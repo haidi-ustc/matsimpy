@@ -132,3 +132,30 @@ class Crystal(Structure):
         else:
             return poscar_str
 
+    def to_quantum_espresso(self, filename: Optional[str] = None) -> Optional[str]:
+        # Prepare the Quantum Espresso formatted string
+        qe_str = "&system\n"
+        qe_str += f"  ibrav = 0,\n"
+        qe_str += f"  nat = {len(self)},\n"
+        qe_str += f"  ntyp = {len(np.unique(self.species))},\n"
+        qe_str += "/\n\n"
+
+        qe_str += "ATOMIC_SPECIES\n"
+        unique_species, _ = np.unique(self.species, return_counts=True)
+        for s in unique_species:
+            qe_str += f"{s} 1.0 {s}.UPF\n"
+
+        qe_str += "\nCELL_PARAMETERS (angstrom)\n"
+        for vector in self.lattice.lattice_vectors:
+            qe_str += f"{vector[0]:.8f} {vector[1]:.8f} {vector[2]:.8f}\n"
+
+        qe_str += "\nATOMIC_POSITIONS (angstrom)\n"
+        for s, position in zip(self.species, self.cart_positions):
+            qe_str += f"{s} {position[0]:.8f} {position[1]:.8f} {position[2]:.8f}\n"
+
+        if filename:
+            with open(filename, 'w') as file:
+                file.write(qe_str)
+        else:
+            return qe_str
+
