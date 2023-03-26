@@ -1,15 +1,15 @@
 
 import unittest
-from matsimpy.core.structure import Structure
-from matsimpy.core.lattice import Lattice
+from matsimpy.core import Crystal
+from matsimpy.core import Lattice
 
-class TestStructure(unittest.TestCase):
+class TestCrystal(unittest.TestCase):
     def setUp(self):
 #        self.maxDiff = None
         species = ['H', 'O', 'O']
         positions = [[0, 0, 0], [0, 0, 1.2], [0, 1.2, 0]]
         lattice = Lattice.from_parameters(a=3.0, b=3.0, c=3.0, alpha=90, beta=90, gamma=90)
-        self.structure = Structure(species=species, positions=positions, lattice=lattice)
+        self.structure = Crystal(species=species, positions=positions, lattice=lattice)
 
     def test_composition(self):
         expected_composition = {'H': 1, 'O': 2}
@@ -21,8 +21,8 @@ class TestStructure(unittest.TestCase):
 
     def test_as_dict(self):
         expected_dict = {
-            "@module": "matsimpy.core.structure",
-            "@class": "Structure",
+            "@module": "matsimpy.core.crystal",
+            "@class": "Crystal",
             "species": ["H", "O", "O"],
             "positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 1.2], [0.0, 1.2, 0.0]],
             "lattice": {
@@ -35,8 +35,8 @@ class TestStructure(unittest.TestCase):
 
     def test_from_dict(self):
         d = {
-            "@module": "matsimpy.core.structure",
-            "@class": "Structure",
+            "@module": "matsimpy.core.crystal",
+            "@class": "Crystal",
             "species": ["H", "O", "O"],
             "positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 1.2], [0.0, 1.2, 0.0]],
             "lattice": {
@@ -46,7 +46,7 @@ class TestStructure(unittest.TestCase):
             }
         }
         expected_structure = self.structure
-        self.assertEqual(Structure.from_dict(d), expected_structure)
+        self.assertEqual(Crystal.from_dict(d), expected_structure)
 
     def test_add_atom(self):
         self.structure.add_atom(species='H', position=[1.0, 1.0, 1.0])
