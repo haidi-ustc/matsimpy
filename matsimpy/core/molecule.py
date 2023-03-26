@@ -135,3 +135,29 @@ class Molecule(Structure):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()})"
+
+def get_moment_of_inertia(self) -> List[float]:
+    """
+    Calculates the moment of inertia tensor of the molecule around its center of mass.
+
+    Returns:
+        List[float]: The moment of inertia tensor as a flattened list of 6 floats.
+    """
+    masses = np.array([Element(specie).atomic_mass for specie in self.species])
+    com = self.get_center_of_mass()
+    positions = self.positions - com
+    moment_tensor = np.zeros((3, 3))
+    for i in range(len(self.species)):
+        r = positions[i]
+        moment_tensor[0, 0] += masses[i] * (r[1]**2 + r[2]**2)
+        moment_tensor[1, 1] += masses[i] * (r[0]**2 + r[2]**2)
+        moment_tensor[2, 2] += masses[i] * (r[0]**2 + r[1]**2)
+        moment_tensor[0, 1] -= masses[i] * r[0] * r[1]
+        moment_tensor[0, 2] -= masses[i] * r[0] * r[2]
+        moment_tensor[1, 2] -= masses[i] * r[1] * r[2]
+        moment_tensor[1, 0] = moment_tensor[0, 1]
+        moment_tensor[2, 0] = moment_tensor[0, 2]
+        moment_tensor[2, 1] = moment_tensor[1, 2]
+    #eigenvalues, eigenvectors = np.linalg.eigh(moment_tensor)
+    return moment_tensor
+
