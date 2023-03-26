@@ -13,17 +13,17 @@ pip install MatSimPy
 
 ## Usage
 
-### Structure
+### Crystal
 
-The `Structure` class is used to represent crystal and molecular structures. It takes in the species, positions, and lattice vectors as input. 
+The `Crystal` class is used to represent crystal structures. It takes in the species, positions, and lattice vectors as input. 
 
 ```python
-from matsimpy import Structure, Lattice
+from matsimpy import Crystal, Lattice
 
 species = ['C', 'C', 'O', 'O']
 positions = [[0, 0, 0], [1.4, 1.4, 1.4], [1, 1, 1], [-1, -1, -1]]
 lattice = Lattice([[10,0,0],[0,10,0],[0,0,10]])
-structure = Structure(species, positions, lattice)
+structure =Crystal(species, positions, lattice)
 ```
 
 You can add and remove atoms from the structure:
