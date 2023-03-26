@@ -9,6 +9,9 @@ setup(
         "scipy",
         "monty"
     ],
+    package_data={
+        "matsimpy.core": ["periodic_table.json"]
+    },
     extras_require={
         "dev": [
             "pytest"
@@ -16,7 +19,7 @@ setup(
     },
     author="haidi wang",
     author_email="haidi@hfut.edu.cn",
-    description="A package for materials simulation adn analysis",
+    description="A package for materials simulation and analysis",
     url="https://gitee.com/haidi-hfut/MatSimPy",
     classifiers=[
         "Development Status :: 3 - Alpha",

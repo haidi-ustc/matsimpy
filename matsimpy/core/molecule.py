@@ -12,6 +12,7 @@ from .structure import Structure
 from .crystal import Crystal
 from .composition import Composition
 from .mass import atomic_masses
+from .periodic_table import  Element
 
 
 class Molecule(Structure):
@@ -40,7 +41,7 @@ class Molecule(Structure):
         Returns:
             List[float]: The center of mass as a list of three floats.
         """
-        masses = np.array([atomic_masses[specie] for specie in self.species])
+        masses = np.array([Element(specie).atomic_mass for specie in self.species])
         center_of_mass = np.average(self.positions, weights=masses, axis=0)
         return center_of_mass.tolist()
 
@@ -128,3 +129,9 @@ class Molecule(Structure):
         crystal = Structure(molecule.species, molecule.positions, Lattice(lattice_vectors))
     
         return crystal
+
+    def __str__(self):
+        return f"{self.__class__.__name__} with {len(self)} atoms "
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()})"

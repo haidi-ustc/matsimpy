@@ -127,11 +127,6 @@ class Structure(MSONable):
         """To be implemented by subclasses."""
         pass
 
-    def __str__(self):
-        return f"{self.__class__.__name__} with {len(self)} atoms"
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()}, lattice={self.lattice.as_dict()})"
 
     def __len__(self):
         return len(self.species)
