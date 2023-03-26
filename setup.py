@@ -10,7 +10,8 @@ setup(
         "monty"
     ],
     package_data={
-        "matsimpy.core": ["periodic_table.json"]
+        "matsimpy.core": ["periodic_table.json"],
+        "tests": ["POSCAR-cart.vasp","POSCAR-frac.vasp"]
     },
     extras_require={
         "dev": [

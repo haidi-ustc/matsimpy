@@ -1,11 +1,21 @@
+import numpy as np
 from .structure import Structure
 from .lattice import Lattice
-from typing import List
+from typing import List,Optional
 
 class Crystal(Structure):
-    def __init__(self, species: List[str], positions: List[List[float]], lattice: Lattice):
+    def __init__(self, species: List[str], positions: List[List[float]], lattice: Lattice, coords_are_cartesian: bool = False):
         super().__init__(species, positions, lattice)
+        self.lattice = lattice
 
+        if coords_are_cartesian:
+            self.cart_positions = np.array(positions)
+            self.frac_positions = self._convert_to_fractional()
+        else:
+            self.frac_positions = np.array(positions)
+            self.cart_positions = self._convert_to_cartesian()
+
+        self.positions = self.frac_positions  # Set self.positions as the same as self.frac_positions by default
 
 
     def calculate_reciprocal_lattice(self) -> Lattice:
@@ -51,4 +61,74 @@ class Crystal(Structure):
         return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()}, lattice={self.lattice.as_dict()})"
 
 
+    def _convert_to_cartesian(self):
+        """
+        Converts fractional coordinates to Cartesian coordinates.
+
+        Args:
+            frac_positions (np.ndarray): Numpy array of fractional positions.
+
+        Returns:
+            (np.ndarray): Numpy array of Cartesian positions.
+        """
+        return np.dot(self.frac_positions, self.lattice.matrix)
+
+    def _convert_to_fractional(self):
+        """
+        Converts Cartesian coordinates to fractional coordinates.
+
+        Args:
+            cart_positions (np.ndarray): Numpy array of Cartesian positions.
+
+        Returns:
+            (np.ndarray): Numpy array of fractional positions.
+        """
+        return np.dot(self.cart_positions, np.linalg.inv(self.lattice.matrix))
+
+    @staticmethod
+    def from_POSCAR(filename: str) -> 'Crystal':
+        with open(filename, 'r') as file:
+            lines = file.readlines()
+
+        # Read the lattice scale factor
+        scale_factor = float(lines[1].strip())
+
+        # Read the lattice vectors
+        lattice_vectors = [list(map(float, line.strip().split())) for line in lines[2:5]]
+        lattice_matrix = np.array(lattice_vectors) * scale_factor
+        lattice = Lattice(lattice_matrix)
+
+        # Read the atomic species and positions
+        species = lines[5].strip().split()
+        species_counts = list(map(int, lines[6].strip().split()))
+        species_list = []
+        for s, count in zip(species, species_counts):
+            species_list.extend([s] * count)
+
+        coords_are_cartesian = lines[7].strip().lower().startswith('c')
+        positions = [list(map(float, line.strip().split())) for line in lines[8: 8 + sum(species_counts)]]
+
+        return Crystal(species_list, positions, lattice, coords_are_cartesian=coords_are_cartesian)
+
+
+    def to_POSCAR(self, filename: Optional[str] = None) -> Optional[str]:
+        # Prepare the POSCAR formatted string
+        poscar_str = f"{self.__class__.__name__}\n"
+        poscar_str += "1.0\n"
+        for vector in self.lattice.lattice_vectors:
+            poscar_str += f"{vector[0]:.8f} {vector[1]:.8f} {vector[2]:.8f}\n"
+
+        unique_species, counts = np.unique(self.species, return_counts=True)
+        poscar_str += " ".join(unique_species) + "\n"
+        poscar_str += " ".join(map(str, counts)) + "\n"
+
+        poscar_str += "Direct\n"
+        for position in self.frac_positions:
+            poscar_str += f"{position[0]:.8f} {position[1]:.8f} {position[2]:.8f}\n"
+
+        if filename:
+            with open(filename, 'w') as file:
+                file.write(poscar_str)
+        else:
+            return poscar_str
 

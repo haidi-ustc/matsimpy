@@ -30,6 +30,16 @@ class Lattice(MSONable):
         return cls(lattice_vectors)
 
     @property
+    def matrix(self) -> np.ndarray:
+        """
+        Get the lattice vectors as a matrix.
+
+        Returns:
+            (np.ndarray): Lattice vectors as a 3x3 matrix.
+        """
+        return self.lattice_vectors
+
+    @property
     def a(self) -> float:
         """Get the length of the a lattice vector."""
         return np.linalg.norm(self.lattice_vectors[0])
