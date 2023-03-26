@@ -1,0 +1,36 @@
+MatSimPy/
+|-- matsimpy/
+|   |-- __init__.py
+|   |-- core/
+|   |   |-- __init__.py
+|   |   |-- lattice.py
+|   |   |-- structure.py
+|   |   |-- molecule.py
+|   |   |-- crystal.py
+|   |   |-- utils.py
+|   |-- code/
+|   |   |-- __init__.py
+|   |   |-- vasp/
+|   |   |-- pwdft/
+|   |-- io/
+|   |   |-- __init__.py
+|   |   |-- readers.py
+|   |   |-- writers.py
+|   |-- analysis/
+|   |   |-- __init__.py
+|   |   |-- geometry.py
+|   |   |-- symmetry.py
+|   |-- visualization/
+|   |   |-- __init__.py
+|   |   |-- renderers.py
+|-- tests/
+|   |-- __init__.py
+|   |-- test_core.py
+|   |-- test_io.py
+|   |-- test_analysis.py
+|   |-- test_visualization.py
+|-- setup.py
+|-- README.md
+|-- LICENSE
+|-- .gitignore
+
