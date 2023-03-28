@@ -134,3 +134,50 @@ class Lattice(MSONable):
 
         return cls(lattice_vectors)
 
+    @classmethod
+    def cubic(cls, a: float):
+        """
+        Initialize a Lattice object with lattice parameters.
+
+        Args:
+            a: The length of the a lattice vector.
+        """
+        lattice_vectors = [
+            [a, 0.0, 0.0],
+            [0.0, a, 0.0],
+            [0.0, 0.0, a]
+        ]
+        return cls(lattice_vectors)
+    
+    @classmethod
+    def tetragonal(cls, a: float, c: float):
+        """
+        Initialize a Lattice object with lattice parameters.
+
+        Args:
+            a: The length of the a lattice vector.
+            c: The length of the c lattice vector.
+        """
+        lattice_vectors = [
+            [a, 0.0, 0.0],
+            [0.0, a, 0.0],
+            [0.0, 0.0, c]
+        ]
+        return cls(lattice_vectors)
+
+    @classmethod
+    def orthorhomic(cls, a: float, b: float, c: float):
+        """
+        Initialize a Lattice object with lattice parameters.
+
+        Args:
+            a: The length of the a lattice vector.
+            b: The length of the a lattice vector.
+            c: The length of the c lattice vector.
+        """
+        lattice_vectors = [
+            [a, 0.0, 0.0],
+            [0.0, b, 0.0],
+            [0.0, 0.0, c]
+        ]
+        return cls(lattice_vectors)
