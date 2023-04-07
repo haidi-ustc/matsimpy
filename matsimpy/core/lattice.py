@@ -12,8 +12,20 @@ class Lattice(MSONable):
             lattice_vectors: A list of 3 lists representing the lattice vectors.
         """
         self.lattice_vectors = np.array(lattice_vectors, dtype=float)
-        #self._validate_lattice_vectors()
+        self._validate_lattice_vectors()
 
+    def _validate_lattice_vectors(self) -> None:
+        """
+        Validate the lattice vectors.
+    
+        Raises:
+            ValueError: If the lattice vectors are not 3D or are linearly dependent.
+        """
+        if len(self.lattice_vectors) != 3:
+            raise ValueError("Lattice vectors must be 3-dimensional.")
+        det = np.linalg.det(self.matrix)
+        if np.isclose(det, 0):
+            raise ValueError("Lattice vectors must be linearly independent.")
 
     def as_dict(self):
         d = {
@@ -83,18 +95,6 @@ class Lattice(MSONable):
         
     def __repr__(self) -> str:
         return f"Lattice(lattice_vectors={self.lattice_vectors.tolist()})"
-
-    def _validate_lattice_vectors(self):
-        """
-        Check that the lattice vectors are non-zero, non-collinear, and form a right-handed coordinate system.
-        """
-        if not np.all(self.lattice_vectors):
-            raise ValueError("Lattice vectors must be non-zero.")
-        cross = np.cross(self.lattice_vectors[0], self.lattice_vectors[1])
-        if np.dot(cross, self.lattice_vectors[2]) == 0:
-            raise ValueError("Lattice vectors must be non-collinear.")
-        elif np.dot(cross, self.lattice_vectors[2]) < 0:
-            self.lattice_vectors[2] *= -1
 
 
     @classmethod
