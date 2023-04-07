@@ -18,26 +18,6 @@ class Crystal(Structure):
         self.positions = self.frac_positions  # Set self.positions as the same as self.frac_positions by default
 
 
-    def calculate_reciprocal_lattice(self) -> Lattice:
-        """Calculate the reciprocal lattice."""
-        a, b, c = self.lattice.lattice_vectors
-        volume = np.dot(a, np.cross(b, c))
-
-        a_star = 2 * np.pi * np.cross(b, c) / volume
-        b_star = 2 * np.pi * np.cross(c, a) / volume
-        c_star = 2 * np.pi * np.cross(a, b) / volume
-
-        reciprocal_lattice = Lattice([a_star, b_star, c_star])
-        return reciprocal_lattice
-
-    def get_planes_from_miller_indices(self, h, k, l):
-        """Get the plane defined by the given Miller indices (h, k, l)."""
-        reciprocal_lattice = self.calculate_reciprocal_lattice()
-        g = h * reciprocal_lattice.lattice_vectors[0] + \
-            k * reciprocal_lattice.lattice_vectors[1] + \
-            l * reciprocal_lattice.lattice_vectors[2]
-        return g
-
     def as_dict(self):
         d = {
             "@module": self.__class__.__module__,
