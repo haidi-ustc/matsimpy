@@ -1,9 +1,11 @@
 import numpy as np
 from typing import List
+import hashlib
+from collections import Counter
 from monty.json import MSONable
+
 from .lattice import Lattice
 from .composition import Composition
-from collections import Counter
 
 class Structure(MSONable):
     """
@@ -83,6 +85,12 @@ class Structure(MSONable):
         for element, count in element_counter.items():
             formula += element + str(count)
         return formula
+
+
+    def __hash__(self):
+        # Use hashlib to generate an MD5 hash of the Crystal object's dictionary representation
+        hash_str = str(self.as_dict()).encode('utf-8')
+        return int(hashlib.md5(hash_str).hexdigest(), 16)
 
     def get_composition(self):
         """
