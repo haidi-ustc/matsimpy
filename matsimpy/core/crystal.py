@@ -1,10 +1,15 @@
 import numpy as np
 from .structure import Structure
 from .lattice import Lattice
-from typing import List,Optional
+from typing import List,Optional,Union
+from .periodic_table import  Element
 
 class Crystal(Structure):
-    def __init__(self, species: List[str], positions: List[List[float]], lattice: Lattice, coords_are_cartesian: bool = False):
+    def __init__(self, species: Union[List[str], List[int], List[Element]],
+            positions: List[List[float]], 
+            lattice: Lattice,
+            pbc: Optional[List[bool]] = None,
+            coords_are_cartesian: bool = False):
         super().__init__(species, positions, lattice)
         self.lattice = lattice
 
@@ -16,12 +21,13 @@ class Crystal(Structure):
             self.cart_positions = self._convert_to_cartesian()
 
         self.positions = self.frac_positions  # Set self.positions as the same as self.frac_positions by default
-
+        self.pbc = pbc or [True, True, True]
 
     def as_dict(self):
         d = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
+            "pbc": self.pbc,
             "lattice": self.lattice.as_dict(),
             "species": self.species,
             "positions": self.positions.tolist()

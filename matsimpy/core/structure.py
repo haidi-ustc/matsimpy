@@ -1,11 +1,12 @@
 import numpy as np
-from typing import List
+from typing import List,Union
 import hashlib
 from collections import Counter
 from monty.json import MSONable
 
 from .lattice import Lattice
 from .composition import Composition
+from .periodic_table import  Element
 
 class Structure(MSONable):
     """
@@ -33,9 +34,23 @@ class Structure(MSONable):
         get_neighbor_list(cutoff): Returns a list of atoms within a cutoff radius of each atom.
 
     """
+    def __init__(self, species: Union[List[str], List[int], List[Element]],
+                 positions: List[List[float]], 
+                 lattice: Lattice = None):
+        if all(isinstance(s, str) for s in species):
+            # If species are atomic symbols, convert to atomic numbers
+            self.species = species
+        elif all(isinstance(s, int) for s in species):
+            # If species are atomic numbers, use directly
+            self.species = [Element.from_Z(s).symbol for s in species]
+        elif all(isinstance(s, Element) for s in species):
+            # If species are Element objects, get atomic numbers
+            self.species = [s.symbol for s in species]
+        else:
+            raise TypeError("Invalid type for species. \
+                    Must be a list of atomic symbols, \
+                    a list of atomic numbers, or a list of Element objects.")
 
-    def __init__(self, species: List[str], positions: List[List[float]], lattice: Lattice):
-        self.species = list(species)
         self.positions = np.array(positions)
         self.lattice = lattice
         self.formula = self.get_formula()

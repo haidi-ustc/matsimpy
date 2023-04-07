@@ -30,6 +30,7 @@ class TestCrystal(unittest.TestCase):
         expected_dict = {
                 '@module': 'matsimpy.core.crystal',
                 '@class': 'Crystal',
+                'pbc': [True, True, True],
                 'lattice': {'@module': 'matsimpy.core.lattice',
                  '@class': 'Lattice',
                  'lattice_vectors': [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]]
@@ -39,6 +40,7 @@ class TestCrystal(unittest.TestCase):
         }
         self.assertEqual(d["@module"], expected_dict["@module"])
         self.assertEqual(d["@class"], expected_dict["@class"])
+        self.assertEqual(d["pbc"], expected_dict["pbc"])
         #np.testing.assert_allclose(d['lattice'], expected_dict['lattice'])
         self.assertEqual(d['species'], expected_dict['species'])
         self.assertEqual(len(d['positions']), len(expected_dict['positions']))
