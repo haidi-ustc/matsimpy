@@ -53,7 +53,7 @@ class TestCrystal(unittest.TestCase):
 
         crystal = Crystal(species, positions, lattice)
 
-        self.assertAlmostEqual(crystal.volume(), 24.0, places=6)
+        self.assertAlmostEqual(crystal.volume, 24.0, places=6)
 
 
 if __name__ == '__main__':

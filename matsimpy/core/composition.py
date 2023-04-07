@@ -102,6 +102,7 @@ class Composition(MSONable):
         else:
             return False
 
+    @property
     def mass(self):
         """
         Calculate the mass of the composition.
@@ -111,7 +112,7 @@ class Composition(MSONable):
 
         Examples:
             >>> c = Composition('H2O')
-            >>> c.mass()
+            >>> c.mass
             18.01528
         """
         mass = 0.0
@@ -126,7 +127,7 @@ class Composition(MSONable):
         Returns:
             dict: A dictionary containing the mass fractions of the composition.
         """
-        total_mass = self.mass()
+        total_mass = self.mass
         fractions = {}
         for element, count in self.composition.items():
             mass_fraction = Element(element).atomic_mass * count / total_mass

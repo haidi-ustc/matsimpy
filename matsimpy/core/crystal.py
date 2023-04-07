@@ -28,6 +28,7 @@ class Crystal(Structure):
         }
         return d
 
+    @property
     def volume(self) -> float:
         """Calculate the volume of the crystal."""
         a, b, c = self.lattice.lattice_vectors
@@ -35,7 +36,7 @@ class Crystal(Structure):
         return abs(volume)
 
     def __str__(self):
-        return f"{self.__class__.__name__} with {len(self)} atoms and a volume of {self.volume():.2f} Å^3"
+        return f"{self.__class__.__name__} with {len(self)} atoms and a volume of {self.volume:.2f} Å^3"
 
     def __repr__(self):
         return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()}, lattice={self.lattice.as_dict()})"
@@ -90,6 +91,11 @@ class Crystal(Structure):
 
         return Crystal(species_list, positions, lattice, coords_are_cartesian=coords_are_cartesian)
 
+    def density(self) -> float:
+        """Calculate the density of the crystal."""
+        mass = self.composition.mass()
+        volume = self.volume
+        return mass / volume
 
     def to_POSCAR(self, filename: Optional[str] = None) -> Optional[str]:
         # Prepare the POSCAR formatted string
@@ -138,4 +144,38 @@ class Crystal(Structure):
                 file.write(qe_str)
         else:
             return qe_str
+
+    @classmethod
+    def random_crystal(cls, dim: int, group: int, species: list, num_ions: list, **kwargs):
+        """
+        Generate a random crystal using PyXtal.
+
+        Args:
+            dim (int): The dimensionality of the crystal (2 or 3).
+            group (int): The space group number.
+            species (list): List of chemical symbols for the atoms in the crystal.
+            num_ions (list): List of integers representing the number of ions of each species.
+            **kwargs: Additional keyword arguments to pass to PyXtal.
+
+        Returns:
+            (Crystal): A random crystal object.
+        """
+        try:
+            import pyxtal
+        except ImportError:
+            raise ImportError("The pyxtal package is required to generate random crystals.")
+
+        pyxtal_crystal = pyxtal.crystal.random_crystal(
+            dim=dim,
+            group=group,
+            species=species,
+            numIons=num_ions,
+            **kwargs
+        )
+
+        #species = pyxtal_crystal.species
+        #positions = pyxtal_crystal.frac_coords
+        #lattice = Lattice(pyxtal_crystal.lattice.matrix)
+
+        return cls(species, positions, lattice)
 

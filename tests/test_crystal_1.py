@@ -21,7 +21,7 @@ class TestCrystal(unittest.TestCase):
 
 
     def test_volume(self):
-        volume = self.crystal.volume()
+        volume = self.crystal.volume
         expected_volume = 125.0
         self.assertAlmostEqual(volume, expected_volume)
 
