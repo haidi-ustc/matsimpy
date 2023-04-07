@@ -3,8 +3,7 @@ from typing import List
 from monty.json import MSONable
 from .lattice import Lattice 
 from .composition import Composition
-
-import numpy as np
+from scipy.spatial.distance import cdist
 from typing import List
 from monty.json import MSONable
 from .lattice import Lattice
@@ -159,4 +158,35 @@ class Molecule(Structure):
             moment_tensor[2, 1] = moment_tensor[1, 2]
         #eigenvalues, eigenvectors = np.linalg.eigh(moment_tensor)
         return moment_tensor
+
+    def get_neighbor_list(self, atom_index: int, cutoff: float) -> List[int]:
+          """
+          Returns a list of atoms within a cutoff radius of the specified atom.
+
+          Args:
+              atom_index (int): Index of the target atom.
+              cutoff (float): Cutoff radius.
+
+          Returns:
+              List[int]: List of indices of neighboring atoms.
+          """
+          distances = cdist([self.positions[atom_index]], self.positions)[0]
+          neighbors = [i for i, d in enumerate(distances) if d < cutoff and i != atom_index]
+          return neighbors
+
+    def get_all_neighbor_lists(self, cutoff: float):
+        """
+        Returns a list of neighbor lists for all atoms in the structure.
+    
+        Args:
+            cutoff (float): Cutoff radius.
+    
+        Returns:
+            List[List[int]]: List of neighbor lists for all atoms.
+        """
+        neighbor_lists = []
+        for i in range(len(self)):
+            neighbor_list = self.get_neighbor_list(i, cutoff)
+            neighbor_lists.append(neighbor_list)
+        return neighbor_lists
 
