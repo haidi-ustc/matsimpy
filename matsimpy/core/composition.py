@@ -1,8 +1,10 @@
 import re
-import re
+import json
 from collections import Counter
+from monty.json import MSONable
+from .periodic_table import  Element
 
-class Composition:
+class Composition(MSONable):
     """
     A class representing the composition of a chemical formula.
 
@@ -72,4 +74,62 @@ class Composition:
 
     def __repr__(self) -> str:
         return f"Composition('{self.formula}')"
+
+    def as_dict(self):
+        d = {
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "formula": self.formula
+        }
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        formula = d["formula"]
+        return cls(formula=formula)
+
+    def to_json(self):
+        return json.dumps(self.as_dict())
+
+    @classmethod
+    def from_json(cls, json_string):
+        return cls.from_dict(json.loads(json_string))
+
+
+    def __eq__(self, other):
+        if isinstance(other, Composition):
+            return self.composition == other.composition
+        else:
+            return False
+
+    def mass(self):
+        """
+        Calculate the mass of the composition.
+
+        Returns:
+            float: The mass of the composition.
+
+        Examples:
+            >>> c = Composition('H2O')
+            >>> c.mass()
+            18.01528
+        """
+        mass = 0.0
+        for element, count in self.composition.items():
+            mass += Element(element).atomic_mass * count
+        return mass
+
+    def mass_fractions(self):
+        """
+        Calculate the mass fractions of the composition.
+
+        Returns:
+            dict: A dictionary containing the mass fractions of the composition.
+        """
+        total_mass = self.mass()
+        fractions = {}
+        for element, count in self.composition.items():
+            mass_fraction = Element(element).atomic_mass * count / total_mass
+            fractions[element] = mass_fraction
+        return fractions
 
