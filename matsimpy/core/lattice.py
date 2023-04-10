@@ -49,7 +49,7 @@ class Lattice(MSONable):
         Returns:
             (np.ndarray): Lattice vectors as a 3x3 matrix.
         """
-        return self.lattice_vectors
+        return np.array(self.lattice_vectors , dtype=np.float64).reshape((3, 3))
 
     @property
     def a(self) -> float:
