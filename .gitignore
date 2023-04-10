@@ -23,4 +23,4 @@ dist/
 *.log
 *.swp
 *~
-
+tests/install
