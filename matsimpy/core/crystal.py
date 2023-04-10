@@ -34,6 +34,15 @@ class Crystal(Structure):
         }
         return d
 
+    @classmethod
+    def from_dict(cls, d):
+        species = d["species"]
+        positions = d["positions"]
+#        lattice = d.get("lattice").get("lattice_vectors")
+        lattice = Lattice.from_dict(d["lattice"])
+        pbc = d.get("pbc")
+        return cls(species=species, positions=positions, lattice=lattice, pbc=pbc)
+
     @property
     def volume(self) -> float:
         """Calculate the volume of the crystal."""
