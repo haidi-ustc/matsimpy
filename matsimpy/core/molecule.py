@@ -1,11 +1,12 @@
 import numpy as np
-from typing import List
+from typing import List,Optional,Dict,Any
 from monty.json import MSONable
 from .lattice import Lattice
 from .structure import Structure
 from .crystal import Crystal
 from .composition import Composition
 from .periodic_table import  Element
+from .site import Site
 from scipy.spatial.distance import cdist
 
 
@@ -18,7 +19,9 @@ class Molecule(Structure):
         positions (List[List[float]]): A list of atomic positions.
     """
 
-    def __init__(self, species: List[str], positions: List[List[float]]):
+    def __init__(self, species: List[str], 
+            positions: List[List[float]],
+            site_properties: Optional[List[Dict[str, Any]]] = None):
         """
         Initializes the Molecule object.
 
@@ -27,6 +30,32 @@ class Molecule(Structure):
             positions (List[List[float]]): A list of atomic positions.
         """
         super().__init__(species, positions, None)
+        self._site_properties = site_properties or []
+        self._sites = self._initialize_sites()
+
+    def _initialize_sites(self) -> List[Site]:
+        """
+        Initializes the list of Site objects.
+
+        Returns:
+            List[Site]: A list of Site objects.
+        """
+        sites=[]
+        if self._site_properties:
+            assert(len(self.species)==len(self._site_properties))
+            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
+                  sites.append(Site(position=pos, specie=specie, properties=self._site_properties[i]))
+        else:
+            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
+                sites.append(Site(position=pos, specie=specie))
+        return sites
+
+    @property
+    def sites(self):
+        return self._sites
+
+    def __getitem__(self, item):
+        return self.sites[item]
 
     def get_center_of_mass(self) -> List[float]:
         """
@@ -72,8 +101,10 @@ class Molecule(Structure):
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "species": self.species,
-            "positions": self.positions.tolist()
+            "positions": self.positions.tolist(),
         }
+        if self._site_properties:
+            d["site_properties"] = self._site_properties
         return d
 
     @classmethod
@@ -89,8 +120,8 @@ class Molecule(Structure):
         """
         species = d["species"]
         positions = d["positions"]
-        return cls(species, positions)
-
+        site_properties = d.get("site_properties", [])
+        return cls(species, positions, site_properties)
 
     def to_crystal(self, scale: float = None) -> Structure:
         """
