@@ -1,16 +1,12 @@
 import numpy as np
 from typing import List
 from monty.json import MSONable
-from .lattice import Lattice 
-from .composition import Composition
-from scipy.spatial.distance import cdist
-from typing import List
-from monty.json import MSONable
 from .lattice import Lattice
 from .structure import Structure
 from .crystal import Crystal
 from .composition import Composition
 from .periodic_table import  Element
+from scipy.spatial.distance import cdist
 
 
 class Molecule(Structure):
