@@ -3,13 +3,15 @@ from .structure import Structure
 from .lattice import Lattice
 from typing import List,Optional,Union
 from .periodic_table import  Element
+from .site import CrystalSite
 
 class Crystal(Structure):
     def __init__(self, species: Union[List[str], List[int], List[Element]],
             positions: List[List[float]], 
             lattice: Lattice,
             pbc: Optional[List[bool]] = None,
-            coords_are_cartesian: bool = False):
+            coords_are_cartesian: bool = False,
+            site_properties: Optional[List[dict]] = None):  # Add site_properties as an optional argument)
         super().__init__(species, positions, lattice)
         self.lattice = lattice
 
@@ -21,7 +23,30 @@ class Crystal(Structure):
             self.cart_positions = self._convert_to_cartesian()
 
         self.positions = self.frac_positions  # Set self.positions as the same as self.frac_positions by default
+        self.site_properties = site_properties or []
+        self._sites = self._initialize_sites()  # Add this line to initialize the _sites attribute
         self.pbc = pbc or [True, True, True]
+
+    def _initialize_sites(self) -> List[CrystalSite]:
+        """
+        Initializes the list of CrystalSite objects.
+
+        Returns:
+            List[CrystalSite]: A list of CrystalSite objects.
+        """
+        sites = []
+        if self.site_properties:
+            assert(len(self.species) == len(self.site_properties))
+            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
+                sites.append(CrystalSite(position=pos, specie=specie, lattice=self.lattice, properties=self.site_properties[i], coords_are_cartesian=False))
+        else:
+            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
+                sites.append(CrystalSite(position=pos, specie=specie, lattice=self.lattice, coords_are_cartesian=False))
+        return sites
+
+    @property
+    def sites(self):
+        return self._sites
 
     def as_dict(self):
         d = {
@@ -30,7 +55,8 @@ class Crystal(Structure):
             "pbc": self.pbc,
             "lattice": self.lattice.as_dict(),
             "species": self.species,
-            "positions": self.positions.tolist()
+            "positions": self.positions.tolist(),
+            "site_properties": self.site_properties  # Add site_properties to the dictionary
         }
         return d
 
@@ -40,8 +66,11 @@ class Crystal(Structure):
         positions = d["positions"]
 #        lattice = d.get("lattice").get("lattice_vectors")
         lattice = Lattice.from_dict(d["lattice"])
+        site_properties = d.get("site_properties", [])
+        coords_are_cartesian = d.get("coords_are_cartesian")
         pbc = d.get("pbc")
-        return cls(species=species, positions=positions, lattice=lattice, pbc=pbc)
+        return cls(species=species, positions=positions, lattice=lattice, pbc=pbc, 
+                   site_properties = site_properties )
 
     @property
     def volume(self) -> float:

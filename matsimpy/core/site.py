@@ -87,9 +87,20 @@ class CrystalSite(Site):
         specie: Union[str, int, Element] ,
         lattice: Union[List[list[float]], Lattice],
         properties: Optional[dict] = None,
+        coords_are_cartesian: bool = False
     ):
-        super().__init__(position, specie, properties)
         self._lattice = self._validate_lattice(lattice)
+       
+        if coords_are_cartesian:
+            self.cart_position = np.array(position)
+            self.frac_position = self._convert_to_fractional()
+        else:
+            self.frac_position = np.array(position)
+            self.cart_position = self._convert_to_cartesian()
+
+        position = self.frac_position
+        super().__init__(position, specie, properties)
+
 
     def as_dict(self):
         d = super().as_dict()
@@ -103,7 +114,7 @@ class CrystalSite(Site):
         position = d["position"]
         specie = d.get("specie")
         properties = d.get("properties")
-        lattice = d.get("lattice").get('lattice_vectors')
+        lattice = Lattice.from_dict ( d.get("lattice") )
         return cls(position=position, specie=specie, properties=properties, lattice=lattice)
 
     def __repr__(self):
@@ -115,7 +126,7 @@ class CrystalSite(Site):
     def _validate_lattice(self, lattice: Union[List[List[float]],Lattice]) -> Lattice:
 
         if  isinstance(lattice, Lattice):
-            return Lattice
+            return lattice
 
         if not isinstance(lattice, list):
             raise TypeError("Lattice must be a list of lists of floats.")
@@ -139,17 +150,14 @@ class CrystalSite(Site):
     def lattice(self, lattice: Union[List[float],Lattice]) -> None:
         self._lattice = self._validate_lattice(lattice)
 
-    @property
-    def frac_position(self) -> np.ndarray:
+    def _convert_to_fractional(self) -> np.ndarray:
         """
         Get the fractional coordinates of the site in the unit cell.
         """
         return np.dot(self.cart_position, np.linalg.inv(self.lattice.matrix))
 
-    @property
-    def cart_position(self) -> np.ndarray:
+    def _convert_to_cartesian(self) -> np.ndarray:
         """
         Get the cartesian coordinates of the site.
         """
-        return self.position
-
+        return  np.dot(self.frac_position, self.lattice.matrix)

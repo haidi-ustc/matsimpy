@@ -17,16 +17,18 @@ class TestCrystalSite(unittest.TestCase):
         self.specie = Element('C')
         self.site = CrystalSite(position=self.position, specie=self.specie, lattice=self.lattice_vectors)
 
-    def test_position(self):
-        self.assertEqual(self.site.position.tolist(), self.site.cart_position.tolist())
-        self.site.position = [1, 1, 1]
-        self.assertEqual(self.site.position.tolist(), self.site.cart_position.tolist())
+
+    def test_cart_position(self):
+        cart_position = self.site.cart_position
+        self.assertAlmostEqual(cart_position[0], 1.0)
+        self.assertAlmostEqual(cart_position[1], 1.0)
+        self.assertAlmostEqual(cart_position[2], 1.0)
 
     def test_frac_position(self):
         frac_position = self.site.frac_position
-        self.assertAlmostEqual(frac_position[0], 0.25)
-        self.assertAlmostEqual(frac_position[1], 0.25)
-        self.assertAlmostEqual(frac_position[2], 0.25)
+        self.assertAlmostEqual(frac_position[0], 0.5)
+        self.assertAlmostEqual(frac_position[1], 0.5)
+        self.assertAlmostEqual(frac_position[2], 0.5)
 
     def test_specie(self):
         self.assertEqual(self.site.specie, self.specie.symbol)
