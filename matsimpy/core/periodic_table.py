@@ -29,7 +29,7 @@ class Element:
 
     @property
     def atomic_no(self):
-        return self._data['atomic_no']
+        return self._data['Atomic no']
 
     @property
     def name(self):
@@ -198,5 +198,6 @@ if __name__ == '__main__':
     print(h)
     he=Element.from_Z(2)
     print(he)
+    print(he.atomic_no)
 
     

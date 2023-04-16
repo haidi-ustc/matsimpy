@@ -24,9 +24,21 @@ class Composition(MSONable):
         >>> c['H']
         2
     """
-    def __init__(self, formula: str):
-        self.formula = formula
+    def __init__(self, formula: str ,sort_by: str = 'alphabet'):
         self.composition = self._parse_formula(formula)
+        self.formula = self._chemical_formula(sort_by=sort_by)
+
+    def _chemical_formula(self, sort_by: str = 'alphabet') -> str:
+        element_counts = self.composition
+        if sort_by == 'alphabet':
+            sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        elif sort_by == 'element':
+            sorted_elements = sorted(element_counts.items(), key=lambda x: Element(x[0]).atomic_no)
+        else:
+            raise ValueError("sort_by must be either 'alphabet' or 'Element.Z'")
+    
+        formula = ''.join([f'{element}{count if count > 1 else ""}' for element, count in sorted_elements])
+        return formula
 
     def _parse_formula(self, formula: str) -> Counter:
         """
@@ -44,12 +56,22 @@ class Composition(MSONable):
             Counter({'H': 2, 'O': 1})
         """
 
+        def parse_subformula(sub_formula, count):
+            sub_counts = re.findall(element_pattern, sub_formula)
+            for element, sub_count in sub_counts:
+                composition[element] += int(sub_count) if sub_count else 1 * count
+
         element_pattern = r"([A-Z][a-z]*)(\d*)"
-        elements_counts = re.findall(element_pattern, formula)
+        group_pattern = r"\(([^\)]+)\)(\d*)"
 
         composition = Counter()
-        for element, count in elements_counts:
-            composition[element] += int(count) if count else 1
+
+        groups = re.findall(group_pattern, formula)
+        for group, count in groups:
+            parse_subformula(group, int(count) if count else 1)
+            formula = formula.replace(f"({group}){count}", "")
+
+        parse_subformula(formula, 1)
 
         return composition
 
