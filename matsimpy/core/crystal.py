@@ -1,4 +1,5 @@
 import numpy as np
+from tabulate import tabulate
 from .structure import Structure
 from .lattice import Lattice
 from typing import List,Optional,Union
@@ -80,7 +81,15 @@ class Crystal(Structure):
         return abs(volume)
 
     def __str__(self):
-        return f"{self.__class__.__name__} with {len(self)} atoms and a volume of {self.volume:.2f} Å^3"
+        headers = ["Element", "Fractional Coordinates", "Cartesian Coordinates"]
+        rows = []
+        ret=f"{self.__class__.__name__} with {len(self)} atoms and a volume of {self.volume:.2f} Å^3"
+        for site in self.sites:
+            element = site.specie
+            frac_coords = ", ".join(f"{coord:.4f}" for coord in site.frac_position)
+            cart_coords = ", ".join(f"{coord:.4f}" for coord in site.cart_position)
+            rows.append([element, frac_coords, cart_coords])
+        return str(self.lattice)+'\n'+ret+'\n'+tabulate(rows, headers=headers, tablefmt="plain")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()}, lattice={self.lattice.as_dict()})"
