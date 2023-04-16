@@ -84,7 +84,9 @@ class Crystal(Structure):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()}, lattice={self.lattice.as_dict()})"
-
+  
+    def __getitem__(self, item):
+        return self.sites[item]
 
     def _convert_to_cartesian(self):
         """
