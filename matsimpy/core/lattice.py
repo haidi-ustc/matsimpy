@@ -91,7 +91,9 @@ class Lattice(MSONable):
         return abs(volume)
 
     def __str__(self) -> str:
-        return f"Lattice with lattice vectors:\n{self.lattice_vectors}"
+        vectors = [f" {vector[0]:.4f} {vector[1]:.4f} {vector[2]:.4f}" for vector in self.lattice_vectors]
+        return f"Lattice with lattice vectors:\n{vectors[0]}\n{vectors[1]}\n{vectors[2]}"
+
         
     def __repr__(self) -> str:
         return f"Lattice(lattice_vectors={self.lattice_vectors.tolist()})"
