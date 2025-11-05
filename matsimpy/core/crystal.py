@@ -192,8 +192,14 @@ class Crystal(Structure):
         if has_properties:
             headers.append("Properties")
         
+        # Sort sites by element (alphabetically, then by atomic number for same element)
+        sorted_sites = sorted(
+            self.sites,
+            key=lambda s: (Element.get_element(s.specie).atomic_no, s.frac_position[0], s.frac_position[1], s.frac_position[2])
+        )
+        
         rows = []
-        for site in self.sites:
+        for site in sorted_sites:
             element = str(site.specie)
             frac_coords = f"({site.frac_position[0]:.4f}, {site.frac_position[1]:.4f}, {site.frac_position[2]:.4f})"
             cart_coords = f"({site.cart_position[0]:.4f}, {site.cart_position[1]:.4f}, {site.cart_position[2]:.4f})"

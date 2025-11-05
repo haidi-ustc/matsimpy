@@ -270,8 +270,14 @@ class Molecule(Structure):
         if has_properties:
             headers.append("Properties")
         
+        # Sort sites by element (by atomic number, then by position for same element)
+        sorted_sites = sorted(
+            self.sites,
+            key=lambda s: (Element.get_element(s.specie).atomic_no, s.position[0], s.position[1], s.position[2])
+        )
+        
         rows = []
-        for site in self.sites:
+        for site in sorted_sites:
             element = str(site.specie)
             cart_coords = f"({site.position[0]:.4f}, {site.position[1]:.4f}, {site.position[2]:.4f})"
             row = [element, cart_coords]
