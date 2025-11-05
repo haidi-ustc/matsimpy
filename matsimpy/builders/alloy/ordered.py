@@ -5,8 +5,8 @@ Generate ordered intermetallic compounds and structured alloys.
 """
 
 from typing import Dict, List
-from copy import deepcopy
 from ...core import Crystal, Lattice
+from ...transformation.chemical.substitution import substitute
 
 
 def generate_ordered_alloy(
@@ -31,19 +31,17 @@ def generate_ordered_alloy(
         >>> pattern = {0: 'Au', 1: 'Au', 2: 'Cu', 3: 'Cu'}
         >>> ordered = generate_ordered_alloy(base, pattern)
     """
-    alloy = deepcopy(base_structure)
-    new_species = list(alloy.species)
+    # Extract indices and species from pattern
+    indices = list(substitution_pattern.keys())
+    species_list = [substitution_pattern[idx] for idx in indices]
     
-    for idx, spec in substitution_pattern.items():
-        if idx >= len(new_species):
+    # Validate indices
+    for idx in indices:
+        if idx >= len(base_structure.species):
             raise ValueError(f"Site index {idx} out of range")
-        new_species[idx] = spec
     
-    alloy.species = tuple(new_species)
-    alloy._formula_dirty = True
-    alloy._cached_composition = None
-    
-    return alloy
+    # Use transformation function for substitution
+    return substitute(base_structure, indices, species_list, inplace=False)
 
 
 def generate_intermetallic(

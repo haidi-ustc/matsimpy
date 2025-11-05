@@ -8,6 +8,8 @@ from typing import List, Optional, Union, Tuple
 import numpy as np
 from copy import deepcopy
 from ...core import Crystal, Molecule, Lattice
+from ...transformation.chemical.substitution import substitute
+from ...transformation.atomic.manipulation import swap_atoms
 
 
 def create_vacancy(
@@ -153,9 +155,7 @@ def create_substitution(
         >>> # Multiple substitutions
         >>> multi_doped = create_substitution(fcc, [0, 1, 2], ['Ni', 'Ni', 'Zn'])
     """
-    if not inplace:
-        structure = deepcopy(structure)
-    
+    # Normalize inputs (substitute function handles this, but we validate first)
     if isinstance(indices, int):
         indices = [indices]
     if isinstance(new_species, str):
@@ -167,16 +167,8 @@ def create_substitution(
             f"number of species ({len(new_species)})"
         )
     
-    # Validate indices
-    for idx in indices:
-        if idx < 0 or idx >= len(structure.species):
-            raise IndexError(f"Invalid atom index: {idx}")
-    
-    # Perform substitutions
-    for idx, spec in zip(indices, new_species):
-        structure.substitute(idx, spec)
-    
-    return structure
+    # Use transformation function for substitution (handles copying and validation)
+    return substitute(structure, indices, new_species, inplace=inplace)
 
 
 def create_frenkel(
@@ -328,15 +320,8 @@ def create_antisite(
     if index1 == index2:
         raise ValueError("Cannot swap atom with itself")
     
-    # Get species
-    species1 = structure.species[index1]
-    species2 = structure.species[index2]
-    
-    # Swap species
-    structure.substitute(index1, species2)
-    structure.substitute(index2, species1)
-    
-    return structure
+    # Use transformation function for swapping atoms
+    return swap_atoms(structure, index1, index2, inplace=inplace)
 
 
 __all__ = [

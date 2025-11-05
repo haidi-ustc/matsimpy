@@ -7,6 +7,7 @@ Generate random solid solution alloys with specified compositions.
 from typing import List, Optional
 import numpy as np
 from ...core import Crystal
+from ...transformation.chemical.substitution import substitute
 
 
 def generate_random_alloy(
@@ -42,8 +43,6 @@ def generate_random_alloy(
         >>> # Al-Cu-Mg alloy: 40% Cu, 10% Mg, 50% Al
         >>> alloy = generate_random_alloy(base, ['Cu', 'Mg'], 'Al', [0.4, 0.1])
     """
-    from copy import deepcopy
-    
     if seed is not None:
         np.random.seed(seed)
     
@@ -82,18 +81,8 @@ def generate_random_alloy(
     # Shuffle substitution list
     np.random.shuffle(substitution_list)
     
-    # Create new crystal
-    alloy = deepcopy(base_structure)
-    new_species = list(alloy.species)
-    
-    for site_idx, new_spec in zip(sites_to_substitute, substitution_list):
-        new_species[site_idx] = new_spec
-    
-    alloy.species = tuple(new_species)
-    alloy._formula_dirty = True
-    alloy._cached_composition = None
-    
-    return alloy
+    # Use transformation function for substitution
+    return substitute(base_structure, sites_to_substitute, substitution_list, inplace=False)
 
 
 __all__ = ['generate_random_alloy']
