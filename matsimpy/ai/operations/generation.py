@@ -122,6 +122,12 @@ class AIGeneration(AIOperation):
         structures = result.get("variants", [])
         return [self._parse_structure_result(s) for s in structures]
     
+    def _format_structure(self, structure: Crystal) -> Dict[str, Any]:
+        """Format structure for AI input."""
+        from ..utils.formatting import format_structure_for_ai
+        
+        return format_structure_for_ai(structure)
+    
     def _parse_structure_result(self, result: Dict[str, Any]) -> Union[Crystal, Molecule]:
         """
         Parse AI result into Crystal or Molecule object.
@@ -132,33 +138,10 @@ class AIGeneration(AIOperation):
         Returns:
             Crystal or Molecule object
         """
-        # Expected result format:
-        # {
-        #     "species": ["Ti", "O", "O"],
-        #     "positions": [[0, 0, 0], [0.5, 0.5, 0.5], ...],
-        #     "lattice": [[a, 0, 0], [0, b, 0], [0, 0, c]]  # for Crystal
-        #     # OR no lattice for Molecule
-        # }
+        # Use utility function for parsing
+        from ..utils.formatting import parse_structure_from_ai
         
-        species = result.get("species", [])
-        positions = result.get("positions", [])
-        
-        if not species or not positions:
-            raise ValueError("Invalid structure result: missing species or positions")
-        
-        if len(species) != len(positions):
-            raise ValueError("Species and positions must have same length")
-        
-        # Check if it's a crystal (has lattice) or molecule
-        lattice_data = result.get("lattice")
-        
-        if lattice_data:
-            # Create Crystal
-            lattice = Lattice(lattice_data)
-            return Crystal(species, positions, lattice)
-        else:
-            # Create Molecule
-            return Molecule(species, positions)
+        return parse_structure_from_ai(result)
     
     def execute(self, **kwargs) -> Union[Crystal, Molecule]:
         """
@@ -186,25 +169,6 @@ class AIGeneration(AIOperation):
                 "for generation operation"
             )
     
-    def _format_structure(self, structure: Crystal) -> Dict[str, Any]:
-        """
-        Format structure for AI input.
-        
-        Args:
-            structure: Crystal or Molecule structure
-        
-        Returns:
-            Dictionary representation
-        """
-        data = {
-            "species": list(structure.species),
-            "positions": structure.positions.tolist() if hasattr(structure.positions, 'tolist') else list(structure.positions)
-        }
-        
-        if isinstance(structure, Crystal):
-            data["lattice"] = structure.lattice.lattice_vectors.tolist()
-        
-        return data
 
 
 __all__ = ['AIGeneration']

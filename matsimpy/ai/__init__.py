@@ -32,10 +32,18 @@ from .base import AIInterface, AIOperation
 from .interfaces import MCPInterface
 
 # Operations
-from .operations import AIGeneration
+from .operations import (
+    AIGeneration,
+    PropertyPrediction,
+    AIAnalysis,
+    AIOptimization
+)
 
 # Utilities
-from .utils import get_ai_interface, list_available_protocols
+from .utils import get_ai_interface, list_available_protocols, prompts, formatting
+
+# Models
+from .models import ModelRegistry, ResponseCache, cached
 
 __all__ = [
     # Base classes
@@ -47,9 +55,19 @@ __all__ = [
     
     # Operations
     'AIGeneration',
+    'PropertyPrediction',
+    'AIAnalysis',
+    'AIOptimization',
     
     # Utilities
     'get_ai_interface',
     'list_available_protocols',
+    'prompts',
+    'formatting',
+    
+    # Models
+    'ModelRegistry',
+    'ResponseCache',
+    'cached',
 ]
 

@@ -4,11 +4,14 @@ AI utilities module.
 Provides utility functions for AI operations:
 - get_ai_interface: Factory function for AI interfaces
 - list_available_protocols: List available protocols
+- Prompt templates and formatting utilities
 """
 
 from typing import Dict, Any, Optional, List
 from ..base import AIInterface
 from ..interfaces import MCPInterface
+from . import prompts
+from . import formatting
 
 _PROTOCOL_REGISTRY = {
     "mcp": MCPInterface,
@@ -72,5 +75,10 @@ def list_available_protocols() -> List[str]:
     return list(_PROTOCOL_REGISTRY.keys())
 
 
-__all__ = ['get_ai_interface', 'list_available_protocols']
+__all__ = [
+    'get_ai_interface',
+    'list_available_protocols',
+    'prompts',
+    'formatting',
+]
 
