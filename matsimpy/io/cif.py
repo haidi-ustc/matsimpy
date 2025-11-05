@@ -122,7 +122,12 @@ def read_CIF(filename: str) -> Crystal:
                     continue
                 loop_parsed = _parse_cif_line(loop_line)
                 if loop_parsed is None:
-                    # Empty line or comment, skip
+                    # This might be a data line (not a data item)
+                    # Check if it's actually data by seeing if it doesn't start with special chars
+                    stripped = loop_line.strip()
+                    if not (stripped.startswith('_') or stripped.startswith('loop_') or stripped.startswith('data_')):
+                        # This is a data line, break to start collecting data
+                        break
                     i += 1
                     continue
                 loop_name, loop_value = loop_parsed
@@ -134,15 +139,16 @@ def read_CIF(filename: str) -> Crystal:
                     break
             # Collect data lines (everything after loop items until we hit another data item or loop)
             while i < len(lines):
-                data_line = lines[i].strip()
-                if not data_line:
+                data_line = lines[i]
+                data_line_stripped = data_line.strip()
+                if not data_line_stripped:
                     i += 1
                     continue
                 # Check if this is a data item or loop start (end of loop)
-                if data_line.startswith('_') or data_line.startswith('loop_') or data_line.startswith('data_'):
+                if data_line_stripped.startswith('_') or data_line_stripped.startswith('loop_') or data_line_stripped.startswith('data_'):
                     break
                 # This is a data line - add it
-                loop_data_lines.append(data_line)
+                loop_data_lines.append(data_line_stripped)
                 i += 1
             # Process loop data
             for data_line in loop_data_lines:
