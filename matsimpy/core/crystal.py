@@ -135,9 +135,28 @@ class Crystal(Structure):
         info += f"  Volume: {self.volume:.4f} Å³\n"
         try:
             density = self.density()
-            info += f"  Density: {density:.4f} g/cm³"
+            info += f"  Density: {density:.4f} g/cm³\n"
         except (ValueError, AttributeError):
-            pass
+            info += "\n"
+        
+        # Atom coordinates and properties table
+        has_properties = any(site.properties for site in self.sites)
+        headers = ["Element", "Fractional Coordinates", "Cartesian Coordinates"]
+        if has_properties:
+            headers.append("Properties")
+        
+        rows = []
+        for site in self.sites:
+            element = str(site.specie)
+            frac_coords = f"({site.frac_position[0]:.4f}, {site.frac_position[1]:.4f}, {site.frac_position[2]:.4f})"
+            cart_coords = f"({site.cart_position[0]:.4f}, {site.cart_position[1]:.4f}, {site.cart_position[2]:.4f})"
+            row = [element, frac_coords, cart_coords]
+            if has_properties:
+                props_str = ", ".join(f"{k}={v}" for k, v in site.properties.items()) if site.properties else ""
+                row.append(props_str)
+            rows.append(row)
+        
+        info += tabulate(rows, headers=headers, tablefmt="plain", stralign="left")
         
         return info
 

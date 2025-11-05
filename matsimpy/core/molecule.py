@@ -190,15 +190,35 @@ class Molecule(Structure):
 
     def __str__(self):
         """Human-readable string representation of Molecule."""
+        from tabulate import tabulate
+        
         info = f"{self.__class__.__name__}: {self.formula}\n"
         info += f"  Sites: {len(self)} atoms\n"
         
         # Center of mass
         try:
             com = self.get_center_of_mass()
-            info += f"  Center of mass: ({com[0]:.4f}, {com[1]:.4f}, {com[2]:.4f}) Å"
+            info += f"  Center of mass: ({com[0]:.4f}, {com[1]:.4f}, {com[2]:.4f}) Å\n"
         except (ValueError, AttributeError):
-            pass
+            info += "\n"
+        
+        # Atom coordinates and properties table
+        has_properties = any(site.properties for site in self.sites)
+        headers = ["Element", "Cartesian Coordinates"]
+        if has_properties:
+            headers.append("Properties")
+        
+        rows = []
+        for site in self.sites:
+            element = str(site.specie)
+            cart_coords = f"({site.position[0]:.4f}, {site.position[1]:.4f}, {site.position[2]:.4f})"
+            row = [element, cart_coords]
+            if has_properties:
+                props_str = ", ".join(f"{k}={v}" for k, v in site.properties.items()) if site.properties else ""
+                row.append(props_str)
+            rows.append(row)
+        
+        info += tabulate(rows, headers=headers, tablefmt="plain", stralign="left")
         
         return info
 
