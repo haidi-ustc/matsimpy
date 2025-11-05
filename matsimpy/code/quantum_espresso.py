@@ -30,21 +30,39 @@ def write_input(structure: Union[Crystal, Molecule], filename: str, **kwargs) ->
     # Prepare the Quantum Espresso formatted string
     qe_str = "&system\n"
     qe_str += f"  ibrav = 0,\n"
-    qe_str += f"  nat = {len(crystal)},\n"
-    qe_str += f"  ntyp = {len(np.unique(crystal.species))},\n"
+    qe_str += f"  nat = {len(structure)},\n"
+    qe_str += f"  ntyp = {len(np.unique(structure.species))},\n"
     qe_str += "/\n\n"
     
     qe_str += "ATOMIC_SPECIES\n"
-    unique_species, _ = np.unique(crystal.species, return_counts=True)
+    unique_species, _ = np.unique(structure.species, return_counts=True)
     for s in unique_species:
         qe_str += f"{s} 1.0 {s}.UPF\n"
     
-    qe_str += "\nCELL_PARAMETERS (angstrom)\n"
-    for vector in crystal.lattice.lattice_vectors:
-        qe_str += f"{vector[0]:.8f} {vector[1]:.8f} {vector[2]:.8f}\n"
+    # For crystals, include cell; for molecules, use a large cell
+    if isinstance(structure, Crystal):
+        qe_str += "\nCELL_PARAMETERS (angstrom)\n"
+        for vector in structure.lattice.lattice_vectors:
+            qe_str += f"{vector[0]:.8f} {vector[1]:.8f} {vector[2]:.8f}\n"
+    else:
+        # For molecules, create a large cubic cell
+        max_distance = 0
+        for i, pos_i in enumerate(structure.positions):
+            for j, pos_j in enumerate(structure.positions):
+                if i >= j:
+                    continue
+                distance = np.linalg.norm(pos_i - pos_j)
+                if distance > max_distance:
+                    max_distance = distance
+        cell_size = max_distance * 2.5  # Add padding
+        qe_str += "\nCELL_PARAMETERS (angstrom)\n"
+        qe_str += f"{cell_size:.8f} 0.00000000 0.00000000\n"
+        qe_str += f"0.00000000 {cell_size:.8f} 0.00000000\n"
+        qe_str += f"0.00000000 0.00000000 {cell_size:.8f}\n"
     
     qe_str += "\nATOMIC_POSITIONS (angstrom)\n"
-    for s, position in zip(crystal.species, crystal.cart_positions):
+    positions = structure.cart_positions if isinstance(structure, Crystal) else structure.positions
+    for s, position in zip(structure.species, positions):
         qe_str += f"{s} {position[0]:.8f} {position[1]:.8f} {position[2]:.8f}\n"
     
     with open(filename, 'w') as file:
