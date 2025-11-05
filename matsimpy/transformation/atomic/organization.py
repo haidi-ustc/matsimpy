@@ -49,14 +49,14 @@ def sort_atoms(
     if key == 'species':
         keys = [(i, structure.species[i]) for i in range(n_atoms)]
     elif key == 'z':
-        keys = [(i, Element(structure.species[i]).Z) for i in range(n_atoms)]
+        keys = [(i, Element(structure.species[i]).atomic_no) for i in range(n_atoms)]
     elif key == 'mass':
         keys = [(i, Element(structure.species[i]).atomic_mass) for i in range(n_atoms)]
     elif key == 'distance':
         if isinstance(structure, Crystal):
             distances = np.linalg.norm(structure.cart_positions, axis=1)
         else:
-            distances = np.linalg.norm(structure.cart_positions, axis=1)
+            distances = np.linalg.norm(structure.positions, axis=1)
         keys = [(i, distances[i]) for i in range(n_atoms)]
     elif callable(key):
         keys = [(i, key(structure, i)) for i in range(n_atoms)]
@@ -78,7 +78,7 @@ def sort_atoms(
         structure.cart_positions = structure._convert_to_cartesian()
         structure._sites = structure._initialize_sites()
     else:
-        structure.cart_positions = new_positions
+        structure.positions = new_positions
     
     # Invalidate caches
     structure._neighbor_tree = None
@@ -128,8 +128,7 @@ def center_structure(
         displacement = center - current_center
         
         # Move all atoms
-        structure.cart_positions += displacement
-        structure.positions = structure.cart_positions
+        structure.positions += displacement
         
     else:
         # For crystals, center in fractional coordinates
@@ -203,11 +202,10 @@ def perturb_positions(
         structure._sites = structure._initialize_sites()
         
     else:
-        new_positions = structure.cart_positions.copy()
+        new_positions = structure.positions.copy()
         for i, idx in enumerate(indices):
             new_positions[idx] += perturbations[i]
         
-        structure.cart_positions = new_positions
         structure.positions = new_positions
     
     # Invalidate caches

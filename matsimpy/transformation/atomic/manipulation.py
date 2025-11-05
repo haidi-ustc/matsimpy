@@ -71,11 +71,10 @@ def move_atoms(
             raise ValueError("Molecule positions are always Cartesian")
         
         # Move atoms
-        new_positions = structure.cart_positions.copy()
+        new_positions = structure.positions.copy()
         for idx in indices:
             new_positions[idx] += displacement
         
-        structure.cart_positions = new_positions
         structure.positions = new_positions
     
     # Invalidate caches
