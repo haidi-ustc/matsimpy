@@ -18,6 +18,8 @@ Both approaches are valid and serve different use cases.
 **Methods**:
 - `add_atom(species, position, site_properties=None)` - Add atom to structure
 - `remove_atom(index)` - Remove atom from structure
+- `substitute(indices, new_species)` - Substitute atoms (Crystal & Molecule)
+- `substitute_all(old_species, new_species)` - Substitute all atoms of a species
 - `translate(vector)` - Translate molecule (Molecule only)
 - `rotate(angle, axis)` - Rotate molecule (Molecule only)
 
@@ -40,6 +42,8 @@ Both approaches are valid and serve different use cases.
 molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
 molecule.translate([1, 1, 1])  # Modifies molecule directly
 molecule.add_atom('H', [2, 0, 0])  # Adds atom in-place
+molecule.substitute(0, 'N')  # Substitute atom at index 0
+crystal.substitute_all('Si', 'Ge')  # Replace all Si with Ge
 ```
 
 ### Transformation Module (Functional, Immutable-Style)
@@ -49,7 +53,8 @@ molecule.add_atom('H', [2, 0, 0])  # Adds atom in-place
 **Functions**:
 - `translate(structure, vector, inplace=False)` - Translate any structure
 - `rotate(structure, angle, axis, center=None, inplace=False)` - Rotate any structure
-- `substitute(structure, indices, new_species, inplace=False)` - Substitute atoms
+- `substitute(structure, indices, new_species, inplace=False)` - Substitute atoms (functional)
+- `substitute_all(structure, old_species, new_species, inplace=False)` - Substitute all (functional)
 - `make_supercell(crystal, scaling_matrix, inplace=False)` - Create supercell
 - `chain(structure, transformations)` - Chain multiple operations
 
@@ -165,14 +170,23 @@ molecule.rotate(90, [0, 0, 1])
 # ... but need to implement substitution manually
 ```
 
-### Example 4: Adding Atoms
+### Example 4: Substituting Atoms
+```python
+# Class method - direct (common operation)
+crystal.substitute(0, 'Ge')  # Substitute atom at index 0
+crystal.substitute_all('Si', 'Ge')  # Replace all Si with Ge
+molecule.substitute([0, 1], ['N', 'O'])  # Substitute multiple atoms
+
+# Transformation module - functional (preserves original)
+from matsimpy.transformation import substitute, substitute_all
+new_crystal = substitute(crystal, 0, 'Ge')  # Returns new crystal
+new_crystal = substitute_all(crystal, 'Si', 'Ge')  # Returns new crystal
+```
+
+### Example 5: Adding Atoms
 ```python
 # Class method - direct
 crystal.add_atom('O', [0.5, 0.5, 0.5], site_properties={'charge': -2})
-
-# Transformation module - functional (if we add it)
-# from matsimpy.transformation import add_atom
-# new_crystal = add_atom(crystal, 'O', [0.5, 0.5, 0.5], site_properties={'charge': -2})
 ```
 
 ## Best Practices
@@ -181,6 +195,8 @@ crystal.add_atom('O', [0.5, 0.5, 0.5], site_properties={'charge': -2})
    ```python
    molecule.translate([1, 1, 1])
    crystal.add_atom('O', [0.5, 0.5, 0.5])
+   crystal.substitute(0, 'Ge')  # Common operation
+   molecule.substitute_all('C', 'N')  # Bulk substitution
    ```
 
 2. **For complex operations**: Use transformation module

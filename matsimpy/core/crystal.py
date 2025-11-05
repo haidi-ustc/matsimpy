@@ -82,6 +82,33 @@ class Crystal(Structure):
             self.site_properties.pop(index)
         # Reinitialize sites
         self._sites = self._initialize_sites()
+    
+    def substitute(self, indices: Union[int, List[int]], 
+                   new_species: Union[str, List[str]]) -> None:
+        """
+        Substitute atoms with new species.
+        
+        This is a common operation for modifying crystals. For functional
+        style (returning new object), use matsimpy.transformation.substitute().
+        
+        Args:
+            indices: Atom index or list of indices to substitute
+            new_species: New species symbol or list of symbols
+            
+        Raises:
+            IndexError: If index is out of range
+            ValueError: If number of indices doesn't match number of species
+            
+        Examples:
+            >>> crystal.substitute(0, 'Ge')  # Substitute atom at index 0
+            >>> crystal.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
+        """
+        super().substitute(indices, new_species)
+        # Invalidate neighbor tree (species changed)
+        self._neighbor_tree = None
+        self._neighbor_tree_positions = None
+        # Reinitialize sites
+        self._sites = self._initialize_sites()
 
     def _initialize_sites(self) -> List[CrystalSite]:
         """

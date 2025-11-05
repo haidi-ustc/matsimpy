@@ -181,6 +181,89 @@ class Structure(MSONable):
         else:
             raise IndexError("Invalid atom index.")
 
+    def substitute(self, indices: Union[int, List[int]], 
+                   new_species: Union[str, List[str]]) -> None:
+        """
+        Substitute atoms with new species.
+        
+        This is a common operation for modifying structures. For functional
+        style (returning new object), use matsimpy.transformation.substitute().
+        
+        Args:
+            indices: Atom index or list of indices to substitute
+            new_species: New species symbol or list of symbols
+            
+        Raises:
+            IndexError: If index is out of range
+            ValueError: If number of indices doesn't match number of species
+            
+        Examples:
+            >>> structure.substitute(0, 'Ge')  # Substitute atom at index 0
+            >>> structure.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
+        """
+        # Normalize inputs
+        if isinstance(indices, int):
+            indices = [indices]
+            if isinstance(new_species, str):
+                new_species = [new_species]
+            else:
+                new_species = [new_species[0]]  # Take first if list
+        elif isinstance(new_species, str):
+            # Multiple indices, single species
+            new_species = [new_species] * len(indices)
+        elif isinstance(new_species, list):
+            # Both are lists
+            pass
+        else:
+            raise TypeError(f"new_species must be str or List[str], got {type(new_species)}")
+        
+        if len(indices) != len(new_species):
+            raise ValueError(
+                f"Number of indices ({len(indices)}) must match "
+                f"number of species ({len(new_species)})"
+            )
+        
+        # Validate indices
+        for idx in indices:
+            if not (0 <= idx < len(self.species)):
+                raise IndexError(f"Atom index {idx} is out of range [0, {len(self.species)-1}]")
+        
+        # Perform substitutions
+        species_list = list(self.species)
+        for idx, species in zip(indices, new_species):
+            species_list[idx] = species
+        
+        # Update species tuple
+        self.species = tuple(species_list)
+        
+        # Invalidate caches
+        self._formula_dirty = True
+        self._cached_composition = None
+    
+    def substitute_all(self, old_species: str, new_species: str) -> None:
+        """
+        Substitute all atoms of a given species with a new species.
+        
+        This is a convenience method for bulk substitution. For functional
+        style (returning new object), use matsimpy.transformation.substitute_all().
+        
+        Args:
+            old_species: Species to replace
+            new_species: Replacement species
+            
+        Examples:
+            >>> structure.substitute_all('Si', 'Ge')  # Replace all Si with Ge
+        """
+        # Find all indices of old_species
+        indices = [i for i, spec in enumerate(self.species) if spec == old_species]
+        
+        if not indices:
+            # No substitution needed
+            return
+        
+        # Substitute all at once
+        self.substitute(indices, [new_species] * len(indices))
+
     def get_neighbor_list(self, cutoff: float, use_pbc: bool = True) -> Dict[int, List[Tuple[int, float]]]:
         """
         Get neighbor list. To be implemented by subclasses.

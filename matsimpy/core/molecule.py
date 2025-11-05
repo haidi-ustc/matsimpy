@@ -133,6 +133,30 @@ class Molecule(Structure):
         if self.site_properties and len(self.site_properties) > index:
             self.site_properties.pop(index)
         self._sites = self._initialize_sites()
+    
+    def substitute(self, indices: Union[int, List[int]], 
+                   new_species: Union[str, List[str]]) -> None:
+        """
+        Substitute atoms with new species.
+        
+        This is a common operation for modifying molecules. For functional
+        style (returning new object), use matsimpy.transformation.substitute().
+        
+        Args:
+            indices: Atom index or list of indices to substitute
+            new_species: New species symbol or list of symbols
+            
+        Raises:
+            IndexError: If index is out of range
+            ValueError: If number of indices doesn't match number of species
+            
+        Examples:
+            >>> molecule.substitute(0, 'N')  # Substitute atom at index 0
+            >>> molecule.substitute([0, 1], ['N', 'O'])  # Substitute multiple
+        """
+        super().substitute(indices, new_species)
+        # Update sites after substitution
+        self._sites = self._initialize_sites()
 
     def as_dict(self):
         """
