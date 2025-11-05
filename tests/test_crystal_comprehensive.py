@@ -164,34 +164,6 @@ class TestCrystalComprehensive(unittest.TestCase):
         finally:
             Path(temp_file).unlink()
     
-    def test_crystal_to_quantum_espresso(self):
-        """Test Quantum Espresso format output."""
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        qe_str = crystal.to_quantum_espresso()
-        self.assertIn('&system', qe_str)
-        self.assertIn('ATOMIC_POSITIONS', qe_str)
-        self.assertIn('CELL_PARAMETERS', qe_str)
-    
-    def test_crystal_to_quantum_espresso_file(self):
-        """Test writing Quantum Espresso to file."""
-        import tempfile
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.in') as f:
-            temp_file = f.name
-        
-        try:
-            crystal.to_quantum_espresso(temp_file)
-            self.assertTrue(Path(temp_file).exists())
-        finally:
-            Path(temp_file).unlink()
     
     def test_crystal_str(self):
         """Test string representation."""

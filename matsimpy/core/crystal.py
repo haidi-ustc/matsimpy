@@ -432,6 +432,22 @@ class Crystal(Structure):
             raise ValueError("ASE Atoms must have cell and PBC for Crystal conversion")
         return result
     
+    def to_quantum_espresso(self, filename: Optional[str] = None) -> Optional[str]:
+        """
+        Convert Crystal to Quantum Espresso input format.
+        
+        This is a convenience method that calls the function in the code module.
+        For better organization, consider using matsimpy.code.quantum_espresso.to_quantum_espresso() directly.
+        
+        Args:
+            filename: Optional filename to write to. If None, returns string.
+            
+        Returns:
+            str or None: Quantum Espresso input string if filename is None, otherwise None
+        """
+        from ..code.quantum_espresso import to_quantum_espresso
+        return to_quantum_espresso(self, filename)
+    
     @classmethod
     def random_crystal(cls, dim: int, group: int, species: list, num_ions: list, **kwargs):
         """
