@@ -4,16 +4,44 @@ VASP DFT code interface.
 Provides input/output functionality for VASP calculations.
 """
 
-# TODO: Implement VASP interface
-# from ..core import Crystal
+from typing import Optional
+from ..core import Crystal
 
-# class VASPInput:
-#     """Generate VASP input files."""
-#     pass
 
-# class VASPOutput:
-#     """Parse VASP output files."""
-#     pass
+def write_input(crystal: Crystal, filename: str, **kwargs) -> None:
+    """
+    Write VASP input file from Crystal structure.
+    
+    Args:
+        crystal: Crystal structure to convert
+        filename: Output filename
+        **kwargs: Additional parameters for VASP input
+                 (e.g., INCAR parameters, k-points, etc.)
+        
+    Raises:
+        ValueError: If crystal is not a valid Crystal object
+        NotImplementedError: Not yet implemented
+    """
+    # TODO: Implement VASP input file writing
+    raise NotImplementedError("VASP input file writing not yet implemented")
 
-__all__ = []
 
+def read_output(filename: str) -> dict:
+    """
+    Read VASP output file (OUTCAR, CONTCAR, etc.).
+    
+    Args:
+        filename: Path to VASP output file
+        
+    Returns:
+        dict: Dictionary containing parsed output data
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        NotImplementedError: Not yet implemented
+    """
+    # TODO: Implement VASP output parsing
+    raise NotImplementedError("VASP output parsing not yet implemented")
+
+
+__all__ = ['write_input', 'read_output']

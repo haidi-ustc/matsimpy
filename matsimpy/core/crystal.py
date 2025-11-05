@@ -432,21 +432,68 @@ class Crystal(Structure):
             raise ValueError("ASE Atoms must have cell and PBC for Crystal conversion")
         return result
     
-    def to_quantum_espresso(self, filename: Optional[str] = None) -> Optional[str]:
+    def to_code(self, code: str, filename: str, **kwargs) -> None:
         """
-        Convert Crystal to Quantum Espresso input format.
+        Write input file for a DFT code.
         
-        This is a convenience method that calls the function in the code module.
-        For better organization, consider using matsimpy.code.quantum_espresso.to_quantum_espresso() directly.
+        Generic interface for writing DFT code input files. Supports multiple
+        codes through the code parameter.
         
         Args:
-            filename: Optional filename to write to. If None, returns string.
-            
-        Returns:
-            str or None: Quantum Espresso input string if filename is None, otherwise None
+            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            filename: Output filename
+            **kwargs: Additional parameters for the DFT code input
+                     (code-specific parameters)
+        
+        Raises:
+            ValueError: If code is not supported
+            NotImplementedError: If code interface is not yet implemented
+        
+        Examples:
+            >>> crystal.to_code('quantum_espresso', 'scf.in')
+            >>> crystal.to_code('qe', 'pw.in', calculation='scf')
         """
-        from ..code.quantum_espresso import to_quantum_espresso
-        return to_quantum_espresso(self, filename)
+        from ..code import get_code_interface
+        
+        try:
+            interface = get_code_interface(code)
+            write_input = interface['write_input']
+            write_input(self, filename, **kwargs)
+        except ValueError as e:
+            raise ValueError(f"Unsupported DFT code: {code}") from e
+    
+    @classmethod
+    def from_code(cls, code: str, filename: str, **kwargs) -> 'Crystal':
+        """
+        Read structure from DFT code output file.
+        
+        Generic interface for reading structures from DFT code output files.
+        Currently not implemented.
+        
+        Args:
+            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            filename: Path to output file
+            **kwargs: Additional parameters for parsing
+        
+        Returns:
+            Crystal: Crystal structure from the output file
+        
+        Raises:
+            ValueError: If code is not supported
+            NotImplementedError: Output parsing not yet implemented
+        
+        Examples:
+            >>> crystal = Crystal.from_code('quantum_espresso', 'scf.out')
+        """
+        from ..code import get_code_interface
+        
+        try:
+            interface = get_code_interface(code)
+            read_output = interface['read_output']
+            # TODO: Implement output parsing
+            raise NotImplementedError(f"Reading {code} output files not yet implemented")
+        except ValueError as e:
+            raise ValueError(f"Unsupported DFT code: {code}") from e
     
     @classmethod
     def random_crystal(cls, dim: int, group: int, species: list, num_ions: list, **kwargs):

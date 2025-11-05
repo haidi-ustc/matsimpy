@@ -11,22 +11,21 @@ import numpy as np
 from ..core import Crystal
 
 
-def to_quantum_espresso(crystal: Crystal, filename: Optional[str] = None) -> Optional[str]:
+def write_input(crystal: Crystal, filename: str, **kwargs) -> None:
     """
-    Convert a Crystal structure to Quantum Espresso input format.
+    Write Quantum Espresso input file from Crystal structure.
     
     Args:
         crystal: Crystal structure to convert
-        filename: Optional filename to write to. If None, returns string.
-        
-    Returns:
-        str or None: Quantum Espresso input string if filename is None, otherwise None
+        filename: Output filename
+        **kwargs: Additional parameters for Quantum Espresso input
+                 (e.g., calculation type, k-points, etc.)
         
     Raises:
         ValueError: If crystal is not a valid Crystal object
     """
     if not isinstance(crystal, Crystal):
-        raise ValueError("to_quantum_espresso requires a Crystal object")
+        raise ValueError("write_input requires a Crystal object")
     
     # Prepare the Quantum Espresso formatted string
     qe_str = "&system\n"
@@ -48,12 +47,61 @@ def to_quantum_espresso(crystal: Crystal, filename: Optional[str] = None) -> Opt
     for s, position in zip(crystal.species, crystal.cart_positions):
         qe_str += f"{s} {position[0]:.8f} {position[1]:.8f} {position[2]:.8f}\n"
     
+    with open(filename, 'w') as file:
+        file.write(qe_str)
+
+
+def read_output(filename: str) -> dict:
+    """
+    Read Quantum Espresso output file.
+    
+    Args:
+        filename: Path to Quantum Espresso output file
+        
+    Returns:
+        dict: Dictionary containing parsed output data
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        NotImplementedError: Not yet implemented
+    """
+    # TODO: Implement Quantum Espresso output parsing
+    raise NotImplementedError("Quantum Espresso output parsing not yet implemented")
+
+
+# Keep legacy function for backward compatibility (deprecated)
+def to_quantum_espresso(crystal: Crystal, filename: Optional[str] = None) -> Optional[str]:
+    """
+    Convert a Crystal structure to Quantum Espresso input format.
+    
+    DEPRECATED: Use write_input() instead.
+    
+    Args:
+        crystal: Crystal structure to convert
+        filename: Optional filename to write to. If None, returns string.
+        
+    Returns:
+        str or None: Quantum Espresso input string if filename is None, otherwise None
+        
+    Raises:
+        ValueError: If crystal is not a valid Crystal object
+    """
     if filename:
-        with open(filename, 'w') as file:
-            file.write(qe_str)
+        write_input(crystal, filename)
         return None
     else:
-        return qe_str
+        # Return string representation
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.in') as f:
+            temp_file = f.name
+        try:
+            write_input(crystal, temp_file)
+            with open(temp_file, 'r') as f:
+                content = f.read()
+            return content
+        finally:
+            os.unlink(temp_file)
 
 
-__all__ = ['to_quantum_espresso']
+__all__ = ['write_input', 'read_output', 'to_quantum_espresso']
