@@ -33,6 +33,13 @@ organized by structure type:
 
 **interface/**   - Interface structures (placeholder)
 
+**nanostructure/** - Nanostructures
+  - build_nanotube(): Build nanotubes from 2D sheets
+  - build_carbon_nanotube(): Build carbon nanotubes from chirality
+  - build_twisted_bilayer(): Build twisted bilayer structures
+  - build_magic_angle_twisted(): Build magic-angle twisted structures
+  - build_twisted_multilayer(): Build twisted multilayer structures
+
 Quick Start:
     >>> from matsimpy.builders import *
     >>> 
@@ -61,6 +68,7 @@ from .surface import *
 from .alloy import *
 from .molecule import *
 from .defects import *
+from .nanostructure import *
 
 # Import submodule __all__ lists
 from .bulk import __all__ as _bulk_all
@@ -68,9 +76,11 @@ from .surface import __all__ as _surface_all
 from .alloy import __all__ as _alloy_all
 from .molecule import __all__ as _molecule_all
 from .defects import __all__ as _defects_all
+from .nanostructure import __all__ as _nanostructure_all
 
 # Combine all exports
-__all__ = _bulk_all + _surface_all + _alloy_all + _molecule_all + _defects_all
+__all__ = (_bulk_all + _surface_all + _alloy_all + _molecule_all + 
+          _defects_all + _nanostructure_all)
 
 # Allow access to submodules
 from . import bulk
@@ -79,4 +89,5 @@ from . import alloy
 from . import molecule
 from . import defects
 from . import interface
+from . import nanostructure
 
