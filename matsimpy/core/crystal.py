@@ -360,4 +360,119 @@ class Crystal(Structure):
         lattice = Lattice(pyxtal_crystal.lattice.matrix)
 
         return cls(species_list, positions, lattice)
+    
+    @classmethod
+    def from_file(cls, filename: str, format: Optional[str] = None) -> 'Crystal':
+        """
+        Create a Crystal from a file.
+        
+        Automatically detects file format from extension if not specified.
+        Supported formats: .vasp, .poscar, .contcar, .cif, .xsf, .json, .ase
+        
+        Args:
+            filename: Path to the structure file
+            format: Optional format specification (e.g., 'vasp', 'cif').
+                   If None, format is detected from file extension.
+        
+        Returns:
+            Crystal: Crystal structure from the file
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            ValueError: If format is not supported or file format is invalid
+        """
+        from ..io import detect_format, get_reader_writer
+        from ..io import (
+            read_POSCAR, read_CIF, read_XSF, from_json, read_ASE
+        )
+        
+        # Detect format if not specified
+        if format is None:
+            format_ext = detect_format(filename)
+            if format_ext is None:
+                raise ValueError(f"Could not detect file format from extension: {filename}")
+        else:
+            # Map format string to extension
+            format_map = {
+                'vasp': '.vasp', 'poscar': '.vasp', 'contcar': '.contcar',
+                'cif': '.cif', 'xsf': '.xsf', 'json': '.json',
+                'ase': '.ase'
+            }
+            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
+        
+        # Get appropriate reader
+        reader_name, _ = get_reader_writer(format_ext)
+        if reader_name is None:
+            raise ValueError(f"Unsupported format for Crystal: {format_ext}")
+        
+        # Call appropriate reader function
+        readers = {
+            'read_POSCAR': read_POSCAR,
+            'read_CONTCAR': read_POSCAR,  # Alias
+            'read_CIF': read_CIF,
+            'read_XSF': read_XSF,
+            'from_json': lambda f: from_json(filename=f),
+            'read_ASE': read_ASE,
+        }
+        
+        reader = readers.get(reader_name)
+        if reader is None:
+            raise ValueError(f"Reader not found for format: {format_ext}")
+        
+        return reader(filename)
+    
+    def to_file(self, filename: str, format: Optional[str] = None) -> None:
+        """
+        Write Crystal to a file.
+        
+        Automatically detects file format from extension if not specified.
+        Supported formats: .vasp, .poscar, .contcar, .cif, .xsf, .json, .ase
+        
+        Args:
+            filename: Output filename
+            format: Optional format specification (e.g., 'vasp', 'cif').
+                   If None, format is detected from file extension.
+        
+        Raises:
+            ValueError: If format is not supported
+        """
+        from ..io import detect_format, get_reader_writer
+        from ..io import (
+            write_POSCAR, write_CIF, write_XSF, to_json, write_ASE
+        )
+        
+        # Detect format if not specified
+        if format is None:
+            format_ext = detect_format(filename)
+            if format_ext is None:
+                raise ValueError(f"Could not detect file format from extension: {filename}")
+        else:
+            # Map format string to extension
+            format_map = {
+                'vasp': '.vasp', 'poscar': '.vasp', 'contcar': '.contcar',
+                'cif': '.cif', 'xsf': '.xsf', 'json': '.json',
+                'ase': '.ase'
+            }
+            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
+        
+        # Get appropriate writer
+        _, writer_name = get_reader_writer(format_ext)
+        if writer_name is None:
+            raise ValueError(f"Unsupported format for Crystal: {format_ext}")
+        
+        # Call appropriate writer function
+        writers = {
+            'write_POSCAR': write_POSCAR,
+            'write_CONTCAR': write_POSCAR,  # Alias
+            'write_CIF': write_CIF,
+            'write_XSF': write_XSF,
+            'to_json': lambda s, f: to_json(s, filename=f),
+            'write_ASE': write_ASE,
+        }
+        
+        writer = writers.get(writer_name)
+        if writer is None:
+            raise ValueError(f"Writer not found for format: {format_ext}")
+        
+        writer(self, filename)
 

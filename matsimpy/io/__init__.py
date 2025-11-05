@@ -16,6 +16,9 @@ from .xyz import read_XYZ, write_XYZ, read_XYZ_multiframe
 from .pdb import read_PDB, write_PDB
 from .xsf import read_XSF, write_XSF
 from .json import to_json, from_json
+from .ase import read_ASE, write_ASE
+from .mol import read_MOL, write_MOL
+from .utils import detect_format, get_reader_writer, is_crystal_format, is_molecule_format
 
 __all__ = [
     # VASP
@@ -30,5 +33,11 @@ __all__ = [
     'read_XSF', 'write_XSF',
     # JSON
     'to_json', 'from_json',
+    # ASE
+    'read_ASE', 'write_ASE',
+    # MOL
+    'read_MOL', 'write_MOL',
+    # Utils
+    'detect_format', 'get_reader_writer', 'is_crystal_format', 'is_molecule_format',
 ]
 

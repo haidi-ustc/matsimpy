@@ -95,11 +95,16 @@ def read_CIF(filename: str) -> Crystal:
     cif_data = {}
     in_loop = False
     loop_items = []
-    loop_data = []
+    loop_data_lines = []
+    current_line_index = 0
     
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         parsed = _parse_cif_line(line)
+        
         if parsed is None:
+            i += 1
             continue
         
         data_name, value = parsed
@@ -107,26 +112,43 @@ def read_CIF(filename: str) -> Crystal:
         if data_name == 'loop_start':
             in_loop = True
             loop_items = []
-            loop_data = []
-        elif in_loop:
-            if data_name.startswith('_'):
-                loop_items.append(data_name)
-            else:
-                # End of loop items, start of data
-                if loop_items:
-                    in_loop = False
-                    # Process loop data
-                    if data_name and loop_items:
-                        # This line is first data line
-                        values = line.strip().split()
-                        for i, item in enumerate(loop_items):
-                            if item not in cif_data:
-                                cif_data[item] = []
-                            if i < len(values):
-                                cif_data[item].append(values[i])
+            loop_data_lines = []
+            i += 1
+            # Collect loop items
+            while i < len(lines):
+                loop_line = lines[i]
+                loop_parsed = _parse_cif_line(loop_line)
+                if loop_parsed is None:
+                    i += 1
+                    continue
+                loop_name, loop_value = loop_parsed
+                if loop_name.startswith('_'):
+                    loop_items.append(loop_name)
+                    i += 1
+                else:
+                    # Start of data
+                    break
+            # Collect data lines
+            while i < len(lines):
+                data_line = lines[i]
+                if data_line.strip() and not data_line.startswith('_') and not data_line.startswith('loop_'):
+                    loop_data_lines.append(data_line.strip())
+                    i += 1
+                else:
+                    break
+            # Process loop data
+            for data_line in loop_data_lines:
+                values = data_line.split()
+                for j, item in enumerate(loop_items):
+                    if item not in cif_data:
+                        cif_data[item] = []
+                    if j < len(values):
+                        cif_data[item].append(values[j])
+            in_loop = False
         else:
             if data_name.startswith('_'):
                 cif_data[data_name] = value
+            i += 1
     
     # Extract lattice parameters
     # Try both standard and alternative CIF data names

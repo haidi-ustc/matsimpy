@@ -229,4 +229,115 @@ class Molecule(Structure):
             neighbor_list = self.get_neighbor_list(i, cutoff)
             neighbor_lists.append(neighbor_list)
         return neighbor_lists
+    
+    @classmethod
+    def from_file(cls, filename: str, format: Optional[str] = None) -> 'Molecule':
+        """
+        Create a Molecule from a file.
+        
+        Automatically detects file format from extension if not specified.
+        Supported formats: .xyz, .pdb, .mol, .json
+        
+        Args:
+            filename: Path to the structure file
+            format: Optional format specification (e.g., 'xyz', 'pdb').
+                   If None, format is detected from file extension.
+        
+        Returns:
+            Molecule: Molecule structure from the file
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            ValueError: If format is not supported or file format is invalid
+        """
+        from ..io import detect_format, get_reader_writer
+        from ..io import read_XYZ, read_PDB, read_MOL, from_json
+        from ..core import Crystal
+        
+        # Detect format if not specified
+        if format is None:
+            format_ext = detect_format(filename)
+            if format_ext is None:
+                raise ValueError(f"Could not detect file format from extension: {filename}")
+        else:
+            # Map format string to extension
+            format_map = {
+                'xyz': '.xyz', 'pdb': '.pdb', 'mol': '.mol', 'json': '.json'
+            }
+            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
+        
+        # Get appropriate reader
+        reader_name, _ = get_reader_writer(format_ext)
+        if reader_name is None:
+            raise ValueError(f"Unsupported format for Molecule: {format_ext}")
+        
+        # Call appropriate reader function
+        readers = {
+            'read_XYZ': read_XYZ,
+            'read_PDB': lambda f: read_PDB(f, as_crystal=False),
+            'read_MOL': read_MOL,
+            'from_json': lambda f: from_json(filename=f),
+        }
+        
+        reader = readers.get(reader_name)
+        if reader is None:
+            raise ValueError(f"Reader not found for format: {format_ext}")
+        
+        result = reader(filename)
+        
+        # Ensure we return a Molecule
+        if isinstance(result, Crystal):
+            # Convert crystal to molecule if needed
+            return cls(result.species, result.cart_positions.tolist())
+        
+        return result
+    
+    def to_file(self, filename: str, format: Optional[str] = None) -> None:
+        """
+        Write Molecule to a file.
+        
+        Automatically detects file format from extension if not specified.
+        Supported formats: .xyz, .pdb, .mol, .json
+        
+        Args:
+            filename: Output filename
+            format: Optional format specification (e.g., 'xyz', 'pdb').
+                   If None, format is detected from file extension.
+        
+        Raises:
+            ValueError: If format is not supported
+        """
+        from ..io import detect_format, get_reader_writer
+        from ..io import write_XYZ, write_PDB, write_MOL, to_json
+        
+        # Detect format if not specified
+        if format is None:
+            format_ext = detect_format(filename)
+            if format_ext is None:
+                raise ValueError(f"Could not detect file format from extension: {filename}")
+        else:
+            # Map format string to extension
+            format_map = {
+                'xyz': '.xyz', 'pdb': '.pdb', 'mol': '.mol', 'json': '.json'
+            }
+            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
+        
+        # Get appropriate writer
+        _, writer_name = get_reader_writer(format_ext)
+        if writer_name is None:
+            raise ValueError(f"Unsupported format for Molecule: {format_ext}")
+        
+        # Call appropriate writer function
+        writers = {
+            'write_XYZ': write_XYZ,
+            'write_PDB': write_PDB,
+            'write_MOL': write_MOL,
+            'to_json': lambda s, f: to_json(s, filename=f),
+        }
+        
+        writer = writers.get(writer_name)
+        if writer is None:
+            raise ValueError(f"Writer not found for format: {format_ext}")
+        
+        writer(self, filename)
 
