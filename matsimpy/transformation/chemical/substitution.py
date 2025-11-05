@@ -7,8 +7,8 @@ Can use selection utilities from matsimpy.utils.selection for flexible atom sele
 
 from typing import List, Union, Dict
 import numpy as np
-from ..core import Crystal, Molecule
-from .base import _copy_structure, _validate_structure
+from ...core import Crystal, Molecule
+from ..base import _copy_structure, _validate_structure
 
 
 def substitute(structure: Union[Crystal, Molecule],
@@ -57,7 +57,7 @@ def substitute(structure: Union[Crystal, Molecule],
     _validate_structure(structure)
     
     # Handle AtomSelection object
-    from ..utils.selection import AtomSelection
+    from ...utils.selection import AtomSelection
     if isinstance(indices, AtomSelection):
         if indices.structure is not structure:
             raise ValueError("AtomSelection must be created from the structure being modified")

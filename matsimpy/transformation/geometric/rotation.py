@@ -6,8 +6,8 @@ Provides both functional (immutable-style) and in-place rotation operations.
 
 from typing import List, Optional, Union
 import numpy as np
-from ..core import Crystal, Molecule
-from .base import _copy_structure, _validate_structure
+from ...core import Crystal, Molecule
+from ..base import _copy_structure, _validate_structure
 
 
 def rotate(structure: Union[Crystal, Molecule],

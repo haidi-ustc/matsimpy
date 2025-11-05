@@ -6,8 +6,8 @@ Create supercells from unit cells by repeating the unit cell.
 
 from typing import List, Union
 import numpy as np
-from ..core import Crystal, Lattice
-from .base import _validate_structure
+from ...core import Crystal, Lattice
+from ..base import _validate_structure
 
 
 def make_supercell(crystal: Crystal,
