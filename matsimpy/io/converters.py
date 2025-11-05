@@ -149,7 +149,12 @@ def to_ase(structure: Union[Crystal, Molecule]):
     
     # Get species and positions
     symbols = list(structure.species)
-    positions = structure.positions.tolist()
+    
+    # For crystals, use cartesian positions; for molecules use positions directly
+    if isinstance(structure, Crystal):
+        positions = structure.cart_positions.tolist()
+    else:
+        positions = structure.positions.tolist()
     
     # Create ASE Atoms
     if isinstance(structure, Crystal):
