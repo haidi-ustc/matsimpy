@@ -120,6 +120,21 @@ class TestMoleculeEdgeCases(unittest.TestCase):
         molecule = Molecule(species, positions)
         crystal = molecule.to_crystal()
         self.assertIsInstance(crystal, Crystal)
+        # Should still apply vacuum padding
+        self.assertGreater(crystal.lattice.a, 100.0 + 15.0)
+    
+    def test_molecule_to_crystal_empty_molecule(self):
+        """Test to_crystal with empty molecule raises error."""
+        with self.assertRaises(ValueError):
+            Molecule([], []).to_crystal()
+    
+    def test_molecule_to_crystal_single_atom(self):
+        """Test to_crystal with single atom."""
+        molecule = Molecule(['H'], [[0, 0, 0]])
+        crystal = molecule.to_crystal()
+        self.assertIsInstance(crystal, Crystal)
+        # Single atom should still create a box with minimum size
+        self.assertGreaterEqual(crystal.lattice.a, 30.0)  # 2 * vacuum (15.0)
 
 
 if __name__ == '__main__':

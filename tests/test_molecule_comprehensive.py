@@ -114,7 +114,7 @@ class TestMoleculeComprehensive(unittest.TestCase):
         self.assertIsNotNone(com2)
     
     def test_molecule_to_crystal(self):
-        """Test conversion to crystal."""
+        """Test conversion to crystal with default vacuum."""
         species = ['C', 'O']
         positions = [[0, 0, 0], [1.4, 0, 0]]
         molecule = Molecule(species, positions)
@@ -123,17 +123,19 @@ class TestMoleculeComprehensive(unittest.TestCase):
         self.assertIsInstance(crystal, Crystal)
         self.assertIsNotNone(crystal.lattice)
         self.assertEqual(len(crystal), 2)
+        # Check that vacuum padding was applied (box should be larger than molecule)
+        self.assertGreater(crystal.lattice.a, 1.4 + 15.0)  # molecule size + vacuum
     
-    def test_molecule_to_crystal_with_scale(self):
-        """Test conversion to crystal with specified scale."""
+    def test_molecule_to_crystal_with_vacuum(self):
+        """Test conversion to crystal with specified vacuum padding."""
         species = ['C', 'O']
         positions = [[0, 0, 0], [1.4, 0, 0]]
         molecule = Molecule(species, positions)
         
-        crystal = molecule.to_crystal(scale=10.0)
+        crystal = molecule.to_crystal(vacuum=20.0)
         self.assertIsInstance(crystal, Crystal)
-        # Lattice should be approximately 10x10x10
-        self.assertAlmostEqual(crystal.lattice.a, 10.0, places=1)
+        # Check that custom vacuum was applied
+        self.assertGreater(crystal.lattice.a, 1.4 + 20.0)  # molecule size + vacuum
     
     def test_molecule_moment_of_inertia(self):
         """Test moment of inertia calculation."""
