@@ -22,6 +22,7 @@ from .selection import (
     combine_selections,
     select_all,
     select_none,
+    AtomSelection,
 )
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     'combine_selections',
     'select_all',
     'select_none',
+    'AtomSelection',
 ]
 

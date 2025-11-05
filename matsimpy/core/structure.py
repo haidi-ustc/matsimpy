@@ -181,7 +181,7 @@ class Structure(MSONable):
         else:
             raise IndexError("Invalid atom index.")
 
-    def substitute(self, indices: Union[int, List[int]], 
+    def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
                    new_species: Union[str, List[str]]) -> None:
         """
         Substitute atoms with new species.
@@ -190,7 +190,7 @@ class Structure(MSONable):
         style (returning new object), use matsimpy.transformation.substitute().
         
         Args:
-            indices: Atom index or list of indices to substitute
+            indices: Atom index, list of indices, or AtomSelection object to substitute
             new_species: New species symbol or list of symbols
             
         Raises:
@@ -200,7 +200,17 @@ class Structure(MSONable):
         Examples:
             >>> structure.substitute(0, 'Ge')  # Substitute atom at index 0
             >>> structure.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
+            >>> # Using AtomSelection
+            >>> from matsimpy.utils.selection import AtomSelection
+            >>> sel = AtomSelection(structure).by_species('Si')
+            >>> structure.substitute(sel, 'Ge')  # Substitute selected atoms
         """
+        # Handle AtomSelection object
+        from ..utils.selection import AtomSelection
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
         # Normalize inputs
         if isinstance(indices, int):
             indices = [indices]

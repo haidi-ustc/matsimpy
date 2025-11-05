@@ -12,7 +12,7 @@ from .base import _copy_structure, _validate_structure
 
 
 def substitute(structure: Union[Crystal, Molecule],
-                indices: Union[int, List[int]],
+                indices: Union[int, List[int], 'AtomSelection'],
                 new_species: Union[str, List[str]],
                 inplace: bool = False) -> Union[Crystal, Molecule]:
     """
@@ -24,7 +24,7 @@ def substitute(structure: Union[Crystal, Molecule],
     
     Args:
         structure: Crystal or Molecule to modify
-        indices: Atom index or list of indices to substitute
+        indices: Atom index, list of indices, or AtomSelection object to substitute
         new_species: New species symbol or list of symbols
         inplace: If True, modify structure in-place (default: False)
     
@@ -40,13 +40,24 @@ def substitute(structure: Union[Crystal, Molecule],
     Examples:
         >>> from matsimpy.core import Crystal, Lattice
         >>> from matsimpy.transformation import substitute
+        >>> from matsimpy.utils.selection import AtomSelection
         >>> crystal = Crystal(['Si', 'Si'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(10))
         >>> # Substitute one atom
         >>> new_crystal = substitute(crystal, 0, 'Ge')
         >>> # Substitute multiple atoms
         >>> new_crystal = substitute(crystal, [0, 1], ['Ge', 'Ge'])
+        >>> # Using AtomSelection
+        >>> sel = AtomSelection(crystal).by_species('Si')
+        >>> new_crystal = substitute(crystal, sel, 'Ge')
     """
     _validate_structure(structure)
+    
+    # Handle AtomSelection object
+    from ..utils.selection import AtomSelection
+    if isinstance(indices, AtomSelection):
+        if indices.structure is not structure:
+            raise ValueError("AtomSelection must be created from the structure being modified")
+        indices = indices.indices
     
     # Normalize inputs
     if isinstance(indices, int):

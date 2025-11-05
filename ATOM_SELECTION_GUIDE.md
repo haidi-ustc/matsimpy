@@ -4,6 +4,61 @@
 
 MatSimPy provides flexible atom selection utilities that can be used for substitution, analysis, transformations, and other operations. The selection functions are located in `matsimpy.utils.selection`.
 
+**Two approaches are available:**
+1. **Functional functions** - Direct function calls for compatibility
+2. **AtomSelection class** - Fluent, chainable API (recommended for new code)
+
+## AtomSelection Class (Recommended)
+
+The `AtomSelection` class provides a fluent, chainable API that is more elegant and easier to use:
+
+```python
+from matsimpy.utils.selection import AtomSelection
+from matsimpy.core import Crystal, Lattice
+
+crystal = Crystal(['Si', 'O', 'Si'], [[0,0,0], [5,0,0], [10,0,0]], 
+                  Lattice.cubic(20), coords_are_cartesian=True)
+
+# Simple selection and substitution
+sel = AtomSelection(crystal).by_species('Si')
+crystal.substitute(sel, 'Ge')
+
+# Chaining multiple criteria
+sel = AtomSelection(crystal).by_species('Si').near([0,0,0], 5.0)
+crystal.substitute(sel, 'Ge')
+
+# Using operators for combination
+sel1 = AtomSelection(crystal).by_species('Si')
+sel2 = AtomSelection(crystal).near([0,0,0], 5.0)
+combined = sel1 & sel2  # Intersection (AND)
+crystal.substitute(combined, 'Ge')
+```
+
+### AtomSelection Methods
+
+All selection methods return `self` for chaining:
+- `by_species(species)` - Filter by species
+- `by_indices(indices)` - Filter by indices
+- `near(center, radius)` - Filter by position (within radius)
+- `in_box(min_coords, max_coords)` - Filter by box
+- `by_property(key, value=None, condition=None)` - Filter by properties
+- `by_custom(condition)` - Filter by custom condition
+
+### AtomSelection Operators
+
+- `sel1 & sel2` - Intersection (AND)
+- `sel1 | sel2` - Union (OR)
+- `sel1 - sel2` - Difference (subtract)
+
+### AtomSelection Properties
+
+- `sel.indices` - Get list of selected indices
+- `len(sel)` - Number of selected atoms
+- `bool(sel)` - True if any atoms selected
+- `iter(sel)` - Iterate over indices
+
+## Functional Functions (Legacy/Alternative)
+
 ## Selection Functions
 
 ### Basic Selection

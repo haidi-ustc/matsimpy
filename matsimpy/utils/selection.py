@@ -99,7 +99,7 @@ def select_by_position(structure: Union[Crystal, Molecule],
         positions = structure.frac_positions
     
     # Calculate distances
-    distances = np.linalg.norm(positions - center, axis=1)
+    distances = np.linalg.norm(positions - center, dtype=np.float64)
     
     # Select atoms within radius
     return np.where(distances <= radius)[0].tolist()
@@ -305,6 +305,236 @@ def select_none(structure: Union[Crystal, Molecule]) -> List[int]:
     return []
 
 
+class AtomSelection:
+    """
+    Fluent API for atom selection.
+    
+    Provides a chainable interface for building complex atom selections.
+    Can be used directly in substitution and other operations.
+    
+    Examples:
+        >>> # Basic usage
+        >>> sel = AtomSelection(crystal).by_species('Si')
+        >>> crystal.substitute(sel, 'Ge')
+        
+        >>> # Chaining multiple criteria
+        >>> sel = AtomSelection(crystal).by_species('Si').near([0,0,0], 5.0)
+        >>> crystal.substitute(sel, 'Ge')
+        
+        >>> # Using with combine operations
+        >>> sel1 = AtomSelection(crystal).by_species('Si')
+        >>> sel2 = AtomSelection(crystal).near([0,0,0], 5.0)
+        >>> combined = sel1 & sel2  # Intersection
+        >>> crystal.substitute(combined, 'Ge')
+    """
+    
+    def __init__(self, structure: Union[Crystal, Molecule], indices: Optional[List[int]] = None):
+        """
+        Initialize AtomSelection.
+        
+        Args:
+            structure: Crystal or Molecule to select from
+            indices: Optional initial list of indices. If None, starts with all atoms.
+        """
+        self.structure = structure
+        if indices is None:
+            self._indices = set(range(len(structure)))
+        else:
+            self._indices = set(indices)
+    
+    @property
+    def indices(self) -> List[int]:
+        """Get the selected atom indices as a sorted list."""
+        return sorted(list(self._indices))
+    
+    def by_species(self, species: Union[str, List[str]]) -> 'AtomSelection':
+        """
+        Filter selection by species.
+        
+        Args:
+            species: Species symbol or list of species symbols
+            
+        Returns:
+            New AtomSelection with filtered indices
+        
+        Examples:
+            >>> sel = AtomSelection(crystal).by_species('Si')
+            >>> sel = AtomSelection(crystal).by_species(['Si', 'Ge'])
+        """
+        selected = select_by_species(self.structure, species)
+        self._indices &= set(selected)
+        return self
+    
+    def by_indices(self, indices: Union[int, List[int]]) -> 'AtomSelection':
+        """
+        Filter selection by specific indices.
+        
+        Args:
+            indices: Atom index or list of indices
+            
+        Returns:
+            New AtomSelection with filtered indices
+        
+        Examples:
+            >>> sel = AtomSelection(crystal).by_indices([0, 1, 2])
+        """
+        selected = select_by_indices(self.structure, indices)
+        self._indices &= set(selected)
+        return self
+    
+    def near(self, center: List[float], radius: float, 
+             use_cartesian: bool = True) -> 'AtomSelection':
+        """
+        Filter selection by position (within radius).
+        
+        Args:
+            center: Center point [x, y, z]
+            radius: Selection radius in Angstroms
+            use_cartesian: If True, use Cartesian coordinates (default)
+            
+        Returns:
+            New AtomSelection with filtered indices
+        
+        Examples:
+            >>> sel = AtomSelection(crystal).near([0, 0, 0], 5.0)
+        """
+        selected = select_by_position(self.structure, center, radius, use_cartesian)
+        self._indices &= set(selected)
+        return self
+    
+    def in_box(self, min_coords: List[float], max_coords: List[float],
+               use_cartesian: bool = True) -> 'AtomSelection':
+        """
+        Filter selection by box.
+        
+        Args:
+            min_coords: Minimum coordinates [x_min, y_min, z_min]
+            max_coords: Maximum coordinates [x_max, y_max, z_max]
+            use_cartesian: If True, use Cartesian coordinates (default)
+            
+        Returns:
+            New AtomSelection with filtered indices
+        
+        Examples:
+            >>> sel = AtomSelection(crystal).in_box([0, 0, 0], [5, 5, 5])
+        """
+        selected = select_by_box(self.structure, min_coords, max_coords, use_cartesian)
+        self._indices &= set(selected)
+        return self
+    
+    def by_property(self, property_key: str, value: Optional[any] = None,
+                    condition: Optional[Callable] = None) -> 'AtomSelection':
+        """
+        Filter selection by site properties.
+        
+        Args:
+            property_key: Property key to check
+            value: Optional value to match
+            condition: Optional callable for custom condition
+            
+        Returns:
+            New AtomSelection with filtered indices
+        
+        Examples:
+            >>> sel = AtomSelection(crystal).by_property('charge')
+            >>> sel = AtomSelection(crystal).by_property('charge', value=-2)
+            >>> sel = AtomSelection(crystal).by_property('charge', condition=lambda x: x > 0)
+        """
+        selected = select_by_property(self.structure, property_key, value, condition)
+        self._indices &= set(selected)
+        return self
+    
+    def by_custom(self, condition: Callable[[int], bool]) -> 'AtomSelection':
+        """
+        Filter selection using custom condition.
+        
+        Args:
+            condition: Function that takes atom index and returns bool
+            
+        Returns:
+            New AtomSelection with filtered indices
+        
+        Examples:
+            >>> sel = AtomSelection(crystal).by_custom(lambda i: i % 2 == 0)
+        """
+        selected = select_by_custom(self.structure, condition)
+        self._indices &= set(selected)
+        return self
+    
+    def __and__(self, other: 'AtomSelection') -> 'AtomSelection':
+        """
+        Intersection: self & other (AND operation).
+        
+        Args:
+            other: Another AtomSelection
+            
+        Returns:
+            New AtomSelection with intersection of indices
+        
+        Examples:
+            >>> sel1 = AtomSelection(crystal).by_species('Si')
+            >>> sel2 = AtomSelection(crystal).near([0,0,0], 5.0)
+            >>> combined = sel1 & sel2  # Si atoms AND near origin
+        """
+        if self.structure is not other.structure:
+            raise ValueError("Cannot combine selections from different structures")
+        return AtomSelection(self.structure, list(self._indices & other._indices))
+    
+    def __or__(self, other: 'AtomSelection') -> 'AtomSelection':
+        """
+        Union: self | other (OR operation).
+        
+        Args:
+            other: Another AtomSelection
+            
+        Returns:
+            New AtomSelection with union of indices
+        
+        Examples:
+            >>> sel1 = AtomSelection(crystal).by_species('Si')
+            >>> sel2 = AtomSelection(crystal).by_species('Ge')
+            >>> combined = sel1 | sel2  # Si atoms OR Ge atoms
+        """
+        if self.structure is not other.structure:
+            raise ValueError("Cannot combine selections from different structures")
+        return AtomSelection(self.structure, list(self._indices | other._indices))
+    
+    def __sub__(self, other: 'AtomSelection') -> 'AtomSelection':
+        """
+        Difference: self - other (subtract operation).
+        
+        Args:
+            other: Another AtomSelection
+            
+        Returns:
+            New AtomSelection with difference of indices
+        
+        Examples:
+            >>> sel1 = AtomSelection(crystal).by_species('Si')
+            >>> sel2 = AtomSelection(crystal).near([0,0,0], 5.0)
+            >>> combined = sel1 - sel2  # Si atoms NOT near origin
+        """
+        if self.structure is not other.structure:
+            raise ValueError("Cannot combine selections from different structures")
+        return AtomSelection(self.structure, list(self._indices - other._indices))
+    
+    def __len__(self) -> int:
+        """Return the number of selected atoms."""
+        return len(self._indices)
+    
+    def __bool__(self) -> bool:
+        """Return True if any atoms are selected."""
+        return len(self._indices) > 0
+    
+    def __iter__(self):
+        """Iterate over selected indices."""
+        return iter(sorted(self._indices))
+    
+    def __repr__(self) -> str:
+        """String representation."""
+        return f"AtomSelection({len(self._indices)} atoms from {self.structure.__class__.__name__})"
+
+
 __all__ = [
     'select_by_species',
     'select_by_indices',
@@ -315,5 +545,5 @@ __all__ = [
     'combine_selections',
     'select_all',
     'select_none',
+    'AtomSelection',
 ]
-
