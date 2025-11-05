@@ -19,6 +19,7 @@ from .json import to_json, from_json
 from .ase import read_ASE, write_ASE
 from .mol import read_MOL, write_MOL
 from .utils import detect_format, get_reader_writer, is_crystal_format, is_molecule_format
+from .converters import to_pymatgen, from_pymatgen, to_ase, from_ase
 
 __all__ = [
     # VASP
@@ -39,5 +40,7 @@ __all__ = [
     'read_MOL', 'write_MOL',
     # Utils
     'detect_format', 'get_reader_writer', 'is_crystal_format', 'is_molecule_format',
+    # Converters
+    'to_pymatgen', 'from_pymatgen', 'to_ase', 'from_ase',
 ]
 

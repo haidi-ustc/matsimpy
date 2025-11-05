@@ -340,4 +340,67 @@ class Molecule(Structure):
             raise ValueError(f"Writer not found for format: {format_ext}")
         
         writer(self, filename)
+    
+    def to_pymatgen(self):
+        """
+        Convert Molecule to pymatgen Molecule.
+        
+        Returns:
+            pymatgen.core.structure.Molecule: pymatgen Molecule object
+            
+        Raises:
+            ImportError: If pymatgen is not installed
+        """
+        from ..io.converters import to_pymatgen
+        return to_pymatgen(self)
+    
+    def to_ase(self):
+        """
+        Convert Molecule to ASE Atoms.
+        
+        Returns:
+            ase.Atoms: ASE Atoms object
+            
+        Raises:
+            ImportError: If ASE is not installed
+        """
+        from ..io.converters import to_ase
+        return to_ase(self)
+    
+    @classmethod
+    def from_pymatgen(cls, pymatgen_molecule):
+        """
+        Create Molecule from pymatgen Molecule.
+        
+        Args:
+            pymatgen_molecule: pymatgen.core.structure.Molecule object
+            
+        Returns:
+            Molecule: MatSimPy Molecule object
+            
+        Raises:
+            ImportError: If pymatgen is not installed
+        """
+        from ..io.converters import from_pymatgen
+        return from_pymatgen(pymatgen_molecule)
+    
+    @classmethod
+    def from_ase(cls, ase_atoms):
+        """
+        Create Molecule from ASE Atoms.
+        
+        Args:
+            ase_atoms: ase.Atoms object (without cell or with cell=False)
+            
+        Returns:
+            Molecule: MatSimPy Molecule object
+            
+        Raises:
+            ImportError: If ASE is not installed
+        """
+        from ..io.converters import from_ase
+        result = from_ase(ase_atoms)
+        if not isinstance(result, Molecule):
+            raise ValueError("ASE Atoms without cell/PBC will be converted to Molecule")
+        return result
 

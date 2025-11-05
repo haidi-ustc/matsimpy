@@ -475,4 +475,68 @@ class Crystal(Structure):
             raise ValueError(f"Writer not found for format: {format_ext}")
         
         writer(self, filename)
+    
+    def to_pymatgen(self):
+        """
+        Convert Crystal to pymatgen Structure.
+        
+        Returns:
+            pymatgen.core.Structure: pymatgen Structure object
+            
+        Raises:
+            ImportError: If pymatgen is not installed
+        """
+        from ..io.converters import to_pymatgen
+        return to_pymatgen(self)
+    
+    def to_ase(self):
+        """
+        Convert Crystal to ASE Atoms.
+        
+        Returns:
+            ase.Atoms: ASE Atoms object
+            
+        Raises:
+            ImportError: If ASE is not installed
+        """
+        from ..io.converters import to_ase
+        return to_ase(self)
+    
+    @classmethod
+    def from_pymatgen(cls, pymatgen_structure):
+        """
+        Create Crystal from pymatgen Structure.
+        
+        Args:
+            pymatgen_structure: pymatgen.core.Structure object
+            
+        Returns:
+            Crystal: MatSimPy Crystal object
+            
+        Raises:
+            ImportError: If pymatgen is not installed
+        """
+        from ..io.converters import from_pymatgen
+        return from_pymatgen(pymatgen_structure)
+    
+    @classmethod
+    def from_ase(cls, ase_atoms):
+        """
+        Create Crystal from ASE Atoms.
+        
+        Args:
+            ase_atoms: ase.Atoms object (must have cell and PBC)
+            
+        Returns:
+            Crystal: MatSimPy Crystal object
+            
+        Raises:
+            ImportError: If ASE is not installed
+            ValueError: If ASE Atoms doesn't have cell information
+        """
+        from ..io.converters import from_ase
+        result = from_ase(ase_atoms)
+        if not isinstance(result, Crystal):
+            raise ValueError("ASE Atoms must have cell and PBC for Crystal conversion")
+        return result
 
