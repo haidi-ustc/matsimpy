@@ -5,6 +5,14 @@ This module provides symmetry analysis capabilities:
 - Crystal symmetry: Space group determination using spglib
 - Molecule symmetry: Point group determination
 - Symmetry operations and Wyckoff positions
+- Access to symmetry data (space groups, point groups, generator matrices)
+
+The module loads symmetry data from symm_data.json or symm_data.yaml files
+in the symmetry directory, providing access to:
+- Space group encodings (234 space groups)
+- Point group encodings (32 point groups)
+- Generator matrices for symmetry operations
+- Translations and maximal subgroups
 """
 
 from .analyzer import SymmetryAnalyzer, analyze_symmetry

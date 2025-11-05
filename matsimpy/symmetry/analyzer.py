@@ -106,21 +106,51 @@ class SymmetryAnalyzer:
                 'symmetry_operations': []
             }
         
+        # Handle both dict and object interface (spglib compatibility)
+        if hasattr(dataset, 'number'):
+            # Object interface (newer spglib)
+            space_group_number = int(dataset.number)
+            space_group_symbol = dataset.international
+            point_group = dataset.pointgroup
+            hall_symbol = dataset.hall
+            rotations = dataset.rotations
+            translations = dataset.translations
+            origin_shift = dataset.origin_shift
+            equivalent_atoms = dataset.equivalent_atoms
+            wyckoffs = getattr(dataset, 'wyckoffs', [])
+        else:
+            # Dict interface (older spglib)
+            space_group_number = int(dataset['number'])
+            space_group_symbol = dataset['international']
+            point_group = dataset['pointgroup']
+            hall_symbol = dataset['hall']
+            rotations = dataset['rotations']
+            translations = dataset['translations']
+            origin_shift = dataset['origin_shift']
+            equivalent_atoms = dataset['equivalent_atoms']
+            wyckoffs = dataset.get('wyckoffs', [])
+        
         # Get Wyckoff positions
-        wyckoff = self._get_wyckoff_positions(crystal, dataset)
+        wyckoff = self._get_wyckoff_positions(crystal, {
+            'equivalent_atoms': equivalent_atoms,
+            'wyckoffs': wyckoffs
+        })
         
         return {
-            'space_group_number': int(dataset['number']),
-            'space_group_symbol': dataset['international'],
-            'point_group': dataset['pointgroup'],
-            'crystal_system': self._get_crystal_system(int(dataset['number'])),
-            'hall_symbol': dataset['hall'],
+            'space_group_number': space_group_number,
+            'space_group_symbol': space_group_symbol,
+            'point_group': point_group,
+            'crystal_system': self._get_crystal_system(space_group_number),
+            'hall_symbol': hall_symbol,
             'wyckoff_positions': wyckoff,
-            'symmetry_operations': self._format_symmetry_operations(dataset),
-            'rotation_matrices': dataset['rotations'].tolist(),
-            'translation_vectors': dataset['translations'].tolist(),
-            'origin_shift': dataset['origin_shift'].tolist(),
-            'equivalent_atoms': dataset['equivalent_atoms'].tolist()
+            'symmetry_operations': self._format_symmetry_operations({
+                'rotations': rotations,
+                'translations': translations
+            }),
+            'rotation_matrices': rotations.tolist() if hasattr(rotations, 'tolist') else list(rotations),
+            'translation_vectors': translations.tolist() if hasattr(translations, 'tolist') else list(translations),
+            'origin_shift': origin_shift.tolist() if hasattr(origin_shift, 'tolist') else list(origin_shift),
+            'equivalent_atoms': equivalent_atoms.tolist() if hasattr(equivalent_atoms, 'tolist') else list(equivalent_atoms)
         }
     
     def analyze_molecule(self, molecule: Molecule, tolerance: float = 0.1) -> Dict[str, Any]:
@@ -138,9 +168,16 @@ class SymmetryAnalyzer:
             - rotation_axes: List of rotation axes
             - mirror_planes: List of mirror planes
             - inversion_center: Whether inversion center exists
+            - order: Point group order
         """
         if self._symmetry_data is None:
-            raise RuntimeError("Symmetry data not loaded. Cannot analyze molecule symmetry.")
+            # Try to load data again
+            self._load_symmetry_data()
+            if self._symmetry_data is None:
+                raise RuntimeError(
+                    "Symmetry data not loaded. Cannot analyze molecule symmetry. "
+                    "Make sure symm_data.json or symm_data.yaml exists in the symmetry directory."
+                )
         
         # Center molecule at origin
         center = molecule.get_center_of_mass()
@@ -529,7 +566,15 @@ class SymmetryAnalyzer:
         return "C1"  # No symmetry
     
     def _get_point_group_order(self, point_group: str) -> int:
-        """Get order of point group."""
+        """Get order of point group from symmetry data if available."""
+        # Try to get from space group encoding data
+        if self._symmetry_data and 'space_group_encoding' in self._symmetry_data:
+            # Search for space groups with this point group
+            for sg_data in self._symmetry_data['space_group_encoding'].values():
+                if sg_data.get('point_group') == point_group:
+                    return sg_data.get('order', 1)
+        
+        # Fallback to hardcoded map
         order_map = {
             'C1': 1, 'Ci': 2, 'Cs': 2, 'C2': 2, 'C3': 3, 'C4': 4, 'C5': 5, 'C6': 6,
             'C2v': 4, 'C3v': 6, 'C4v': 8, 'C5v': 10, 'C6v': 12,
@@ -544,6 +589,62 @@ class SymmetryAnalyzer:
             'C∞v': float('inf'), 'D∞h': float('inf'), 'Kh': float('inf')
         }
         return order_map.get(point_group, 1)
+    
+    def get_space_group_info(self, space_group_symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Get space group information from symmetry data.
+        
+        Args:
+            space_group_symbol: Space group symbol (e.g., 'Pm-3m', 'Fd-3m')
+            
+        Returns:
+            Dictionary with space group information or None if not found
+        """
+        if self._symmetry_data is None:
+            self._load_symmetry_data()
+        
+        if self._symmetry_data and 'space_group_encoding' in self._symmetry_data:
+            return self._symmetry_data['space_group_encoding'].get(space_group_symbol)
+        
+        return None
+    
+    def get_point_group_encoding(self, point_group: str) -> Optional[str]:
+        """
+        Get point group encoding from symmetry data.
+        
+        Args:
+            point_group: Point group symbol (e.g., 'm-3m', 'mm2')
+            
+        Returns:
+            Encoding string or None if not found
+        """
+        if self._symmetry_data is None:
+            self._load_symmetry_data()
+        
+        if self._symmetry_data and 'point_group_encoding' in self._symmetry_data:
+            return self._symmetry_data['point_group_encoding'].get(point_group)
+        
+        return None
+    
+    def get_generator_matrix(self, generator_name: str) -> Optional[np.ndarray]:
+        """
+        Get generator matrix from symmetry data.
+        
+        Args:
+            generator_name: Generator name (e.g., 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n')
+            
+        Returns:
+            Generator matrix as numpy array or None if not found
+        """
+        if self._symmetry_data is None:
+            self._load_symmetry_data()
+        
+        if self._symmetry_data and 'generator_matrices' in self._symmetry_data:
+            gen_data = self._symmetry_data['generator_matrices'].get(generator_name)
+            if gen_data:
+                return np.array(gen_data)
+        
+        return None
     
     def _get_molecule_symmetry_operations(self, positions: np.ndarray, 
                                         species: List[str],
