@@ -51,16 +51,17 @@ class TestCrystalEdgeCases(unittest.TestCase):
         """Test random_crystal when pyxtal is not available."""
         # This will raise ImportError if pyxtal not installed
         try:
-            crystal = Crystal.random_crystal(3, 225, ['Si', 'O'], [1, 2])
+            from matsimpy.generation import random_crystal
+            crystal = random_crystal(3, 225, ['Si', 'O'], [1, 2])
             self.assertIsInstance(crystal, Crystal)
         except ImportError:
             # Expected if pyxtal not installed
             pass
     
-    def test_crystal_from_POSCAR_file_not_found(self):
-        """Test from_POSCAR with non-existent file."""
+    def test_crystal_from_file_file_not_found(self):
+        """Test from_file with non-existent file."""
         with self.assertRaises(FileNotFoundError):
-            Crystal.from_POSCAR('nonexistent.vasp')
+            Crystal.from_file('nonexistent.vasp')
 
 
 class TestElementEdgeCases(unittest.TestCase):

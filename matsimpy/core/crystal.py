@@ -247,119 +247,27 @@ class Crystal(Structure):
         
         return neighbors_dict
 
-    @staticmethod
-    def from_POSCAR(filename: str) -> 'Crystal':
-        with open(filename, 'r') as file:
-            lines = file.readlines()
-
-        # Read the lattice scale factor
-        scale_factor = float(lines[1].strip())
-
-        # Read the lattice vectors
-        lattice_vectors = [list(map(float, line.strip().split())) for line in lines[2:5]]
-        lattice_matrix = np.array(lattice_vectors) * scale_factor
-        lattice = Lattice(lattice_matrix)
-
-        # Read the atomic species and positions
-        species = lines[5].strip().split()
-        species_counts = list(map(int, lines[6].strip().split()))
-        species_list = []
-        for s, count in zip(species, species_counts):
-            species_list.extend([s] * count)
-
-        coords_are_cartesian = lines[7].strip().lower().startswith('c')
-        positions = [list(map(float, line.strip().split())) for line in lines[8: 8 + sum(species_counts)]]
-
-        return Crystal(species_list, positions, lattice, coords_are_cartesian=coords_are_cartesian)
-
     def density(self) -> float:
         """Calculate the density of the crystal."""
         mass = self.composition.mass  # mass is a property, not a method
         volume = self.volume
         return mass / volume
 
-    def to_POSCAR(self, filename: Optional[str] = None) -> Optional[str]:
-        # Prepare the POSCAR formatted string
-        poscar_str = f"{self.__class__.__name__}\n"
-        poscar_str += "1.0\n"
-        for vector in self.lattice.lattice_vectors:
-            poscar_str += f"{vector[0]:.8f} {vector[1]:.8f} {vector[2]:.8f}\n"
-
-        unique_species, counts = np.unique(self.species, return_counts=True)
-        poscar_str += " ".join(unique_species) + "\n"
-        poscar_str += " ".join(map(str, counts)) + "\n"
-
-        poscar_str += "Direct\n"
-        for position in self.frac_positions:
-            poscar_str += f"{position[0]:.8f} {position[1]:.8f} {position[2]:.8f}\n"
-
-        if filename:
-            with open(filename, 'w') as file:
-                file.write(poscar_str)
-        else:
-            return poscar_str
-
     def to_quantum_espresso(self, filename: Optional[str] = None) -> Optional[str]:
-        # Prepare the Quantum Espresso formatted string
-        qe_str = "&system\n"
-        qe_str += f"  ibrav = 0,\n"
-        qe_str += f"  nat = {len(self)},\n"
-        qe_str += f"  ntyp = {len(np.unique(self.species))},\n"
-        qe_str += "/\n\n"
-
-        qe_str += "ATOMIC_SPECIES\n"
-        unique_species, _ = np.unique(self.species, return_counts=True)
-        for s in unique_species:
-            qe_str += f"{s} 1.0 {s}.UPF\n"
-
-        qe_str += "\nCELL_PARAMETERS (angstrom)\n"
-        for vector in self.lattice.lattice_vectors:
-            qe_str += f"{vector[0]:.8f} {vector[1]:.8f} {vector[2]:.8f}\n"
-
-        qe_str += "\nATOMIC_POSITIONS (angstrom)\n"
-        for s, position in zip(self.species, self.cart_positions):
-            qe_str += f"{s} {position[0]:.8f} {position[1]:.8f} {position[2]:.8f}\n"
-
-        if filename:
-            with open(filename, 'w') as file:
-                file.write(qe_str)
-        else:
-            return qe_str
-
-    @classmethod
-    def random_crystal(cls, dim: int, group: int, species: list, num_ions: list, **kwargs):
         """
-        Generate a random crystal using PyXtal.
-
+        Convert Crystal to Quantum Espresso input format.
+        
+        This is a convenience method that calls the function in the code module.
+        For better organization, consider using matsimpy.code.quantum_espresso.to_quantum_espresso() directly.
+        
         Args:
-            dim (int): The dimensionality of the crystal (2 or 3).
-            group (int): The space group number.
-            species (list): List of chemical symbols for the atoms in the crystal.
-            num_ions (list): List of integers representing the number of ions of each species.
-            **kwargs: Additional keyword arguments to pass to PyXtal.
-
+            filename: Optional filename to write to. If None, returns string.
+            
         Returns:
-            (Crystal): A random crystal object.
+            str or None: Quantum Espresso input string if filename is None, otherwise None
         """
-        try:
-            import pyxtal
-        except ImportError:
-            raise ImportError("The pyxtal package is required to generate random crystals.")
-
-        pyxtal_crystal = pyxtal.crystal.random_crystal(
-            dim=dim,
-            group=group,
-            species=species,
-            numIons=num_ions,
-            **kwargs
-        )
-
-        # FIX: Extract from pyxtal_crystal
-        species_list = pyxtal_crystal.species
-        positions = pyxtal_crystal.frac_coords
-        lattice = Lattice(pyxtal_crystal.lattice.matrix)
-
-        return cls(species_list, positions, lattice)
+        from ..code.quantum_espresso import to_quantum_espresso
+        return to_quantum_espresso(self, filename)
     
     @classmethod
     def from_file(cls, filename: str, format: Optional[str] = None) -> 'Crystal':
@@ -539,4 +447,25 @@ class Crystal(Structure):
         if not isinstance(result, Crystal):
             raise ValueError("ASE Atoms must have cell and PBC for Crystal conversion")
         return result
+    
+    @classmethod
+    def random_crystal(cls, dim: int, group: int, species: list, num_ions: list, **kwargs):
+        """
+        Generate a random crystal using PyXtal.
+        
+        This is a convenience method that calls the function in the generation module.
+        For better organization, consider using matsimpy.generation.random.random_crystal() directly.
+        
+        Args:
+            dim (int): The dimensionality of the crystal (2 or 3).
+            group (int): The space group number.
+            species (list): List of chemical symbols for the atoms in the crystal.
+            num_ions (list): List of integers representing the number of ions of each species.
+            **kwargs: Additional keyword arguments to pass to PyXtal.
+
+        Returns:
+            Crystal: A random crystal object.
+        """
+        from ..generation.random import random_crystal
+        return random_crystal(dim, group, species, num_ions, **kwargs)
 

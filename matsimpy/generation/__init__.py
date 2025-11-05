@@ -7,10 +7,6 @@ This module provides:
 - Interface generation
 """
 
-# Generation tools will be imported here as they are implemented
-# from .random import RandomStructureGenerator
-# from .surfaces import SurfaceGenerator
-# from .interfaces import InterfaceGenerator
+from .random import random_crystal
 
-__all__ = []
-
+__all__ = ['random_crystal']

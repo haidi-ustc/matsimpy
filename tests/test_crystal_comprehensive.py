@@ -135,28 +135,16 @@ class TestCrystalComprehensive(unittest.TestCase):
         self.assertEqual(len(crystal), 1)
         self.assertEqual(crystal.species[0], 'O')
     
-    def test_crystal_from_POSCAR(self):
-        """Test reading POSCAR file."""
+    def test_crystal_from_file_poscar(self):
+        """Test reading POSCAR file using from_file."""
         poscar_file = Path(__file__).parent / "POSCAR-frac.vasp"
         if poscar_file.exists():
-            crystal = Crystal.from_POSCAR(str(poscar_file))
+            crystal = Crystal.from_file(str(poscar_file))
             self.assertIsInstance(crystal, Crystal)
             self.assertGreater(len(crystal), 0)
     
-    def test_crystal_to_POSCAR(self):
-        """Test writing POSCAR file."""
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        poscar_str = crystal.to_POSCAR()
-        self.assertIn('Si', poscar_str)
-        self.assertIn('O', poscar_str)
-        self.assertIn('Direct', poscar_str)
-    
-    def test_crystal_to_POSCAR_file(self):
-        """Test writing POSCAR to file."""
+    def test_crystal_to_file_poscar(self):
+        """Test writing POSCAR file using to_file."""
         import tempfile
         species = ['Si', 'O']
         positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
@@ -167,9 +155,12 @@ class TestCrystalComprehensive(unittest.TestCase):
             temp_file = f.name
         
         try:
-            crystal.to_POSCAR(temp_file)
+            crystal.to_file(temp_file)
             # Verify file was created
             self.assertTrue(Path(temp_file).exists())
+            # Read back to verify
+            crystal2 = Crystal.from_file(temp_file)
+            self.assertEqual(len(crystal2), len(crystal))
         finally:
             Path(temp_file).unlink()
     
