@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List,Optional,Dict,Any
+from typing import List, Optional, Dict, Any, Union
 from monty.json import MSONable
 from .lattice import Lattice
 from .structure import Structure
