@@ -56,13 +56,14 @@ class TestMoleculeSubstitution(unittest.TestCase):
     
     def test_substitute_cache_invalidation(self):
         """Test that substitution invalidates formula cache."""
-        original_formula = self.molecule.formula
-        self.molecule.substitute(0, 'N')
+        molecule = Molecule(['C', 'C'], [[0, 0, 0], [1.2, 0, 0]])  # C2
+        original_formula = molecule.formula
+        molecule.substitute(0, 'N')
         
         # Formula should be recalculated
-        new_formula = self.molecule.formula
+        new_formula = molecule.formula
         self.assertNotEqual(original_formula, new_formula)
-        self.assertEqual(new_formula, 'NO')  # C replaced with N
+        self.assertEqual(new_formula, 'CN')  # C replaced with N
 
 
 class TestCrystalSubstitution(unittest.TestCase):
@@ -119,12 +120,14 @@ class TestCrystalSubstitution(unittest.TestCase):
     
     def test_substitute_cache_invalidation(self):
         """Test that substitution invalidates formula cache."""
-        original_formula = self.crystal.formula
-        self.crystal.substitute(0, 'Ge')
+        crystal = Crystal(['Si', 'Si'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))  # Si2
+        original_formula = crystal.formula
+        crystal.substitute(0, 'Ge')
         
         # Formula should be recalculated
-        new_formula = self.crystal.formula
+        new_formula = crystal.formula
         self.assertNotEqual(original_formula, new_formula)
+        self.assertEqual(new_formula, 'GeSi')  # One Si replaced with Ge
 
 
 class TestSubstitutionConsistency(unittest.TestCase):
