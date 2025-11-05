@@ -289,6 +289,59 @@ class Structure(MSONable):
         
         # Substitute all at once
         self.substitute(indices, [new_species] * len(indices))
+    
+    def sort_atoms(self, sort_by: str = 'element') -> None:
+        """
+        Sort atoms in the structure by element (in-place).
+        
+        This method actually reorders the internal species and positions arrays,
+        unlike __str__ which only sorts for display.
+        
+        Args:
+            sort_by: Sorting method ('element' for atomic number, 'alphabet' for alphabetical)
+            
+        Examples:
+            >>> structure.sort_atoms('element')  # Sort by atomic number
+            >>> structure.sort_atoms('alphabet')  # Sort alphabetically
+        """
+        # Create list of (index, specie, position) tuples
+        atoms = list(zip(range(len(self.species)), self.species, self.positions))
+        
+        # Sort by element
+        if sort_by == 'element':
+            # Sort by atomic number, then by position for same element
+            sorted_atoms = sorted(
+                atoms,
+                key=lambda a: (
+                    Element.get_element(a[1]).atomic_no,
+                    a[2][0], a[2][1], a[2][2]
+                )
+            )
+        elif sort_by == 'alphabet':
+            # Sort alphabetically by species symbol, then by position
+            sorted_atoms = sorted(
+                atoms,
+                key=lambda a: (a[1], a[2][0], a[2][1], a[2][2])
+            )
+        else:
+            raise ValueError("sort_by must be 'element' or 'alphabet'")
+        
+        # Extract sorted species and positions
+        sorted_species = [a[1] for a in sorted_atoms]
+        sorted_positions = np.array([a[2] for a in sorted_atoms])
+        
+        # Update internal data
+        self.species = tuple(sorted_species)
+        self.positions = sorted_positions
+        
+        # Invalidate caches
+        self._formula_dirty = True
+        self._cached_composition = None
+        
+        # Reinitialize sites if they exist
+        if hasattr(self, '_sites'):
+            if hasattr(self, '_initialize_sites'):
+                self._sites = self._initialize_sites()
 
     def get_neighbor_list(self, cutoff: float, use_pbc: bool = True) -> Dict[int, List[Tuple[int, float]]]:
         """
