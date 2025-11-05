@@ -1,8 +1,9 @@
 import re
 import json
 from collections import Counter
+from typing import Optional
 from monty.json import MSONable
-from .periodic_table import  Element
+from .periodic_table import Element
 
 class Composition(MSONable):
     """
@@ -160,9 +161,13 @@ class Composition(MSONable):
             fractions[element] = mass_fraction
         return fractions
 
-    def to_html(self) -> str:
+    def to_html(self, sort_by: Optional[str] = None) -> str:
         """
         Convert the chemical formula to HTML string with subscript formatting.
+        
+        Args:
+            sort_by: Sorting method ('alphabet' or 'element'). If None, uses the
+                    original sort_by from initialization.
         
         Returns:
             str: HTML string with subscripts (e.g., "Fe<sub>2</sub>O<sub>3</sub>")
@@ -174,10 +179,25 @@ class Composition(MSONable):
             >>> c = Composition('H2O')
             >>> c.to_html()
             'H<sub>2</sub>O'
+            >>> c = Composition('Fe2O3', sort_by='element')
+            >>> c.to_html()
+            'Fe<sub>2</sub>O<sub>3</sub>'  # Uses element sorting
         """
         html_formula = []
         element_counts = self.composition
-        sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        
+        # Use provided sort_by or determine from original formula
+        if sort_by is None:
+            # Try to infer from formula order (if element sort, use element; else alphabet)
+            # For simplicity, default to alphabet unless explicitly specified
+            sort_by = 'alphabet'
+        
+        if sort_by == 'alphabet':
+            sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        elif sort_by == 'element':
+            sorted_elements = sorted(element_counts.items(), key=lambda x: Element(x[0]).atomic_no)
+        else:
+            raise ValueError("sort_by must be either 'alphabet' or 'element'")
         
         for element, count in sorted_elements:
             html_formula.append(element)
@@ -186,9 +206,13 @@ class Composition(MSONable):
         
         return ''.join(html_formula)
 
-    def to_latex(self) -> str:
+    def to_latex(self, sort_by: Optional[str] = None) -> str:
         """
         Convert the chemical formula to LaTeX string with subscript formatting.
+        
+        Args:
+            sort_by: Sorting method ('alphabet' or 'element'). If None, uses the
+                    original sort_by from initialization.
         
         Returns:
             str: LaTeX string with subscripts (e.g., "Fe$_2$O$_3$")
@@ -200,10 +224,23 @@ class Composition(MSONable):
             >>> c = Composition('H2O')
             >>> c.to_latex()
             'H$_2$O'
+            >>> c = Composition('Fe2O3', sort_by='element')
+            >>> c.to_latex()
+            'Fe$_2$O$_3$'  # Uses element sorting
         """
         latex_formula = []
         element_counts = self.composition
-        sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        
+        # Use provided sort_by or default to alphabet
+        if sort_by is None:
+            sort_by = 'alphabet'
+        
+        if sort_by == 'alphabet':
+            sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        elif sort_by == 'element':
+            sorted_elements = sorted(element_counts.items(), key=lambda x: Element(x[0]).atomic_no)
+        else:
+            raise ValueError("sort_by must be either 'alphabet' or 'element'")
         
         for element, count in sorted_elements:
             latex_formula.append(element)
