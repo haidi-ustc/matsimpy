@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -136,6 +137,5 @@ class TestSortAtoms(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    import numpy as np
     unittest.main()
 
