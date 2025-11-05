@@ -2,6 +2,7 @@
 Substitution transformations for structures.
 
 Replace atoms in structures with new species.
+Can use selection utilities from matsimpy.utils.selection for flexible atom selection.
 """
 
 from typing import List, Union
