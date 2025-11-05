@@ -35,13 +35,18 @@ class TestLatticeEdgeCases(unittest.TestCase):
     
     def test_lattice_from_parameters_zero_gamma(self):
         """Test from_parameters with zero gamma (edge case)."""
-        # This might cause issues with sin_gamma
-        try:
-            lattice = Lattice.from_parameters(a=5, b=5, c=5, alpha=90, beta=90, gamma=0)
-            self.assertIsNotNone(lattice)
-        except (ValueError, ZeroDivisionError):
-            # Expected for gamma=0
-            pass
+        # Gamma=0 should raise ValueError as it makes a and b vectors parallel
+        with self.assertRaises(ValueError) as context:
+            Lattice.from_parameters(a=5, b=5, c=5, alpha=90, beta=90, gamma=0)
+        
+        # Verify error message mentions the issue
+        self.assertIn('gamma', str(context.exception).lower())
+    
+    def test_lattice_from_parameters_180_gamma(self):
+        """Test from_parameters with 180 degree gamma (edge case)."""
+        # Gamma=180 should also raise ValueError
+        with self.assertRaises(ValueError):
+            Lattice.from_parameters(a=5, b=5, c=5, alpha=90, beta=90, gamma=180)
 
 
 class TestCrystalEdgeCases(unittest.TestCase):

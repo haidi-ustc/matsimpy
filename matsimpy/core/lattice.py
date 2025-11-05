@@ -125,6 +125,10 @@ class Lattice(MSONable):
             alpha: The angle between the b and c lattice vectors in degrees.
             beta: The angle between the a and c lattice vectors in degrees.
             gamma: The angle between the a and b lattice vectors in degrees.
+            
+        Raises:
+            ValueError: If gamma is 0 or 180 degrees (a and b vectors would be parallel,
+                       making the lattice linearly dependent)
         """
         alpha = np.radians(alpha)
         beta = np.radians(beta)
@@ -134,6 +138,15 @@ class Lattice(MSONable):
         cos_beta = np.cos(beta)
         cos_gamma = np.cos(gamma)
         sin_gamma = np.sin(gamma)
+
+        # Check for invalid gamma values (0 or 180 degrees)
+        # This would make a and b vectors parallel, resulting in a linearly dependent lattice
+        if np.isclose(abs(sin_gamma), 0, atol=1e-10):
+            raise ValueError(
+                f"Invalid gamma angle: {np.degrees(gamma):.2f} degrees. "
+                "Gamma cannot be 0 or 180 degrees as this would make the a and b "
+                "lattice vectors parallel, resulting in a linearly dependent lattice."
+            )
 
         a1 = a
         a2 = b * cos_gamma
