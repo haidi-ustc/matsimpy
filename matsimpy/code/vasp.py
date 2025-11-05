@@ -4,24 +4,26 @@ VASP DFT code interface.
 Provides input/output functionality for VASP calculations.
 """
 
-from typing import Optional
-from ..core import Crystal
+from typing import Optional, Union
+from ..core import Crystal, Molecule
 
 
-def write_input(crystal: Crystal, filename: str, **kwargs) -> None:
+def write_input(structure: Union[Crystal, Molecule], filename: str, **kwargs) -> None:
     """
-    Write VASP input file from Crystal structure.
+    Write VASP input file from Crystal or Molecule structure.
     
     Args:
-        crystal: Crystal structure to convert
+        structure: Crystal or Molecule structure to convert
         filename: Output filename
         **kwargs: Additional parameters for VASP input
                  (e.g., INCAR parameters, k-points, etc.)
         
     Raises:
-        ValueError: If crystal is not a valid Crystal object
+        ValueError: If structure is not a valid Crystal or Molecule object
         NotImplementedError: Not yet implemented
     """
+    if not isinstance(structure, (Crystal, Molecule)):
+        raise ValueError("write_input requires a Crystal or Molecule object")
     # TODO: Implement VASP input file writing
     raise NotImplementedError("VASP input file writing not yet implemented")
 

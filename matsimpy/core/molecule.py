@@ -403,4 +403,68 @@ class Molecule(Structure):
         if not isinstance(result, Molecule):
             raise ValueError("ASE Atoms without cell/PBC will be converted to Molecule")
         return result
+    
+    def to_code(self, code: str, filename: str, **kwargs) -> None:
+        """
+        Write input file for a DFT code.
+        
+        Generic interface for writing DFT code input files. Supports multiple
+        codes through the code parameter. Molecules are typically treated as
+        isolated systems in a large cell.
+        
+        Args:
+            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            filename: Output filename
+            **kwargs: Additional parameters for the DFT code input
+                     (code-specific parameters)
+        
+        Raises:
+            ValueError: If code is not supported
+            NotImplementedError: If code interface is not yet implemented
+        
+        Examples:
+            >>> molecule.to_code('quantum_espresso', 'mol_scf.in')
+            >>> molecule.to_code('qe', 'molecule.in')
+        """
+        from ..code import get_code_interface
+        
+        try:
+            interface = get_code_interface(code)
+            write_input = interface['write_input']
+            write_input(self, filename, **kwargs)
+        except ValueError as e:
+            raise ValueError(f"Unsupported DFT code: {code}") from e
+    
+    @classmethod
+    def from_code(cls, code: str, filename: str, **kwargs) -> 'Molecule':
+        """
+        Read structure from DFT code output file.
+        
+        Generic interface for reading structures from DFT code output files.
+        Currently not implemented.
+        
+        Args:
+            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            filename: Path to output file
+            **kwargs: Additional parameters for parsing
+        
+        Returns:
+            Molecule: Molecule structure from the output file
+        
+        Raises:
+            ValueError: If code is not supported
+            NotImplementedError: Output parsing not yet implemented
+        
+        Examples:
+            >>> molecule = Molecule.from_code('quantum_espresso', 'mol_scf.out')
+        """
+        from ..code import get_code_interface
+        
+        try:
+            interface = get_code_interface(code)
+            read_output = interface['read_output']
+            # TODO: Implement output parsing
+            raise NotImplementedError(f"Reading {code} output files not yet implemented")
+        except ValueError as e:
+            raise ValueError(f"Unsupported DFT code: {code}") from e
 

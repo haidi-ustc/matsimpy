@@ -5,27 +5,27 @@ This module provides functions for generating Quantum Espresso input files
 from crystal structures.
 """
 
-from typing import Optional
+from typing import Optional, Union
 import numpy as np
 
-from ..core import Crystal
+from ..core import Crystal, Molecule
 
 
-def write_input(crystal: Crystal, filename: str, **kwargs) -> None:
+def write_input(structure: Union[Crystal, Molecule], filename: str, **kwargs) -> None:
     """
-    Write Quantum Espresso input file from Crystal structure.
+    Write Quantum Espresso input file from Crystal or Molecule structure.
     
     Args:
-        crystal: Crystal structure to convert
+        structure: Crystal or Molecule structure to convert
         filename: Output filename
         **kwargs: Additional parameters for Quantum Espresso input
                  (e.g., calculation type, k-points, etc.)
         
     Raises:
-        ValueError: If crystal is not a valid Crystal object
+        ValueError: If structure is not a valid Crystal or Molecule object
     """
-    if not isinstance(crystal, Crystal):
-        raise ValueError("write_input requires a Crystal object")
+    if not isinstance(structure, (Crystal, Molecule)):
+        raise ValueError("write_input requires a Crystal or Molecule object")
     
     # Prepare the Quantum Espresso formatted string
     qe_str = "&system\n"
@@ -70,24 +70,24 @@ def read_output(filename: str) -> dict:
 
 
 # Keep legacy function for backward compatibility (deprecated)
-def to_quantum_espresso(crystal: Crystal, filename: Optional[str] = None) -> Optional[str]:
+def to_quantum_espresso(structure: Union[Crystal, Molecule], filename: Optional[str] = None) -> Optional[str]:
     """
-    Convert a Crystal structure to Quantum Espresso input format.
+    Convert a Crystal or Molecule structure to Quantum Espresso input format.
     
     DEPRECATED: Use write_input() instead.
     
     Args:
-        crystal: Crystal structure to convert
+        structure: Crystal or Molecule structure to convert
         filename: Optional filename to write to. If None, returns string.
         
     Returns:
         str or None: Quantum Espresso input string if filename is None, otherwise None
         
     Raises:
-        ValueError: If crystal is not a valid Crystal object
+        ValueError: If structure is not a valid Crystal or Molecule object
     """
     if filename:
-        write_input(crystal, filename)
+        write_input(structure, filename)
         return None
     else:
         # Return string representation
@@ -96,7 +96,7 @@ def to_quantum_espresso(crystal: Crystal, filename: Optional[str] = None) -> Opt
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.in') as f:
             temp_file = f.name
         try:
-            write_input(crystal, temp_file)
+            write_input(structure, temp_file)
             with open(temp_file, 'r') as f:
                 content = f.read()
             return content
