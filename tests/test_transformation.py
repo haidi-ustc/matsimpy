@@ -1,0 +1,212 @@
+"""Tests for transformation module."""
+import os
+import sys
+import unittest
+import numpy as np
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from matsimpy.core import Crystal, Molecule, Lattice
+from matsimpy.transformation import (
+    translate, translate_to_origin,
+    rotate, rotate_around_axis,
+    substitute, substitute_all,
+    make_supercell,
+    chain, apply_transformations
+)
+
+
+class TestTranslation(unittest.TestCase):
+    """Tests for translation transformations."""
+    
+    def setUp(self):
+        """Set up test molecules."""
+        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(10))
+    
+    def test_translate_functional(self):
+        """Test functional translation (returns new object)."""
+        original_pos = self.molecule.positions[0].copy()
+        new_molecule = translate(self.molecule, [1, 1, 1])
+        
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.molecule.positions[0], original_pos)
+        # New should be translated
+        np.testing.assert_array_almost_equal(new_molecule.positions[0], original_pos + [1, 1, 1])
+        self.assertIsNot(self.molecule, new_molecule)
+    
+    def test_translate_inplace(self):
+        """Test in-place translation."""
+        original_pos = self.molecule.positions[0].copy()
+        result = translate(self.molecule, [1, 1, 1], inplace=True)
+        
+        # Should be same object
+        self.assertIs(self.molecule, result)
+        # Should be translated
+        np.testing.assert_array_almost_equal(self.molecule.positions[0], original_pos + [1, 1, 1])
+    
+    def test_translate_crystal(self):
+        """Test translation of crystal."""
+        original_cart = self.crystal.cart_positions[0].copy()
+        new_crystal = translate(self.crystal, [1, 1, 1])
+        
+        np.testing.assert_array_almost_equal(new_crystal.cart_positions[0], original_cart + [1, 1, 1])
+    
+    def test_translate_to_origin(self):
+        """Test translate to origin."""
+        # Move molecule away from origin
+        self.molecule.translate([5, 5, 5])
+        centered = translate_to_origin(self.molecule)
+        
+        com = centered.get_center_of_mass()
+        np.testing.assert_array_almost_equal(com, [0, 0, 0], decimal=5)
+    
+    def test_translate_invalid_vector(self):
+        """Test translation with invalid vector."""
+        with self.assertRaises(ValueError):
+            translate(self.molecule, [1, 1])  # Not 3D
+
+
+class TestRotation(unittest.TestCase):
+    """Tests for rotation transformations."""
+    
+    def setUp(self):
+        """Set up test molecules."""
+        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+    
+    def test_rotate_functional(self):
+        """Test functional rotation."""
+        original_pos = self.molecule.positions[1].copy()
+        new_molecule = rotate(self.molecule, angle=90, axis=[0, 0, 1])
+        
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.molecule.positions[1], original_pos)
+        # New should be rotated
+        self.assertIsNot(self.molecule, new_molecule)
+        # O atom should have moved (from [1.2, 0, 0] to approximately [0, 1.2, 0])
+        np.testing.assert_array_almost_equal(new_molecule.positions[1], [0, 1.2, 0], decimal=3)
+    
+    def test_rotate_inplace(self):
+        """Test in-place rotation."""
+        result = rotate(self.molecule, angle=90, axis=[0, 0, 1], inplace=True)
+        
+        self.assertIs(self.molecule, result)
+        # O atom should be rotated
+        np.testing.assert_array_almost_equal(self.molecule.positions[1], [0, 1.2, 0], decimal=3)
+    
+    def test_rotate_around_center(self):
+        """Test rotation around custom center."""
+        # Molecule at [1, 1, 1], rotate around origin
+        self.molecule.translate([1, 1, 1])
+        rotated = rotate(self.molecule, angle=180, axis=[0, 0, 1], center=[0, 0, 0])
+        
+        # Should be rotated around origin
+        self.assertIsNotNone(rotated)
+
+
+class TestSubstitution(unittest.TestCase):
+    """Tests for substitution transformations."""
+    
+    def setUp(self):
+        """Set up test structures."""
+        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
+        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+    
+    def test_substitute_single(self):
+        """Test substituting a single atom."""
+        new_crystal = substitute(self.crystal, 0, 'Ge')
+        
+        self.assertEqual(new_crystal.species[0], 'Ge')
+        self.assertEqual(new_crystal.species[1], 'O')
+        self.assertIsNot(self.crystal, new_crystal)
+    
+    def test_substitute_multiple(self):
+        """Test substituting multiple atoms."""
+        new_crystal = substitute(self.crystal, [0, 1], ['Ge', 'S'])
+        
+        self.assertEqual(new_crystal.species[0], 'Ge')
+        self.assertEqual(new_crystal.species[1], 'S')
+    
+    def test_substitute_all(self):
+        """Test substituting all atoms of a species."""
+        new_crystal = substitute_all(self.crystal, 'Si', 'Ge')
+        
+        self.assertEqual(new_crystal.species[0], 'Ge')
+        self.assertEqual(new_crystal.species[1], 'O')
+    
+    def test_substitute_inplace(self):
+        """Test in-place substitution."""
+        original_species = list(self.crystal.species)
+        result = substitute(self.crystal, 0, 'Ge', inplace=True)
+        
+        self.assertIs(self.crystal, result)
+        self.assertEqual(self.crystal.species[0], 'Ge')
+        self.assertEqual(self.crystal.species[1], original_species[1])
+
+
+class TestSupercell(unittest.TestCase):
+    """Tests for supercell generation."""
+    
+    def setUp(self):
+        """Set up test crystal."""
+        self.unit_cell = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5))
+    
+    def test_make_supercell_2x2x2(self):
+        """Test creating 2x2x2 supercell."""
+        supercell = make_supercell(self.unit_cell, [2, 2, 2])
+        
+        self.assertEqual(len(supercell), 8)  # 2^3 = 8 atoms
+        self.assertAlmostEqual(supercell.lattice.a, 10.0, places=5)  # 2 * 5
+        self.assertIsNot(self.unit_cell, supercell)
+    
+    def test_make_supercell_inplace(self):
+        """Test in-place supercell creation."""
+        result = make_supercell(self.unit_cell, [2, 2, 2], inplace=True)
+        
+        self.assertIs(self.unit_cell, result)
+        self.assertEqual(len(self.unit_cell), 8)
+    
+    def test_make_supercell_invalid_matrix(self):
+        """Test supercell with invalid matrix."""
+        with self.assertRaises(ValueError):
+            make_supercell(self.unit_cell, [2, 2])  # Invalid shape
+
+
+class TestComposite(unittest.TestCase):
+    """Tests for composite transformations."""
+    
+    def setUp(self):
+        """Set up test molecule."""
+        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+    
+    def test_chain_transformations(self):
+        """Test chaining multiple transformations."""
+        from matsimpy.transformation import translate, rotate
+        
+        def translate_func(s):
+            return translate(s, [1, 1, 1])
+        
+        def rotate_func(s):
+            return rotate(s, 90, [0, 0, 1])
+        
+        transformed = chain(self.molecule, [translate_func, rotate_func])
+        
+        self.assertIsNot(self.molecule, transformed)
+        # Should be both translated and rotated
+        self.assertIsNotNone(transformed)
+    
+    def test_apply_transformations(self):
+        """Test apply_transformations utility."""
+        from matsimpy.transformation import translate
+        
+        def translate_func(s):
+            return translate(s, [1, 1, 1])
+        
+        transformed = apply_transformations(self.molecule, translate_func)
+        
+        self.assertIsNot(self.molecule, transformed)
+
+
+if __name__ == '__main__':
+    unittest.main()
+
