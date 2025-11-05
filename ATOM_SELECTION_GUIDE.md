@@ -193,34 +193,29 @@ diff_indices = combine_selections([si_indices, near_indices], 'difference')
 
 ```python
 from matsimpy.core import Crystal, Lattice
-from matsimpy.utils.selection import select_by_species, select_by_position, combine_selections
+from matsimpy.utils.selection import AtomSelection
 
 crystal = Crystal(['Si', 'O', 'Si'], [[0,0,0], [5,0,0], [10,0,0]], 
                   Lattice.cubic(20), coords_are_cartesian=True)
 
-# Select Si atoms near surface (within 5 Å of origin)
-si_indices = select_by_species(crystal, 'Si')
-surface_indices = select_by_position(crystal, [0, 0, 0], 5.0)
-surface_si = combine_selections([si_indices, surface_indices], 'intersection')
+# Using AtomSelection (recommended)
+sel = AtomSelection(crystal).by_species('Si').near([0, 0, 0], 5.0)
+crystal.substitute(sel, 'Ge')  # Simple substitution
 
-# Substitute surface Si with Ge
-crystal.substitute(surface_si, ['Ge'] * len(surface_si))
+# Or using dict mapping (maps old species to new species)
+crystal.substitute(sel, {'Si': 'Ge'})  # More explicit
 ```
 
 ### Example 2: Complex Selection for Analysis
 
 ```python
-from matsimpy.utils.selection import (
-    select_by_species, select_by_property, combine_selections
-)
+from matsimpy.utils.selection import AtomSelection
 
-# Select all Si atoms with positive charge
-si_indices = select_by_species(crystal, 'Si')
-charged_indices = select_by_property(crystal, 'charge', condition=lambda x: x > 0)
-charged_si = combine_selections([si_indices, charged_indices], 'intersection')
+# Select all Si atoms with positive charge (using AtomSelection)
+sel = AtomSelection(crystal).by_species('Si').by_property('charge', condition=lambda x: x > 0)
 
 # Use for analysis
-for idx in charged_si:
+for idx in sel:
     print(f"Atom {idx}: {crystal.species[idx]}, charge: {crystal.site_properties[idx]['charge']}")
 ```
 
@@ -228,40 +223,58 @@ for idx in charged_si:
 
 ```python
 from matsimpy.transformation import substitute
-from matsimpy.utils.selection import select_by_box
+from matsimpy.utils.selection import AtomSelection
 
-# Select atoms in a specific region
-region_indices = select_by_box(crystal, [0, 0, 0], [5, 5, 5])
+# Select atoms in a specific region (using AtomSelection)
+sel = AtomSelection(crystal).in_box([0, 0, 0], [5, 5, 5])
 
 # Substitute them functionally (preserves original)
-new_crystal = substitute(crystal, region_indices, ['Ge'] * len(region_indices))
+new_crystal = substitute(crystal, sel, 'Ge')  # Simple substitution
+# Or with dict mapping
+new_crystal = substitute(crystal, sel, {'Si': 'Ge', 'O': 'S'})  # Dict mapping
 ```
 
 ### Example 4: Multiple Criteria Selection
 
 ```python
-from matsimpy.utils.selection import (
-    select_by_species, select_by_position, select_by_property, combine_selections
-)
+from matsimpy.utils.selection import AtomSelection
 
-# Complex selection: Si atoms, near surface, with charge > 0
-si = select_by_species(crystal, 'Si')
-surface = select_by_position(crystal, [0, 0, 0], 5.0)
-charged = select_by_property(crystal, 'charge', condition=lambda x: x > 0)
+# Complex selection: Si atoms, near surface, with charge > 0 (using AtomSelection)
+sel = AtomSelection(crystal).by_species('Si').near([0, 0, 0], 5.0).by_property('charge', condition=lambda x: x > 0)
 
-# Combine: Si AND surface AND charged
-selected = combine_selections([si, surface, charged], 'intersection')
+# Or using operators
+sel1 = AtomSelection(crystal).by_species('Si')
+sel2 = AtomSelection(crystal).near([0, 0, 0], 5.0)
+sel3 = AtomSelection(crystal).by_property('charge', condition=lambda x: x > 0)
+combined = sel1 & sel2 & sel3
 
-# Substitute
-crystal.substitute(selected, ['Ge'] * len(selected))
+# Substitute with dict mapping
+crystal.substitute(combined, {'Si': 'Ge'})
 ```
 
 ## Best Practices
 
-1. **Use selection before substitution**: Select atoms first, then substitute
+1. **Use AtomSelection for cleaner code**: AtomSelection provides fluent API
    ```python
+   # Recommended: Using AtomSelection
+   sel = AtomSelection(crystal).by_species('Si')
+   crystal.substitute(sel, 'Ge')
+   
+   # Or with dict mapping
+   crystal.substitute(sel, {'Si': 'Ge'})
+   
+   # Legacy: Using functional functions
    indices = select_by_species(crystal, 'Si')
    crystal.substitute(indices, ['Ge'] * len(indices))
+   ```
+   
+2. **Use dict mapping for multi-species substitution**: More readable than lists
+   ```python
+   # Dict mapping: maps old species to new species
+   crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
+   
+   # vs explicit list (less readable)
+   crystal.substitute([0, 1, 2], ['Ge', 'S', 'Ge'])
    ```
 
 2. **Combine selections for complex criteria**: Use `combine_selections` for AND/OR logic
@@ -296,8 +309,15 @@ crystal.substitute(selected, ['Ge'] * len(selected))
 ### Transformation Module
 ```python
 from matsimpy.transformation import substitute
-from matsimpy.utils.selection import select_by_species
+from matsimpy.utils.selection import AtomSelection
 
+# Using AtomSelection
+sel = AtomSelection(crystal).by_species('Si')
+new_crystal = substitute(crystal, sel, 'Ge')  # Simple
+new_crystal = substitute(crystal, sel, {'Si': 'Ge'})  # Dict mapping
+
+# Or functional style
+from matsimpy.utils.selection import select_by_species
 indices = select_by_species(crystal, 'Si')
 new_crystal = substitute(crystal, indices, ['Ge'] * len(indices))
 ```

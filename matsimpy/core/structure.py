@@ -182,7 +182,7 @@ class Structure(MSONable):
             raise IndexError("Invalid atom index.")
 
     def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
-                   new_species: Union[str, List[str]]) -> None:
+                   new_species: Union[str, List[str], Dict[str, str]]) -> None:
         """
         Substitute atoms with new species.
         
@@ -191,11 +191,13 @@ class Structure(MSONable):
         
         Args:
             indices: Atom index, list of indices, or AtomSelection object to substitute
-            new_species: New species symbol or list of symbols
+            new_species: New species symbol, list of symbols, or dict mapping old->new species.
+                       If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'})
             
         Raises:
             IndexError: If index is out of range
             ValueError: If number of indices doesn't match number of species
+            KeyError: If dict mapping doesn't contain a species
             
         Examples:
             >>> structure.substitute(0, 'Ge')  # Substitute atom at index 0
@@ -204,6 +206,8 @@ class Structure(MSONable):
             >>> from matsimpy.utils.selection import AtomSelection
             >>> sel = AtomSelection(structure).by_species('Si')
             >>> structure.substitute(sel, 'Ge')  # Substitute selected atoms
+            >>> # Using dict mapping (maps old species to new species)
+            >>> structure.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
         # Handle AtomSelection object
         from ..utils.selection import AtomSelection
@@ -211,6 +215,18 @@ class Structure(MSONable):
             if indices.structure is not self:
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
+        
+        # Handle dict-based species mapping
+        if isinstance(new_species, dict):
+            # Convert dict to list based on current species at selected indices
+            new_species_list = []
+            for idx in indices:
+                old_spec = self.species[idx]
+                if old_spec not in new_species:
+                    raise KeyError(f"Species '{old_spec}' at index {idx} not found in substitution mapping")
+                new_species_list.append(new_species[old_spec])
+            new_species = new_species_list
+        
         # Normalize inputs
         if isinstance(indices, int):
             indices = [indices]
@@ -225,7 +241,7 @@ class Structure(MSONable):
             # Both are lists
             pass
         else:
-            raise TypeError(f"new_species must be str or List[str], got {type(new_species)}")
+            raise TypeError(f"new_species must be str, List[str], or Dict[str, str], got {type(new_species)}")
         
         if len(indices) != len(new_species):
             raise ValueError(

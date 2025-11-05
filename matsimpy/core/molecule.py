@@ -134,8 +134,8 @@ class Molecule(Structure):
             self.site_properties.pop(index)
         self._sites = self._initialize_sites()
     
-    def substitute(self, indices: Union[int, List[int]], 
-                   new_species: Union[str, List[str]]) -> None:
+    def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
+                   new_species: Union[str, List[str], Dict[str, str]]) -> None:
         """
         Substitute atoms with new species.
         
@@ -143,16 +143,23 @@ class Molecule(Structure):
         style (returning new object), use matsimpy.transformation.substitute().
         
         Args:
-            indices: Atom index or list of indices to substitute
-            new_species: New species symbol or list of symbols
+            indices: Atom index, list of indices, or AtomSelection object to substitute
+            new_species: New species symbol, list of symbols, or dict mapping old->new species
             
         Raises:
             IndexError: If index is out of range
             ValueError: If number of indices doesn't match number of species
+            KeyError: If dict mapping doesn't contain a species
             
         Examples:
             >>> molecule.substitute(0, 'N')  # Substitute atom at index 0
             >>> molecule.substitute([0, 1], ['N', 'O'])  # Substitute multiple
+            >>> # Using AtomSelection
+            >>> from matsimpy.utils.selection import AtomSelection
+            >>> sel = AtomSelection(molecule).by_species('C')
+            >>> molecule.substitute(sel, 'N')  # Substitute selected atoms
+            >>> # Using dict mapping (maps old species to new species)
+            >>> molecule.substitute([0, 1, 2], {'C': 'N', 'O': 'S'})
         """
         super().substitute(indices, new_species)
         # Update sites after substitution

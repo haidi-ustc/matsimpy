@@ -83,8 +83,8 @@ class Crystal(Structure):
         # Reinitialize sites
         self._sites = self._initialize_sites()
     
-    def substitute(self, indices: Union[int, List[int]], 
-                   new_species: Union[str, List[str]]) -> None:
+    def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
+                   new_species: Union[str, List[str], Dict[str, str]]) -> None:
         """
         Substitute atoms with new species.
         
@@ -92,16 +92,23 @@ class Crystal(Structure):
         style (returning new object), use matsimpy.transformation.substitute().
         
         Args:
-            indices: Atom index or list of indices to substitute
-            new_species: New species symbol or list of symbols
+            indices: Atom index, list of indices, or AtomSelection object to substitute
+            new_species: New species symbol, list of symbols, or dict mapping old->new species
             
         Raises:
             IndexError: If index is out of range
             ValueError: If number of indices doesn't match number of species
+            KeyError: If dict mapping doesn't contain a species
             
         Examples:
             >>> crystal.substitute(0, 'Ge')  # Substitute atom at index 0
             >>> crystal.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
+            >>> # Using AtomSelection
+            >>> from matsimpy.utils.selection import AtomSelection
+            >>> sel = AtomSelection(crystal).by_species('Si')
+            >>> crystal.substitute(sel, 'Ge')  # Substitute selected atoms
+            >>> # Using dict mapping (maps old species to new species)
+            >>> crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
         super().substitute(indices, new_species)
         # Invalidate neighbor tree (species changed)

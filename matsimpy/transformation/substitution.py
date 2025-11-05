@@ -5,7 +5,7 @@ Replace atoms in structures with new species.
 Can use selection utilities from matsimpy.utils.selection for flexible atom selection.
 """
 
-from typing import List, Union
+from typing import List, Union, Dict
 import numpy as np
 from ..core import Crystal, Molecule
 from .base import _copy_structure, _validate_structure
@@ -13,7 +13,7 @@ from .base import _copy_structure, _validate_structure
 
 def substitute(structure: Union[Crystal, Molecule],
                 indices: Union[int, List[int], 'AtomSelection'],
-                new_species: Union[str, List[str]],
+                new_species: Union[str, List[str], Dict[str, str]],
                 inplace: bool = False) -> Union[Crystal, Molecule]:
     """
     Substitute atoms with new species.
@@ -25,7 +25,8 @@ def substitute(structure: Union[Crystal, Molecule],
     Args:
         structure: Crystal or Molecule to modify
         indices: Atom index, list of indices, or AtomSelection object to substitute
-        new_species: New species symbol or list of symbols
+        new_species: New species symbol, list of symbols, or dict mapping old->new species.
+                   If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'})
         inplace: If True, modify structure in-place (default: False)
     
     Returns:
@@ -36,6 +37,7 @@ def substitute(structure: Union[Crystal, Molecule],
         TypeError: If structure is not Crystal or Molecule
         IndexError: If index is out of range
         ValueError: If number of indices doesn't match number of species
+        KeyError: If dict mapping doesn't contain a species
         
     Examples:
         >>> from matsimpy.core import Crystal, Lattice
@@ -49,6 +51,8 @@ def substitute(structure: Union[Crystal, Molecule],
         >>> # Using AtomSelection
         >>> sel = AtomSelection(crystal).by_species('Si')
         >>> new_crystal = substitute(crystal, sel, 'Ge')
+        >>> # Using dict mapping
+        >>> new_crystal = substitute(crystal, [0, 1, 2], {'Si': 'Ge', 'O': 'S'})
     """
     _validate_structure(structure)
     
@@ -59,12 +63,34 @@ def substitute(structure: Union[Crystal, Molecule],
             raise ValueError("AtomSelection must be created from the structure being modified")
         indices = indices.indices
     
+    # Handle dict-based species mapping
+    if isinstance(new_species, dict):
+        # Convert dict to list based on current species at selected indices
+        if isinstance(indices, int):
+            indices = [indices]
+        new_species_list = []
+        for idx in indices:
+            old_spec = structure.species[idx]
+            if old_spec not in new_species:
+                raise KeyError(f"Species '{old_spec}' at index {idx} not found in substitution mapping")
+            new_species_list.append(new_species[old_spec])
+        new_species = new_species_list
+    
     # Normalize inputs
     if isinstance(indices, int):
         indices = [indices]
-        new_species = [new_species]
+        if isinstance(new_species, str):
+            new_species = [new_species]
+        elif isinstance(new_species, list):
+            new_species = [new_species[0]]  # Take first if list
     elif isinstance(new_species, str):
-        new_species = [new_species]
+        # Multiple indices, single species
+        new_species = [new_species] * len(indices)
+    elif isinstance(new_species, list):
+        # Both are lists
+        pass
+    else:
+        raise TypeError(f"new_species must be str, List[str], or Dict[str, str], got {type(new_species)}")
     
     if len(indices) != len(new_species):
         raise ValueError(
