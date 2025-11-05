@@ -169,10 +169,26 @@ class Molecule(Structure):
         return crystal
 
     def __str__(self):
-        return f"{self.__class__.__name__} with {len(self)} atoms "
+        """Human-readable string representation of Molecule."""
+        info = f"{self.__class__.__name__}: {self.formula}\n"
+        info += f"  Sites: {len(self)} atoms\n"
+        
+        # Center of mass
+        try:
+            com = self.get_center_of_mass()
+            info += f"  Center of mass: ({com[0]:.4f}, {com[1]:.4f}, {com[2]:.4f}) Å"
+        except (ValueError, AttributeError):
+            pass
+        
+        return info
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()})"
+        """Unambiguous string representation of Molecule for debugging."""
+        # Compact representation with key info
+        return (
+            f"{self.__class__.__name__}(formula='{self.formula}', "
+            f"nsites={len(self)})"
+        )
 
     def get_moment_of_inertia(self) -> List[float]:
         """

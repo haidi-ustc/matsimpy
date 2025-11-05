@@ -122,18 +122,36 @@ class Crystal(Structure):
         return abs(volume)
 
     def __str__(self):
-        headers = ["Element", "Fractional Coordinates", "Cartesian Coordinates"]
-        rows = []
-        ret=f"{self.__class__.__name__} with {len(self)} atoms and a volume of {self.volume:.2f} Å^3"
-        for site in self.sites:
-            element = site.specie
-            frac_coords = ", ".join(f"{coord:.4f}" for coord in site.frac_position)
-            cart_coords = ", ".join(f"{coord:.4f}" for coord in site.cart_position)
-            rows.append([element, frac_coords, cart_coords])
-        return str(self.lattice)+'\n'+ret+'\n'+tabulate(rows, headers=headers, tablefmt="plain")
+        """Human-readable string representation of Crystal."""
+        # Basic info
+        info = f"{self.__class__.__name__}: {self.formula}\n"
+        info += f"  Sites: {len(self)} atoms\n"
+        
+        # Lattice parameters
+        info += f"  Lattice: a={self.lattice.a:.4f} Å, b={self.lattice.b:.4f} Å, c={self.lattice.c:.4f} Å\n"
+        info += f"           α={self.lattice.alpha:.2f}°, β={self.lattice.beta:.2f}°, γ={self.lattice.gamma:.2f}°\n"
+        
+        # Volume and density
+        info += f"  Volume: {self.volume:.4f} Å³\n"
+        try:
+            density = self.density()
+            info += f"  Density: {density:.4f} g/cm³"
+        except (ValueError, AttributeError):
+            pass
+        
+        return info
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(species={self.species}, positions={self.positions.tolist()}, lattice={self.lattice.as_dict()})"
+        """Unambiguous string representation of Crystal for debugging."""
+        # Compact representation with key info
+        lattice_params = (
+            f"a={self.lattice.a:.4f}, b={self.lattice.b:.4f}, c={self.lattice.c:.4f}, "
+            f"α={self.lattice.alpha:.1f}°, β={self.lattice.beta:.1f}°, γ={self.lattice.gamma:.1f}°"
+        )
+        return (
+            f"{self.__class__.__name__}(formula='{self.formula}', "
+            f"nsites={len(self)}, lattice={lattice_params})"
+        )
   
     def __getitem__(self, item):
         return self.sites[item]
