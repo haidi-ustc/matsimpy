@@ -17,6 +17,7 @@ def build_nanotube(
     chirality: Tuple[int, int],
     length: Optional[float] = None,
     periodic: bool = True,
+    center: bool = True,
     **kwargs
 ) -> Crystal:
     """
@@ -32,6 +33,7 @@ def build_nanotube(
                   The chiral vector C = n*a1 + m*a2 determines the wrapping
         length: Length of nanotube in Angstroms (if None, uses one unit cell)
         periodic: If True, nanotube is periodic along the axis
+        center: If True, center the nanotube at origin (default: True)
         **kwargs: Additional parameters
     
     Returns:
@@ -240,7 +242,14 @@ def build_nanotube(
         nanotube_lattice = Lattice(lattice_vectors)
     
     # Create crystal with cartesian coordinates (positions are in Angstroms)
-    return Crystal(species_list, positions_list, nanotube_lattice, coords_are_cartesian=True)
+    nanotube = Crystal(species_list, positions_list, nanotube_lattice, coords_are_cartesian=True)
+    
+    # Center the nanotube if requested
+    if center:
+        from ...transformation.geometric import translate_to_origin
+        nanotube = translate_to_origin(nanotube, inplace=False)
+    
+    return nanotube
 
 
 def build_carbon_nanotube(
@@ -249,6 +258,7 @@ def build_carbon_nanotube(
     bond_length: float = 1.42,
     length: Optional[float] = None,
     periodic: bool = True,
+    center: bool = True,
     **kwargs
 ) -> Crystal:
     """
@@ -266,6 +276,7 @@ def build_carbon_nanotube(
         bond_length: C-C bond length in Angstroms (default: 1.42)
         length: Length of nanotube in Angstroms (if None, uses one unit cell)
         periodic: If True, nanotube is periodic along the axis
+        center: If True, center the nanotube at origin (default: True)
         **kwargs: Additional parameters
     
     Returns:
@@ -289,7 +300,7 @@ def build_carbon_nanotube(
     graphene = _create_graphene_sheet(bond_length)
     
     # Build nanotube from graphene using the general function
-    return build_nanotube(graphene, (n, m), length=length, periodic=periodic, **kwargs)
+    return build_nanotube(graphene, (n, m), length=length, periodic=periodic, center=center, **kwargs)
 
 
 def _create_graphene_sheet(bond_length: float = 1.42) -> Crystal:

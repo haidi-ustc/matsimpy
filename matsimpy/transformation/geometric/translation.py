@@ -93,7 +93,7 @@ def translate_to_origin(structure: Union[Crystal, Molecule],
     else:
         # For crystals, use center of mass of positions
         com = np.mean(structure.cart_positions, axis=0)
-        translation_vector = -com.tolist()
+        translation_vector = (-com).tolist()
     
     return translate(structure, translation_vector, inplace=inplace)
 
