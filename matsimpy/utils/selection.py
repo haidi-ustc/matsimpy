@@ -99,7 +99,7 @@ def select_by_position(structure: Union[Crystal, Molecule],
         positions = structure.frac_positions
     
     # Calculate distances
-    distances = np.linalg.norm(positions - center, dtype=np.float64)
+    distances = np.linalg.norm(positions - center, axis=1)
     
     # Select atoms within radius
     return np.where(distances <= radius)[0].tolist()
