@@ -160,3 +160,55 @@ class Composition(MSONable):
             fractions[element] = mass_fraction
         return fractions
 
+    def to_html(self) -> str:
+        """
+        Convert the chemical formula to HTML string with subscript formatting.
+        
+        Returns:
+            str: HTML string with subscripts (e.g., "Fe<sub>2</sub>O<sub>3</sub>")
+            
+        Examples:
+            >>> c = Composition('Fe2O3')
+            >>> c.to_html()
+            'Fe<sub>2</sub>O<sub>3</sub>'
+            >>> c = Composition('H2O')
+            >>> c.to_html()
+            'H<sub>2</sub>O'
+        """
+        html_formula = []
+        element_counts = self.composition
+        sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        
+        for element, count in sorted_elements:
+            html_formula.append(element)
+            if count > 1:
+                html_formula.append(f'<sub>{count}</sub>')
+        
+        return ''.join(html_formula)
+
+    def to_latex(self) -> str:
+        """
+        Convert the chemical formula to LaTeX string with subscript formatting.
+        
+        Returns:
+            str: LaTeX string with subscripts (e.g., "Fe$_2$O$_3$")
+            
+        Examples:
+            >>> c = Composition('Fe2O3')
+            >>> c.to_latex()
+            'Fe$_2$O$_3$'
+            >>> c = Composition('H2O')
+            >>> c.to_latex()
+            'H$_2$O'
+        """
+        latex_formula = []
+        element_counts = self.composition
+        sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
+        
+        for element, count in sorted_elements:
+            latex_formula.append(element)
+            if count > 1:
+                latex_formula.append(f'$_{{{count}}}$')
+        
+        return ''.join(latex_formula)
+
