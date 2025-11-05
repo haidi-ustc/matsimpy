@@ -23,6 +23,14 @@ organized by structure type:
   - build_tetrahedral(): CH4-like structures
   - build_from_smiles(): From SMILES strings (RDKit)
 
+**defects/**     - Defect structures
+  - create_vacancy(): Remove atoms (vacancies)
+  - create_interstitial(): Add atoms (interstitials)
+  - create_substitution(): Replace atoms (substitutions)
+  - create_frenkel(): Displace atom to interstitial
+  - create_schottky(): Create vacancy pairs
+  - create_antisite(): Swap two atoms
+
 **interface/**   - Interface structures (placeholder)
 
 Quick Start:
@@ -52,20 +60,23 @@ from .bulk import *
 from .surface import *
 from .alloy import *
 from .molecule import *
+from .defects import *
 
 # Import submodule __all__ lists
 from .bulk import __all__ as _bulk_all
 from .surface import __all__ as _surface_all
 from .alloy import __all__ as _alloy_all
 from .molecule import __all__ as _molecule_all
+from .defects import __all__ as _defects_all
 
 # Combine all exports
-__all__ = _bulk_all + _surface_all + _alloy_all + _molecule_all
+__all__ = _bulk_all + _surface_all + _alloy_all + _molecule_all + _defects_all
 
 # Allow access to submodules
 from . import bulk
 from . import surface
 from . import alloy
 from . import molecule
+from . import defects
 from . import interface
 
