@@ -21,6 +21,39 @@ The substitution functionality in MatSimPy now supports three powerful features:
 
 ## Usage Examples
 
+### 0. Multiple Partial Substitutions (Complex Scenario)
+
+```python
+from matsimpy.core import Crystal, Lattice
+from matsimpy.utils.selection import AtomSelection
+
+# Create CaCO3-like structure
+crystal = Crystal(['Ca', 'Ca', 'C', 'C', 'O', 'O', 'O'], 
+                  [[0,0,0], [0.5,0,0], [0.25,0,0], [0.75,0,0], ...],
+                  Lattice.cubic(10))
+
+# Scenario: Substitute part of Ca with Ba, part of C with Si
+
+# Method 1: Sequential (recommended for clarity)
+sel_ca = AtomSelection(crystal).by_species('Ca').by_indices([0])  # First Ca
+crystal.substitute(sel_ca, {'Ca': 'Ba'})
+
+sel_c = AtomSelection(crystal).by_species('C').by_indices([2])  # First C
+crystal.substitute(sel_c, {'C': 'Si'})
+
+# Method 2: Combined selection
+sel_ca = AtomSelection(crystal).by_species('Ca').by_indices([0])
+sel_c = AtomSelection(crystal).by_species('C').by_indices([2])
+combined = sel_ca | sel_c  # Union
+crystal.substitute(combined, {'Ca': 'Ba', 'C': 'Si'})  # One operation
+
+# Method 3: Position-based partial substitution
+sel_ca = AtomSelection(crystal).by_species('Ca').near([0,0,0], 3.0)  # Ca near origin
+sel_c = AtomSelection(crystal).by_species('C').near([0,0,0], 3.0)  # C near origin
+combined = sel_ca | sel_c
+crystal.substitute(combined, {'Ca': 'Ba', 'C': 'Si'})
+```
+
 ### 1. Simple Substitution (Traditional)
 
 ```python
