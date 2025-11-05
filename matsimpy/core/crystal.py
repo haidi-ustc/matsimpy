@@ -227,6 +227,37 @@ class Crystal(Structure):
   
     def __getitem__(self, item):
         return self.sites[item]
+    
+    def sort_atoms(self, sort_by: str = 'element') -> None:
+        """
+        Sort atoms in the crystal by element (in-place).
+        
+        This method actually reorders the internal species and positions arrays,
+        unlike __str__ which only sorts for display.
+        
+        Args:
+            sort_by: Sorting method ('element' for atomic number, 'alphabet' for alphabetical)
+            
+        Examples:
+            >>> crystal.sort_atoms('element')  # Sort by atomic number
+            >>> crystal.sort_atoms('alphabet')  # Sort alphabetically
+            
+        Note:
+            This will invalidate the neighbor tree and reinitialize sites.
+        """
+        # Call parent method to sort species and positions
+        super().sort_atoms(sort_by)
+        
+        # Update fractional/Cartesian positions for crystal
+        self.frac_positions = self.positions
+        self.cart_positions = self._convert_to_cartesian()
+        
+        # Invalidate neighbor tree (positions changed)
+        self._neighbor_tree = None
+        self._neighbor_tree_positions = None
+        
+        # Reinitialize sites
+        self._sites = self._initialize_sites()
 
     def _convert_to_cartesian(self):
         """

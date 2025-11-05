@@ -251,7 +251,13 @@ class Molecule(Structure):
         return crystal
 
     def __str__(self):
-        """Human-readable string representation of Molecule."""
+        """
+        Human-readable string representation of Molecule.
+        
+        Note: Atoms are displayed sorted by atomic number for readability,
+        but the internal structure (species, positions) maintains the original order.
+        Use sort_atoms() if you want to actually reorder the internal data.
+        """
         from tabulate import tabulate
         
         info = f"{self.__class__.__name__}: {self.formula}\n"
@@ -270,7 +276,8 @@ class Molecule(Structure):
         if has_properties:
             headers.append("Properties")
         
-        # Sort sites by element (by atomic number, then by position for same element)
+        # Sort sites by element for display only (by atomic number, then by Cartesian coordinates)
+        # Note: This does NOT change the internal order - just for display
         sorted_sites = sorted(
             self.sites,
             key=lambda s: (Element.get_element(s.specie).atomic_no, s.position[0], s.position[1], s.position[2])
