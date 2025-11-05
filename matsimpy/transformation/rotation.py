@@ -67,7 +67,7 @@ def rotate(structure: Union[Crystal, Molecule],
             center = [0.0, 0.0, 0.0]
     center = np.array(center, dtype=np.float64)
     
-        if inplace:
+    if inplace:
         # Use in-place method if available (for molecules)
         if isinstance(structure, Molecule):
             # Translate to origin, rotate, translate back
