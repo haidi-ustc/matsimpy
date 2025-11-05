@@ -7,7 +7,8 @@ setup(
     install_requires=[
         "numpy",
         "scipy",
-        "monty"
+        "monty",
+        "tabulate"
     ],
     package_data={
         "matsimpy.core": ["periodic_table.json"],

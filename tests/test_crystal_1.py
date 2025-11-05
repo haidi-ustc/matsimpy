@@ -42,7 +42,8 @@ class TestCrystal(unittest.TestCase):
         self.assertEqual(d["@class"], expected_dict["@class"])
         self.assertEqual(d["pbc"], expected_dict["pbc"])
         #np.testing.assert_allclose(d['lattice'], expected_dict['lattice'])
-        self.assertEqual(d['species'], expected_dict['species'])
+        # Species is now a tuple, but as_dict converts to list
+        self.assertEqual(list(d['species']), expected_dict['species'])
         self.assertEqual(len(d['positions']), len(expected_dict['positions']))
         for p1, p2 in zip(d['positions'], expected_dict['positions']):
             for x, y in zip(p1, p2):

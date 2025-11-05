@@ -1,9 +1,10 @@
 import numpy as np
 from tabulate import tabulate
+from typing import List, Optional, Union, Dict, Tuple
+from scipy.spatial import cKDTree
 from .structure import Structure
 from .lattice import Lattice
-from typing import List,Optional,Union
-from .periodic_table import  Element
+from .periodic_table import Element
 from .site import CrystalSite
 
 class Crystal(Structure):
@@ -27,6 +28,46 @@ class Crystal(Structure):
         self.site_properties = site_properties or []
         self._sites = self._initialize_sites()  # Add this line to initialize the _sites attribute
         self.pbc = pbc or [True, True, True]
+        
+        # Add neighbor tree cache for optimized neighbor finding
+        self._neighbor_tree: Optional[cKDTree] = None
+        self._neighbor_tree_cutoff: Optional[float] = None
+        self._neighbor_tree_positions: Optional[np.ndarray] = None
+    
+    def add_atom(self, species: str, position: List[float]) -> None:
+        """
+        Adds an atom to the crystal structure and updates coordinates.
+        
+        Args:
+            species (str): Atomic species.
+            position (List[float]): Atomic position (fractional coordinates).
+        """
+        super().add_atom(species, position)
+        # Update fractional and cartesian positions
+        self.frac_positions = self.positions
+        self.cart_positions = self._convert_to_cartesian()
+        # Invalidate neighbor tree
+        self._neighbor_tree = None
+        self._neighbor_tree_positions = None
+        # Reinitialize sites
+        self._sites = self._initialize_sites()
+    
+    def remove_atom(self, index: int) -> None:
+        """
+        Removes an atom from the crystal structure and updates coordinates.
+        
+        Args:
+            index (int): Index of atom to be removed.
+        """
+        super().remove_atom(index)
+        # Update fractional and cartesian positions
+        self.frac_positions = self.positions
+        self.cart_positions = self._convert_to_cartesian()
+        # Invalidate neighbor tree
+        self._neighbor_tree = None
+        self._neighbor_tree_positions = None
+        # Reinitialize sites
+        self._sites = self._initialize_sites()
 
     def _initialize_sites(self) -> List[CrystalSite]:
         """
@@ -119,7 +160,92 @@ class Crystal(Structure):
         Returns:
             (np.ndarray): Numpy array of fractional positions.
         """
-        return np.dot(self.cart_positions, np.linalg.inv(self.lattice.matrix))
+        # Use cached inverse matrix
+        return np.dot(self.cart_positions, self.lattice.inv_matrix)
+
+    def _get_periodic_images(self, cutoff: float) -> np.ndarray:
+        """
+        Get all periodic images within cutoff.
+        
+        Args:
+            cutoff: Cutoff radius for neighbor finding
+            
+        Returns:
+            np.ndarray: All positions including periodic images
+        """
+        # Calculate number of images needed
+        max_dist = np.max(np.linalg.norm(self.lattice.lattice_vectors, axis=1))
+        n_images = int(np.ceil(cutoff / max_dist)) + 1
+        
+        images = []
+        for i in range(-n_images, n_images + 1):
+            for j in range(-n_images, n_images + 1):
+                for k in range(-n_images, n_images + 1):
+                    if i == 0 and j == 0 and k == 0:
+                        continue
+                    shift = (i * self.lattice.lattice_vectors[0] + 
+                            j * self.lattice.lattice_vectors[1] + 
+                            k * self.lattice.lattice_vectors[2])
+                    images.append(self.cart_positions + shift)
+        
+        if images:
+            return np.vstack([self.cart_positions] + images)
+        return self.cart_positions
+
+    def get_neighbor_list(self, cutoff: float, 
+                         use_pbc: bool = True) -> Dict[int, List[Tuple[int, float]]]:
+        """
+        Get neighbor list with optimized KDTree.
+        
+        Args:
+            cutoff: Cutoff radius for neighbor finding
+            use_pbc: Whether to use periodic boundary conditions
+        
+        Returns:
+            Dict mapping atom index to list of (neighbor_index, distance) tuples
+        """
+        # Check if we need to rebuild tree
+        n_atoms = len(self.cart_positions)
+        rebuild_tree = (
+            self._neighbor_tree is None or
+            self._neighbor_tree_cutoff != cutoff or
+            (use_pbc and self._neighbor_tree_positions is None) or
+            (self._neighbor_tree_positions is not None and 
+             len(self._neighbor_tree_positions) < n_atoms)  # Structure changed
+        )
+        
+        if rebuild_tree:
+            if use_pbc:
+                positions = self._get_periodic_images(cutoff)
+            else:
+                positions = self.cart_positions
+            
+            self._neighbor_tree = cKDTree(positions)
+            self._neighbor_tree_cutoff = cutoff
+            self._neighbor_tree_positions = positions
+        
+        # Query neighbors
+        neighbors_dict = {}
+        n_atoms = len(self.cart_positions)
+        for i, pos in enumerate(self.cart_positions):
+            indices = self._neighbor_tree.query_ball_point(pos, cutoff)
+            neighbors = []
+            for idx in indices:
+                if idx < n_atoms:
+                    # Original atom
+                    if idx != i:
+                        dist = np.linalg.norm(pos - self._neighbor_tree_positions[idx])
+                        neighbors.append((idx, dist))
+                else:
+                    # Periodic image
+                    image_idx = idx % n_atoms
+                    if image_idx != i:
+                        dist = np.linalg.norm(pos - self._neighbor_tree_positions[idx])
+                        neighbors.append((image_idx, dist))
+            
+            neighbors_dict[i] = neighbors
+        
+        return neighbors_dict
 
     @staticmethod
     def from_POSCAR(filename: str) -> 'Crystal':
@@ -228,9 +354,10 @@ class Crystal(Structure):
             **kwargs
         )
 
-        #species = pyxtal_crystal.species
-        #positions = pyxtal_crystal.frac_coords
-        #lattice = Lattice(pyxtal_crystal.lattice.matrix)
+        # FIX: Extract from pyxtal_crystal
+        species_list = pyxtal_crystal.species
+        positions = pyxtal_crystal.frac_coords
+        lattice = Lattice(pyxtal_crystal.lattice.matrix)
 
-        return cls(species, positions, lattice)
+        return cls(species_list, positions, lattice)
 

@@ -1,12 +1,12 @@
 import numpy as np
-from typing import List,Union
+from typing import List, Union, Optional, Dict, Tuple
 import hashlib
 from collections import Counter
 from monty.json import MSONable
 
 from .lattice import Lattice
 from .composition import Composition
-from .periodic_table import  Element
+from .periodic_table import Element
 
 class Structure(MSONable):
     """
@@ -37,22 +37,28 @@ class Structure(MSONable):
     def __init__(self, species: Union[List[str], List[int], List[Element]],
                  positions: List[List[float]], 
                  lattice: Lattice = None):
+        # Convert to list first, then tuple for immutability
         if all(isinstance(s, str) for s in species):
-            # If species are atomic symbols, convert to atomic numbers
-            self.species = species
+            species_list = list(species)
         elif all(isinstance(s, int) for s in species):
-            # If species are atomic numbers, use directly
-            self.species = [Element.from_Z(s).symbol for s in species]
+            species_list = [Element.from_Z(s).symbol for s in species]
         elif all(isinstance(s, Element) for s in species):
-            # If species are Element objects, get atomic numbers
-            self.species = [s.symbol for s in species]
+            species_list = [s.symbol for s in species]
         else:
             raise TypeError("Invalid type for species. \
                     Must be a list of atomic symbols, \
                     a list of atomic numbers, or a list of Element objects.")
 
-        self.positions = np.array(positions)
+        self.species = tuple(species_list)  # Make immutable
+        self.positions = np.array(positions, dtype=np.float64)
         self.lattice = lattice
+        
+        # Add cache attributes
+        self._cached_composition: Optional[Composition] = None
+        self._cached_formula: Optional[str] = None
+        self._formula_dirty = True
+        
+        # Initialize cached properties
         self.formula = self.get_formula()
         self.composition = self.get_composition()
 
@@ -68,8 +74,9 @@ class Structure(MSONable):
             "@class": self.__class__.__name__,
             "species": list(self.species),
             "positions": self.positions.tolist(),
-            "lattice": self.lattice.as_dict()
         }
+        if self.lattice is not None:
+            d["lattice"] = self.lattice.as_dict()
         return d
 
     @classmethod
@@ -85,21 +92,24 @@ class Structure(MSONable):
         """
         species = d["species"]
         positions = d["positions"]
-        lattice = Lattice.from_dict(d["lattice"])
+        lattice = Lattice.from_dict(d["lattice"]) if d.get("lattice") is not None else None
         return cls(species, positions, lattice)
 
     def get_formula(self):
         """
-        Calculates the chemical formula of the structure.
+        Calculates the chemical formula of the structure with caching.
 
         Returns:
             (str): Chemical formula of the structure.
         """
-        element_counter = Counter(self.species)
-        formula = ""
-        for element, count in element_counter.items():
-            formula += element + str(count)
-        return formula
+        if self._cached_formula is None or self._formula_dirty:
+            element_counter = Counter(self.species)
+            formula = ""
+            for element, count in sorted(element_counter.items()):
+                formula += element + (str(count) if count > 1 else "")
+            self._cached_formula = formula
+            self._formula_dirty = False
+        return self._cached_formula
 
 
     def __hash__(self):
@@ -109,45 +119,66 @@ class Structure(MSONable):
 
     def get_composition(self):
         """
-        Calculates the composition of the structure.
+        Calculates the composition of the structure with caching.
 
         Returns:
             (Composition): Composition object.
         """
-        if self.formula is None:
-            formula = self.get_formula()
+        if self._cached_composition is None:
+            self._cached_composition = Composition(self.get_formula())
+        return self._cached_composition
 
-        return Composition(self.formula)
-
-    def add_atom(self, species: str, position: List[float]):
+    def add_atom(self, species: str, position: List[float]) -> None:
         """
-        Adds an atom to the structure.
+        Adds an atom to the structure and invalidates cache.
 
         Args:
             species (str): Atomic species.
             position (List[float]): Atomic position.
         """
-        self.species += (species,)
+        # Maintain tuple immutability
+        species_list = list(self.species)
+        species_list.append(species)
+        self.species = tuple(species_list)
         self.positions = np.vstack([self.positions, position])
+        self._formula_dirty = True
+        self._cached_composition = None
+        # Update cached properties
+        self.formula = self.get_formula()
         self.composition = self.get_composition()
 
-    def remove_atom(self, index: int):
+    def remove_atom(self, index: int) -> None:
         """
-        Removes an atom from the structure.
+        Removes an atom from the structure and invalidates cache.
 
         Args:
             index (int): Index of atom to be removed.
         """
-
         if 0 <= index < len(self.species):
-            self.species.pop(index)
+            # Maintain tuple immutability
+            species_list = list(self.species)
+            species_list.pop(index)
+            self.species = tuple(species_list)
             self.positions = np.delete(self.positions, index, axis=0)
+            self._formula_dirty = True
+            self._cached_composition = None
+            # Update cached properties
+            self.formula = self.get_formula()
             self.composition = self.get_composition()
         else:
             raise IndexError("Invalid atom index.")
 
-    def get_neighbor_list(self, cutoff: float):
-        """To be implemented by subclasses."""
+    def get_neighbor_list(self, cutoff: float, use_pbc: bool = True) -> Dict[int, List[Tuple[int, float]]]:
+        """
+        Get neighbor list. To be implemented by subclasses.
+        
+        Args:
+            cutoff: Cutoff radius for neighbor finding
+            use_pbc: Whether to use periodic boundary conditions
+            
+        Returns:
+            Dict mapping atom index to list of (neighbor_index, distance) tuples
+        """
         pass
 
 

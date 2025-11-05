@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Union
+from typing import List, Union, Optional
 from monty.json import MSONable
 from scipy.spatial.distance import pdist, squareform
 
@@ -13,6 +13,8 @@ class Lattice(MSONable):
         """
         self.lattice_vectors = np.array(lattice_vectors, dtype=float)
         self._validate_lattice_vectors()
+        # Cache inverse matrix
+        self._inv_matrix: Optional[np.ndarray] = None
 
     def _validate_lattice_vectors(self) -> None:
         """
@@ -50,6 +52,18 @@ class Lattice(MSONable):
             (np.ndarray): Lattice vectors as a 3x3 matrix.
         """
         return np.array(self.lattice_vectors , dtype=np.float64).reshape((3, 3))
+    
+    @property
+    def inv_matrix(self) -> np.ndarray:
+        """
+        Cached inverse of lattice matrix.
+
+        Returns:
+            (np.ndarray): Inverse of lattice matrix.
+        """
+        if self._inv_matrix is None:
+            self._inv_matrix = np.linalg.inv(self.matrix)
+        return self._inv_matrix
 
     @property
     def a(self) -> float:

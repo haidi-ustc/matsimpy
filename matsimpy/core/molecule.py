@@ -123,7 +123,7 @@ class Molecule(Structure):
         site_properties = d.get("site_properties", [])
         return cls(species, positions, site_properties)
 
-    def to_crystal(self, scale: float = None) -> Structure:
+    def to_crystal(self, scale: float = None) -> Crystal:
         """
         Convert a Molecule to a Crystal structure by automatically defining the lattice scale.
     
@@ -131,12 +131,12 @@ class Molecule(Structure):
             scale (float): The scale factor to be used to define the lattice vectors.
     
         Returns:
-            Structure: The Crystal structure.
+            Crystal: The Crystal structure.
         """
-        molecule = self.molecule
+        # FIX: Use self instead of self.molecule
         max_distance = 0
-        for i, pos_i in enumerate(molecule.positions):
-            for j, pos_j in enumerate(molecule.positions):
+        for i, pos_i in enumerate(self.positions):
+            for j, pos_j in enumerate(self.positions):
                 if i >= j:
                     continue
                 distance = np.linalg.norm(pos_i - pos_j)
@@ -150,8 +150,8 @@ class Molecule(Structure):
         # Define lattice vectors based on the scale factor
         lattice_vectors = [[scale, 0, 0], [0, scale, 0], [0, 0, scale]]
     
-        # Create Crystal structure with the same species and positions as the Molecule
-        crystal = Structure(molecule.species, molecule.positions, Lattice(lattice_vectors))
+        # FIX: Return Crystal, not Structure
+        crystal = Crystal(self.species, self.positions, Lattice(lattice_vectors))
     
         return crystal
 
