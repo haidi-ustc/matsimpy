@@ -244,10 +244,18 @@ def build_nanotube(
     # Create crystal with cartesian coordinates (positions are in Angstroms)
     nanotube = Crystal(species_list, positions_list, nanotube_lattice, coords_are_cartesian=True)
     
-    # Center the nanotube if requested
+    # Center the nanotube in xy plane if requested
     if center:
-        from ...transformation.geometric import translate_to_origin
-        nanotube = translate_to_origin(nanotube, inplace=False)
+        # Calculate center of mass in xy plane (x and y components only)
+        positions_array = np.array(positions_list)
+        com_xy = np.mean(positions_array[:, :2], axis=0)  # Only x, y components
+        com_z = np.mean(positions_array[:, 2])  # z component separately
+        
+        # Translate to center xy plane at origin, and center z at origin
+        translation_vector = [-com_xy[0], -com_xy[1], -com_z]
+        
+        from ...transformation.geometric import translate
+        nanotube = translate(nanotube, translation_vector, inplace=False)
     
     return nanotube
 
