@@ -24,6 +24,9 @@ class Site(MSONable):
             if not isinstance(specie, (str, int, Element)):
                 raise TypeError("Specie must be a string, integer, or Element object.")
             if isinstance(specie, int):
+                # Validate atomic number before creating Element
+                if not (0 < specie <= 103):  # Valid atomic numbers
+                    raise ValueError(f"Invalid atomic number: {specie}. Must be between 1 and 103.")
                 return Element.from_Z(specie).symbol
             if isinstance(specie, str):
                 return specie

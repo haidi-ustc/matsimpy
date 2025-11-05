@@ -27,8 +27,8 @@ class TestSite(unittest.TestCase):
         s = Site([0.5, 0.5, 0.5], specie=Element("Fe"), properties={"magmom": 2.5})
         self.assertEqual(s.specie, "Fe")
 
-        # Test setting invalid specie
-        with self.assertRaises(AssertionError):
+        # Test setting invalid specie (invalid atomic number)
+        with self.assertRaises(ValueError):
             s = Site([0, 0, 0], specie=123)
 
         # Test setting invalid properties
@@ -59,8 +59,8 @@ class TestSite(unittest.TestCase):
         s.specie = Element("Fe")
         self.assertEqual(s.specie, "Fe")
 
-        # Test setting invalid specie
-        with self.assertRaises(AssertionError):
+        # Test setting invalid specie (invalid atomic number)
+        with self.assertRaises(ValueError):
             s.specie = 123
 
     def test_position(self):
