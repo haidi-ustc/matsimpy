@@ -77,7 +77,8 @@ class TestRotation(unittest.TestCase):
     def test_rotate_functional(self):
         """Test functional rotation."""
         original_pos = self.molecule.positions[1].copy()
-        new_molecule = rotate(self.molecule, angle=90, axis=[0, 0, 1])
+        # Rotate around origin (not COM)
+        new_molecule = rotate(self.molecule, angle=90, axis=[0, 0, 1], center=[0, 0, 0])
         
         # Original should be unchanged
         np.testing.assert_array_almost_equal(self.molecule.positions[1], original_pos)
@@ -88,7 +89,8 @@ class TestRotation(unittest.TestCase):
     
     def test_rotate_inplace(self):
         """Test in-place rotation."""
-        result = rotate(self.molecule, angle=90, axis=[0, 0, 1], inplace=True)
+        # Rotate around origin (not COM)
+        result = rotate(self.molecule, angle=90, axis=[0, 0, 1], center=[0, 0, 0], inplace=True)
         
         self.assertIs(self.molecule, result)
         # O atom should be rotated
