@@ -72,7 +72,9 @@ class TestNanotube:
         nanotube = build_nanotube(graphene, (5, 5))
         
         assert isinstance(nanotube, Crystal)
-        assert len(nanotube.species) == len(graphene.species)
+        # Nanotube should have more atoms than input (supercell is created first)
+        assert len(nanotube.species) > len(graphene.species)
+        assert all(s == 'C' for s in nanotube.species)
     
     def test_build_nanotube_non_graphene(self):
         """Test building nanotube from non-graphene 2D material."""
@@ -92,9 +94,15 @@ class TestNanotube:
         hbn_nanotube = build_nanotube(hbn, (10, 0))
         
         assert isinstance(hbn_nanotube, Crystal)
-        assert len(hbn_nanotube.species) == len(hbn.species)
+        # Nanotube should have more atoms than input (supercell is created first)
+        assert len(hbn_nanotube.species) > len(hbn.species)
         assert 'B' in hbn_nanotube.species
         assert 'N' in hbn_nanotube.species
+        # Check that B and N are both present in roughly equal amounts
+        b_count = sum(1 for s in hbn_nanotube.species if s == 'B')
+        n_count = sum(1 for s in hbn_nanotube.species if s == 'N')
+        assert b_count > 0 and n_count > 0
+        assert abs(b_count - n_count) < len(hbn_nanotube.species) * 0.1  # Roughly equal
 
 
 class TestTwistedBilayer:

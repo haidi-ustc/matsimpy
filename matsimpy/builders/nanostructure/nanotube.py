@@ -120,11 +120,39 @@ def build_nanotube(
     else:
         axis_length = length
     
-    # Roll up the 2D structure
+    # Create a supercell large enough to wrap around the nanotube
+    # We need enough unit cells to cover the chiral vector C and translation vector T
+    # Calculate how many unit cells we need in each direction
+    # For safety, we'll create a supercell that covers n+m in a1 and n+m in a2 directions
+    # Also need enough along T direction for the length
+    max_repeat = max(abs(n), abs(m)) + 1  # Extra cell for safety
+    cells_a1 = max_repeat + abs(t1) if t1 != 0 else max_repeat
+    cells_a2 = max_repeat + abs(t2) if t2 != 0 else max_repeat
+    
+    # Calculate how many cells along T direction
+    if length is None:
+        cells_along_T = max(1, int(np.ceil(T_length / np.linalg.norm(T))))
+    else:
+        cells_along_T = max(1, int(np.ceil(length / T_length)))
+    
+    # Create supercell using transformation module
+    from ...transformation.structural import make_supercell
+    
+    # Create supercell matrix
+    # For 2D materials, we expand in a1 and a2, and keep c minimal
+    supercell_matrix = np.array([
+        [cells_a1, 0, 0],
+        [0, cells_a2, 0],
+        [0, 0, cells_along_T]
+    ])
+    
+    supercell_2d = make_supercell(base_2d, supercell_matrix, inplace=False)
+    
+    # Roll up the supercell structure
     species_list = []
     positions_list = []
     
-    for i, (species, pos_2d) in enumerate(zip(base_2d.species, base_2d.positions)):
+    for i, (species, pos_2d) in enumerate(zip(supercell_2d.species, supercell_2d.positions)):
         # Project position onto chiral vector
         # Calculate angle around the nanotube
         proj_on_C = np.dot(pos_2d, C) / (np.linalg.norm(C) ** 2)
