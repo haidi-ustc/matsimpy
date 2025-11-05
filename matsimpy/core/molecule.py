@@ -59,14 +59,21 @@ class Molecule(Structure):
 
     def get_center_of_mass(self) -> List[float]:
         """
-        Calculates the center of mass of the molecule.
+        Calculates the center of mass of the molecule with caching.
 
         Returns:
             List[float]: The center of mass as a list of three floats.
         """
-        masses = np.array([Element(specie).atomic_mass for specie in self.species])
-        center_of_mass = np.average(self.positions, weights=masses, axis=0)
-        return center_of_mass.tolist()
+        if not hasattr(self, '_cached_com'):
+            # Use cached Element instances for better performance
+            masses = np.array([
+                Element.get_element(specie).atomic_mass if hasattr(Element, 'get_element') 
+                else Element(specie).atomic_mass 
+                for specie in self.species
+            ])
+            center_of_mass = np.average(self.positions, weights=masses, axis=0)
+            self._cached_com = center_of_mass.tolist()
+        return self._cached_com
 
     def translate(self, vector: List[float]):
         """
@@ -76,6 +83,9 @@ class Molecule(Structure):
             vector (List[float]): The vector by which to translate the molecule.
         """
         self.positions += np.array(vector)
+        # Invalidate center of mass cache
+        if hasattr(self, '_cached_com'):
+            del self._cached_com
 
     def rotate(self, angle: float, axis: List[float]):
         """
@@ -89,6 +99,9 @@ class Molecule(Structure):
 
         rotation = Rotation.from_rotvec(np.radians(angle) * np.array(axis))
         self.positions = rotation.apply(self.positions)
+        # Invalidate center of mass cache
+        if hasattr(self, '_cached_com'):
+            del self._cached_com
 
     def as_dict(self):
         """

@@ -9,7 +9,7 @@ class Site(MSONable):
             specie: Union[str, int, Element] = 'X' ,
             properties: Optional[dict] = None):
         self._position = self._validate_position(position)
-        self._specie = self._validatespecie(specie)
+        self._specie = self._validate_specie(specie)
         self._properties = self._validate_properties(properties)
 
     def as_dict(self):
@@ -19,7 +19,7 @@ class Site(MSONable):
     def from_dict(cls, d):
         return cls(position=d["position"], specie=d.get("specie"), properties=d.get("properties"))
 
-    def _validatespecie(self, specie: Optional[Union[str, int, Element]]) -> Optional[Union[str, int, Element]]:
+    def _validate_specie(self, specie: Optional[Union[str, int, Element]]) -> Optional[Union[str, int, Element]]:
         if specie is not None:
             if not isinstance(specie, (str, int, Element)):
                 raise TypeError("Specie must be a string, integer, or Element object.")
@@ -64,7 +64,7 @@ class Site(MSONable):
 
     @specie.setter
     def specie(self, specie: Union[str, int, Element]) -> None:
-        self._specie = self._validatespecie(specie)
+        self._specie = self._validate_specie(specie)
 
     @property
     def position(self) -> np.ndarray:

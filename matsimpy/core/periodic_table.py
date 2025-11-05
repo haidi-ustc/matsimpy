@@ -1,5 +1,6 @@
 from pathlib import Path
 from monty.serialization import loadfn, dumpfn
+from typing import Optional
 
 fpdt = str(Path(__file__).absolute().parent / "periodic_table.json")
 _pdt = loadfn(fpdt)
@@ -9,10 +10,14 @@ ELEMENTS = ['H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne', 'Na', 'Mg', 'A
          'Lu', 'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'Fr', 'Ra', 'Ac', 'Th', 'Pa', 'U', 'Np', \
          'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr']
 
+# Cache for Element instances to avoid repeated creation
+_element_cache: dict[str, 'Element'] = {}
+
 class Element:
 
     def __init__(self, symbol: str):
-        assert symbol in ELEMENTS, f"{symbol} not found in periodic table"
+        if symbol not in ELEMENTS:
+            raise ValueError(f"{symbol} not found in periodic table")
         self.symbol = symbol
         self._data = _pdt[symbol]
 
@@ -23,9 +28,27 @@ class Element:
         return f"Element : {self.symbol}"
 
     @classmethod
-    def from_Z(cls, Z):
-        assert Z > 0 and Z <= len(ELEMENTS), f"Z must be between 1 and {len(ELEMENTS)}"
-        return cls(ELEMENTS[Z-1])
+    def from_Z(cls, Z: int) -> 'Element':
+        """Create Element from atomic number Z."""
+        if not (0 < Z <= len(ELEMENTS)):
+            raise ValueError(f"Z must be between 1 and {len(ELEMENTS)}, got {Z}")
+        symbol = ELEMENTS[Z-1]
+        # Use cache if available
+        if symbol in _element_cache:
+            return _element_cache[symbol]
+        element = cls(symbol)
+        _element_cache[symbol] = element
+        return element
+    
+    @classmethod
+    def get_element(cls, symbol: str) -> 'Element':
+        """Get Element instance with caching."""
+        symbol = symbol.capitalize()  # Normalize case
+        if symbol in _element_cache:
+            return _element_cache[symbol]
+        element = cls(symbol)
+        _element_cache[symbol] = element
+        return element
 
     @property
     def atomic_no(self):
@@ -33,48 +56,50 @@ class Element:
 
     @property
     def name(self):
-        return self._data['name']
+        """Element name. Try both keys for compatibility."""
+        return self._data.get("Name") or self._data.get('name')
 
     @property
     def X(self):
-        return self._data['X']
-
-
-    @property
-    def radius(self):
-        return self._data['radius']
-
-    @property
-    def calculated_radius(self):
-        return self._data['calculated_radius']
-
-    @property
-    def shannon_radii(self):
-        return self._data["Shannon radii"]
-
-    @property
-    def superconduction_temperature(self):
-        return self._data["Superconduction temperature"]
-
-    @property
-    def thermal_conductivity(self):
-        return self._data["Thermal conductivity"]
-
-    @property
-    def van_der_waals_radius(self):
-        return self._data["Van der waals radius"]
-
-    @property
-    def velocity_of_sound(self):
-        return self._data["Velocity of sound"]
-
-    @property
-    def vickers_hardness(self):
-        return self._data["Vickers hardness"]
+        """Electronegativity (X)."""
+        return self._data.get("X") or self._data.get('x')
 
     @property
     def x(self):
-        return self._data["X"]
+        """Electronegativity (x) - alias for X."""
+        return self.X
+
+    @property
+    def radius(self):
+        return self._data.get('radius')
+
+    @property
+    def calculated_radius(self):
+        return self._data.get('calculated_radius')
+
+    @property
+    def shannon_radii(self):
+        return self._data.get("Shannon radii")
+
+    @property
+    def superconduction_temperature(self):
+        return self._data.get("Superconduction temperature")
+
+    @property
+    def thermal_conductivity(self):
+        return self._data.get("Thermal conductivity")
+
+    @property
+    def van_der_waals_radius(self):
+        return self._data.get("Van der waals radius")
+
+    @property
+    def velocity_of_sound(self):
+        return self._data.get("Velocity of sound")
+
+    @property
+    def vickers_hardness(self):
+        return self._data.get("Vickers hardness")
 
     @property
     def youngs_modulus(self):
@@ -86,11 +111,9 @@ class Element:
 
     @property
     def iupac_ordering(self):
-        return self._data["iupac_ordering"]
-
-    @property
-    def iupac_ordering(self):
-        return self._data["IUPAC ordering"]
+        """IUPAC ordering number."""
+        # Try both keys for compatibility
+        return self._data.get("IUPAC ordering") or self._data.get('iupac_ordering')
 
     @property
     def atomic_mass(self):
@@ -169,9 +192,7 @@ class Element:
     def molar_volume(self):
         return self._data["Molar volume"]
 
-    @property
-    def name(self):
-        return self._data["Name"]
+    # name property already defined above (line 58), removing duplicate
 
     @property
     def oxidation_states(self):

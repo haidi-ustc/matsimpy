@@ -127,7 +127,7 @@ class Composition(MSONable):
     @property
     def mass(self):
         """
-        Calculate the mass of the composition.
+        Calculate the mass of the composition with cached Element instances.
 
         Returns:
             float: The mass of the composition.
@@ -139,7 +139,9 @@ class Composition(MSONable):
         """
         mass = 0.0
         for element, count in self.composition.items():
-            mass += Element(element).atomic_mass * count
+            # Use cached Element.get_element for better performance
+            elem = Element.get_element(element) if hasattr(Element, 'get_element') else Element(element)
+            mass += elem.atomic_mass * count
         return mass
 
     def mass_fractions(self):
@@ -152,7 +154,9 @@ class Composition(MSONable):
         total_mass = self.mass
         fractions = {}
         for element, count in self.composition.items():
-            mass_fraction = Element(element).atomic_mass * count / total_mass
+            # Use cached Element.get_element for better performance
+            elem = Element.get_element(element) if hasattr(Element, 'get_element') else Element(element)
+            mass_fraction = elem.atomic_mass * count / total_mass
             fractions[element] = mass_fraction
         return fractions
 
