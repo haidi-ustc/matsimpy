@@ -75,9 +75,14 @@ def build_nanotube(
     
     # Get 2D lattice vectors (assuming they're in the xy plane)
     lattice_2d = base_2d.lattice
-    a1, a2 = lattice_2d.lattice_vectors[0], lattice_2d.lattice_vectors[1]
+    a1_full = lattice_2d.lattice_vectors[0]
+    a2_full = lattice_2d.lattice_vectors[1]
     
-    # Calculate chiral vector C = n*a1 + m*a2
+    # Extract only xy components (first 2 dimensions) for 2D operations
+    a1 = a1_full[:2]
+    a2 = a2_full[:2]
+    
+    # Calculate chiral vector C = n*a1 + m*a2 (in 2D)
     C = n * a1 + m * a2
     
     # Calculate nanotube diameter
@@ -111,6 +116,7 @@ def build_nanotube(
         t1 = m
         t2 = -n
     
+    # Translation vector T (in 2D)
     T = t1 * a1 + t2 * a2
     T_length = np.linalg.norm(T)
     
@@ -120,61 +126,90 @@ def build_nanotube(
     else:
         axis_length = length
     
-    # Create a supercell large enough to wrap around the nanotube
-    # We need enough unit cells to cover the chiral vector C and translation vector T
-    # Calculate how many unit cells we need in each direction
-    # For safety, we'll create a supercell that covers n+m in a1 and n+m in a2 directions
-    # Also need enough along T direction for the length
-    max_repeat = max(abs(n), abs(m)) + 1  # Extra cell for safety
-    cells_a1 = max_repeat + abs(t1) if t1 != 0 else max_repeat
-    cells_a2 = max_repeat + abs(t2) if t2 != 0 else max_repeat
+    # Generate atoms directly in the fundamental parallelogram defined by C and T
+    # This avoids duplicate issues from supercell wrapping
+    # The fundamental parallelogram contains all unique atoms for one nanotube unit cell
     
-    # Calculate how many cells along T direction
-    if length is None:
-        cells_along_T = max(1, int(np.ceil(T_length / np.linalg.norm(T))))
-    else:
-        cells_along_T = max(1, int(np.ceil(length / T_length)))
+    # Get unit cell lattice vectors
+    a1_full_vec = base_2d.lattice.lattice_vectors[0]
+    a2_full_vec = base_2d.lattice.lattice_vectors[1]
+    a1_2d = a1_full_vec[:2]  # xy components only
+    a2_2d = a2_full_vec[:2]  # xy components only
     
-    # Create supercell using transformation module
-    from ...transformation.structural import make_supercell
+    # Calculate how many unit cells fit in the fundamental parallelogram
+    # The fundamental parallelogram area is |det(C, T)|
+    # Unit cell area is |det(a1, a2)|
+    unit_cell_area = abs(np.linalg.det(np.array([a1_2d, a2_2d])))
+    fundamental_area = abs(np.linalg.det(np.array([C, T])))
+    num_unit_cells = int(np.round(fundamental_area / unit_cell_area))
     
-    # Create supercell matrix
-    # For 2D materials, we expand in a1 and a2, and keep c minimal
-    supercell_matrix = np.array([
-        [cells_a1, 0, 0],
-        [0, cells_a2, 0],
-        [0, 0, cells_along_T]
-    ])
+    # Generate atoms by tiling unit cells within the fundamental parallelogram
+    # Find the range of unit cell indices needed
+    # We need enough cells to cover the parallelogram
+    max_cells_a1 = max(abs(n), abs(m), abs(t1)) + 2
+    max_cells_a2 = max(abs(n), abs(m), abs(t2)) + 2
     
-    supercell_2d = make_supercell(base_2d, supercell_matrix, inplace=False)
+    # Collect all atoms from unit cells that fall within or overlap the fundamental region
+    all_atoms = []
+    for i in range(-max_cells_a1, max_cells_a1 + 1):
+        for j in range(-max_cells_a2, max_cells_a2 + 1):
+            # Position of this unit cell origin in cartesian
+            cell_origin_2d = i * a1_2d + j * a2_2d
+            
+            # Add atoms from this unit cell
+            for species, pos_frac in zip(base_2d.species, base_2d.positions):
+                # Atom position in cartesian (2D)
+                atom_pos_2d = cell_origin_2d + pos_frac[0] * a1_2d + pos_frac[1] * a2_2d
+                all_atoms.append((species, atom_pos_2d))
     
-    # Roll up the supercell structure
     species_list = []
     positions_list = []
     
-    for i, (species, pos_2d) in enumerate(zip(supercell_2d.species, supercell_2d.positions)):
-        # Project position onto chiral vector
-        # Calculate angle around the nanotube
-        proj_on_C = np.dot(pos_2d, C) / (np.linalg.norm(C) ** 2)
-        angle = 2 * np.pi * proj_on_C / np.linalg.norm(C)
+    # Build transformation matrix from (C, T) coordinates to (a1, a2) coordinates
+    # We want to find coefficients (u, v) such that: pos = u*C + v*T
+    # This defines the fundamental region: 0 <= u < 1, 0 <= v < 1
+    # Matrix: [C_x, T_x; C_y, T_y] * [u; v] = [pos_x; pos_y]
+    transform_matrix = np.array([[C[0], T[0]], [C[1], T[1]]])
+    inv_transform = np.linalg.inv(transform_matrix)
+    
+    # Use a set to track unique (u, v) pairs to avoid duplicates
+    seen_uv = set()
+    
+    for species, pos_2d_cart in all_atoms:
+        # Convert to (C, T) coordinates  
+        u_v = inv_transform @ pos_2d_cart
         
-        # Calculate radius at this position
-        # For a perfect roll-up, radius = diameter / 2
+        # Wrap to fundamental region [0, 1) x [0, 1)
+        u = u_v[0] % 1.0
+        v = u_v[1] % 1.0
+        
+        # Check if this (u, v) pair has been seen (with tolerance for floating point)
+        uv_rounded = (round(u, 8), round(v, 8))
+        if uv_rounded in seen_uv:
+            continue  # Skip duplicate
+        seen_uv.add(uv_rounded)
+        
+        # Calculate angle around the nanotube (0 to 2π)
+        # u goes from 0 to 1 along the circumference
+        angle = 2 * np.pi * u
+        
+        # Calculate radius (constant for cylindrical nanotube)
         radius = diameter / 2
         
-        # Convert to cylindrical coordinates
+        # Convert to cylindrical coordinates (nanotube surface)
         x = radius * np.cos(angle)
         y = radius * np.sin(angle)
         
-        # z coordinate is the projection onto T (translation vector)
-        z = np.dot(pos_2d, T) / T_length
-        
-        # Scale z to desired length
+        # z coordinate is along the translation vector
+        # v goes from 0 to 1 along the axis
         if length is not None:
-            z = z * (length / T_length)
+            z = v * length
+        else:
+            z = v * T_length
         
         positions_list.append([x, y, z])
         species_list.append(species)
+    
     
     # Create nanotube lattice
     # The lattice vectors are: [circumference direction, T direction, perpendicular]
@@ -204,7 +239,8 @@ def build_nanotube(
         ])
         nanotube_lattice = Lattice(lattice_vectors)
     
-    return Crystal(species_list, positions_list, nanotube_lattice)
+    # Create crystal with cartesian coordinates (positions are in Angstroms)
+    return Crystal(species_list, positions_list, nanotube_lattice, coords_are_cartesian=True)
 
 
 def build_carbon_nanotube(
