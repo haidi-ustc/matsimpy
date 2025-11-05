@@ -110,7 +110,7 @@ def optimize_lattice(
     if target_density is not None:
         # Calculate required volume from density
         # density = mass / volume
-        mass = crystal.composition.weight  # in amu
+        mass = crystal.composition.mass  # in amu
         # Convert amu to grams and A^3 to cm^3
         amu_to_g = 1.66053906660e-24
         angstrom3_to_cm3 = 1e-24
