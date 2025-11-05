@@ -136,36 +136,56 @@ class Molecule(Structure):
         site_properties = d.get("site_properties", [])
         return cls(species, positions, site_properties)
 
-    def to_crystal(self, scale: float = None) -> Crystal:
+    def to_crystal(self, vacuum: float = 15.0) -> Crystal:
         """
-        Convert a Molecule to a Crystal structure by automatically defining the lattice scale.
+        Convert a Molecule to a Crystal structure by automatically creating a box
+        with vacuum padding around the molecule.
     
         Args:
-            scale (float): The scale factor to be used to define the lattice vectors.
+            vacuum (float): Vacuum padding in Angstroms to add around the molecule.
+                           Default is 15.0 Å.
     
         Returns:
-            Crystal: The Crystal structure.
+            Crystal: The Crystal structure with the molecule centered in a cubic box.
         """
-        # FIX: Use self instead of self.molecule
-        max_distance = 0
-        for i, pos_i in enumerate(self.positions):
-            for j, pos_j in enumerate(self.positions):
-                if i >= j:
-                    continue
-                distance = np.linalg.norm(pos_i - pos_j)
-                if distance > max_distance:
-                    max_distance = distance
-    
-        if scale is None or max_distance / scale > 15:
-            # If scale is not supplied or is not reasonable, define scale based on max distance
-            scale = max_distance / 5
-    
-        # Define lattice vectors based on the scale factor
-        lattice_vectors = [[scale, 0, 0], [0, scale, 0], [0, 0, scale]]
-    
-        # FIX: Return Crystal, not Structure
-        crystal = Crystal(self.species, self.positions, Lattice(lattice_vectors))
-    
+        if len(self.positions) == 0:
+            raise ValueError("Cannot convert empty molecule to crystal")
+        
+        # Calculate bounding box of the molecule
+        positions = np.array(self.positions)
+        min_coords = np.min(positions, axis=0)
+        max_coords = np.max(positions, axis=0)
+        
+        # Calculate the size needed for the box (including vacuum padding)
+        box_size = (max_coords - min_coords) + 2 * vacuum
+        
+        # Ensure minimum box size (in case molecule is a single atom or very small)
+        min_box_size = 2 * vacuum
+        box_size = np.maximum(box_size, min_box_size)
+        
+        # Center the molecule in the box
+        # Shift positions so that the bounding box is centered at origin
+        center_offset = (min_coords + max_coords) / 2
+        centered_positions = positions - center_offset
+        
+        # Shift to center of box (add half the box size)
+        centered_positions = centered_positions + box_size / 2
+        
+        # Create cubic lattice vectors
+        lattice_vectors = [
+            [box_size[0], 0.0, 0.0],
+            [0.0, box_size[1], 0.0],
+            [0.0, 0.0, box_size[2]]
+        ]
+        
+        # Create Crystal with Cartesian coordinates
+        crystal = Crystal(
+            list(self.species),
+            centered_positions.tolist(),
+            Lattice(lattice_vectors),
+            coords_are_cartesian=True
+        )
+        
         return crystal
 
     def __str__(self):
