@@ -274,7 +274,7 @@ class Crystal(Structure):
 
     def density(self) -> float:
         """Calculate the density of the crystal."""
-        mass = self.composition.mass()
+        mass = self.composition.mass  # mass is a property, not a method
         volume = self.volume
         return mass / volume
 
