@@ -73,6 +73,28 @@ class TestNanotube:
         
         assert isinstance(nanotube, Crystal)
         assert len(nanotube.species) == len(graphene.species)
+    
+    def test_build_nanotube_non_graphene(self):
+        """Test building nanotube from non-graphene 2D material."""
+        # Create a simple hexagonal boron nitride (hBN) structure
+        # hBN has a hexagonal structure similar to graphene but with B and N
+        a = 2.50  # Lattice parameter for hBN
+        species = ['B', 'N']
+        positions = [[0.0, 0.0, 0.0], [a/3, a*np.sqrt(3)/3, 0.0]]
+        lattice_2d = Lattice(np.array([
+            [a, 0, 0],
+            [a/2, a*np.sqrt(3)/2, 0],
+            [0, 0, 10.0]
+        ]))
+        hbn = Crystal(species, positions, lattice_2d)
+        
+        # Build hBN nanotube
+        hbn_nanotube = build_nanotube(hbn, (10, 0))
+        
+        assert isinstance(hbn_nanotube, Crystal)
+        assert len(hbn_nanotube.species) == len(hbn.species)
+        assert 'B' in hbn_nanotube.species
+        assert 'N' in hbn_nanotube.species
 
 
 class TestTwistedBilayer:
