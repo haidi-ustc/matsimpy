@@ -34,13 +34,14 @@ class Crystal(Structure):
         self._neighbor_tree_cutoff: Optional[float] = None
         self._neighbor_tree_positions: Optional[np.ndarray] = None
     
-    def add_atom(self, species: str, position: List[float]) -> None:
+    def add_atom(self, species: str, position: List[float], site_properties: Optional[dict] = None) -> None:
         """
         Adds an atom to the crystal structure and updates coordinates.
         
         Args:
             species (str): Atomic species.
             position (List[float]): Atomic position (fractional coordinates).
+            site_properties (Optional[dict]): Optional site properties for the new atom.
         """
         super().add_atom(species, position)
         # Update fractional and cartesian positions
@@ -49,6 +50,16 @@ class Crystal(Structure):
         # Invalidate neighbor tree
         self._neighbor_tree = None
         self._neighbor_tree_positions = None
+        # Update site properties
+        # Only maintain site_properties if we're actively using them
+        if site_properties is not None:
+            if not self.site_properties:
+                # Initialize with empty dicts for existing atoms
+                self.site_properties = [{}] * (len(self.species) - 1)
+            self.site_properties.append(site_properties)
+        elif self.site_properties:
+            # If we have site_properties, maintain them (add empty dict)
+            self.site_properties.append({})
         # Reinitialize sites
         self._sites = self._initialize_sites()
     
@@ -66,6 +77,9 @@ class Crystal(Structure):
         # Invalidate neighbor tree
         self._neighbor_tree = None
         self._neighbor_tree_positions = None
+        # Update site properties
+        if self.site_properties and len(self.site_properties) > index:
+            self.site_properties.pop(index)
         # Reinitialize sites
         self._sites = self._initialize_sites()
 
@@ -76,18 +90,17 @@ class Crystal(Structure):
         Returns:
             List[CrystalSite]: A list of CrystalSite objects.
         """
-        sites = []
-        if self.site_properties:
-            assert(len(self.species) == len(self.site_properties))
-            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
-                sites.append(CrystalSite(position=pos, specie=specie, lattice=self.lattice, properties=self.site_properties[i], coords_are_cartesian=False))
+        if self.site_properties and len(self.site_properties) == len(self.species):
+            return [CrystalSite(position=pos, specie=spec, lattice=self.lattice, 
+                              properties=props, coords_are_cartesian=False)
+                    for pos, spec, props in zip(self.positions, self.species, self.site_properties)]
         else:
-            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
-                sites.append(CrystalSite(position=pos, specie=specie, lattice=self.lattice, coords_are_cartesian=False))
-        return sites
+            return [CrystalSite(position=pos, specie=spec, lattice=self.lattice, 
+                              coords_are_cartesian=False)
+                    for pos, spec in zip(self.positions, self.species)]
 
     @property
-    def sites(self):
+    def sites(self) -> List[CrystalSite]:
         return self._sites
 
     def as_dict(self):
@@ -106,13 +119,13 @@ class Crystal(Structure):
     def from_dict(cls, d):
         species = d["species"]
         positions = d["positions"]
-#        lattice = d.get("lattice").get("lattice_vectors")
         lattice = Lattice.from_dict(d["lattice"])
         site_properties = d.get("site_properties", [])
-        coords_are_cartesian = d.get("coords_are_cartesian")
+        coords_are_cartesian = d.get("coords_are_cartesian", False)
         pbc = d.get("pbc")
-        return cls(species=species, positions=positions, lattice=lattice, pbc=pbc, 
-                   site_properties = site_properties )
+        return cls(species=species, positions=positions, lattice=lattice, 
+                   pbc=pbc, coords_are_cartesian=coords_are_cartesian,
+                   site_properties=site_properties)
 
     @property
     def volume(self) -> float:
@@ -285,9 +298,19 @@ class Crystal(Structure):
         return neighbors_dict
 
     def density(self) -> float:
-        """Calculate the density of the crystal."""
+        """
+        Calculate the density of the crystal.
+        
+        Returns:
+            float: Density in g/cm³
+            
+        Raises:
+            ValueError: If crystal volume is zero or negative
+        """
         mass = self.composition.mass  # mass is a property, not a method
         volume = self.volume
+        if volume <= 0:
+            raise ValueError("Cannot calculate density: crystal volume is zero or negative")
         return mass / volume
 
     @classmethod

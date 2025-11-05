@@ -49,8 +49,20 @@ class Structure(MSONable):
                     Must be a list of atomic symbols, \
                     a list of atomic numbers, or a list of Element objects.")
 
+        # Validate input lengths match
+        if len(species_list) != len(positions):
+            raise ValueError(
+                f"Number of species ({len(species_list)}) must match "
+                f"number of positions ({len(positions)})"
+            )
+
         self.species = tuple(species_list)  # Make immutable
         self.positions = np.array(positions, dtype=np.float64)
+        
+        # Validate positions are 3D
+        if self.positions.ndim != 2 or self.positions.shape[1] != 3:
+            raise ValueError("Positions must be a list of 3D coordinates")
+        
         self.lattice = lattice
         
         # Add cache attributes
@@ -113,9 +125,9 @@ class Structure(MSONable):
 
 
     def __hash__(self):
-        # Use hashlib to generate an MD5 hash of the Crystal object's dictionary representation
+        # Use hashlib to generate a SHA256 hash of the structure's dictionary representation
         hash_str = str(self.as_dict()).encode('utf-8')
-        return int(hashlib.md5(hash_str).hexdigest(), 16)
+        return int(hashlib.sha256(hash_str).hexdigest(), 16)
 
     def get_composition(self):
         """
@@ -134,8 +146,13 @@ class Structure(MSONable):
 
         Args:
             species (str): Atomic species.
-            position (List[float]): Atomic position.
+            position (List[float]): Atomic position (must be 3D).
         """
+        # Validate position is 3D
+        position = np.array(position, dtype=np.float64)
+        if position.ndim != 1 or len(position) != 3:
+            raise ValueError("Position must be a 3D coordinate")
+        
         # Maintain tuple immutability
         species_list = list(self.species)
         species_list.append(species)
@@ -143,9 +160,7 @@ class Structure(MSONable):
         self.positions = np.vstack([self.positions, position])
         self._formula_dirty = True
         self._cached_composition = None
-        # Update cached properties
-        self.formula = self.get_formula()
-        self.composition = self.get_composition()
+        # Properties computed lazily on access
 
     def remove_atom(self, index: int) -> None:
         """
@@ -162,9 +177,7 @@ class Structure(MSONable):
             self.positions = np.delete(self.positions, index, axis=0)
             self._formula_dirty = True
             self._cached_composition = None
-            # Update cached properties
-            self.formula = self.get_formula()
-            self.composition = self.get_composition()
+            # Properties computed lazily on access
         else:
             raise IndexError("Invalid atom index.")
 
@@ -178,8 +191,11 @@ class Structure(MSONable):
             
         Returns:
             Dict mapping atom index to list of (neighbor_index, distance) tuples
+            
+        Raises:
+            NotImplementedError: Must be implemented by subclasses
         """
-        pass
+        raise NotImplementedError("get_neighbor_list must be implemented by subclasses")
 
 
     def __len__(self):

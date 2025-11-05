@@ -30,7 +30,7 @@ class Molecule(Structure):
             positions (List[List[float]]): A list of atomic positions.
         """
         super().__init__(species, positions, None)
-        self._site_properties = site_properties or []
+        self.site_properties = site_properties or []  # Make public for consistency
         self._sites = self._initialize_sites()
 
     def _initialize_sites(self) -> List[Site]:
@@ -40,18 +40,15 @@ class Molecule(Structure):
         Returns:
             List[Site]: A list of Site objects.
         """
-        sites=[]
-        if self._site_properties:
-            assert(len(self.species)==len(self._site_properties))
-            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
-                  sites.append(Site(position=pos, specie=specie, properties=self._site_properties[i]))
+        if self.site_properties and len(self.site_properties) == len(self.species):
+            return [Site(position=pos, specie=spec, properties=props) 
+                    for pos, spec, props in zip(self.positions, self.species, self.site_properties)]
         else:
-            for i, (pos, specie) in enumerate(zip(self.positions, self.species)):
-                sites.append(Site(position=pos, specie=specie))
-        return sites
+            return [Site(position=pos, specie=spec) 
+                    for pos, spec in zip(self.positions, self.species)]
 
     @property
-    def sites(self):
+    def sites(self) -> List[Site]:
         return self._sites
 
     def __getitem__(self, item):
@@ -66,11 +63,7 @@ class Molecule(Structure):
         """
         if not hasattr(self, '_cached_com'):
             # Use cached Element instances for better performance
-            masses = np.array([
-                Element.get_element(specie).atomic_mass if hasattr(Element, 'get_element') 
-                else Element(specie).atomic_mass 
-                for specie in self.species
-            ])
+            masses = np.array([Element.get_element(specie).atomic_mass for specie in self.species])
             center_of_mass = np.average(self.positions, weights=masses, axis=0)
             self._cached_com = center_of_mass.tolist()
         return self._cached_com
@@ -86,6 +79,8 @@ class Molecule(Structure):
         # Invalidate center of mass cache
         if hasattr(self, '_cached_com'):
             del self._cached_com
+        # Update sites
+        self._sites = self._initialize_sites()
 
     def rotate(self, angle: float, axis: List[float]):
         """
@@ -102,6 +97,42 @@ class Molecule(Structure):
         # Invalidate center of mass cache
         if hasattr(self, '_cached_com'):
             del self._cached_com
+        # Update sites
+        self._sites = self._initialize_sites()
+    
+    def add_atom(self, species: str, position: List[float], site_properties: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Adds an atom to the molecule and updates sites.
+        
+        Args:
+            species (str): Atomic species.
+            position (List[float]): Atomic position (must be 3D).
+            site_properties (Optional[Dict[str, Any]]): Optional site properties for the new atom.
+        """
+        super().add_atom(species, position)
+        # Update site properties list if needed
+        # Only maintain site_properties if we're actively using them
+        if site_properties is not None:
+            if not self.site_properties:
+                # Initialize with empty dicts for existing atoms
+                self.site_properties = [{}] * (len(self.species) - 1)
+            self.site_properties.append(site_properties)
+        elif self.site_properties:
+            # If we have site_properties, maintain them (add empty dict)
+            self.site_properties.append({})
+        self._sites = self._initialize_sites()
+
+    def remove_atom(self, index: int) -> None:
+        """
+        Removes an atom from the molecule and updates sites.
+        
+        Args:
+            index (int): Index of atom to be removed.
+        """
+        super().remove_atom(index)
+        if self.site_properties and len(self.site_properties) > index:
+            self.site_properties.pop(index)
+        self._sites = self._initialize_sites()
 
     def as_dict(self):
         """
@@ -116,8 +147,8 @@ class Molecule(Structure):
             "species": self.species,
             "positions": self.positions.tolist(),
         }
-        if self._site_properties:
-            d["site_properties"] = self._site_properties
+        if self.site_properties:
+            d["site_properties"] = self.site_properties
         return d
 
     @classmethod
@@ -134,7 +165,7 @@ class Molecule(Structure):
         species = d["species"]
         positions = d["positions"]
         site_properties = d.get("site_properties", [])
-        return cls(species, positions, site_properties)
+        return cls(species, positions, site_properties=site_properties)
 
     def to_crystal(self, vacuum: float = 15.0) -> Crystal:
         """
@@ -230,12 +261,12 @@ class Molecule(Structure):
             f"nsites={len(self)})"
         )
 
-    def get_moment_of_inertia(self) -> List[float]:
+    def get_moment_of_inertia(self) -> np.ndarray:
         """
         Calculates the moment of inertia tensor of the molecule around its center of mass.
     
         Returns:
-            List[float]: The moment of inertia tensor as a flattened list of 6 floats.
+            np.ndarray: The moment of inertia tensor as a 3x3 numpy array.
         """
         masses = np.array([Element(specie).atomic_mass for specie in self.species])
         com = self.get_center_of_mass()
@@ -344,7 +375,9 @@ class Molecule(Structure):
         # Ensure we return a Molecule
         if isinstance(result, Crystal):
             # Convert crystal to molecule if needed
-            return cls(result.species, result.cart_positions.tolist())
+            # Preserve site properties if available
+            site_props = getattr(result, 'site_properties', None)
+            return cls(result.species, result.cart_positions.tolist(), site_properties=site_props)
         
         return result
     
