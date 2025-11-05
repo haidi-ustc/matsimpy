@@ -47,9 +47,14 @@ def format_structure_for_ai(structure: Union[Crystal, Molecule]) -> Dict[str, An
     # Add composition info
     if hasattr(structure, 'composition'):
         comp = structure.composition
-        data["composition"] = {
-            str(k): v for k, v in comp.items()
-        }
+        # Composition has a .composition attribute that is a Counter
+        if hasattr(comp, 'composition'):
+            data["composition"] = {
+                str(k): float(v) for k, v in comp.composition.items()
+            }
+        else:
+            # Fallback: try to get from formula
+            data["composition"] = {"formula": str(comp.formula) if hasattr(comp, 'formula') else str(comp)}
     
     # Add lattice for Crystal
     if isinstance(structure, Crystal):
