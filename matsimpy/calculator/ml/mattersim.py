@@ -11,7 +11,6 @@ from pathlib import Path
 import os
 from .base_ml import BaseML
 from ...core import Crystal, Molecule
-from ...io.converters import to_pymatgen
 
 
 class Mattersim(BaseML):
@@ -182,42 +181,39 @@ class Mattersim(BaseML):
         """
         Prepare input for MatterSim model.
         
-        Converts structure to pymatgen format and then to MatterSim's graph format.
-        Uses pymatgen structures which can be converted to MatterSim's internal format.
+        Extracts structure data directly from MatSimPy Crystal/Molecule objects
+        and converts to MatterSim's graph format.
         
         Args:
-            positions: Atomic positions (N, 3)
+            positions: Atomic positions (N, 3) - already in Cartesian coordinates
             species: Atomic species list (N,)
-            lattice: Lattice object (for crystals)
+            lattice: Lattice object (for crystals) - contains lattice_vectors
             pbc: Periodic boundary conditions
             
         Returns:
             Graph batch object for MatterSim
         """
-        # Create a temporary MatSimPy structure to convert to pymatgen
+        # Extract structure data directly from MatSimPy objects
+        # All data needed is already available from the parameters
+        
+        # Get positions (already in Cartesian)
+        atom_positions = np.array(positions, dtype=np.float64)
+        
+        # Get species (already as list)
+        atom_species = list(species)
+        
+        # Get cell/lattice for crystals
+        cell = None
         if lattice is not None:
-            temp_structure = Crystal(species, positions, lattice, coords_are_cartesian=True, pbc=pbc)
+            cell = np.array(lattice.lattice_vectors, dtype=np.float64)
+            pbc_array = np.array(pbc, dtype=bool)
         else:
-            temp_structure = Molecule(species, positions)
-        
-        # Convert to pymatgen structure
-        try:
-            pymatgen_structure = to_pymatgen(temp_structure)
-        except ImportError:
-            raise ImportError(
-                "pymatgen is required for MatterSim calculator. Install with: pip install pymatgen"
-            )
-        
-        # MatterSim's build_dataloader internally requires ASE Atoms objects.
-        # Since MatterSim itself requires ASE as a dependency, we can conditionally
-        # import ASE only when MatterSim calculator is used. This keeps ASE as an
-        # optional dependency for the rest of MatSimPy while allowing MatterSim to work.
-        # We use pymatgen as an intermediate format to avoid direct ASE usage elsewhere.
+            # For molecules, no cell
+            pbc_array = np.array([False, False, False], dtype=bool)
         
         # MatterSim's build_dataloader requires ASE Atoms objects.
-        # We conditionally import ASE only within this method (not at module level)
-        # to keep ASE as an optional dependency. MatterSim itself requires ASE,
-        # so this is necessary for MatterSim calculator functionality.
+        # We conditionally import ASE only when MatterSim calculator is used.
+        # This keeps ASE as an optional dependency for the rest of MatSimPy.
         try:
             from ase import Atoms
         except ImportError:
@@ -227,23 +223,20 @@ class Mattersim(BaseML):
                 "Note: MatterSim requires ASE internally for structure conversion."
             )
         
-        # Create ASE Atoms object from pymatgen structure
-        # MatterSim requires ASE Atoms, so we use it here (ASE is optional dependency)
-        if hasattr(pymatgen_structure, 'lattice'):
+        # Create ASE Atoms object directly from MatSimPy structure data
+        if cell is not None:
             # Crystal structure
-            cell = pymatgen_structure.lattice.matrix
-            pbc_array = np.array([True, True, True])  # pymatgen structures are periodic
             ase_atoms = Atoms(
-                symbols=[str(s.symbol) for s in pymatgen_structure.species],
-                positions=pymatgen_structure.cart_coords,
+                symbols=atom_species,
+                positions=atom_positions,
                 cell=cell,
                 pbc=pbc_array
             )
         else:
             # Molecule
             ase_atoms = Atoms(
-                symbols=[str(s.symbol) for s in pymatgen_structure.species],
-                positions=pymatgen_structure.cart_coords
+                symbols=atom_species,
+                positions=atom_positions
             )
         
         # Get cutoff parameters from model
