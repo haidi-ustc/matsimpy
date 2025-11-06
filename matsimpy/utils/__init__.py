@@ -1,17 +1,10 @@
 """
-Utility functions and constants.
+Utility functions for MatSimPy.
 
-This module provides:
-- Math utilities
-- Physical constants
-- Type hints and utilities
-- Atom selection utilities
+This module provides atom selection utilities for flexible atom selection
+in Crystal and Molecule structures.
 """
 
-# Utilities will be imported here as they are implemented
-# from .math import *
-# from .constants import *
-# from .typing import *
 from .selection import (
     select_by_species,
     select_by_indices,
@@ -26,7 +19,6 @@ from .selection import (
 )
 
 __all__ = [
-    # Selection utilities
     'select_by_species',
     'select_by_indices',
     'select_by_position',
