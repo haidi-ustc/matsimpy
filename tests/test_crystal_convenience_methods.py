@@ -107,6 +107,43 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         
         # Should get same result
         self.assertTrue(np.allclose(crystal1.positions, crystal2.positions))
+    
+    def test_perturb_atom_selection(self):
+        """Test perturb with AtomSelection object."""
+        from matsimpy.utils.selection import AtomSelection
+        
+        # Create crystal with multiple species
+        crystal = Crystal(
+            ['Si', 'O', 'Si', 'O'],
+            [[0, 0, 0], [0.25, 0.25, 0.25], [0.5, 0.5, 0.5], [0.75, 0.75, 0.75]],
+            Lattice.cubic(5.0)
+        )
+        original_positions = crystal.positions.copy()
+        
+        # Select Si atoms and perturb only them
+        sel = AtomSelection(crystal).by_species('Si')
+        crystal.perturb(0.1, indices=sel, seed=42)
+        
+        # Si atoms should be perturbed
+        self.assertFalse(np.allclose(original_positions[0], crystal.positions[0]))
+        self.assertFalse(np.allclose(original_positions[2], crystal.positions[2]))
+        
+        # O atoms should be unchanged
+        self.assertTrue(np.allclose(original_positions[1], crystal.positions[1]))
+        self.assertTrue(np.allclose(original_positions[3], crystal.positions[3]))
+    
+    def test_perturb_atom_selection_wrong_structure(self):
+        """Test that AtomSelection from different structure raises error."""
+        from matsimpy.utils.selection import AtomSelection
+        
+        crystal1 = from_prototype('diamond', 'Si', 5.43)
+        crystal2 = from_prototype('diamond', 'Si', 5.43)
+        
+        # Create selection from crystal1 but try to use on crystal2
+        sel = AtomSelection(crystal1).by_species('Si')
+        
+        with self.assertRaises(ValueError):
+            crystal2.perturb(0.1, indices=sel)
 
 
 if __name__ == '__main__':

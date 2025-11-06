@@ -661,7 +661,7 @@ class Molecule(Structure):
             self.calc.calculate(self)
         return self.calc.get_forces()
     
-    def perturb(self, amplitude: float, indices: Optional[List[int]] = None, 
+    def perturb(self, amplitude: float, indices: Optional[Union[List[int], 'AtomSelection']] = None, 
                 seed: Optional[int] = None, inplace: bool = True) -> 'Molecule':
         """
         Add random perturbations to atomic positions.
@@ -671,7 +671,8 @@ class Molecule(Structure):
         
         Args:
             amplitude: Maximum perturbation amplitude (Angstroms)
-            indices: Atom indices to perturb (default: all atoms)
+            indices: Atom indices to perturb (default: all atoms).
+                    Can be a list of indices or an AtomSelection object.
             seed: Random seed for reproducibility
             inplace: If True, modify this molecule in-place (default: True).
                     If False, return a new Molecule object.
@@ -681,12 +682,23 @@ class Molecule(Structure):
             
         Examples:
             >>> from matsimpy.core import Molecule
+            >>> from matsimpy.utils.selection import AtomSelection
             >>> molecule = Molecule(['H', 'O', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
             >>> # Perturb all atoms by up to 0.1 Angstrom
             >>> molecule.perturb(0.1)
             >>> # Perturb specific atoms without modifying original
             >>> perturbed = molecule.perturb(0.1, indices=[0, 1], inplace=False)
+            >>> # Perturb using AtomSelection
+            >>> sel = AtomSelection(molecule).by_species('H')
+            >>> molecule.perturb(0.1, indices=sel)
         """
+        # Handle AtomSelection object
+        from ..utils.selection import AtomSelection
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
+        
         from ..transformation.atomic import perturb_positions
         result = perturb_positions(self, amplitude, indices=indices, seed=seed, inplace=inplace)
         if inplace:

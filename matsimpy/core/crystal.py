@@ -836,7 +836,7 @@ class Crystal(Structure):
             return self
         return result
     
-    def perturb(self, amplitude: float, indices: Optional[List[int]] = None, 
+    def perturb(self, amplitude: float, indices: Optional[Union[List[int], 'AtomSelection']] = None, 
                 seed: Optional[int] = None, inplace: bool = True) -> 'Crystal':
         """
         Add random perturbations to atomic positions.
@@ -846,7 +846,8 @@ class Crystal(Structure):
         
         Args:
             amplitude: Maximum perturbation amplitude (Angstroms)
-            indices: Atom indices to perturb (default: all atoms)
+            indices: Atom indices to perturb (default: all atoms).
+                    Can be a list of indices or an AtomSelection object.
             seed: Random seed for reproducibility
             inplace: If True, modify this crystal in-place (default: True).
                     If False, return a new Crystal object.
@@ -856,12 +857,23 @@ class Crystal(Structure):
             
         Examples:
             >>> from matsimpy.builders.bulk import from_prototype
+            >>> from matsimpy.utils.selection import AtomSelection
             >>> crystal = from_prototype('diamond', 'Si', 5.43)
             >>> # Perturb all atoms by up to 0.1 Angstrom
             >>> crystal.perturb(0.1)
             >>> # Perturb specific atoms without modifying original
             >>> perturbed = crystal.perturb(0.1, indices=[0, 1], inplace=False)
+            >>> # Perturb using AtomSelection
+            >>> sel = AtomSelection(crystal).by_species('Si')
+            >>> crystal.perturb(0.1, indices=sel)
         """
+        # Handle AtomSelection object
+        from ..utils.selection import AtomSelection
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
+        
         from ..transformation.atomic import perturb_positions
         result = perturb_positions(self, amplitude, indices=indices, seed=seed, inplace=inplace)
         if inplace:
