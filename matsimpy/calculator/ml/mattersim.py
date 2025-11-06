@@ -11,7 +11,7 @@ from pathlib import Path
 import os
 from .base_ml import BaseML
 from ...core import Crystal, Molecule
-from ...core.graph import structure_to_ase_atoms
+from ...core.graph import structure_to_mattersim_input
 
 
 class Mattersim(BaseML):
@@ -201,8 +201,32 @@ class Mattersim(BaseML):
         else:
             temp_structure = Molecule(species, positions)
         
-        # Convert to ASE Atoms using core graph module
-        ase_atoms = structure_to_ase_atoms(temp_structure, require_ase=True)
+        # Convert to MatterSim input format directly from Crystal/Molecule (no ASE dependency)
+        atoms_input = structure_to_mattersim_input(temp_structure)
+        
+        # Patch isinstance check in MatterSim's convertor module to accept our objects
+        # MatterSim's GraphConvertor checks isinstance(atoms, Atoms) which requires ASE
+        # We patch this to accept our MatterSimInput objects
+        import mattersim.datasets.utils.convertor as convertor_module
+        import builtins
+        
+        # Store original isinstance
+        if not hasattr(convertor_module, '_original_isinstance'):
+            convertor_module._original_isinstance = builtins.isinstance
+        
+        # Patch isinstance in convertor module
+        def patched_isinstance(obj, cls):
+            # Accept our MatterSimInput objects as Atoms
+            if hasattr(cls, '__name__') and cls.__name__ == 'Atoms':
+                if hasattr(obj, 'symbols') and hasattr(obj, 'positions') and hasattr(obj, 'get_scaled_positions'):
+                    return True
+            if hasattr(cls, '__module__') and 'ase' in str(cls.__module__):
+                if hasattr(obj, 'symbols') and hasattr(obj, 'positions'):
+                    return True
+            # Fall back to original isinstance
+            return convertor_module._original_isinstance(obj, cls)
+        
+        convertor_module.isinstance = patched_isinstance
         
         # Get cutoff parameters from model
         if hasattr(self.potential, 'model') and hasattr(self.potential.model, 'model_args'):
@@ -215,9 +239,9 @@ class Mattersim(BaseML):
         # Get model name (default to 'm3gnet' for MatterSim)
         model_name = getattr(self.potential, 'model_name', 'm3gnet')
         
-        # Build dataloader using ASE Atoms (required by MatterSim)
+        # Build dataloader using MatterSim input (built directly from Crystal/Molecule)
         dataloader = self._build_dataloader(
-            [ase_atoms],
+            [atoms_input],
             model_type=model_name,
             cutoff=cutoff,
             threebody_cutoff=threebody_cutoff,
