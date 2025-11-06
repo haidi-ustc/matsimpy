@@ -12,7 +12,9 @@
 - **Core Data Structures**: Crystal, Molecule, Lattice, Composition, Site, Element
 - **Structure Builders**: Bulk, surface, alloy, molecule, defects, nanostructures
 - **Transformations**: Geometric, lattice, atomic, chemical operations
+- **High-Throughput Tools**: Transformation pipelines, parameter sweeps, batch processing
 - **Calculators**: Classical potentials (LJ), ML potentials (Mattersim), DFT interfaces
+- **Symmetry Analysis**: Space group determination, conventional cell conversion
 - **Configuration System**: Global config with environment variable overrides
 - **Data Storage**: Persistent storage for structures and calculation results (maggma)
 - **File I/O**: Support for multiple formats (VASP, XYZ, JSON, and more)
@@ -134,6 +136,67 @@ substituted = substitute(crystal, [0, 1], ['Ge', 'Ge'])
 supercell = make_supercell(crystal, [2, 2, 2])  # 2x2x2 supercell
 ```
 
+### High-Throughput Transformations
+
+```python
+from matsimpy.transformation.composite import (
+    TransformationPipeline, ParameterSweep, BatchProcessor
+)
+from matsimpy.transformation import make_supercell, apply_strain
+from matsimpy.builders.bulk import from_prototype
+
+# 1. Reusable transformation pipeline
+pipeline = TransformationPipeline("strain_study")
+pipeline.add_step(make_supercell, scaling_matrix=[2, 2, 2])
+pipeline.add_step(apply_strain, strain_matrix=[[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
+
+# Apply to structure
+crystal = from_prototype('diamond', 'Si', 5.43)
+result = pipeline.apply(crystal)
+
+# Apply to multiple structures in parallel
+results = pipeline.apply_batch([crystal1, crystal2, crystal3], parallel=True, n_workers=4)
+
+# 2. Parameter sweep - generate structures with varying parameters
+sweep = ParameterSweep(
+    base_structure=crystal,
+    transformations={
+        'strain': {
+            'func': apply_strain,
+            'params': {
+                'strain_matrix': [
+                    [[0.00, 0, 0], [0, 0, 0], [0, 0, 0]],
+                    [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]],
+                    [[0.02, 0, 0], [0, 0, 0], [0, 0, 0]],
+                ]
+            }
+        }
+    },
+    mode='cartesian'  # All combinations
+)
+
+# Generate all structures
+for struct, params in sweep:
+    print(f"Strain: {params['strain']}")
+    run_calculation(struct)
+
+# 3. Batch processing with error handling
+processor = BatchProcessor(
+    transformations=[
+        lambda s: make_supercell(s, [2, 2, 2]),
+        lambda s: apply_strain(s, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
+    ],
+    n_workers=4,
+    progress=True,
+    error_handling='skip'  # or 'raise', 'log'
+)
+
+results = processor.process([crystal1, crystal2, ..., crystal1000])
+for result in results:
+    if result.success:
+        process_structure(result.structure)
+```
+
 ### File I/O
 
 ```python
@@ -184,6 +247,27 @@ config = ConfigManager()
 config.set('calculator.ml.default_device', 'cuda', save=True)
 ```
 
+### Symmetry Analysis
+
+```python
+from matsimpy.builders.bulk import from_prototype
+from matsimpy.symmetry import get_conventional_cell
+
+# Create crystal structure
+crystal = from_prototype('diamond', 'Si', 5.43)
+
+# Get symmetry information
+sym_info = crystal.get_symmetry_info()
+print(f"Space group: {sym_info['space_group_symbol']}")  # Fd-3m
+print(f"Point group: {sym_info['point_group']}")        # m-3m
+print(f"Crystal system: {sym_info['crystal_system']}")  # Cubic
+
+# Get conventional cell
+conventional = crystal.get_conventional_cell()
+print(f"Primitive: {len(crystal)} atoms")         # 2 atoms
+print(f"Conventional: {len(conventional)} atoms") # 8 atoms
+```
+
 ### Data Storage
 
 ```python
@@ -232,7 +316,11 @@ matsimpy/
 │   ├── lattice/       # Lattice strain, scaling, transformations
 │   ├── atomic/        # Atom manipulation and organization
 │   ├── chemical/      # Chemical substitutions
-│   └── structural/    # Supercell, molecular operations
+│   ├── structural/    # Supercell, molecular operations
+│   └── composite/     # High-throughput transformation tools
+│       ├── pipeline.py    # TransformationPipeline
+│       ├── sweep.py       # ParameterSweep
+│       └── batch.py       # BatchProcessor
 │
 ├── io/                # File format support
 │   ├── vasp.py        # VASP POSCAR/CONTCAR
@@ -254,6 +342,7 @@ matsimpy/
 │   └── maggma_store.py  # Persistent storage using maggma
 │
 ├── symmetry/          # Symmetry analysis
+│   └── analyzer.py    # SymmetryAnalyzer, get_conventional_cell
 ├── utils/             # Utility functions
 ├── code/              # DFT code interfaces
 ├── ai/                # AI/ML integration
@@ -295,6 +384,10 @@ python examples/builders_bulk.py
 - **Atomic**: Atom movement, swapping, sorting, centering
 - **Chemical**: Single/multiple substitutions, bulk substitutions
 - **Structural**: Supercell generation, molecular operations
+- **High-Throughput**: 
+  - **TransformationPipeline**: Reusable transformation sequences with save/load
+  - **ParameterSweep**: Systematic parameter variation (cartesian product or zip mode)
+  - **BatchProcessor**: Parallel batch processing with progress tracking and error handling
 
 ### Calculators
 
@@ -319,12 +412,20 @@ python examples/builders_bulk.py
 - **Metadata**: Attach metadata for organization and search
 - **Memory & File Stores**: In-memory for testing, JSON file for persistence
 
+### Symmetry Analysis
+
+- **Space Group Determination**: Get space group number, symbol, point group, crystal system
+- **Conventional Cell**: Convert primitive cells to standard conventional cells
+- **Symmetry Operations**: Access to rotation matrices and translation vectors
+- **Integration**: Direct methods on Crystal objects (`get_symmetry_info()`, `get_conventional_cell()`)
+
 ### Performance Features
 
 - **Caching**: Formula and composition caching for faster repeated access
 - **KDTree**: Optimized neighbor finding for large structures
 - **Lazy Evaluation**: Sites and properties computed on-demand
 - **Vectorized Operations**: Efficient numpy-based coordinate transformations
+- **Parallel Processing**: Multiprocessing support for batch operations
 
 ## Module Reference
 
@@ -373,6 +474,14 @@ from matsimpy.transformation import (
     # Structural
     make_supercell
 )
+
+# High-throughput composite transformations
+from matsimpy.transformation.composite import (
+    TransformationPipeline,  # Reusable pipelines
+    ParameterSweep,           # Parameter variation
+    BatchProcessor,           # Batch processing
+    BatchResult               # Result metadata
+)
 ```
 
 ## Requirements
@@ -395,7 +504,7 @@ from matsimpy.transformation import (
 
 ## Testing
 
-The project includes comprehensive tests with **665 passing tests**:
+The project includes comprehensive tests with **700+ passing tests**:
 
 ```bash
 # Run all tests
@@ -406,6 +515,9 @@ pytest tests/ --cov=matsimpy --cov-report=html
 
 # Run specific test file
 pytest tests/test_core_structure_comprehensive.py -v
+
+# Run composite transformation tests
+pytest tests/test_composite_*.py -v
 ```
 
 ## Documentation
