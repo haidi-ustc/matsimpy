@@ -10,8 +10,7 @@ from typing import Optional, Dict, Any, Union
 from pathlib import Path
 import os
 from .base_ml import BaseML
-from ...core import Crystal, Molecule
-from ...core.graph import structure_to_mattersim_input
+from ...core import Crystal, Molecule, Element
 
 
 class Mattersim(BaseML):
@@ -182,8 +181,8 @@ class Mattersim(BaseML):
         """
         Prepare input for MatterSim model.
         
-        Uses the core graph conversion module to convert MatSimPy structure
-        data to MatterSim's graph format.
+        Converts MatSimPy structure data directly to MatterSim's graph format
+        without external dependencies.
         
         Args:
             positions: Atomic positions (N, 3) - already in Cartesian coordinates
@@ -194,15 +193,90 @@ class Mattersim(BaseML):
         Returns:
             Graph batch object for MatterSim
         """
-        # Reconstruct structure object from parameters to use graph conversion
-        # This ensures we use the core graph module
+        # Extract cell from lattice if present
         if lattice is not None:
-            temp_structure = Crystal(species, positions, lattice, coords_are_cartesian=True, pbc=pbc)
+            cell = np.array(lattice.lattice_vectors, dtype=np.float64)
+            pbc_array = np.array(pbc, dtype=bool)
         else:
-            temp_structure = Molecule(species, positions)
+            cell = None
+            pbc_array = np.array([False, False, False], dtype=bool)
         
-        # Convert to MatterSim input format directly from Crystal/Molecule (no ASE dependency)
-        atoms_input = structure_to_mattersim_input(temp_structure)
+        positions_array = np.array(positions, dtype=np.float64)
+        species_list = list(species)
+        
+        # Create minimal object compatible with MatterSim's GraphConvertor
+        # This mimics ASE Atoms interface without requiring ASE
+        class MatterSimInput:
+            """Minimal interface for MatterSim GraphConvertor (no ASE dependency)."""
+            def __init__(self, symbols, positions, cell, pbc):
+                self.symbols = symbols
+                self.positions = positions
+                self.cell = cell
+                self.pbc = pbc
+                
+                # MatterSim may access these
+                self.numbers = self._get_atomic_numbers()
+                
+            def _get_atomic_numbers(self):
+                """Get atomic numbers from symbols."""
+                numbers = []
+                for symbol in self.symbols:
+                    elem = Element(symbol)
+                    numbers.append(elem.atomic_no)
+                return np.array(numbers, dtype=int)
+            
+            def get_chemical_symbols(self):
+                """Return chemical symbols (MatterSim may call this)."""
+                return self.symbols
+            
+            def get_scaled_positions(self, wrap=True):
+                """Get fractional positions (MatterSim calls this)."""
+                if self.cell is None:
+                    return self.positions.copy()
+                cell_inv = np.linalg.inv(self.cell)
+                frac_pos = np.dot(self.positions, cell_inv)
+                if wrap:
+                    frac_pos = frac_pos % 1.0
+                return frac_pos
+            
+            def set_scaled_positions(self, scaled_positions):
+                """Set fractional positions (MatterSim calls this)."""
+                if self.cell is None:
+                    self.positions = np.array(scaled_positions, dtype=np.float64)
+                else:
+                    self.positions = np.dot(scaled_positions, self.cell)
+            
+            def get_positions(self):
+                """Get Cartesian positions (MatterSim calls this)."""
+                return self.positions.copy()
+            
+            def get_atomic_numbers(self):
+                """Get atomic numbers (MatterSim calls this)."""
+                return self.numbers
+            
+            def copy(self):
+                """Create a copy."""
+                return MatterSimInput(
+                    self.symbols.copy(),
+                    self.positions.copy(),
+                    self.cell.copy() if self.cell is not None else None,
+                    self.pbc.copy()
+                )
+            
+            def set_cell(self, cell):
+                """Set cell (MatterSim may call this)."""
+                self.cell = np.array(cell, dtype=np.float64)
+            
+            def set_pbc(self, pbc):
+                """Set PBC (MatterSim may call this)."""
+                self.pbc = np.array(pbc, dtype=bool)
+            
+            def __len__(self):
+                """Return number of atoms (MatterSim calls len(atoms))."""
+                return len(self.symbols)
+        
+        # Create MatterSim input object directly from parameters
+        atoms_input = MatterSimInput(species_list, positions_array, cell, pbc_array)
         
         # Patch isinstance check in MatterSim's convertor module to accept our objects
         # MatterSim's GraphConvertor checks isinstance(atoms, Atoms) which requires ASE
