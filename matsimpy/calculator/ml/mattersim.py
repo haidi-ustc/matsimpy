@@ -11,7 +11,7 @@ from pathlib import Path
 import os
 from .base_ml import BaseML
 from ...core import Crystal, Molecule
-from ...io.converters import to_ase
+from ...io.converters import to_pymatgen
 
 
 class Mattersim(BaseML):
@@ -182,7 +182,8 @@ class Mattersim(BaseML):
         """
         Prepare input for MatterSim model.
         
-        Converts structure to ASE Atoms and prepares graph batch.
+        Converts structure to pymatgen format and then to MatterSim's graph format.
+        Uses pymatgen structures which can be converted to MatterSim's internal format.
         
         Args:
             positions: Atomic positions (N, 3)
@@ -193,23 +194,56 @@ class Mattersim(BaseML):
         Returns:
             Graph batch object for MatterSim
         """
-        # Convert to ASE Atoms
-        from ase import Atoms
-        
+        # Create a temporary MatSimPy structure to convert to pymatgen
         if lattice is not None:
+            temp_structure = Crystal(species, positions, lattice, coords_are_cartesian=True, pbc=pbc)
+        else:
+            temp_structure = Molecule(species, positions)
+        
+        # Convert to pymatgen structure
+        try:
+            pymatgen_structure = to_pymatgen(temp_structure)
+        except ImportError:
+            raise ImportError(
+                "pymatgen is required for MatterSim calculator. Install with: pip install pymatgen"
+            )
+        
+        # MatterSim's build_dataloader internally requires ASE Atoms objects.
+        # Since MatterSim itself requires ASE as a dependency, we can conditionally
+        # import ASE only when MatterSim calculator is used. This keeps ASE as an
+        # optional dependency for the rest of MatSimPy while allowing MatterSim to work.
+        # We use pymatgen as an intermediate format to avoid direct ASE usage elsewhere.
+        
+        # MatterSim's build_dataloader requires ASE Atoms objects.
+        # We conditionally import ASE only within this method (not at module level)
+        # to keep ASE as an optional dependency. MatterSim itself requires ASE,
+        # so this is necessary for MatterSim calculator functionality.
+        try:
+            from ase import Atoms
+        except ImportError:
+            raise ImportError(
+                "ASE is required for MatterSim calculator. "
+                "Install with: pip install ase\n"
+                "Note: MatterSim requires ASE internally for structure conversion."
+            )
+        
+        # Create ASE Atoms object from pymatgen structure
+        # MatterSim requires ASE Atoms, so we use it here (ASE is optional dependency)
+        if hasattr(pymatgen_structure, 'lattice'):
             # Crystal structure
-            cell = lattice.lattice_vectors
+            cell = pymatgen_structure.lattice.matrix
+            pbc_array = np.array([True, True, True])  # pymatgen structures are periodic
             ase_atoms = Atoms(
-                symbols=species,
-                positions=positions,
+                symbols=[str(s.symbol) for s in pymatgen_structure.species],
+                positions=pymatgen_structure.cart_coords,
                 cell=cell,
-                pbc=pbc
+                pbc=pbc_array
             )
         else:
             # Molecule
             ase_atoms = Atoms(
-                symbols=species,
-                positions=positions
+                symbols=[str(s.symbol) for s in pymatgen_structure.species],
+                positions=pymatgen_structure.cart_coords
             )
         
         # Get cutoff parameters from model
@@ -220,7 +254,7 @@ class Mattersim(BaseML):
             cutoff = 5.0
             threebody_cutoff = 4.0
         
-        # Build dataloader
+        # Build dataloader using ASE Atoms (required by MatterSim)
         dataloader = self._build_dataloader(
             [ase_atoms],
             model_type=self.potential.model_name,
