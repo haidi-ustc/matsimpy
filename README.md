@@ -193,9 +193,10 @@ from matsimpy import Crystal, Lattice
 # Initialize storage (uses config default path)
 storage = DataStorage()
 
-# Store crystal structure
-crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
-doc_id = storage.store_data(crystal, metadata={'description': 'Si cell'})
+# Store crystal structure (proper diamond structure with 2 atoms)
+from matsimpy.builders.bulk import from_prototype
+crystal = from_prototype('diamond', 'Si', 5.43)
+doc_id = storage.store_data(crystal, metadata={'description': 'Si primitive cell'})
 
 # Store calculation results
 results = {'energy': -10.5, 'forces': [[0,0,0]]}

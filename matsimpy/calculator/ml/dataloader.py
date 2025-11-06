@@ -171,11 +171,12 @@ def build_dataloader(
         DataLoader: PyTorch Geometric DataLoader
         
     Example:
-        >>> from matsimpy import Crystal, Lattice
+        >>> from matsimpy.builders.bulk import from_prototype
         >>> from matsimpy.calculator.ml.dataloader import build_dataloader
         >>> 
-        >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
-        >>> dataloader = build_dataloader([crystal], only_inference=True)
+        >>> # Use proper diamond structure (2 atoms)
+        >>> si_crystal = from_prototype('diamond', 'Si', 5.43)
+        >>> dataloader = build_dataloader([si_crystal], only_inference=True)
     """
     # Patch isinstance to accept MatSimPy objects
     _patch_isinstance_for_matsimpy()

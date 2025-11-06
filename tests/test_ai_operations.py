@@ -164,7 +164,9 @@ class TestAIAnalysis(unittest.TestCase):
     
     def test_compare_structures(self):
         """Test structure comparison."""
-        crystal1 = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        crystal1 = from_prototype('diamond', 'Si', 5.43)
         crystal2 = Crystal(['Ge'], [[0,0,0]], Lattice.cubic(5.65))
         
         self.mock_interface.call.return_value = {

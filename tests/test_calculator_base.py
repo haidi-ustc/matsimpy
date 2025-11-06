@@ -24,7 +24,9 @@ class TestCalculatorBase(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.calc = MockCalculator(sigma=3.4, epsilon=0.01)
-        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.crystal = from_prototype('diamond', 'Si', 5.43)
         self.molecule = Molecule(['H', 'H'], [[0, 0, 0], [0.74, 0, 0]])
     
     def test_init(self):

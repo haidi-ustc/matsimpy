@@ -28,14 +28,15 @@ class Mattersim(BaseML):
         args_dict: Additional arguments for dataloader
         
     Example:
-        >>> from matsimpy import Crystal, Lattice
+        >>> from matsimpy.builders.bulk import from_prototype
         >>> from matsimpy.calculator.ml import Mattersim
         >>> 
-        >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+        >>> # Use proper diamond structure (2 atoms in primitive cell)
+        >>> si_crystal = from_prototype('diamond', 'Si', 5.43)
         >>> calc = Mattersim(model_path='~/.matsimpy/models/mattersim-v1.0.0-5M.pth.tar')
-        >>> crystal.calc = calc
-        >>> energy = crystal.get_potential_energy()
-        >>> forces = crystal.get_forces()
+        >>> si_crystal.calc = calc
+        >>> energy = si_crystal.get_potential_energy()
+        >>> forces = si_crystal.get_forces()
     """
     
     def __init__(self,

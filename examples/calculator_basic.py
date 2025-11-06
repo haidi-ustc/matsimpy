@@ -84,8 +84,9 @@ try:
         print(f"Loading MatterSim model from: {model_path}")
         ml_calc = Mattersim(model_path=str(model_path), device='cpu')
         
-        # Test with Si crystal
-        si_crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Test with Si crystal (proper diamond structure with 2 atoms)
+        from matsimpy.builders.bulk import from_prototype
+        si_crystal = from_prototype('diamond', 'Si', 5.43)
         si_crystal.calc = ml_calc
         
         energy = si_crystal.get_potential_energy()

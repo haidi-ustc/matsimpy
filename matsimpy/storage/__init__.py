@@ -9,7 +9,8 @@ Usage:
     >>> from matsimpy import Crystal, Lattice
     >>> 
     >>> storage = DataStorage()
-    >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+    >>> from matsimpy.builders.bulk import from_prototype
+    >>> crystal = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
     >>> doc_id = storage.store_data(crystal)
     >>> retrieved = storage.retrieve_data(doc_id)
 """

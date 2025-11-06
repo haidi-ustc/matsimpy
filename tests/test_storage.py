@@ -50,7 +50,9 @@ class TestDataStorage(unittest.TestCase):
     def test_store_crystal(self):
         """Test storing Crystal structure."""
         storage = DataStorage(use_memory_store=True)
-        crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        crystal = from_prototype('diamond', 'Si', 5.43)
         doc_id = storage.store_data(crystal)
         
         # Retrieve and verify
@@ -228,7 +230,9 @@ class TestDataStorage(unittest.TestCase):
         storage = DataStorage(use_memory_store=True)
         
         # Store crystal
-        crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        crystal = from_prototype('diamond', 'Si', 5.43)
         doc_id = storage.store_data(crystal)
         
         # Retrieve and restore

@@ -26,7 +26,8 @@ def apply_strain(
     Examples:
         >>> from matsimpy import Crystal, Lattice
         >>> from matsimpy.transformation.lattice import apply_strain
-        >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> crystal = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
         >>> # Apply 1% tensile strain in x direction
         >>> strain = [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]]
         >>> strained = apply_strain(crystal, strain)

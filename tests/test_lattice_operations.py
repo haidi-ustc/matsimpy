@@ -19,7 +19,9 @@ class TestLatticeStrain(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.crystal = from_prototype('diamond', 'Si', 5.43)
     
     def test_apply_strain_tensile(self):
         """Test applying tensile strain."""
@@ -89,7 +91,9 @@ class TestLatticeScaling(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.crystal = from_prototype('diamond', 'Si', 5.43)
     
     def test_scale_lattice_uniform(self):
         """Test uniform scaling."""
@@ -165,7 +169,9 @@ class TestLatticeTransform(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.crystal = from_prototype('diamond', 'Si', 5.43)
     
     def test_rotate_lattice(self):
         """Test rotating lattice."""
@@ -240,7 +246,9 @@ class TestLatticeInplace(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.crystal = from_prototype('diamond', 'Si', 5.43)
     
     def test_apply_strain_inplace(self):
         """Test in-place strain."""

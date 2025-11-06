@@ -41,7 +41,9 @@ try:
     print("\n2. Store Crystal Structure")
     print("-" * 70)
     
-    crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+    # Use proper diamond structure (2 atoms in primitive cell)
+    from matsimpy.builders.bulk import from_prototype
+    crystal = from_prototype('diamond', 'Si', 5.43)
     doc_id = storage.store_data(
         crystal,
         metadata={

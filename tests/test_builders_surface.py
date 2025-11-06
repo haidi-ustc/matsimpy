@@ -11,7 +11,9 @@ class TestSlabGeneration(unittest.TestCase):
     
     def setUp(self):
         """Set up test bulk structures."""
-        self.si_bulk = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.si_bulk = from_prototype('diamond', 'Si', 5.43)
         self.fcc_cu = from_prototype('fcc', 'Cu', 3.61)
     
     def test_generate_slab_basic(self):
@@ -81,7 +83,9 @@ class TestAdsorbate(unittest.TestCase):
     
     def setUp(self):
         """Set up test slab."""
-        bulk = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        bulk = from_prototype('diamond', 'Si', 5.43)
         self.slab = generate_slab(bulk, (1, 0, 0), min_slab_size=10, min_vacuum_size=15)
     
     def test_add_adsorbate_single_atom(self):

@@ -39,13 +39,14 @@ def structure_to_graph_data(
             - is_crystal: Whether structure is a crystal
             
     Example:
-        >>> from matsimpy import Crystal, Lattice
+        >>> from matsimpy.builders.bulk import from_prototype
         >>> from matsimpy.core.graph import structure_to_graph_data
         >>> 
-        >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
-        >>> graph_data = structure_to_graph_data(crystal)
-        >>> print(graph_data['positions'].shape)  # (1, 3)
-        >>> print(graph_data['species'])  # ['Si']
+        >>> # Use proper diamond structure (2 atoms in primitive cell)
+        >>> si_crystal = from_prototype('diamond', 'Si', 5.43)
+        >>> graph_data = structure_to_graph_data(si_crystal)
+        >>> print(graph_data['positions'].shape)  # (2, 3)
+        >>> print(graph_data['species'])  # ['Si', 'Si']
     """
     # Extract positions (already in Cartesian)
     if isinstance(structure, Crystal):

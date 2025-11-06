@@ -14,7 +14,8 @@ Examples:
     >>> from matsimpy import Crystal, Lattice
     >>> from matsimpy.builders.interface import create_simple_interface
     >>> 
-    >>> si = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+    >>> from matsimpy.builders.bulk import from_prototype
+    >>> si = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
     >>> ge = Crystal(['Ge'], [[0,0,0]], Lattice.cubic(5.65))
     >>> 
     >>> # Simple stacking interface (placeholder)

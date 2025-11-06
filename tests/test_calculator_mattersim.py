@@ -14,7 +14,9 @@ class TestMattersim(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.crystal = from_prototype('diamond', 'Si', 5.43)
         self.molecule = Molecule(['H', 'H'], [[0, 0, 0], [0.74, 0, 0]])
     
     def test_init_with_model_path(self):
@@ -133,7 +135,9 @@ class TestMattersim(unittest.TestCase):
         mock_potential = MockPotential()
         calc = Mattersim(model=mock_potential, device='cpu')
         
-        crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        crystal = from_prototype('diamond', 'Si', 5.43)
         crystal.calc = calc
         
         # Should raise error when trying to get energy with mock model

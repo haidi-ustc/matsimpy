@@ -48,7 +48,8 @@ class DataStorage(MSONable):
         >>> storage = DataStorage()
         >>> 
         >>> # Store a crystal structure
-        >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> crystal = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
         >>> doc_id = storage.store_data(crystal)
         >>> 
         >>> # Store calculation results with metadata
@@ -153,7 +154,8 @@ class DataStorage(MSONable):
             
         Example:
             >>> storage = DataStorage()
-            >>> crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+            >>> from matsimpy.builders.bulk import from_prototype
+        >>> crystal = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
             >>> doc_id = storage.store_data(crystal, metadata={'description': 'Si primitive cell'})
         """
         try:

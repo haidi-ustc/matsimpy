@@ -37,7 +37,8 @@ def generate_slab(
     Examples:
         >>> from matsimpy import Crystal, Lattice
         >>> from matsimpy.builders.surface import generate_slab
-        >>> bulk = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> bulk = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
         >>> slab = generate_slab(bulk, (1,0,0), min_slab_size=10, min_vacuum_size=15)
         >>> slab = generate_slab(bulk, (1,1,1), layers=5, min_vacuum_size=15)
     """

@@ -151,7 +151,9 @@ class TestSupercell(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.unit_cell = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5))
+        # Use proper diamond structure (2 atoms in primitive cell)
+        from matsimpy.builders.bulk import from_prototype
+        self.unit_cell = from_prototype('diamond', 'Si', 5.0)
     
     def test_make_supercell_2x2x2(self):
         """Test creating 2x2x2 supercell."""

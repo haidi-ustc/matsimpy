@@ -33,7 +33,8 @@ def add_adsorbate(
     Examples:
         >>> from matsimpy.builders.surface import generate_slab, add_adsorbate
         >>> from matsimpy import Crystal, Lattice
-        >>> bulk = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> bulk = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
         >>> slab = generate_slab(bulk, (1,1,1), 10, 15)
         >>> with_ads = add_adsorbate(slab, 'O', (0.5, 0.5), 2.0)
     """

@@ -38,7 +38,8 @@ def make_supercell(crystal: Crystal,
     Examples:
         >>> from matsimpy.core import Crystal, Lattice
         >>> from matsimpy.transformation import make_supercell
-        >>> unit_cell = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5))
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> unit_cell = from_prototype('diamond', 'Si', 5.0)  # Proper diamond structure
         >>> # Simple 2x2x2 supercell
         >>> supercell = make_supercell(unit_cell, [2, 2, 2])
         >>> # General transformation

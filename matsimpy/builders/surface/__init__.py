@@ -8,7 +8,8 @@ Examples:
     >>> from matsimpy.builders.surface import generate_slab, add_adsorbate
     >>> 
     >>> # Generate bulk
-    >>> bulk = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+    >>> from matsimpy.builders.bulk import from_prototype
+    >>> bulk = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
     >>> 
     >>> # Generate (111) slab
     >>> slab = generate_slab(bulk, (1,1,1), min_slab_size=10, min_vacuum_size=15)
