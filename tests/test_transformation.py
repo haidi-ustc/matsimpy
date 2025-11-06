@@ -159,7 +159,8 @@ class TestSupercell(unittest.TestCase):
         """Test creating 2x2x2 supercell."""
         supercell = make_supercell(self.unit_cell, [2, 2, 2])
         
-        self.assertEqual(len(supercell), 8)  # 2^3 = 8 atoms
+        # Diamond structure has 2 atoms in primitive cell, so 2x2x2 supercell = 2 * 8 = 16 atoms
+        self.assertEqual(len(supercell), 16)  # 2 atoms × 2^3 = 16 atoms
         self.assertAlmostEqual(supercell.lattice.a, 10.0, places=5)  # 2 * 5
         self.assertIsNot(self.unit_cell, supercell)
     
@@ -168,7 +169,8 @@ class TestSupercell(unittest.TestCase):
         result = make_supercell(self.unit_cell, [2, 2, 2], inplace=True)
         
         self.assertIs(self.unit_cell, result)
-        self.assertEqual(len(self.unit_cell), 8)
+        # Diamond structure has 2 atoms in primitive cell, so 2x2x2 supercell = 2 * 8 = 16 atoms
+        self.assertEqual(len(self.unit_cell), 16)
     
     def test_make_supercell_invalid_matrix(self):
         """Test supercell with invalid matrix."""
