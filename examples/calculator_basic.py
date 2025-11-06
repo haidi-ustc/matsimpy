@@ -68,28 +68,47 @@ print(f"Cutoff: 15.0 Å")
 print(f"Potential energy: {energy_custom:.6f} eV")
 
 # ======================================================================
-# 4. ML Calculator (Mattersim) - Framework
+# 4. ML Calculator (Mattersim) - MatterSim Framework
 # ======================================================================
-print("\n4. ML Calculator (Mattersim) - Framework")
+print("\n4. ML Calculator (Mattersim) - MatterSim Framework")
 print("-" * 70)
 
-# Note: This requires a trained ML model
-# This example shows the interface, but actual model loading requires
-# framework-specific implementations
-
+# MatterSim uses M3GNet-based models
 try:
-    # Create a mock model for demonstration
-    mock_model = object()
-    ml_calc = Mattersim(model=mock_model, model_type='custom')
+    from pathlib import Path
     
-    print("ML Calculator initialized")
-    print(f"Model type: {ml_calc.model_type}")
-    print(f"Device: {ml_calc.device}")
-    print("\nNote: Actual model inference requires framework-specific implementation")
-    print("      (MACE, NequIP, SchNet, etc.)")
+    # Try to load MatterSim model (if available)
+    model_path = Path.home() / '.matsimpy' / 'models' / 'mattersim-v1.0.0-5M.pth.tar'
     
+    if model_path.exists():
+        print(f"Loading MatterSim model from: {model_path}")
+        ml_calc = Mattersim(model_path=str(model_path), device='cpu')
+        
+        # Test with Si crystal
+        si_crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
+        si_crystal.calc = ml_calc
+        
+        energy = si_crystal.get_potential_energy()
+        forces = si_crystal.get_forces()
+        
+        print(f"✓ MatterSim calculator loaded successfully")
+        print(f"Model type: {ml_calc.model_type}")
+        print(f"Device: {ml_calc.device}")
+        print(f"Si crystal energy: {energy:.6f} eV")
+        print(f"Forces shape: {forces.shape}")
+    else:
+        print("MatterSim model not found at default location")
+        print(f"Expected: {model_path}")
+        print("\nTo use MatterSim calculator:")
+        print("1. Install mattersim: pip install mattersim")
+        print("2. Place model file at ~/.matsimpy/models/mattersim-v1.0.0-5M.pth.tar")
+        print("3. Or specify model_path when creating calculator")
+    
+except ImportError:
+    print("MatterSim library not available")
+    print("Install with: pip install mattersim")
 except Exception as e:
-    print(f"ML calculator example (requires model): {type(e).__name__}")
+    print(f"MatterSim calculator error: {type(e).__name__}: {e}")
 
 # ======================================================================
 # 5. Calculator Integration with Structures
