@@ -104,6 +104,60 @@ class TestLatticeComprehensive(unittest.TestCase):
         self.assertEqual(lattice.b, 6.0)
         self.assertEqual(lattice.c, 7.0)
     
+    def test_lattice_hexagonal(self):
+        """Test hexagonal lattice creation."""
+        lattice = Lattice.hexagonal(a=3.0, c=5.0)
+        self.assertAlmostEqual(lattice.a, 3.0, places=5)
+        self.assertAlmostEqual(lattice.b, 3.0, places=5)
+        self.assertAlmostEqual(lattice.c, 5.0, places=5)
+        self.assertAlmostEqual(lattice.alpha, 90.0, places=5)
+        self.assertAlmostEqual(lattice.beta, 90.0, places=5)
+        self.assertAlmostEqual(lattice.gamma, 120.0, places=5)
+    
+    def test_lattice_rhombohedral(self):
+        """Test rhombohedral lattice creation."""
+        lattice = Lattice.rhombohedral(a=5.0, alpha=60.0)
+        self.assertAlmostEqual(lattice.a, 5.0, places=5)
+        self.assertAlmostEqual(lattice.b, 5.0, places=5)
+        self.assertAlmostEqual(lattice.c, 5.0, places=5)
+        self.assertAlmostEqual(lattice.alpha, 60.0, places=5)
+        self.assertAlmostEqual(lattice.beta, 60.0, places=5)
+        self.assertAlmostEqual(lattice.gamma, 60.0, places=5)
+    
+    def test_lattice_monoclinic(self):
+        """Test monoclinic lattice creation."""
+        lattice = Lattice.monoclinic(a=5.0, b=6.0, c=7.0, beta=90.0)
+        self.assertAlmostEqual(lattice.a, 5.0, places=5)
+        self.assertAlmostEqual(lattice.b, 6.0, places=5)
+        self.assertAlmostEqual(lattice.c, 7.0, places=5)
+        self.assertAlmostEqual(lattice.alpha, 90.0, places=5)
+        self.assertAlmostEqual(lattice.beta, 90.0, places=5)
+        self.assertAlmostEqual(lattice.gamma, 90.0, places=5)
+        
+        # Test with non-90 beta
+        lattice2 = Lattice.monoclinic(a=5.0, b=6.0, c=7.0, beta=120.0)
+        self.assertAlmostEqual(lattice2.beta, 120.0, places=5)
+    
+    def test_lattice_triclinic(self):
+        """Test triclinic lattice creation."""
+        lattice = Lattice.triclinic(a=5.0, b=6.0, c=7.0, alpha=80.0, beta=90.0, gamma=100.0)
+        self.assertAlmostEqual(lattice.a, 5.0, places=5)
+        self.assertAlmostEqual(lattice.b, 6.0, places=5)
+        self.assertAlmostEqual(lattice.c, 7.0, places=5)
+        self.assertAlmostEqual(lattice.alpha, 80.0, places=5)
+        self.assertAlmostEqual(lattice.beta, 90.0, places=5)
+        self.assertAlmostEqual(lattice.gamma, 100.0, places=5)
+    
+    def test_lattice_orthorhombic_alias(self):
+        """Test orthorhombic alias (correct spelling)."""
+        lattice = Lattice.orthorhombic(a=5.0, b=6.0, c=7.0)
+        self.assertEqual(lattice.a, 5.0)
+        self.assertEqual(lattice.b, 6.0)
+        self.assertEqual(lattice.c, 7.0)
+        # Should be the same as orthorhomic
+        lattice2 = Lattice.orthorhomic(a=5.0, b=6.0, c=7.0)
+        np.testing.assert_array_almost_equal(lattice.matrix, lattice2.matrix)
+    
     def test_lattice_str(self):
         """Test string representation."""
         lattice = Lattice.cubic(10.0)

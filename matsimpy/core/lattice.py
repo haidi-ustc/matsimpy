@@ -197,11 +197,11 @@ class Lattice(MSONable):
     @classmethod
     def orthorhomic(cls, a: float, b: float, c: float):
         """
-        Initialize a Lattice object with lattice parameters.
+        Initialize an orthorhombic Lattice object.
 
         Args:
             a: The length of the a lattice vector.
-            b: The length of the a lattice vector.
+            b: The length of the b lattice vector.
             c: The length of the c lattice vector.
         """
         lattice_vectors = [
@@ -254,3 +254,33 @@ class Lattice(MSONable):
         """
         # Monoclinic: alpha = gamma = 90°, beta can vary
         return cls.from_parameters(a=a, b=b, c=c, alpha=90.0, beta=beta, gamma=90.0)
+
+    @classmethod
+    def triclinic(cls, a: float, b: float, c: float, alpha: float, beta: float, gamma: float):
+        """
+        Initialize a triclinic Lattice object.
+
+        Args:
+            a: The length of the a lattice vector.
+            b: The length of the b lattice vector.
+            c: The length of the c lattice vector.
+            alpha: The angle between the b and c lattice vectors in degrees.
+            beta: The angle between the a and c lattice vectors in degrees.
+            gamma: The angle between the a and b lattice vectors in degrees.
+        """
+        # Triclinic: all parameters can vary
+        return cls.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
+
+    @classmethod
+    def orthorhombic(cls, a: float, b: float, c: float):
+        """
+        Initialize an orthorhombic Lattice object.
+        
+        This is an alias for orthorhomic() with correct spelling.
+        
+        Args:
+            a: The length of the a lattice vector.
+            b: The length of the b lattice vector.
+            c: The length of the c lattice vector.
+        """
+        return cls.orthorhomic(a, b, c)
