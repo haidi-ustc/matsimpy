@@ -102,7 +102,8 @@ print(f"{'Chirality':<15} {'Formula':<15} {'Atoms':<8}")
 print("-" * 40)
 for n, m in chiralities:
     tube = build_carbon_nanotube(n, m, length=1)
-    print(f"({n}, {m}):<15} {tube.formula:<15} {len(tube):<8}")
+    chirality_str = f"({n}, {m})"
+    print(f"{chirality_str:<15} {tube.formula:<15} {len(tube):<8}")
 
 print("\n" + "=" * 70)
 print("Nanostructure examples completed!")

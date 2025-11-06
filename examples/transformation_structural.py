@@ -7,10 +7,8 @@ This example demonstrates:
 """
 
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.transformation.structural import (
-    make_supercell,
-    swap_atoms
-)
+from matsimpy.transformation.structural import make_supercell
+from matsimpy.transformation.atomic import swap_atoms
 
 print("=" * 70)
 print("MatSimPy Transformations - Structural Examples")

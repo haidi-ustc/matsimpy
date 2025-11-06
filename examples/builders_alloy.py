@@ -52,7 +52,12 @@ print("\n\n2. Ordered Alloy Generation")
 print("-" * 70)
 
 # Create ordered substitution pattern
-ordered_alloy = generate_ordered_alloy(supercell, ['Ni'], 'Cu', [0.25])
+# Select 25% of Cu atoms to substitute
+import random
+n_substitute = int(len(supercell) * 0.25)
+indices_to_sub = random.sample(range(len(supercell)), n_substitute)
+substitution_pattern = {idx: 'Ni' for idx in indices_to_sub}
+ordered_alloy = generate_ordered_alloy(supercell, substitution_pattern)
 print(f"Ordered Cu-Ni alloy (25% Ni):")
 print(f"  Formula: {ordered_alloy.formula}")
 print(f"  Cu atoms: {sum(1 for s in ordered_alloy.species if s == 'Cu')}")
@@ -66,7 +71,7 @@ print("-" * 70)
 
 try:
     # L1_2 structure (e.g., Cu3Au)
-    l12 = generate_intermetallic('L1_2', ['Cu', 'Au'], a=3.75)
+    l12 = generate_intermetallic(['Cu', 'Au'], 'A3B', 'L1_2', 3.75)
     print(f"L1_2 Cu3Au:")
     print(f"  Formula: {l12.formula}")
     print(f"  Atoms: {len(l12)}")
@@ -74,7 +79,7 @@ try:
     print(f"  Au: {sum(1 for s in l12.species if s == 'Au')}")
     
     # B2 structure (e.g., FeAl)
-    b2 = generate_intermetallic('B2', ['Fe', 'Al'], a=2.9)
+    b2 = generate_intermetallic(['Fe', 'Al'], 'AB', 'B2', 2.9)
     print(f"\nB2 FeAl:")
     print(f"  Formula: {b2.formula}")
     print(f"  Atoms: {len(b2)}")
@@ -94,7 +99,11 @@ base = make_supercell(fcc_cu, [3, 3, 3])
 concentration = 0.2
 
 random = generate_random_alloy(base, ['Ni'], 'Cu', [concentration])
-ordered = generate_ordered_alloy(base, ['Ni'], 'Cu', [concentration])
+# Create ordered pattern
+n_sub = int(len(base) * concentration)
+indices = list(range(n_sub))
+sub_pattern = {idx: 'Ni' for idx in indices}
+ordered = generate_ordered_alloy(base, sub_pattern)
 
 print(f"{'Type':<15} {'Formula':<15} {'Cu':<6} {'Ni':<6}")
 print("-" * 45)

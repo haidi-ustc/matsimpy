@@ -26,21 +26,21 @@ fcc_cu = from_prototype('fcc', 'Cu', 3.61)
 print(f"Bulk FCC Cu: {fcc_cu.formula}, {len(fcc_cu)} atoms")
 
 # Create (111) surface slab
-slab_111 = generate_slab(fcc_cu, (1, 1, 1), layers=5, vacuum=15.0)
+slab_111 = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=10.0, min_vacuum_size=15.0)
 print(f"\n(111) surface slab:")
 print(f"  Formula: {slab_111.formula}")
 print(f"  Number of atoms: {len(slab_111)}")
 print(f"  Lattice c (thickness): {slab_111.lattice.c:.2f} Å")
 
 # Create (100) surface slab
-slab_100 = generate_slab(fcc_cu, (1, 0, 0), layers=5, vacuum=15.0)
+slab_100 = generate_slab(fcc_cu, (1, 0, 0), min_slab_size=10.0, min_vacuum_size=15.0)
 print(f"\n(100) surface slab:")
 print(f"  Formula: {slab_100.formula}")
 print(f"  Number of atoms: {len(slab_100)}")
 print(f"  Lattice c (thickness): {slab_100.lattice.c:.2f} Å")
 
 # Create (110) surface slab
-slab_110 = generate_slab(fcc_cu, (1, 1, 0), layers=5, vacuum=15.0)
+slab_110 = generate_slab(fcc_cu, (1, 1, 0), min_slab_size=10.0, min_vacuum_size=15.0)
 print(f"\n(110) surface slab:")
 print(f"  Formula: {slab_110.formula}")
 print(f"  Number of atoms: {len(slab_110)}")
@@ -53,7 +53,7 @@ print("\n\n2. Adding Adsorbates to Surfaces")
 print("-" * 70)
 
 # Create a simple slab
-slab = generate_slab(fcc_cu, (1, 1, 1), layers=3, vacuum=10.0)
+slab = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=8.0, min_vacuum_size=10.0)
 print(f"Initial slab: {slab.formula}, {len(slab)} atoms")
 
 # Add oxygen atom as adsorbate
@@ -82,7 +82,7 @@ print(f"{'Orientation':<15} {'Atoms':<8} {'Surface Area (Å²)':<18}")
 print("-" * 45)
 
 for miller in orientations:
-    slab = generate_slab(fcc_cu, miller, layers=3, vacuum=10.0)
+    slab = generate_slab(fcc_cu, miller, min_slab_size=8.0, min_vacuum_size=10.0)
     surface_area = slab.lattice.a * slab.lattice.b
     print(f"{str(miller):<15} {len(slab):<8} {surface_area:<18.2f}")
 
@@ -93,7 +93,7 @@ print("\n\n4. Creating Larger Surface Cells")
 print("-" * 70)
 
 # Create a (1x1) slab
-small_slab = generate_slab(fcc_cu, (1, 1, 1), layers=3, vacuum=10.0)
+small_slab = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=8.0, min_vacuum_size=10.0)
 print(f"(1x1) slab: {len(small_slab)} atoms")
 
 # Make a (2x2) supercell

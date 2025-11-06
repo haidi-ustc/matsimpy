@@ -53,15 +53,15 @@ print("\n\n2. Interstitial Defects")
 print("-" * 70)
 
 # Create interstitial atom
-with_interstitial = create_interstitial(supercell, 'H', position=[0.5, 0.5, 0.5])
+with_interstitial = create_interstitial(supercell, 'H', positions=[0.5, 0.5, 0.5])
 print(f"Interstitial H:")
 print(f"  Formula: {with_interstitial.formula}")
 print(f"  Atoms: {len(with_interstitial)} (added 1)")
 print(f"  H atoms: {sum(1 for s in with_interstitial.species if s == 'H')}")
 
 # Create multiple interstitials
-with_interstitials = create_interstitial(supercell, 'C', position=[0.5, 0.5, 0.5])
-with_interstitials = create_interstitial(with_interstitials, 'C', position=[0.25, 0.25, 0.25])
+with_interstitials = create_interstitial(supercell, 'C', positions=[0.5, 0.5, 0.5])
+with_interstitials = create_interstitial(with_interstitials, 'C', positions=[0.25, 0.25, 0.25])
 print(f"\nMultiple interstitials (2 C atoms):")
 print(f"  Formula: {with_interstitials.formula}")
 print(f"  Atoms: {len(with_interstitials)} (added 2)")
@@ -94,7 +94,7 @@ print("\n\n4. Frenkel Defects")
 print("-" * 70)
 
 # Frenkel defect: atom moves from lattice site to interstitial
-frenkel = create_frenkel(supercell, 0, interstitial_pos=[0.5, 0.5, 0.5])
+frenkel = create_frenkel(supercell, 0, interstitial_position=[0.5, 0.5, 0.5])
 print(f"Frenkel defect:")
 print(f"  Formula: {frenkel.formula}")
 print(f"  Atoms: {len(frenkel)} (same number, one displaced)")
@@ -144,7 +144,7 @@ base = make_supercell(fcc_cu, [3, 3, 3])
 # Create structure with multiple defect types
 defected = create_vacancy(base, 0)  # Remove one atom
 defected = create_substitution(defected, 1, 'Ni')  # Substitute one
-defected = create_interstitial(defected, 'H', position=[0.5, 0.5, 0.5])  # Add interstitial
+defected = create_interstitial(defected, 'H', positions=[0.5, 0.5, 0.5])  # Add interstitial
 
 print(f"Combined defects:")
 print(f"  Formula: {defected.formula}")

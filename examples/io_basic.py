@@ -9,7 +9,7 @@ This example demonstrates:
 
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.io.vasp import write_POSCAR, read_POSCAR
-from matsimpy.io.xyz import write_xyz, read_xyz
+from matsimpy.io.xyz import write_XYZ, read_XYZ
 from matsimpy.io.json import write_json, read_json
 import os
 
@@ -54,11 +54,11 @@ print(f"Original molecule: {molecule.formula}, {len(molecule)} atoms")
 
 # Write to XYZ
 xyz_file = os.path.join(output_dir, "ch4.xyz")
-write_xyz(molecule, xyz_file)
+write_XYZ(molecule, xyz_file)
 print(f"Written to: {xyz_file}")
 
 # Read back
-molecule_read = read_xyz(xyz_file)
+molecule_read = read_XYZ(xyz_file)
 print(f"Read from XYZ: {molecule_read.formula}, {len(molecule_read)} atoms")
 
 # ============================================================================
