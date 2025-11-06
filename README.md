@@ -63,11 +63,19 @@ pip install -e .
 
 ```python
 from matsimpy import Crystal, Molecule, Lattice, Composition
+from matsimpy.builders.bulk import from_prototype
 
-# Create a crystal structure
+# Create a crystal structure using prototype builder
+# NaCl rocksalt structure (conventional cell with 8 atoms)
+nacl = from_prototype('rocksalt', 'NaCl', 5.64).get_conventional_cell()
+print(nacl.formula)      # Cl4Na4
+print(len(nacl))         # 8 atoms
+print(nacl.volume)       # ~179.4 Å³
+
+# Or create directly with Crystal class
 lattice = Lattice.cubic(5.0)
 crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], lattice)
-print(crystal.formula)  # ClNa
+print(crystal.formula)   # ClNa
 print(crystal.volume)    # 125.0 Å³
 
 # Create a molecule
