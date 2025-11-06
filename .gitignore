@@ -76,3 +76,4 @@ tests/install
 docs/_build/
 docs/_static/
 docs/_templates/
+examples_output/
