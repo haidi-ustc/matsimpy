@@ -5,7 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.6%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Alpha-orange)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-665%20passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-700%2B%20passed-brightgreen)](tests/)
 
 ## Features
 
