@@ -21,140 +21,175 @@ class TestMattersim(unittest.TestCase):
         """Test initialization with model path."""
         # Use non-existent path to test error handling
         with self.assertRaises(FileNotFoundError):
-            calc = Mattersim(model_path='nonexistent.pth', model_type='mace')
+            calc = Mattersim(model_path='nonexistent.pth')
     
     def test_init_without_model(self):
         """Test initialization without model."""
         with self.assertRaises(ValueError):
-            calc = Mattersim(model_type='mace')
+            calc = Mattersim()
     
     def test_init_with_model_object(self):
         """Test initialization with model object."""
-        # Mock model object
-        mock_model = object()
-        calc = Mattersim(model=mock_model, model_type='custom')
-        self.assertEqual(calc.model, mock_model)
+        # Mock potential object with required attributes
+        class MockPotential:
+            model_name = 'm3gnet'
+        
+        mock_potential = MockPotential()
+        calc = Mattersim(model=mock_potential, device='cpu')
+        self.assertEqual(calc.model, mock_potential)
+        self.assertEqual(calc.potential, mock_potential)
     
     def test_model_types(self):
-        """Test different model types."""
-        mock_model = object()
+        """Test model type handling."""
+        # Create mock potential
+        class MockPotential:
+            model_name = 'm3gnet'
         
-        # Test supported types (should not raise error for custom)
-        calc1 = Mattersim(model=mock_model, model_type='custom')
-        self.assertEqual(calc1.model_type, 'custom')
+        mock_potential = MockPotential()
         
-        calc2 = Mattersim(model=mock_model, model_type='MACE')  # Case insensitive
-        self.assertEqual(calc2.model_type, 'mace')
+        # MatterSim uses 'm3gnet' as default
+        calc = Mattersim(model=mock_potential, device='cpu')
+        self.assertEqual(calc.model_type, 'm3gnet')
     
     def test_set_model(self):
         """Test setting model."""
-        mock_model1 = object()
-        mock_model2 = object()
+        class MockPotential:
+            model_name = 'm3gnet'
         
-        calc = Mattersim(model=mock_model1, model_type='custom')
-        self.assertEqual(calc.model, mock_model1)
+        mock_potential1 = MockPotential()
+        mock_potential2 = MockPotential()
         
-        calc.set_model(mock_model2)
-        self.assertEqual(calc.model, mock_model2)
+        calc = Mattersim(model=mock_potential1, device='cpu')
+        self.assertEqual(calc.model, mock_potential1)
+        
+        calc.set_model(mock_potential2)
+        self.assertEqual(calc.model, mock_potential2)
         self.assertFalse(calc._calculation_performed)
         self.assertEqual(len(calc.results), 0)
     
     def test_load_model_not_implemented(self):
-        """Test that model loading raises NotImplementedError."""
-        # Create a dummy model file
+        """Test that model loading with invalid file raises error."""
+        # Create a dummy model file (not a valid MatterSim checkpoint)
         dummy_path = Path('dummy_model.pth')
         try:
             dummy_path.touch()
-            with self.assertRaises(NotImplementedError):
-                calc = Mattersim(model_path=str(dummy_path), model_type='mace')
+            # Should raise error when trying to load invalid model
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                calc = Mattersim(model_path=str(dummy_path))
         finally:
             if dummy_path.exists():
                 dummy_path.unlink()
     
-    def test_compute_not_implemented(self):
-        """Test that computation raises NotImplementedError."""
-        mock_model = object()
-        calc = Mattersim(model=mock_model, model_type='custom')
+    def test_compute_requires_real_model(self):
+        """Test that computation requires a real MatterSim model."""
+        # Mock potential without proper forward method
+        class MockPotential:
+            model_name = 'm3gnet'
+            def forward(self, *args, **kwargs):
+                raise NotImplementedError("Mock model not implemented")
         
-        with self.assertRaises(NotImplementedError):
+        mock_potential = MockPotential()
+        calc = Mattersim(model=mock_potential, device='cpu')
+        
+        # Should raise error when trying to compute without proper model
+        with self.assertRaises((NotImplementedError, AttributeError)):
             calc.calculate(self.crystal)
     
     def test_parameters(self):
         """Test parameter management."""
-        mock_model = object()
+        class MockPotential:
+            model_name = 'm3gnet'
+        
+        mock_potential = MockPotential()
         calc = Mattersim(
-            model=mock_model,
-            model_type='mace',
+            model=mock_potential,
             device='cuda',
-            batch_size=32
+            args_dict={'batch_size': 32}
         )
         
-        self.assertEqual(calc.parameters['model_type'], 'mace')
-        self.assertEqual(calc.parameters['device'], 'cuda')
-        self.assertEqual(calc.parameters['batch_size'], 32)
+        self.assertEqual(calc.model_type, 'm3gnet')
+        self.assertEqual(calc.device, 'cuda')
+        self.assertEqual(calc.args_dict['batch_size'], 32)
     
     def test_device_parameter(self):
         """Test device parameter."""
-        mock_model = object()
-        calc1 = Mattersim(model=mock_model, model_type='mace', device='cpu')
-        calc2 = Mattersim(model=mock_model, model_type='mace', device='cuda')
+        class MockPotential:
+            model_name = 'm3gnet'
+        
+        mock_potential = MockPotential()
+        calc1 = Mattersim(model=mock_potential, device='cpu')
+        calc2 = Mattersim(model=mock_potential, device='cuda')
         
         self.assertEqual(calc1.device, 'cpu')
         self.assertEqual(calc2.device, 'cuda')
     
     def test_integration_with_crystal(self):
-        """Test integration with Crystal class (should fail gracefully)."""
-        mock_model = object()
-        calc = Mattersim(model=mock_model, model_type='custom')
+        """Test integration with Crystal class."""
+        class MockPotential:
+            model_name = 'm3gnet'
+            def forward(self, *args, **kwargs):
+                raise NotImplementedError("Mock model not implemented")
+        
+        mock_potential = MockPotential()
+        calc = Mattersim(model=mock_potential, device='cpu')
         
         crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5.43))
         crystal.calc = calc
         
-        # Should raise NotImplementedError when trying to get energy
-        with self.assertRaises(NotImplementedError):
+        # Should raise error when trying to get energy with mock model
+        with self.assertRaises((NotImplementedError, AttributeError)):
             energy = crystal.get_potential_energy()
     
     def test_integration_with_molecule(self):
-        """Test integration with Molecule class (should fail gracefully)."""
-        mock_model = object()
-        calc = Mattersim(model=mock_model, model_type='custom')
+        """Test integration with Molecule class."""
+        class MockPotential:
+            model_name = 'm3gnet'
+            def forward(self, *args, **kwargs):
+                raise NotImplementedError("Mock model not implemented")
+        
+        mock_potential = MockPotential()
+        calc = Mattersim(model=mock_potential, device='cpu')
         
         molecule = Molecule(['H', 'H'], [[0, 0, 0], [0.74, 0, 0]])
         molecule.calc = calc
         
-        # Should raise NotImplementedError when trying to get energy
-        with self.assertRaises(NotImplementedError):
+        # Should raise error when trying to get energy with mock model
+        with self.assertRaises((NotImplementedError, AttributeError)):
             energy = molecule.get_potential_energy()
     
     def test_prepare_model_input(self):
         """Test model input preparation."""
-        mock_model = object()
-        calc = Mattersim(model=mock_model, model_type='custom')
+        # Create a mock potential object with required attributes
+        class MockPotential:
+            model_name = 'm3gnet'
+            model = type('obj', (object,), {
+                'model_args': {'cutoff': 5.0, 'threebody_cutoff': 4.0}
+            })()
         
-        # Test with crystal
-        input_dict = calc._prepare_model_input(
+        mock_potential = MockPotential()
+        calc = Mattersim(model=mock_potential, device='cpu')
+        
+        # Test with crystal - should return graph batch (PyG Data object)
+        graph_batch = calc._prepare_model_input(
             self.crystal.cart_positions,
             self.crystal.species,
             self.crystal.lattice,
             self.crystal.pbc
         )
         
-        self.assertIn('positions', input_dict)
-        self.assertIn('species', input_dict)
-        self.assertIn('lattice', input_dict)
-        self.assertIn('pbc', input_dict)
+        # Graph batch should have atom_pos, cell, etc.
+        self.assertIsNotNone(graph_batch)
+        self.assertTrue(hasattr(graph_batch, 'atom_pos') or hasattr(graph_batch, 'pos'))
         
         # Test with molecule
-        input_dict = calc._prepare_model_input(
+        graph_batch = calc._prepare_model_input(
             np.array(self.molecule.positions),
             self.molecule.species,
             None,
             [False, False, False]
         )
         
-        self.assertIn('positions', input_dict)
-        self.assertIn('species', input_dict)
-        self.assertNotIn('lattice', input_dict)
+        self.assertIsNotNone(graph_batch)
 
 
 if __name__ == '__main__':

@@ -5,4 +5,5 @@ from .molecule import Molecule
 from .crystal import Crystal 
 from .site import Site, CrystalSite
 from .periodic_table import Element
+from .graph import structure_to_graph_data, structure_to_ase_atoms
 

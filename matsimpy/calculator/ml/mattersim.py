@@ -11,6 +11,7 @@ from pathlib import Path
 import os
 from .base_ml import BaseML
 from ...core import Crystal, Molecule
+from ...core.graph import structure_to_ase_atoms
 
 
 class Mattersim(BaseML):
@@ -181,8 +182,8 @@ class Mattersim(BaseML):
         """
         Prepare input for MatterSim model.
         
-        Extracts structure data directly from MatSimPy Crystal/Molecule objects
-        and converts to MatterSim's graph format.
+        Uses the core graph conversion module to convert MatSimPy structure
+        data to MatterSim's graph format.
         
         Args:
             positions: Atomic positions (N, 3) - already in Cartesian coordinates
@@ -193,51 +194,15 @@ class Mattersim(BaseML):
         Returns:
             Graph batch object for MatterSim
         """
-        # Extract structure data directly from MatSimPy objects
-        # All data needed is already available from the parameters
-        
-        # Get positions (already in Cartesian)
-        atom_positions = np.array(positions, dtype=np.float64)
-        
-        # Get species (already as list)
-        atom_species = list(species)
-        
-        # Get cell/lattice for crystals
-        cell = None
+        # Reconstruct structure object from parameters to use graph conversion
+        # This ensures we use the core graph module
         if lattice is not None:
-            cell = np.array(lattice.lattice_vectors, dtype=np.float64)
-            pbc_array = np.array(pbc, dtype=bool)
+            temp_structure = Crystal(species, positions, lattice, coords_are_cartesian=True, pbc=pbc)
         else:
-            # For molecules, no cell
-            pbc_array = np.array([False, False, False], dtype=bool)
+            temp_structure = Molecule(species, positions)
         
-        # MatterSim's build_dataloader requires ASE Atoms objects.
-        # We conditionally import ASE only when MatterSim calculator is used.
-        # This keeps ASE as an optional dependency for the rest of MatSimPy.
-        try:
-            from ase import Atoms
-        except ImportError:
-            raise ImportError(
-                "ASE is required for MatterSim calculator. "
-                "Install with: pip install ase\n"
-                "Note: MatterSim requires ASE internally for structure conversion."
-            )
-        
-        # Create ASE Atoms object directly from MatSimPy structure data
-        if cell is not None:
-            # Crystal structure
-            ase_atoms = Atoms(
-                symbols=atom_species,
-                positions=atom_positions,
-                cell=cell,
-                pbc=pbc_array
-            )
-        else:
-            # Molecule
-            ase_atoms = Atoms(
-                symbols=atom_species,
-                positions=atom_positions
-            )
+        # Convert to ASE Atoms using core graph module
+        ase_atoms = structure_to_ase_atoms(temp_structure, require_ase=True)
         
         # Get cutoff parameters from model
         if hasattr(self.potential, 'model') and hasattr(self.potential.model, 'model_args'):
@@ -247,10 +212,13 @@ class Mattersim(BaseML):
             cutoff = 5.0
             threebody_cutoff = 4.0
         
+        # Get model name (default to 'm3gnet' for MatterSim)
+        model_name = getattr(self.potential, 'model_name', 'm3gnet')
+        
         # Build dataloader using ASE Atoms (required by MatterSim)
         dataloader = self._build_dataloader(
             [ase_atoms],
-            model_type=self.potential.model_name,
+            model_type=model_name,
             cutoff=cutoff,
             threebody_cutoff=threebody_cutoff,
             **self.args_dict
