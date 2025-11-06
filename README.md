@@ -12,6 +12,9 @@
 - **Core Data Structures**: Crystal, Molecule, Lattice, Composition, Site, Element
 - **Structure Builders**: Bulk, surface, alloy, molecule, defects, nanostructures
 - **Transformations**: Geometric, lattice, atomic, chemical operations
+- **Calculators**: Classical potentials (LJ), ML potentials (Mattersim), DFT interfaces
+- **Configuration System**: Global config with environment variable overrides
+- **Data Storage**: Persistent storage for structures and calculation results (maggma)
 - **File I/O**: Support for multiple formats (VASP, XYZ, JSON, and more)
 - **Performance**: Optimized with caching and KDTree for efficient neighbor finding
 - **Comprehensive Examples**: 14+ example files demonstrating all features
@@ -30,6 +33,18 @@ For development with testing support:
 
 ```bash
 pip install MatSimPy[dev]
+```
+
+### Optional Features
+
+Install with optional dependencies:
+
+```bash
+# With storage support (maggma)
+pip install MatSimPy[storage]
+
+# With all optional features
+pip install MatSimPy[all]
 ```
 
 Or clone and install from source:
@@ -134,6 +149,63 @@ crystal = read_POSCAR('structure.vasp')
 molecule = read_XYZ('molecule.xyz')
 ```
 
+### Calculators
+
+```python
+from matsimpy import Crystal, Lattice
+from matsimpy.calculator import LennardJones, Mattersim
+
+# Classical potential calculator
+crystal = Crystal(['Ar'], [[0,0,0]], Lattice.cubic(5.0))
+calc = LennardJones(sigma=3.4, epsilon=0.0104)
+crystal.calc = calc
+
+# Get energy and forces
+energy = crystal.get_potential_energy()
+forces = crystal.get_forces()
+
+# ML calculator (uses config defaults)
+ml_calc = Mattersim(model_path='model.pth', model_type='mace')
+crystal.calc = ml_calc
+energy = crystal.get_potential_energy()
+```
+
+### Configuration
+
+```python
+from matsimpy.config import get_config, ConfigManager
+
+# Get configuration values
+device = get_config('calculator.ml.default_device')  # 'cpu'
+model_dir = get_config('paths.models')  # '~/.matsimpy/models'
+
+# Modify configuration
+config = ConfigManager()
+config.set('calculator.ml.default_device', 'cuda', save=True)
+```
+
+### Data Storage
+
+```python
+from matsimpy.storage import DataStorage
+from matsimpy import Crystal, Lattice
+
+# Initialize storage (uses config default path)
+storage = DataStorage()
+
+# Store crystal structure
+crystal = Crystal(['Si'], [[0,0,0]], Lattice.cubic(5.43))
+doc_id = storage.store_data(crystal, metadata={'description': 'Si cell'})
+
+# Store calculation results
+results = {'energy': -10.5, 'forces': [[0,0,0]]}
+storage.store_data(results, metadata={'calculator': 'LJ'})
+
+# Retrieve and query
+retrieved = storage.retrieve_data(doc_id)
+lj_results = storage.retrieve_data(query={'metadata.calculator': 'LJ'})
+```
+
 ## Project Structure
 
 ```
@@ -166,11 +238,25 @@ matsimpy/
 │   ├── xyz.py         # XYZ format
 │   └── json.py        # JSON serialization
 │
+├── calculator/        # Energy/force calculators
+│   ├── base.py        # Base Calculator class
+│   ├── classical/     # Classical potentials (LJ, etc.)
+│   ├── ml/            # Machine learning calculators
+│   └── dft/           # DFT calculators (VASP, QE, etc.)
+│
+├── config/            # Global configuration system
+│   ├── manager.py     # ConfigManager class
+│   ├── defaults.py    # Default configuration
+│   └── utils.py       # Configuration utilities
+│
+├── storage/           # Data storage module
+│   └── maggma_store.py  # Persistent storage using maggma
+│
 ├── symmetry/          # Symmetry analysis
 ├── utils/             # Utility functions
 ├── code/              # DFT code interfaces
 ├── ai/                # AI/ML integration
-└── analysis/           # Analysis tools
+└── analysis/          # Analysis tools
 ```
 
 ## Examples
@@ -208,6 +294,29 @@ python examples/builders_bulk.py
 - **Atomic**: Atom movement, swapping, sorting, centering
 - **Chemical**: Single/multiple substitutions, bulk substitutions
 - **Structural**: Supercell generation, molecular operations
+
+### Calculators
+
+- **Classical Potentials**: Lennard-Jones potential with periodic boundary conditions
+- **ML Potentials**: Machine learning calculators (Mattersim framework)
+- **DFT Calculators**: Base classes for VASP, Quantum Espresso (future)
+- **ASE-Style Interface**: Calculators attach to structures via `structure.calc`
+- **Config Integration**: Default parameters from global configuration
+
+### Configuration System
+
+- **Global Config**: `~/.matsimpy/config.yaml` for user settings
+- **Environment Overrides**: `MATSIMPY_*` environment variables
+- **Calculator Defaults**: Default parameters for all calculator types
+- **Path Management**: Centralized paths for models, cache, output
+
+### Data Storage
+
+- **Persistent Storage**: Store structures and calculation results
+- **MSONable Support**: Automatic serialization of Crystal, Molecule objects
+- **Query Support**: Query stored data by ID or criteria
+- **Metadata**: Attach metadata for organization and search
+- **Memory & File Stores**: In-memory for testing, JSON file for persistence
 
 ### Performance Features
 
