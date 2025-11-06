@@ -425,6 +425,62 @@ print(f"\nFirst site: {crystal.sites[0]}")
 print(f"Site specie: {crystal.sites[0].specie}")
 print(f"Site properties: {crystal.sites[0].properties}")
 
+# ============================================================================
+# Example 13: Copy Method
+# ============================================================================
+print("\n\n13. Copy Method")
+print("-" * 70)
+
+from matsimpy.builders.bulk import from_prototype
+
+# Create crystal with site properties
+original = from_prototype('diamond', 'Si', 5.43)
+original.sites[0].properties['tag'] = 'original'
+
+# Copy the structure
+copied = original.copy()
+
+print(f"Original: {original.formula}, {len(original)} atoms")
+print(f"Copied: {copied.formula}, {len(copied)} atoms")
+print(f"  Are they the same object? {original is copied}")
+print(f"  Do they have same formula? {original.formula == copied.formula}")
+
+# Modify the copy
+copied.add_atom('H', [0.5, 0.5, 0.5])
+print(f"\nAfter adding H to copy:")
+print(f"  Original: {len(original)} atoms")
+print(f"  Copied: {len(copied)} atoms")
+print(f"  Original unchanged: {len(original) == 2}")
+
+# Check site properties are copied
+print(f"\nSite properties:")
+print(f"  Original site 0 tag: {original.sites[0].properties.get('tag')}")
+print(f"  Copied site 0 tag: {copied.sites[0].properties.get('tag')}")
+
+# ============================================================================
+# Example 14: Symmetry Analysis
+# ============================================================================
+print("\n\n14. Symmetry Analysis")
+print("-" * 70)
+
+# Create structure
+crystal = from_prototype('diamond', 'Si', 5.43)
+print(f"Structure: {crystal.formula}, {len(crystal)} atoms (primitive)")
+
+# Get symmetry information
+sym_info = crystal.get_symmetry_info()
+print(f"\nSymmetry information:")
+print(f"  Space group: {sym_info['space_group_number']} ({sym_info['space_group_symbol']})")
+print(f"  Point group: {sym_info['point_group']}")
+print(f"  Crystal system: {sym_info['crystal_system']}")
+
+# Get conventional cell
+conventional = crystal.get_conventional_cell()
+print(f"\nConventional cell:")
+print(f"  Formula: {conventional.formula}")
+print(f"  Atoms: {len(conventional)} (vs {len(crystal)} in primitive)")
+print(f"  Lattice: a={conventional.lattice.a:.4f} Å")
+
 print("\n" + "=" * 70)
 print("Advanced examples completed!")
 print("=" * 70)

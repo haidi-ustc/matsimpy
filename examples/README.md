@@ -21,6 +21,7 @@ This directory contains comprehensive examples demonstrating how to use differen
 - **`transformation_lattice.py`** - Lattice strain, scaling, transformations
 - **`transformation_chemical.py`** - Chemical substitutions
 - **`transformation_structural.py`** - Supercell generation, atom manipulation
+- **`transformation_composite.py`** - High-throughput workflows (Pipeline, ParameterSweep, BatchProcessor)
 
 ### IO Module
 - **`io_basic.py`** - Reading and writing structure files (VASP, XYZ, JSON)
@@ -34,6 +35,9 @@ This directory contains comprehensive examples demonstrating how to use differen
 
 ### Storage Module
 - **`storage_basic.py`** - Persistent data storage for structures and results
+
+### Symmetry Module
+- **`symmetry_basic.py`** - Symmetry analysis (space group, point group, conventional cell)
 
 ### Integration Examples
 - **`workflow_basic.py`** - Complete workflow from structure creation to analysis

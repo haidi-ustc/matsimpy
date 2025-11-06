@@ -14,6 +14,7 @@ This example demonstrates:
 import numpy as np
 from matsimpy.core import Crystal, Molecule, Lattice, Composition, Element
 from matsimpy.calculator import LennardJones
+from matsimpy.builders.bulk import from_prototype
 
 print("=" * 70)
 print("MatSimPy Core Module - Basic Examples")
@@ -178,12 +179,13 @@ print(f"\nFe2O3 composition:")
 print(f"  Formula: {comp_fe2o3.formula}")
 print(f"  Fe count: {comp_fe2o3['Fe']}, O count: {comp_fe2o3['O']}")
 
-# Get weight percent
+# Get weight percent using the weight_percent method
 h2o = Composition('H2O')
-total_mass = sum(Element(s).atomic_mass * count for s, count in h2o.composition.items())
-h_mass = Element('H').atomic_mass * h2o['H']
-h_weight_pct = (h_mass / total_mass) * 100
-print(f"\nH2O hydrogen weight percent: {h_weight_pct:.2f}%")
+weight_pct = h2o.weight_percent()  # Returns a dictionary
+print(f"\nH2O weight percentages:")
+print(f"  Hydrogen: {weight_pct['H']:.2f}%")
+print(f"  Oxygen: {weight_pct['O']:.2f}%")
+print(f"  Total: {sum(weight_pct.values()):.2f}%")
 
 # ============================================================================
 # Example 8: Basic Selection Utilities
@@ -252,6 +254,28 @@ crystal_restored = Crystal.from_dict(crystal_dict)
 print(f"\nCrystal restored: {crystal_restored.formula}")
 print(f"  Formula matches: {ar_crystal.formula == crystal_restored.formula}")
 print(f"  Positions match: {np.allclose(ar_crystal.frac_positions, crystal_restored.frac_positions)}")
+
+# ============================================================================
+# Example 11: Copy Method
+# ============================================================================
+print("\n\n11. Copy Method")
+print("-" * 70)
+
+# Create a crystal and copy it
+original = from_prototype('diamond', 'Si', 5.43)
+copied = original.copy()
+
+print(f"Original: {original.formula}, {len(original)} atoms")
+print(f"Copied: {copied.formula}, {len(copied)} atoms")
+print(f"  Are they the same object? {original is copied}")
+print(f"  Do they have same formula? {original.formula == copied.formula}")
+
+# Modify the copy
+copied.add_atom('H', [0.5, 0.5, 0.5])
+print(f"\nAfter adding H to copy:")
+print(f"  Original: {len(original)} atoms")
+print(f"  Copied: {len(copied)} atoms")
+print(f"  Original unchanged: {len(original) == 2}")
 
 print("\n" + "=" * 70)
 print("Basic examples completed!")

@@ -47,8 +47,8 @@ print(f"  Lattice: a={supercell_aniso.lattice.a:.2f} Å, c={supercell_aniso.latt
 print("\n\n2. Atom Swapping")
 print("-" * 70)
 
-# Create binary compound
-nacl = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
+# Create binary compound - using binary compound string
+nacl = from_prototype('rocksalt', 'NaCl', 5.64)
 print(f"Original: {nacl.formula}")
 print(f"  Species: {list(nacl.species[:4])}")
 

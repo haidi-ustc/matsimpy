@@ -106,7 +106,7 @@ print("\n\n5. Schottky Defects")
 print("-" * 70)
 
 # For binary compound, create Schottky pair (vacancy pair)
-rocksalt = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
+rocksalt = from_prototype('rocksalt', 'NaCl', 5.64)
 rocksalt_super = make_supercell(rocksalt, [2, 2, 2])
 
 try:

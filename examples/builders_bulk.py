@@ -37,8 +37,8 @@ print(f"Diamond C: {diamond_c.formula}, {len(diamond_c)} atoms, a={diamond_c.lat
 hcp_mg = from_prototype('hcp', 'Mg', [3.21, 3.21, 5.21])  # [a, b, c] for hexagonal
 print(f"HCP Mg: {hcp_mg.formula}, {len(hcp_mg)} atoms, a={hcp_mg.lattice.a:.2f} Å, c={hcp_mg.lattice.c:.2f} Å")
 
-# Rocksalt (NaCl structure)
-rocksalt = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
+# Rocksalt (NaCl structure) - using binary compound string
+rocksalt = from_prototype('rocksalt', 'NaCl', 5.64)
 print(f"Rocksalt NaCl: {rocksalt.formula}, {len(rocksalt)} atoms, a={rocksalt.lattice.a:.2f} Å")
 
 # Perovskite structure
@@ -65,11 +65,11 @@ for proto in prototypes:
             struct = from_prototype(proto, 'Mg', a=3.0, c=5.0)
         elif proto in ['rocksalt', 'zincblende', 'fluorite', 'perovskite']:
             if proto == 'rocksalt':
-                struct = from_prototype(proto, ['Na', 'Cl'], 5.0)
+                struct = from_prototype(proto, 'NaCl', 5.0)
             elif proto == 'zincblende':
-                struct = from_prototype(proto, ['Zn', 'S'], 5.4)
+                struct = from_prototype(proto, 'ZnS', 5.4)
             elif proto == 'fluorite':
-                struct = from_prototype(proto, ['Ca', 'F'], 5.5)
+                struct = from_prototype(proto, 'CaF2', 5.5)
             else:  # perovskite
                 struct = from_prototype(proto, ['Ca', 'Ti', 'O'], 4.0)
         else:

@@ -49,8 +49,8 @@ print(f"  Ge: {sum(1 for s in substituted.species if s == 'Ge')}")
 print("\n\n3. Dictionary-Based Substitution")
 print("-" * 70)
 
-# Create binary compound
-nacl = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
+# Create binary compound - using binary compound string
+nacl = from_prototype('rocksalt', 'NaCl', 5.64)
 nacl_super = make_supercell(nacl, [2, 2, 2])
 print(f"Original: {nacl_super.formula}")
 
