@@ -75,6 +75,11 @@ def get_default_config() -> Dict[str, Any]:
             'backend': 'matplotlib',
             'style': 'default',
             'figure_size': [10, 8],
+        },
+        'storage': {
+            'default_path': '~/.matsimpy/storage/data.json',
+            'default_store_type': 'json',  # 'json' or 'memory'
+            'auto_save': True,
         }
     }
 

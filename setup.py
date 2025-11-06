@@ -26,6 +26,14 @@ setup(
         "dev": [
             "pytest",
             "pytest-cov"
+        ],
+        "storage": [
+            "maggma"
+        ],
+        "all": [
+            "pytest",
+            "pytest-cov",
+            "maggma"
         ]
     },
     author="haidi wang",
