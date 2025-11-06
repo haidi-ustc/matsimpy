@@ -10,7 +10,8 @@ from typing import Optional, Dict, Any, Union
 from pathlib import Path
 import os
 from .base_ml import BaseML
-from ...core import Crystal, Molecule, Element
+from .dataloader import build_dataloader
+from ...core import Crystal, Molecule
 
 
 class Mattersim(BaseML):
@@ -65,7 +66,6 @@ class Mattersim(BaseML):
         try:
             from mattersim.forcefield.m3gnet.m3gnet import M3Gnet
             from mattersim.forcefield.potential import Potential
-            from mattersim.datasets.utils.build import build_dataloader
         except ImportError:
             raise ImportError(
                 "MatterSim library is required. Install with: pip install mattersim"
@@ -73,7 +73,6 @@ class Mattersim(BaseML):
         
         # Store MatterSim classes
         self._Potential = Potential
-        self._build_dataloader = build_dataloader
         
         # Set model_type for compatibility (MatterSim uses M3GNet)
         self.model_type = 'm3gnet'
@@ -182,7 +181,7 @@ class Mattersim(BaseML):
         Prepare input for MatterSim model.
         
         Converts MatSimPy structure data directly to MatterSim's graph format
-        without external dependencies.
+        using the adapted build_dataloader that works with Crystal/Molecule.
         
         Args:
             positions: Atomic positions (N, 3) - already in Cartesian coordinates
@@ -193,114 +192,11 @@ class Mattersim(BaseML):
         Returns:
             Graph batch object for MatterSim
         """
-        # Extract cell from lattice if present
+        # Reconstruct structure object from parameters
         if lattice is not None:
-            cell = np.array(lattice.lattice_vectors, dtype=np.float64)
-            pbc_array = np.array(pbc, dtype=bool)
+            temp_structure = Crystal(species, positions, lattice, coords_are_cartesian=True, pbc=pbc)
         else:
-            cell = None
-            pbc_array = np.array([False, False, False], dtype=bool)
-        
-        positions_array = np.array(positions, dtype=np.float64)
-        species_list = list(species)
-        
-        # Create minimal object compatible with MatterSim's GraphConvertor
-        # This mimics ASE Atoms interface without requiring ASE
-        class MatterSimInput:
-            """Minimal interface for MatterSim GraphConvertor (no ASE dependency)."""
-            def __init__(self, symbols, positions, cell, pbc):
-                self.symbols = symbols
-                self.positions = positions
-                self.cell = cell
-                self.pbc = pbc
-                
-                # MatterSim may access these
-                self.numbers = self._get_atomic_numbers()
-                
-            def _get_atomic_numbers(self):
-                """Get atomic numbers from symbols."""
-                numbers = []
-                for symbol in self.symbols:
-                    elem = Element(symbol)
-                    numbers.append(elem.atomic_no)
-                return np.array(numbers, dtype=int)
-            
-            def get_chemical_symbols(self):
-                """Return chemical symbols (MatterSim may call this)."""
-                return self.symbols
-            
-            def get_scaled_positions(self, wrap=True):
-                """Get fractional positions (MatterSim calls this)."""
-                if self.cell is None:
-                    return self.positions.copy()
-                cell_inv = np.linalg.inv(self.cell)
-                frac_pos = np.dot(self.positions, cell_inv)
-                if wrap:
-                    frac_pos = frac_pos % 1.0
-                return frac_pos
-            
-            def set_scaled_positions(self, scaled_positions):
-                """Set fractional positions (MatterSim calls this)."""
-                if self.cell is None:
-                    self.positions = np.array(scaled_positions, dtype=np.float64)
-                else:
-                    self.positions = np.dot(scaled_positions, self.cell)
-            
-            def get_positions(self):
-                """Get Cartesian positions (MatterSim calls this)."""
-                return self.positions.copy()
-            
-            def get_atomic_numbers(self):
-                """Get atomic numbers (MatterSim calls this)."""
-                return self.numbers
-            
-            def copy(self):
-                """Create a copy."""
-                return MatterSimInput(
-                    self.symbols.copy(),
-                    self.positions.copy(),
-                    self.cell.copy() if self.cell is not None else None,
-                    self.pbc.copy()
-                )
-            
-            def set_cell(self, cell):
-                """Set cell (MatterSim may call this)."""
-                self.cell = np.array(cell, dtype=np.float64)
-            
-            def set_pbc(self, pbc):
-                """Set PBC (MatterSim may call this)."""
-                self.pbc = np.array(pbc, dtype=bool)
-            
-            def __len__(self):
-                """Return number of atoms (MatterSim calls len(atoms))."""
-                return len(self.symbols)
-        
-        # Create MatterSim input object directly from parameters
-        atoms_input = MatterSimInput(species_list, positions_array, cell, pbc_array)
-        
-        # Patch isinstance check in MatterSim's convertor module to accept our objects
-        # MatterSim's GraphConvertor checks isinstance(atoms, Atoms) which requires ASE
-        # We patch this to accept our MatterSimInput objects
-        import mattersim.datasets.utils.convertor as convertor_module
-        import builtins
-        
-        # Store original isinstance
-        if not hasattr(convertor_module, '_original_isinstance'):
-            convertor_module._original_isinstance = builtins.isinstance
-        
-        # Patch isinstance in convertor module
-        def patched_isinstance(obj, cls):
-            # Accept our MatterSimInput objects as Atoms
-            if hasattr(cls, '__name__') and cls.__name__ == 'Atoms':
-                if hasattr(obj, 'symbols') and hasattr(obj, 'positions') and hasattr(obj, 'get_scaled_positions'):
-                    return True
-            if hasattr(cls, '__module__') and 'ase' in str(cls.__module__):
-                if hasattr(obj, 'symbols') and hasattr(obj, 'positions'):
-                    return True
-            # Fall back to original isinstance
-            return convertor_module._original_isinstance(obj, cls)
-        
-        convertor_module.isinstance = patched_isinstance
+            temp_structure = Molecule(species, positions)
         
         # Get cutoff parameters from model
         if hasattr(self.potential, 'model') and hasattr(self.potential.model, 'model_args'):
@@ -313,13 +209,23 @@ class Mattersim(BaseML):
         # Get model name (default to 'm3gnet' for MatterSim)
         model_name = getattr(self.potential, 'model_name', 'm3gnet')
         
-        # Build dataloader using MatterSim input (built directly from Crystal/Molecule)
-        dataloader = self._build_dataloader(
-            [atoms_input],
-            model_type=model_name,
+        # Build dataloader directly from MatSimPy structure
+        # Extract explicit parameters from args_dict to avoid conflicts
+        dataloader_kwargs = self.args_dict.copy()
+        batch_size = dataloader_kwargs.pop('batch_size', 1)
+        only_inference = dataloader_kwargs.pop('only_inference', True)
+        # Convert only_inference to bool if it's 1/0
+        if isinstance(only_inference, int):
+            only_inference = bool(only_inference)
+        
+        dataloader = build_dataloader(
+            [temp_structure],
             cutoff=cutoff,
             threebody_cutoff=threebody_cutoff,
-            **self.args_dict
+            model_type=model_name,
+            only_inference=only_inference,
+            batch_size=batch_size,
+            **dataloader_kwargs
         )
         
         # Get graph batch
