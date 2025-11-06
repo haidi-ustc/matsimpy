@@ -50,7 +50,7 @@ class BaseML(Calculator):
     def __init__(self,
                  model: Optional[Any] = None,
                  model_path: Optional[Union[str, Path]] = None,
-                 device: str = 'cpu',
+                 device: Optional[str] = None,
                  **kwargs):
         """
         Initialize ML calculator.
@@ -58,9 +58,17 @@ class BaseML(Calculator):
         Args:
             model: Pre-loaded model object
             model_path: Path to saved model file
-            device: Computation device ('cpu' or 'cuda')
+            device: Computation device ('cpu' or 'cuda'). If None, uses config default.
             **kwargs: Additional parameters
         """
+        # Get default device from config if not provided
+        if device is None:
+            try:
+                from ...config import get_config
+                device = get_config('calculator.ml.default_device', 'cpu')
+            except ImportError:
+                device = 'cpu'
+        
         super().__init__(model=model, model_path=model_path, device=device, **kwargs)
         
         self.model = model
