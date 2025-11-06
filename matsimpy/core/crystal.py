@@ -646,4 +646,80 @@ class Crystal(Structure):
         """
         from ..generation.random import random_crystal
         return random_crystal(dim, group, species, num_ions, **kwargs)
+    
+    @property
+    def calc(self):
+        """
+        Get attached calculator.
+        
+        Returns:
+            Calculator or None: The attached calculator, or None if none attached
+        """
+        return getattr(self, '_calculator', None)
+    
+    @calc.setter
+    def calc(self, calculator):
+        """
+        Attach a calculator to this structure.
+        
+        Args:
+            calculator: Calculator object (e.g., LennardJones, Mattersim, VASP)
+            
+        Raises:
+            TypeError: If calculator is not a Calculator instance
+        """
+        from ..calculator.base import Calculator
+        if calculator is not None and not isinstance(calculator, Calculator):
+            raise TypeError(
+                f"Calculator must be a Calculator instance, got {type(calculator)}"
+            )
+        self._calculator = calculator
+    
+    def get_potential_energy(self) -> float:
+        """
+        Get potential energy from attached calculator.
+        
+        Returns:
+            float: Potential energy in eV
+            
+        Raises:
+            ValueError: If no calculator attached or calculation not performed
+        """
+        if self.calc is None:
+            raise ValueError("No calculator attached. Set crystal.calc = calculator first.")
+        if not self.calc._calculation_performed:
+            self.calc.calculate(self)
+        return self.calc.get_potential_energy()
+    
+    def get_forces(self) -> np.ndarray:
+        """
+        Get forces from attached calculator.
+        
+        Returns:
+            np.ndarray: Forces array of shape (N, 3) in eV/Å
+            
+        Raises:
+            ValueError: If no calculator attached or calculation not performed
+        """
+        if self.calc is None:
+            raise ValueError("No calculator attached. Set crystal.calc = calculator first.")
+        if not self.calc._calculation_performed:
+            self.calc.calculate(self)
+        return self.calc.get_forces()
+    
+    def get_stress(self) -> np.ndarray:
+        """
+        Get stress tensor from attached calculator.
+        
+        Returns:
+            np.ndarray: Stress tensor of shape (3, 3) or (6,) in eV/Å³
+            
+        Raises:
+            ValueError: If no calculator attached or calculation not performed
+        """
+        if self.calc is None:
+            raise ValueError("No calculator attached. Set crystal.calc = calculator first.")
+        if not self.calc._calculation_performed:
+            self.calc.calculate(self)
+        return self.calc.get_stress()
 
