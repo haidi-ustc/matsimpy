@@ -138,13 +138,8 @@ def from_prototype(
         else:
             a = lattice_constant
             c = kwargs.get('c', a * 1.633)  # Ideal c/a ratio
-        # Create hexagonal lattice manually
-        lattice_vectors = [
-            [a, 0, 0],
-            [-a/2, a*np.sqrt(3)/2, 0],
-            [0, 0, c]
-        ]
-        lattice = Lattice(lattice_vectors)
+        # Use convenience method for hexagonal lattice
+        lattice = Lattice.hexagonal(a, c)
     
     else:
         raise NotImplementedError(f"Lattice type '{lattice_type}' not yet implemented")

@@ -244,13 +244,8 @@ def _create_lattice_from_system_by_name(
         else:
             a = lattice_params
             c = a * 1.633  # Ideal c/a for hexagonal
-        # Create hexagonal lattice manually
-        lattice_vectors = [
-            [a, 0, 0],
-            [-a/2, a*np.sqrt(3)/2, 0],
-            [0, 0, c]
-        ]
-        return Lattice(lattice_vectors)
+        # Use convenience method for hexagonal lattice
+        return Lattice.hexagonal(a, c)
     
     elif crystal_system == 'monoclinic':
         if isinstance(lattice_params, (list, tuple)) and len(lattice_params) >= 3:

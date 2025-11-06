@@ -210,3 +210,47 @@ class Lattice(MSONable):
             [0.0, 0.0, c]
         ]
         return cls(lattice_vectors)
+
+    @classmethod
+    def hexagonal(cls, a: float, c: float):
+        """
+        Initialize a hexagonal Lattice object.
+
+        Args:
+            a: The length of the a (and b) lattice vector.
+            c: The length of the c lattice vector.
+        """
+        # Standard hexagonal lattice vectors
+        # a = b, alpha = beta = 90°, gamma = 120°
+        lattice_vectors = [
+            [a, 0.0, 0.0],
+            [-a/2, a*np.sqrt(3)/2, 0.0],
+            [0.0, 0.0, c]
+        ]
+        return cls(lattice_vectors)
+
+    @classmethod
+    def rhombohedral(cls, a: float, alpha: float):
+        """
+        Initialize a rhombohedral Lattice object.
+
+        Args:
+            a: The length of all three lattice vectors (a = b = c).
+            alpha: The angle between all three lattice vectors (alpha = beta = gamma) in degrees.
+        """
+        # Use from_parameters for rhombohedral (a = b = c, alpha = beta = gamma)
+        return cls.from_parameters(a=a, b=a, c=a, alpha=alpha, beta=alpha, gamma=alpha)
+
+    @classmethod
+    def monoclinic(cls, a: float, b: float, c: float, beta: float):
+        """
+        Initialize a monoclinic Lattice object.
+
+        Args:
+            a: The length of the a lattice vector.
+            b: The length of the b lattice vector.
+            c: The length of the c lattice vector.
+            beta: The angle between the a and c lattice vectors in degrees.
+        """
+        # Monoclinic: alpha = gamma = 90°, beta can vary
+        return cls.from_parameters(a=a, b=b, c=c, alpha=90.0, beta=beta, gamma=90.0)

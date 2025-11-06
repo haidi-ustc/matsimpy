@@ -141,19 +141,13 @@ if hasattr(si, 'radius'):
 print("\n\n6. More Lattice Types")
 print("-" * 70)
 
-# Hexagonal lattice (using from_parameters)
-hex_lattice = Lattice.from_parameters(
-    a=3.0, b=3.0, c=5.0,
-    alpha=90.0, beta=90.0, gamma=120.0
-)
+# Hexagonal lattice
+hex_lattice = Lattice.hexagonal(3.0, 5.0)
 print(f"Hexagonal: a={hex_lattice.a:.2f} Å, c={hex_lattice.c:.2f} Å")
 print(f"  Volume: {hex_lattice.volume():.2f} Å³")
 
-# Rhombohedral lattice (using from_parameters)
-rhomb_lattice = Lattice.from_parameters(
-    a=5.0, b=5.0, c=5.0,
-    alpha=60.0, beta=60.0, gamma=60.0
-)
+# Rhombohedral lattice
+rhomb_lattice = Lattice.rhombohedral(5.0, 60.0)
 print(f"\nRhombohedral: a={rhomb_lattice.a:.2f} Å, α={rhomb_lattice.alpha:.1f}°")
 print(f"  Volume: {rhomb_lattice.volume():.2f} Å³")
 
