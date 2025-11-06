@@ -75,6 +75,7 @@ def apply_transformations(structure: Union[Crystal, Molecule],
 
 # Import new pipeline class
 from .pipeline import TransformationPipeline
+from .sweep import ParameterSweep
 
-__all__ = ['chain', 'apply_transformations', 'TransformationPipeline']
+__all__ = ['chain', 'apply_transformations', 'TransformationPipeline', 'ParameterSweep']
 
