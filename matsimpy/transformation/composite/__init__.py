@@ -1,21 +1,18 @@
 """
-Composite transformations for chaining multiple operations.
+Composite transformation tools for high-throughput structure generation.
 
-Provides utilities for combining multiple transformations.
+This module provides advanced tools for:
+- Reusable transformation pipelines
+- Parameter sweeps
+- Batch processing
+- Combinatorial generation
 """
 
 from typing import List, Callable, Union, Any
-from ..core import Crystal, Molecule
-from .base import _copy_structure, _validate_structure
+from ...core import Crystal, Molecule
+from ..base import _copy_structure, _validate_structure
 
-# Import TransformationPipeline from submodule
-try:
-    from .composite.pipeline import TransformationPipeline
-    _has_pipeline = True
-except (ImportError, AttributeError):
-    _has_pipeline = False
-
-
+# Import basic chain functions
 def chain(structure: Union[Crystal, Molecule],
           transformations: List[Callable],
           inplace: bool = False) -> Union[Crystal, Molecule]:
@@ -76,9 +73,8 @@ def apply_transformations(structure: Union[Crystal, Molecule],
     return chain(structure, list(transformations), inplace=inplace)
 
 
-__all__ = ['chain', 'apply_transformations']
+# Import new pipeline class
+from .pipeline import TransformationPipeline
 
-# Add TransformationPipeline to exports if available
-if _has_pipeline:
-    __all__.append('TransformationPipeline')
+__all__ = ['chain', 'apply_transformations', 'TransformationPipeline']
 
