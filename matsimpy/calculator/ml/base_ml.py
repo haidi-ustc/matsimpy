@@ -202,6 +202,71 @@ class BaseML(Calculator):
             NotImplementedError: If not implemented by subclass
         """
         raise NotImplementedError("Subclasses must implement _run_model()")
+    
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Serialize ML calculator to dictionary (MSONable).
+        
+        Note: ML models are not serialized. Only model_path is stored.
+        The model will need to be reloaded when deserializing.
+        
+        Returns:
+            Dictionary representation of the calculator
+        """
+        d = super().as_dict()
+        
+        # Add ML-specific fields
+        if self.model_path is not None:
+            d["model_path"] = str(self.model_path)
+        d["device"] = self.device
+        
+        # Remove model object from parameters if present (models can't be serialized)
+        if "model" in d.get("parameters", {}):
+            d["parameters"] = {k: v for k, v in d["parameters"].items() if k != "model"}
+        
+        return d
+    
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'BaseML':
+        """
+        Deserialize ML calculator from dictionary (MSONable).
+        
+        Note: The model will be automatically reloaded from model_path if provided.
+        
+        Args:
+            d: Dictionary representation of the calculator
+            
+        Returns:
+            BaseML instance
+        """
+        # Extract ML-specific fields
+        model_path = d.get("model_path")
+        device = d.get("device", "cpu")
+        
+        # Extract parameters (excluding model)
+        parameters = d.get("parameters", {}).copy()
+        if "model" in parameters:
+            del parameters["model"]
+        if "model_path" in parameters:
+            del parameters["model_path"]
+        if "device" in parameters:
+            del parameters["device"]
+        
+        # Create instance
+        calc = cls(model_path=model_path, device=device, **parameters)
+        
+        # Restore results if present
+        if "results" in d:
+            results = {}
+            for key, value in d["results"].items():
+                if isinstance(value, list):
+                    results[key] = np.array(value)
+                else:
+                    results[key] = value
+            calc.results = results
+            calc._calculation_performed = True
+        
+        return calc
 
 
 __all__ = ['BaseML']

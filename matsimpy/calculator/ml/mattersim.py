@@ -300,6 +300,85 @@ class Mattersim(BaseML):
             'forces': forces,
             'stress': stress if stress is not None else np.zeros((3, 3))
         }
+    
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Serialize Mattersim calculator to dictionary (MSONable).
+        
+        Note: MatterSim Potential objects are not serialized. Only model_path
+        and configuration are stored. The model will be reloaded when deserializing.
+        
+        Returns:
+            Dictionary representation of the calculator
+        """
+        d = super().as_dict()
+        
+        # Add Mattersim-specific fields
+        if hasattr(self, 'model_type'):
+            d["model_type"] = self.model_type
+        if hasattr(self, 'compute_stress'):
+            d["compute_stress"] = self.compute_stress
+        if hasattr(self, 'load_training_state'):
+            d["load_training_state"] = self.load_training_state
+        if hasattr(self, 'args_dict'):
+            d["args_dict"] = self.args_dict.copy()
+        
+        # Remove potential/model from parameters if present
+        if "potential" in d.get("parameters", {}):
+            d["parameters"] = {k: v for k, v in d["parameters"].items() if k not in ["potential", "model"]}
+        
+        return d
+    
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'Mattersim':
+        """
+        Deserialize Mattersim calculator from dictionary (MSONable).
+        
+        Note: The MatterSim Potential will be automatically reloaded from
+        model_path if provided.
+        
+        Args:
+            d: Dictionary representation of the calculator
+            
+        Returns:
+            Mattersim instance
+        """
+        # Extract Mattersim-specific fields
+        model_path = d.get("model_path")
+        device = d.get("device", "cpu")
+        model_type = d.get("model_type")
+        compute_stress = d.get("compute_stress", True)
+        load_training_state = d.get("load_training_state", False)
+        args_dict = d.get("args_dict", {})
+        
+        # Extract parameters
+        parameters = d.get("parameters", {}).copy()
+        # Remove fields that are handled separately
+        for key in ["model", "model_path", "device", "potential", "model_type"]:
+            parameters.pop(key, None)
+        
+        # Create instance
+        calc = cls(
+            model_path=model_path,
+            device=device,
+            compute_stress=compute_stress,
+            load_training_state=load_training_state,
+            args_dict=args_dict,
+            **parameters
+        )
+        
+        # Restore results if present
+        if "results" in d:
+            results = {}
+            for key, value in d["results"].items():
+                if isinstance(value, list):
+                    results[key] = np.array(value)
+                else:
+                    results[key] = value
+            calc.results = results
+            calc._calculation_performed = True
+        
+        return calc
 
 
 __all__ = ['Mattersim']

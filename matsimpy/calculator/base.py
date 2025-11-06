@@ -7,10 +7,11 @@ All calculators inherit from this base class and implement the abstract methods.
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, Union
 import numpy as np
+from monty.json import MSONable
 from ..core import Crystal, Molecule
 
 
-class Calculator(ABC):
+class Calculator(ABC, MSONable):
     """
     Base class for all calculators.
     
@@ -183,6 +184,61 @@ class Calculator(ABC):
             raise ValueError(f"Result '{key}' not available. Available: {list(self.results.keys())}")
         return self.results[key]
         
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Serialize calculator to dictionary (MSONable).
+        
+        Returns:
+            Dictionary representation of the calculator
+        """
+        d = {
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "parameters": self.parameters.copy(),
+        }
+        # Only include results if calculation has been performed
+        if self._calculation_performed and self.results:
+            # Convert numpy arrays to lists for JSON serialization
+            results_dict = {}
+            for key, value in self.results.items():
+                if isinstance(value, np.ndarray):
+                    results_dict[key] = value.tolist()
+                else:
+                    results_dict[key] = value
+            d["results"] = results_dict
+        return d
+    
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'Calculator':
+        """
+        Deserialize calculator from dictionary (MSONable).
+        
+        Args:
+            d: Dictionary representation of the calculator
+            
+        Returns:
+            Calculator instance
+        """
+        # Extract parameters
+        parameters = d.get("parameters", {})
+        
+        # Create instance
+        calc = cls(**parameters)
+        
+        # Restore results if present
+        if "results" in d:
+            # Convert lists back to numpy arrays
+            results = {}
+            for key, value in d["results"].items():
+                if isinstance(value, list):
+                    results[key] = np.array(value)
+                else:
+                    results[key] = value
+            calc.results = results
+            calc._calculation_performed = True
+        
+        return calc
+    
     def __repr__(self) -> str:
         """String representation of calculator."""
         params_str = ', '.join(f"{k}={v}" for k, v in self.parameters.items())
