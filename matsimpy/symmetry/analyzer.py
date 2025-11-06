@@ -14,7 +14,7 @@ except ImportError:
     HAS_SPGLIB = False
     spglib = None
 
-from ..core import Crystal, Molecule, Lattice
+from ..core import Crystal, Molecule, Lattice, Element
 
 
 class SymmetryAnalyzer:
@@ -201,27 +201,29 @@ class SymmetryAnalyzer:
         }
     
     def _element_to_number(self, element: Union[str, int]) -> int:
-        """Convert element symbol to atomic number."""
+        """
+        Convert element symbol to atomic number.
+        
+        Uses the Element class from core.periodic_table for proper
+        element-to-atomic-number conversion.
+        """
         if isinstance(element, int):
             return element
         
-        # Simple mapping for common elements
-        element_map = {
-            'H': 1, 'He': 2, 'Li': 3, 'Be': 4, 'B': 5, 'C': 6, 'N': 7, 'O': 8,
-            'F': 9, 'Ne': 10, 'Na': 11, 'Mg': 12, 'Al': 13, 'Si': 14, 'P': 15,
-            'S': 16, 'Cl': 17, 'Ar': 18, 'K': 19, 'Ca': 20, 'Ti': 22, 'V': 23,
-            'Cr': 24, 'Mn': 25, 'Fe': 26, 'Co': 27, 'Ni': 28, 'Cu': 29, 'Zn': 30,
-            'Ga': 31, 'Ge': 32, 'As': 33, 'Se': 34, 'Br': 35, 'Kr': 36, 'Rb': 37,
-            'Sr': 38, 'Y': 39, 'Zr': 40, 'Nb': 41, 'Mo': 42, 'Tc': 43, 'Ru': 44,
-            'Rh': 45, 'Pd': 46, 'Ag': 47, 'Cd': 48, 'In': 49, 'Sn': 50, 'Sb': 51,
-            'Te': 52, 'I': 53, 'Xe': 54, 'Cs': 55, 'Ba': 56, 'La': 57, 'Ce': 58,
-            'Pr': 59, 'Nd': 60, 'Pm': 61, 'Sm': 62, 'Eu': 63, 'Gd': 64, 'Tb': 65,
-            'Dy': 66, 'Ho': 67, 'Er': 68, 'Tm': 69, 'Yb': 70, 'Lu': 71, 'Hf': 72,
-            'Ta': 73, 'W': 74, 'Re': 75, 'Os': 76, 'Ir': 77, 'Pt': 78, 'Au': 79,
-            'Hg': 80, 'Tl': 81, 'Pb': 82, 'Bi': 83, 'Po': 84, 'At': 85, 'Rn': 86
-        }
-        
-        return element_map.get(str(element), 1)  # Default to H if not found
+        try:
+            elem = Element.get_element(str(element))
+            return elem.atomic_no
+        except (ValueError, AttributeError):
+            # Fallback: try to get from ELEMENTS list directly
+            from ..core.periodic_table import ELEMENTS
+            try:
+                symbol = str(element).capitalize()
+                if symbol in ELEMENTS:
+                    return ELEMENTS.index(symbol) + 1
+            except (ValueError, AttributeError):
+                pass
+            # Last resort: return 1 (H) if element not found
+            return 1
     
     def _get_crystal_system(self, space_group_number: int) -> str:
         """Get crystal system from space group number."""
