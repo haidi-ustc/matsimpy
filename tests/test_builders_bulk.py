@@ -9,27 +9,40 @@ class TestPrototypeBuilder(unittest.TestCase):
     """Tests for prototype-based bulk crystal generation."""
     
     def test_from_prototype_fcc(self):
-        """Test FCC structure generation."""
+        """Test FCC structure generation (primitive cell)."""
         fcc_cu = from_prototype('fcc', 'Cu', 3.61)
         
-        self.assertEqual(len(fcc_cu.species), 4)  # FCC has 4 atoms
-        self.assertAlmostEqual(fcc_cu.lattice.a, 3.61, places=5)
+        self.assertEqual(len(fcc_cu.species), 1)  # FCC primitive has 1 atom
+        # Primitive cell: a = a_cubic / sqrt(2)
+        expected_a = 3.61 / np.sqrt(2)
+        self.assertAlmostEqual(fcc_cu.lattice.a, expected_a, places=5)
+        self.assertAlmostEqual(fcc_cu.lattice.alpha, 60.0, places=2)  # Rhombohedral angle
         self.assertEqual(fcc_cu.species[0], 'Cu')
     
     def test_from_prototype_bcc(self):
-        """Test BCC structure generation."""
+        """Test BCC structure generation (primitive cell)."""
         bcc_fe = from_prototype('bcc', 'Fe', 2.87)
         
-        self.assertEqual(len(bcc_fe.species), 2)  # BCC has 2 atoms
-        self.assertAlmostEqual(bcc_fe.lattice.a, 2.87, places=5)
+        self.assertEqual(len(bcc_fe.species), 2)  # BCC primitive has 2 atoms
+        # Primitive cell: a = a_cubic * sqrt(3) / 2
+        expected_a = 2.87 * np.sqrt(3) / 2
+        self.assertAlmostEqual(bcc_fe.lattice.a, expected_a, places=5)
+        # BCC primitive is rhombohedral with alpha ≈ 109.47°
+        import math
+        expected_alpha = math.acos(-1/3) * 180 / math.pi
+        self.assertAlmostEqual(bcc_fe.lattice.alpha, expected_alpha, places=2)
     
     def test_from_prototype_diamond(self):
-        """Test diamond structure generation."""
+        """Test diamond structure generation (primitive cell)."""
         diamond_si = from_prototype('diamond', 'Si', 5.43)
         
-        self.assertEqual(len(diamond_si.species), 2)
+        self.assertEqual(len(diamond_si.species), 2)  # Diamond primitive has 2 atoms
         self.assertEqual(diamond_si.species[0], 'Si')
         self.assertEqual(diamond_si.species[1], 'Si')
+        # Primitive cell: a = a_cubic / sqrt(2), alpha = 60°
+        expected_a = 5.43 / np.sqrt(2)
+        self.assertAlmostEqual(diamond_si.lattice.a, expected_a, places=5)
+        self.assertAlmostEqual(diamond_si.lattice.alpha, 60.0, places=2)
     
     def test_from_prototype_rocksalt(self):
         """Test rocksalt structure generation."""
@@ -106,9 +119,14 @@ class TestPrototypeProperties(unittest.TestCase):
     """Test properties of generated prototypes."""
     
     def test_fcc_volume(self):
-        """Test FCC volume calculation."""
+        """Test FCC volume calculation (primitive cell)."""
         fcc = from_prototype('fcc', 'Cu', 3.61)
-        expected_volume = 3.61 ** 3
+        # Primitive cell volume = a^3 * sqrt(1 - 3*cos^2(alpha) + 2*cos^3(alpha))
+        # For FCC primitive: alpha = 60°, a = a_cubic / sqrt(2)
+        # Volume = a^3 * sqrt(1 - 3*(1/2)^2 + 2*(1/2)^3) = a^3 * sqrt(1/2)
+        a_prim = 3.61 / np.sqrt(2)
+        alpha_rad = np.radians(60.0)
+        expected_volume = a_prim ** 3 * np.sqrt(1 - 3 * np.cos(alpha_rad)**2 + 2 * np.cos(alpha_rad)**3)
         self.assertAlmostEqual(fcc.volume, expected_volume, places=2)
     
     def test_bcc_formula(self):
@@ -129,6 +147,26 @@ class TestPrototypeProperties(unittest.TestCase):
         
         # Check that positions are different
         self.assertFalse(np.allclose(diamond.positions[0], diamond.positions[1]))
+    
+    def test_binary_compound_formula(self):
+        """Test binary compound formula parsing (e.g., 'SiC')."""
+        # Test diamond with SiC
+        sic = from_prototype('diamond', 'SiC', 5.2)
+        self.assertEqual(len(sic.species), 2)
+        self.assertIn('Si', sic.species)
+        self.assertIn('C', sic.species)
+        
+        # Test zincblende with GaN
+        gan = from_prototype('zincblende', 'GaN', 4.5)
+        self.assertEqual(len(gan.species), 2)
+        self.assertIn('Ga', gan.species)
+        self.assertIn('N', gan.species)
+        
+        # Test rocksalt with NaCl
+        nacl = from_prototype('rocksalt', 'NaCl', 5.64)
+        self.assertEqual(len(nacl.species), 2)
+        self.assertIn('Na', nacl.species)
+        self.assertIn('Cl', nacl.species)
 
 
 if __name__ == '__main__':

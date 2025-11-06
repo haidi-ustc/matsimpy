@@ -18,7 +18,8 @@ class TestVacancy(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.fcc = from_prototype('fcc', 'Cu', 3.61)
+        # Use diamond structure instead of FCC since FCC primitive has only 1 atom
+        self.fcc = from_prototype('diamond', 'Si', 5.43)
     
     def test_create_single_vacancy(self):
         """Test creating a single vacancy."""
@@ -60,7 +61,8 @@ class TestInterstitial(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.fcc = from_prototype('fcc', 'Cu', 3.61)
+        # Use diamond structure instead of FCC since FCC primitive has only 1 atom
+        self.fcc = from_prototype('diamond', 'Si', 5.43)
     
     def test_create_single_interstitial(self):
         """Test creating a single interstitial."""
@@ -99,7 +101,8 @@ class TestSubstitution(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.fcc = from_prototype('fcc', 'Cu', 3.61)
+        # Use diamond structure instead of FCC since FCC primitive has only 1 atom
+        self.fcc = from_prototype('diamond', 'Si', 5.43)
     
     def test_create_single_substitution(self):
         """Test creating a single substitution."""
@@ -109,7 +112,8 @@ class TestSubstitution(unittest.TestCase):
         self.assertEqual(len(doped.species), len(self.fcc.species))
         self.assertEqual(doped.species[0], 'Ni')
         self.assertEqual(doped.species.count('Ni'), 1)
-        self.assertEqual(doped.species.count('Cu'), len(self.fcc.species) - 1)
+        # Changed from 'Cu' to 'Si' since we're using diamond structure with Si
+        self.assertEqual(doped.species.count('Si'), len(self.fcc.species) - 1)
     
     def test_create_multiple_substitutions(self):
         """Test creating multiple substitutions."""

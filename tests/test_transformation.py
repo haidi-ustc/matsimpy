@@ -161,7 +161,9 @@ class TestSupercell(unittest.TestCase):
         
         # Diamond structure has 2 atoms in primitive cell, so 2x2x2 supercell = 2 * 8 = 16 atoms
         self.assertEqual(len(supercell), 16)  # 2 atoms × 2^3 = 16 atoms
-        self.assertAlmostEqual(supercell.lattice.a, 10.0, places=5)  # 2 * 5
+        # For primitive rhombohedral cell, supercell scales the primitive lattice parameter
+        expected_a = 2 * self.unit_cell.lattice.a
+        self.assertAlmostEqual(supercell.lattice.a, expected_a, places=5)
         self.assertIsNot(self.unit_cell, supercell)
     
     def test_make_supercell_inplace(self):
