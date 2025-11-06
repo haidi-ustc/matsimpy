@@ -10,8 +10,8 @@ This example demonstrates:
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.io.vasp import write_POSCAR, read_POSCAR
 from matsimpy.io.xyz import write_XYZ, read_XYZ
-from matsimpy.io.json import write_json, read_json
 import os
+import json
 
 print("=" * 70)
 print("MatSimPy IO - Basic Examples")
@@ -62,18 +62,23 @@ molecule_read = read_XYZ(xyz_file)
 print(f"Read from XYZ: {molecule_read.formula}, {len(molecule_read)} atoms")
 
 # ============================================================================
-# Example 3: JSON Format
+# Example 3: JSON Format (using as_dict/from_dict)
 # ============================================================================
 print("\n\n3. JSON Format")
 print("-" * 70)
 
-# Write crystal to JSON
+# Write crystal to JSON using as_dict
 json_file = os.path.join(output_dir, "crystal.json")
-write_json(crystal, json_file)
+crystal_dict = crystal.as_dict()
+with open(json_file, 'w') as f:
+    json.dump(crystal_dict, f, indent=2)
 print(f"Written to: {json_file}")
 
-# Read back
-crystal_json = read_json(json_file)
+# Read back using from_dict
+from matsimpy.core import Crystal
+with open(json_file, 'r') as f:
+    crystal_dict_read = json.load(f)
+crystal_json = Crystal.from_dict(crystal_dict_read)
 print(f"Read from JSON: {crystal_json.formula}, {len(crystal_json)} atoms")
 
 # ============================================================================
