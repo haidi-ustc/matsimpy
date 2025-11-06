@@ -1,6 +1,6 @@
 import numpy as np
 from tabulate import tabulate
-from typing import List, Optional, Union, Dict, Tuple
+from typing import List, Optional, Union, Dict, Tuple, Any
 from scipy.spatial import cKDTree
 from .structure import Structure
 from .lattice import Lattice
@@ -722,4 +722,119 @@ class Crystal(Structure):
         if not self.calc._calculation_performed:
             self.calc.calculate(self)
         return self.calc.get_stress()
+    
+    def get_symmetry_info(self, symprec: float = 1e-5, angle_tolerance: float = -1.0) -> Dict[str, Any]:
+        """
+        Get symmetry information for the crystal structure.
+        
+        Uses the symmetry module to analyze the crystal and return space group,
+        point group, crystal system, and symmetry operations.
+        
+        Args:
+            symprec: Symmetry search tolerance (default: 1e-5)
+            angle_tolerance: Angle tolerance in degrees (default: -1.0 for automatic)
+        
+        Returns:
+            Dictionary containing:
+            - space_group_number: International space group number
+            - space_group_symbol: Space group symbol (Hermann-Mauguin)
+            - point_group: Point group symbol
+            - crystal_system: Crystal system name
+            - hall_symbol: Hall symbol
+            - wyckoff_positions: List of Wyckoff positions
+            - symmetry_operations: List of symmetry operations
+            - rotation_matrices: Rotation matrices for symmetry operations
+            - translation_vectors: Translation vectors for symmetry operations
+            
+        Examples:
+            >>> from matsimpy.builders.bulk import from_prototype
+            >>> crystal = from_prototype('diamond', 'Si', 5.43)
+            >>> sym_info = crystal.get_symmetry_info()
+            >>> print(sym_info['space_group_symbol'])
+            'Fd-3m'
+            >>> print(sym_info['crystal_system'])
+            'Cubic'
+        """
+        from ..symmetry import SymmetryAnalyzer
+        
+        analyzer = SymmetryAnalyzer(symprec=symprec, angle_tolerance=angle_tolerance)
+        return analyzer.analyze_crystal(self)
+    
+    def get_conventional_cell(self, symprec: float = 1e-5, angle_tolerance: float = -1.0) -> 'Crystal':
+        """
+        Get the standard conventional cell of the crystal structure.
+        
+        Uses spglib to standardize the cell to the conventional cell representation
+        according to the International Tables for Crystallography.
+        
+        Args:
+            symprec: Symmetry search tolerance (default: 1e-5)
+            angle_tolerance: Angle tolerance in degrees (default: -1.0 for automatic)
+        
+        Returns:
+            Crystal: New Crystal object with standardized conventional cell
+            
+        Examples:
+            >>> from matsimpy.builders.bulk import from_prototype
+            >>> # Start with primitive cell
+            >>> primitive = from_prototype('diamond', 'Si', 5.43)
+            >>> print(len(primitive))  # 2 atoms (primitive)
+            2
+            >>> # Get conventional cell
+            >>> conventional = primitive.get_conventional_cell()
+            >>> print(len(conventional))  # 8 atoms (conventional)
+            8
+        """
+        try:
+            import spglib
+        except ImportError:
+            raise ImportError(
+                "spglib is required for conventional cell conversion. "
+                "Install it with: pip install spglib"
+            )
+        
+        # Convert crystal to spglib format
+        lattice = self.lattice.lattice_vectors
+        positions = self.frac_positions
+        # Get atomic numbers for spglib
+        numbers = []
+        for spec in self.species:
+            if hasattr(Element, 'get_element'):
+                elem = Element.get_element(spec)
+            else:
+                elem = Element(spec)
+            numbers.append(elem.atomic_no)
+        
+        # Get standardized conventional cell
+        cell = (lattice, positions, numbers)
+        std_cell = spglib.standardize_cell(
+            cell,
+            symprec=symprec,
+            angle_tolerance=angle_tolerance
+        )
+        
+        if std_cell is None:
+            # If standardization fails, return a copy of the original
+            return self.copy()
+        
+        std_lattice, std_positions, std_numbers = std_cell
+        
+        # Convert atomic numbers back to species
+        std_species = [Element.from_Z(n).symbol for n in std_numbers]
+        
+        # Create new crystal with conventional cell
+        conventional = Crystal(
+            species=std_species,
+            positions=std_positions.tolist(),
+            lattice=Lattice(std_lattice),
+            pbc=self.pbc.copy() if hasattr(self.pbc, 'copy') else list(self.pbc),
+            coords_are_cartesian=False
+        )
+        
+        # Copy site properties if they exist and match atom count
+        if hasattr(self, 'site_properties') and len(self.site_properties) == len(self.species):
+            # Map site properties (this is approximate - may need refinement)
+            conventional.site_properties = [{}] * len(conventional.species)
+        
+        return conventional
 
