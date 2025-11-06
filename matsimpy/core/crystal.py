@@ -790,4 +790,88 @@ class Crystal(Structure):
         """
         from ..symmetry import get_conventional_cell
         return get_conventional_cell(self, symprec=symprec, angle_tolerance=angle_tolerance)
+    
+    def make_supercell(self, scaling_matrix: Union[List[int], List[List[int]], np.ndarray], 
+                       inplace: bool = True) -> 'Crystal':
+        """
+        Create a supercell from this crystal structure.
+        
+        Convenience method that calls the transformation module's make_supercell function.
+        By default, modifies the structure in-place.
+        
+        Args:
+            scaling_matrix: Scaling matrix for supercell generation.
+                           Can be:
+                           - Simple: [a, b, c] - repeats a times in a, b times in b, c times in c
+                           - Matrix: [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]] - general transformation
+            inplace: If True, modify this crystal in-place (default: True).
+                    If False, return a new Crystal object.
+        
+        Returns:
+            Crystal: Supercell structure (self if inplace=True, new object if inplace=False)
+            
+        Examples:
+            >>> from matsimpy.builders.bulk import from_prototype
+            >>> crystal = from_prototype('diamond', 'Si', 5.43)
+            >>> # Create 2x2x2 supercell in-place
+            >>> crystal.make_supercell([2, 2, 2])
+            >>> print(len(crystal))  # 16 atoms (2*2*2*2)
+            16
+            >>> # Create supercell without modifying original
+            >>> new_crystal = crystal.make_supercell([2, 2, 2], inplace=False)
+        """
+        from ..transformation.structural import make_supercell
+        result = make_supercell(self, scaling_matrix, inplace=inplace)
+        if inplace:
+            # Update self with result's attributes
+            self.species = result.species
+            self.positions = result.positions
+            self.frac_positions = result.frac_positions
+            self.cart_positions = result.cart_positions
+            self.lattice = result.lattice
+            self.site_properties = result.site_properties
+            self._sites = result._sites
+            self._neighbor_tree = None  # Invalidate neighbor tree
+            self._neighbor_tree_positions = None
+            return self
+        return result
+    
+    def perturb(self, amplitude: float, indices: Optional[List[int]] = None, 
+                seed: Optional[int] = None, inplace: bool = True) -> 'Crystal':
+        """
+        Add random perturbations to atomic positions.
+        
+        Convenience method that calls the transformation module's perturb_positions function.
+        By default, modifies the structure in-place.
+        
+        Args:
+            amplitude: Maximum perturbation amplitude (Angstroms)
+            indices: Atom indices to perturb (default: all atoms)
+            seed: Random seed for reproducibility
+            inplace: If True, modify this crystal in-place (default: True).
+                    If False, return a new Crystal object.
+        
+        Returns:
+            Crystal: Structure with perturbed positions (self if inplace=True, new object if inplace=False)
+            
+        Examples:
+            >>> from matsimpy.builders.bulk import from_prototype
+            >>> crystal = from_prototype('diamond', 'Si', 5.43)
+            >>> # Perturb all atoms by up to 0.1 Angstrom
+            >>> crystal.perturb(0.1)
+            >>> # Perturb specific atoms without modifying original
+            >>> perturbed = crystal.perturb(0.1, indices=[0, 1], inplace=False)
+        """
+        from ..transformation.atomic import perturb_positions
+        result = perturb_positions(self, amplitude, indices=indices, seed=seed, inplace=inplace)
+        if inplace:
+            # Update self with result's attributes
+            self.positions = result.positions
+            self.frac_positions = result.frac_positions
+            self.cart_positions = result.cart_positions
+            self._sites = result._sites
+            self._neighbor_tree = None  # Invalidate neighbor tree
+            self._neighbor_tree_positions = None
+            return self
+        return result
 

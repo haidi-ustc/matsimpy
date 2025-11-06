@@ -660,4 +660,40 @@ class Molecule(Structure):
         if not self.calc._calculation_performed:
             self.calc.calculate(self)
         return self.calc.get_forces()
+    
+    def perturb(self, amplitude: float, indices: Optional[List[int]] = None, 
+                seed: Optional[int] = None, inplace: bool = True) -> 'Molecule':
+        """
+        Add random perturbations to atomic positions.
+        
+        Convenience method that calls the transformation module's perturb_positions function.
+        By default, modifies the structure in-place.
+        
+        Args:
+            amplitude: Maximum perturbation amplitude (Angstroms)
+            indices: Atom indices to perturb (default: all atoms)
+            seed: Random seed for reproducibility
+            inplace: If True, modify this molecule in-place (default: True).
+                    If False, return a new Molecule object.
+        
+        Returns:
+            Molecule: Structure with perturbed positions (self if inplace=True, new object if inplace=False)
+            
+        Examples:
+            >>> from matsimpy.core import Molecule
+            >>> molecule = Molecule(['H', 'O', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> # Perturb all atoms by up to 0.1 Angstrom
+            >>> molecule.perturb(0.1)
+            >>> # Perturb specific atoms without modifying original
+            >>> perturbed = molecule.perturb(0.1, indices=[0, 1], inplace=False)
+        """
+        from ..transformation.atomic import perturb_positions
+        result = perturb_positions(self, amplitude, indices=indices, seed=seed, inplace=inplace)
+        if inplace:
+            # Update self with result's attributes
+            self.positions = result.positions
+            self._sites = result._sites
+            self._cached_com = None  # Invalidate center of mass cache
+            return self
+        return result
 
