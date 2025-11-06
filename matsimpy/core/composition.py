@@ -150,7 +150,15 @@ class Composition(MSONable):
         Calculate the mass fractions of the composition.
 
         Returns:
-            dict: A dictionary containing the mass fractions of the composition.
+            dict: A dictionary containing the mass fractions of the composition (0-1).
+
+        Examples:
+            >>> c = Composition('H2O')
+            >>> fractions = c.mass_fractions()
+            >>> fractions['H']  # Mass fraction of H
+            0.111898...
+            >>> fractions['O']  # Mass fraction of O
+            0.888102...
         """
         total_mass = self.mass
         fractions = {}
@@ -160,6 +168,33 @@ class Composition(MSONable):
             mass_fraction = elem.atomic_mass * count / total_mass
             fractions[element] = mass_fraction
         return fractions
+
+    def weight_percent(self):
+        """
+        Calculate the weight percent (weight percentage) of each element in the composition.
+
+        Returns:
+            dict: A dictionary containing the weight percentages of each element (0-100).
+
+        Examples:
+            >>> c = Composition('H2O')
+            >>> weight_pct = c.weight_percent()
+            >>> weight_pct['H']  # Weight percent of H
+            11.1898...
+            >>> weight_pct['O']  # Weight percent of O
+            88.8102...
+            >>> sum(weight_pct.values())  # Should sum to ~100
+            100.0
+        """
+        total_mass = self.mass
+        weight_percentages = {}
+        for element, count in self.composition.items():
+            # Use cached Element.get_element for better performance
+            elem = Element.get_element(element) if hasattr(Element, 'get_element') else Element(element)
+            mass = elem.atomic_mass * count
+            weight_percent = (mass / total_mass) * 100.0
+            weight_percentages[element] = weight_percent
+        return weight_percentages
 
     def to_html(self, sort_by: Optional[str] = None) -> str:
         """

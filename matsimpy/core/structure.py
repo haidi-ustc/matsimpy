@@ -123,6 +123,23 @@ class Structure(MSONable):
             self._formula_dirty = False
         return self._cached_formula
 
+    def copy(self):
+        """
+        Create a copy of the structure.
+        
+        Returns:
+            Structure: A new instance of the structure with copied data.
+            
+        Examples:
+            >>> from matsimpy.core import Crystal, Lattice
+            >>> crystal = Crystal(['Si', 'Si'], [[0,0,0], [0.25,0.25,0.25]], Lattice.cubic(5.43))
+            >>> crystal_copy = crystal.copy()
+            >>> crystal_copy is not crystal  # Different objects
+            True
+            >>> crystal_copy.species == crystal.species  # Same data
+            True
+        """
+        return self.from_dict(self.as_dict())
 
     def __hash__(self):
         # Use hashlib to generate a SHA256 hash of the structure's dictionary representation
