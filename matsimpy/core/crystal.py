@@ -725,10 +725,9 @@ class Crystal(Structure):
     
     def get_symmetry_info(self, symprec: float = 1e-5, angle_tolerance: float = -1.0) -> Dict[str, Any]:
         """
-        Get symmetry information for the crystal structure.
+        Get basic symmetry information for the crystal structure.
         
-        Uses the symmetry module to analyze the crystal and return space group,
-        point group, crystal system, and symmetry operations.
+        Uses the symmetry module to analyze the crystal and return basic symmetry info.
         
         Args:
             symprec: Symmetry search tolerance (default: 1e-5)
@@ -741,10 +740,6 @@ class Crystal(Structure):
             - point_group: Point group symbol
             - crystal_system: Crystal system name
             - hall_symbol: Hall symbol
-            - wyckoff_positions: List of Wyckoff positions
-            - symmetry_operations: List of symmetry operations
-            - rotation_matrices: Rotation matrices for symmetry operations
-            - translation_vectors: Translation vectors for symmetry operations
             
         Examples:
             >>> from matsimpy.builders.bulk import from_prototype
@@ -758,14 +753,22 @@ class Crystal(Structure):
         from ..symmetry import SymmetryAnalyzer
         
         analyzer = SymmetryAnalyzer(symprec=symprec, angle_tolerance=angle_tolerance)
-        return analyzer.analyze_crystal(self)
+        full_info = analyzer.analyze_crystal(self)
+        
+        # Return only basic fields
+        return {
+            'space_group_number': full_info.get('space_group_number'),
+            'space_group_symbol': full_info.get('space_group_symbol'),
+            'point_group': full_info.get('point_group'),
+            'crystal_system': full_info.get('crystal_system'),
+            'hall_symbol': full_info.get('hall_symbol')
+        }
     
     def get_conventional_cell(self, symprec: float = 1e-5, angle_tolerance: float = -1.0) -> 'Crystal':
         """
         Get the standard conventional cell of the crystal structure.
         
-        Uses spglib to standardize the cell to the conventional cell representation
-        according to the International Tables for Crystallography.
+        Uses the symmetry module to get the conventional cell representation.
         
         Args:
             symprec: Symmetry search tolerance (default: 1e-5)
@@ -785,56 +788,6 @@ class Crystal(Structure):
             >>> print(len(conventional))  # 8 atoms (conventional)
             8
         """
-        try:
-            import spglib
-        except ImportError:
-            raise ImportError(
-                "spglib is required for conventional cell conversion. "
-                "Install it with: pip install spglib"
-            )
-        
-        # Convert crystal to spglib format
-        lattice = self.lattice.lattice_vectors
-        positions = self.frac_positions
-        # Get atomic numbers for spglib
-        numbers = []
-        for spec in self.species:
-            if hasattr(Element, 'get_element'):
-                elem = Element.get_element(spec)
-            else:
-                elem = Element(spec)
-            numbers.append(elem.atomic_no)
-        
-        # Get standardized conventional cell
-        cell = (lattice, positions, numbers)
-        std_cell = spglib.standardize_cell(
-            cell,
-            symprec=symprec,
-            angle_tolerance=angle_tolerance
-        )
-        
-        if std_cell is None:
-            # If standardization fails, return a copy of the original
-            return self.copy()
-        
-        std_lattice, std_positions, std_numbers = std_cell
-        
-        # Convert atomic numbers back to species
-        std_species = [Element.from_Z(n).symbol for n in std_numbers]
-        
-        # Create new crystal with conventional cell
-        conventional = Crystal(
-            species=std_species,
-            positions=std_positions.tolist(),
-            lattice=Lattice(std_lattice),
-            pbc=self.pbc.copy() if hasattr(self.pbc, 'copy') else list(self.pbc),
-            coords_are_cartesian=False
-        )
-        
-        # Copy site properties if they exist and match atom count
-        if hasattr(self, 'site_properties') and len(self.site_properties) == len(self.species):
-            # Map site properties (this is approximate - may need refinement)
-            conventional.site_properties = [{}] * len(conventional.species)
-        
-        return conventional
+        from ..symmetry import get_conventional_cell
+        return get_conventional_cell(self, symprec=symprec, angle_tolerance=angle_tolerance)
 

@@ -734,3 +734,88 @@ def analyze_symmetry(structure: Union[Crystal, Molecule],
     else:
         raise TypeError(f"Unsupported structure type: {type(structure)}")
 
+
+def get_conventional_cell(crystal: Crystal,
+                          symprec: float = 1e-5,
+                          angle_tolerance: float = -1.0) -> Crystal:
+    """
+    Get the standard conventional cell of a crystal structure.
+    
+    Uses spglib to standardize the cell to the conventional cell representation
+    according to the International Tables for Crystallography.
+    
+    Args:
+        crystal: Crystal structure to convert
+        symprec: Symmetry search tolerance (default: 1e-5)
+        angle_tolerance: Angle tolerance in degrees (default: -1.0 for automatic)
+    
+    Returns:
+        Crystal: New Crystal object with standardized conventional cell
+        
+    Examples:
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> from matsimpy.symmetry import get_conventional_cell
+        >>> # Start with primitive cell
+        >>> primitive = from_prototype('diamond', 'Si', 5.43)
+        >>> print(len(primitive))  # 2 atoms (primitive)
+        2
+        >>> # Get conventional cell
+        >>> conventional = get_conventional_cell(primitive)
+        >>> print(len(conventional))  # 8 atoms (conventional)
+        8
+    """
+    try:
+        import spglib
+    except ImportError:
+        raise ImportError(
+            "spglib is required for conventional cell conversion. "
+            "Install it with: pip install spglib"
+        )
+    
+    from ..core import Element, Lattice
+    
+    # Convert crystal to spglib format
+    lattice = crystal.lattice.lattice_vectors
+    positions = crystal.frac_positions
+    # Get atomic numbers for spglib
+    numbers = []
+    for spec in crystal.species:
+        if hasattr(Element, 'get_element'):
+            elem = Element.get_element(spec)
+        else:
+            elem = Element(spec)
+        numbers.append(elem.atomic_no)
+    
+    # Get standardized conventional cell
+    cell = (lattice, positions, numbers)
+    std_cell = spglib.standardize_cell(
+        cell,
+        symprec=symprec,
+        angle_tolerance=angle_tolerance
+    )
+    
+    if std_cell is None:
+        # If standardization fails, return a copy of the original
+        return crystal.copy()
+    
+    std_lattice, std_positions, std_numbers = std_cell
+    
+    # Convert atomic numbers back to species
+    std_species = [Element.from_Z(n).symbol for n in std_numbers]
+    
+    # Create new crystal with conventional cell
+    conventional = Crystal(
+        species=std_species,
+        positions=std_positions.tolist(),
+        lattice=Lattice(std_lattice),
+        pbc=crystal.pbc.copy() if hasattr(crystal.pbc, 'copy') else list(crystal.pbc),
+        coords_are_cartesian=False
+    )
+    
+    # Copy site properties if they exist and match atom count
+    if hasattr(crystal, 'site_properties') and len(crystal.site_properties) == len(crystal.species):
+        # Map site properties (this is approximate - may need refinement)
+        conventional.site_properties = [{}] * len(conventional.species)
+    
+    return conventional
+

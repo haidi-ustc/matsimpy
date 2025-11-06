@@ -15,7 +15,7 @@ in the symmetry directory, providing access to:
 - Translations and maximal subgroups
 """
 
-from .analyzer import SymmetryAnalyzer, analyze_symmetry
+from .analyzer import SymmetryAnalyzer, analyze_symmetry, get_conventional_cell
 
-__all__ = ['SymmetryAnalyzer', 'analyze_symmetry']
+__all__ = ['SymmetryAnalyzer', 'analyze_symmetry', 'get_conventional_cell']
 
