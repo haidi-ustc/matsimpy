@@ -256,14 +256,8 @@ def _create_lattice_from_system_by_name(
             b = a
             c = a
             beta = 90.0
-        # Create monoclinic lattice manually
-        beta_rad = np.radians(beta)
-        lattice_vectors = [
-            [a, 0, 0],
-            [0, b, 0],
-            [c * np.cos(beta_rad), 0, c * np.sin(beta_rad)]
-        ]
-        return Lattice(lattice_vectors)
+        # Use convenience method for monoclinic lattice
+        return Lattice.monoclinic(a, b, c, beta)
     
     elif crystal_system == 'triclinic':
         if isinstance(lattice_params, (list, tuple)) and len(lattice_params) >= 6:
@@ -274,28 +268,8 @@ def _create_lattice_from_system_by_name(
             b = a
             c = a
             alpha = beta = gamma = 90.0
-        # Create triclinic lattice manually
-        alpha_rad = np.radians(alpha)
-        beta_rad = np.radians(beta)
-        gamma_rad = np.radians(gamma)
-        
-        # Calculate lattice vectors from parameters
-        a_vec = [a, 0, 0]
-        b_vec = [b * np.cos(gamma_rad), b * np.sin(gamma_rad), 0]
-        
-        # Calculate c vector components
-        c_x = c * np.cos(beta_rad)
-        if np.abs(np.sin(gamma_rad)) > 1e-10:
-            c_y = c * (np.cos(alpha_rad) - np.cos(beta_rad) * np.cos(gamma_rad)) / np.sin(gamma_rad)
-        else:
-            # Handle case where gamma is 90 degrees
-            c_y = c * np.cos(alpha_rad)
-        c_z_sq = c**2 - c_x**2 - c_y**2
-        c_z = np.sqrt(max(0, c_z_sq))  # Ensure non-negative
-        c_vec = [c_x, c_y, c_z]
-        
-        lattice_vectors = [a_vec, b_vec, c_vec]
-        return Lattice(lattice_vectors)
+        # Use convenience method for triclinic lattice
+        return Lattice.triclinic(a, b, c, alpha, beta, gamma)
     
     else:
         # Default to cubic
