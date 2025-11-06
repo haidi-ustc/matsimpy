@@ -186,7 +186,7 @@ print(f"  Fe count: {comp_fe2o3['Fe']}, O count: {comp_fe2o3['O']}")
 
 # Get weight percent
 h2o = Composition('H2O')
-total_mass = sum(Element(s).atomic_mass * count for s, count in h2o.items())
+total_mass = sum(Element(s).atomic_mass * count for s, count in h2o.composition.items())
 h_mass = Element('H').atomic_mass * h2o['H']
 h_weight_pct = (h_mass / total_mass) * 100
 print(f"\nH2O hydrogen weight percent: {h_weight_pct:.2f}%")
