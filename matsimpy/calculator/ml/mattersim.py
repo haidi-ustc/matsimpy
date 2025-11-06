@@ -6,13 +6,13 @@ Supports various ML frameworks (e.g., MACE, NequIP, Schnet, etc.)
 """
 
 import numpy as np
-from typing import Optional, Dict, Any, Union, Callable
+from typing import Optional, Dict, Any, Union
 from pathlib import Path
-from .base import Calculator
-from ..core import Crystal, Molecule
+from .base_ml import BaseML
+from ...core import Crystal, Molecule
 
 
-class Mattersim(Calculator):
+class Mattersim(BaseML):
     """
     Machine learning potential calculator using Mattersim framework.
     
@@ -56,19 +56,14 @@ class Mattersim(Calculator):
         Raises:
             ValueError: If neither model_path nor model is provided
         """
-        super().__init__(model_path=model_path, model_type=model_type, 
-                        device=device, **kwargs)
-        
-        self.model = model
-        self.model_path = Path(model_path) if model_path else None
+        # Set model_type before calling super() so it's available in _load_model
         self.model_type = model_type.lower()
-        self.device = device
         
-        # Load model if path provided
-        if self.model_path and self.model is None:
-            self._load_model()
-        elif self.model is None:
-            raise ValueError("Either model_path or model must be provided")
+        # Initialize base ML calculator
+        super().__init__(model=model, model_path=model_path, device=device, model_type=self.model_type, **kwargs)
+        
+        # Also store in parameters for consistency
+        self.parameters['model_type'] = self.model_type
             
     def _load_model(self) -> None:
         """
@@ -160,94 +155,6 @@ class Mattersim(Calculator):
                 "SchNet library not available. Install with: pip install schnetpack"
             )
             
-    def set_model(self, model: Any) -> None:
-        """
-        Set or update the ML model.
-        
-        Args:
-            model: ML model object
-        """
-        self.model = model
-        self.results.clear()
-        self._calculation_performed = False
-        
-    def _compute(self) -> None:
-        """
-        Compute energy and forces using ML model.
-        
-        Stores results in self.results:
-            - 'energy': Total potential energy in eV
-            - 'forces': Forces array of shape (N, 3) in eV/Å
-            - 'stress': Stress tensor (for crystals) in eV/Å³
-        """
-        if self.structure is None:
-            raise ValueError("Structure not set. Call calculate(structure) first.")
-            
-        if self.model is None:
-            raise ValueError("ML model not loaded. Provide model_path or model.")
-            
-        # Get structure data
-        if isinstance(self.structure, Crystal):
-            positions = self.structure.cart_positions
-            lattice = self.structure.lattice
-            species = self.structure.species
-            pbc = self.structure.pbc
-        else:
-            # Molecule uses positions directly (Cartesian)
-            positions = np.array(self.structure.positions)
-            lattice = None
-            species = self.structure.species
-            pbc = [False, False, False]
-            
-        # Convert to model input format
-        # This is framework-specific, so we provide a generic interface
-        model_input = self._prepare_model_input(positions, species, lattice, pbc)
-        
-        # Run prediction
-        predictions = self._run_model(model_input)
-        
-        # Extract results
-        energy = predictions.get('energy', 0.0)
-        forces = predictions.get('forces', np.zeros((len(positions), 3)))
-        stress = predictions.get('stress', np.zeros((3, 3)))
-        
-        # Store results
-        self.results['energy'] = energy
-        self.results['forces'] = forces
-        if lattice is not None:
-            self.results['stress'] = stress
-            
-    def _prepare_model_input(self,
-                            positions: np.ndarray,
-                            species: list,
-                            lattice: Optional[Any],
-                            pbc: list) -> Dict[str, Any]:
-        """
-        Prepare input for ML model.
-        
-        Converts structure data to format expected by ML model.
-        This method should be overridden for specific frameworks.
-        
-        Args:
-            positions: Atomic positions (N, 3)
-            species: Atomic species list (N,)
-            lattice: Lattice object (for crystals)
-            pbc: Periodic boundary conditions
-            
-        Returns:
-            dict: Model input dictionary
-        """
-        input_dict = {
-            'positions': positions,
-            'species': species,
-            'pbc': pbc,
-        }
-        
-        if lattice is not None:
-            input_dict['lattice'] = lattice.lattice_vectors
-            input_dict['cell'] = lattice.lattice_vectors
-            
-        return input_dict
         
     def _run_model(self, model_input: Dict[str, Any]) -> Dict[str, np.ndarray]:
         """

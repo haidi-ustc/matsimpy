@@ -8,8 +8,8 @@ The LJ potential is commonly used for noble gases and simple molecular systems.
 import numpy as np
 from typing import Optional, Dict, Tuple
 from scipy.spatial import cKDTree
-from .base import Calculator
-from ..core import Crystal, Molecule
+from ..base import Calculator
+from ...core import Crystal, Molecule
 
 
 class LennardJones(Calculator):
