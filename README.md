@@ -17,7 +17,7 @@
 - **Symmetry Analysis**: Space group determination, conventional cell conversion
 - **Configuration System**: Global config with environment variable overrides
 - **Data Storage**: Persistent storage for structures and calculation results (maggma)
-- **File I/O**: Support for multiple formats (VASP, XYZ, JSON, and more)
+- **File I/O**: High-level `read()`/`write()` interface with auto-format detection, supporting VASP, CIF, XYZ, PDB, MOL, XSF, JSON, ASE formats
 - **Performance**: Optimized with caching and KDTree for efficient neighbor finding
 - **Comprehensive Examples**: 14+ example files demonstrating all features
 

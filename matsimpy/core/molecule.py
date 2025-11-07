@@ -362,17 +362,22 @@ class Molecule(Structure):
         return neighbor_lists
     
     @classmethod
-    def from_file(cls, filename: str, format: Optional[str] = None) -> 'Molecule':
+    def from_file(cls, filename: str, format: Optional[str] = None, **kwargs) -> 'Molecule':
         """
         Create a Molecule from a file.
         
         Automatically detects file format from extension if not specified.
         Supported formats: .xyz, .pdb, .mol, .json
         
+        This method uses the high-level read() interface. For more control,
+        use matsimpy.io.read() directly.
+        
         Args:
             filename: Path to the structure file
             format: Optional format specification (e.g., 'xyz', 'pdb').
                    If None, format is detected from file extension.
+            **kwargs: Additional arguments passed to the format-specific reader
+                     (e.g., as_crystal for PDB format)
         
         Returns:
             Molecule: Molecule structure from the file
@@ -380,41 +385,16 @@ class Molecule(Structure):
         Raises:
             FileNotFoundError: If file doesn't exist
             ValueError: If format is not supported or file format is invalid
+            TypeError: If file contains a Crystal instead of Molecule
+        
+        Examples:
+            >>> molecule = Molecule.from_file('molecule.xyz')
+            >>> molecule = Molecule.from_file('molecule.pdb', as_crystal=False)
         """
-        from ..io import detect_format, get_reader_writer
-        from ..io import read_XYZ, read_PDB, read_MOL, from_json
+        from ..io import read
         from ..core import Crystal
         
-        # Detect format if not specified
-        if format is None:
-            format_ext = detect_format(filename)
-            if format_ext is None:
-                raise ValueError(f"Could not detect file format from extension: {filename}")
-        else:
-            # Map format string to extension
-            format_map = {
-                'xyz': '.xyz', 'pdb': '.pdb', 'mol': '.mol', 'json': '.json'
-            }
-            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
-        
-        # Get appropriate reader
-        reader_name, _ = get_reader_writer(format_ext)
-        if reader_name is None:
-            raise ValueError(f"Unsupported format for Molecule: {format_ext}")
-        
-        # Call appropriate reader function
-        readers = {
-            'read_XYZ': read_XYZ,
-            'read_PDB': lambda f: read_PDB(f, as_crystal=False),
-            'read_MOL': read_MOL,
-            'from_json': lambda f: from_json(filename=f),
-        }
-        
-        reader = readers.get(reader_name)
-        if reader is None:
-            raise ValueError(f"Reader not found for format: {format_ext}")
-        
-        result = reader(filename)
+        result = read(filename, format=format, **kwargs)
         
         # Ensure we return a Molecule
         if isinstance(result, Crystal):
@@ -423,56 +403,40 @@ class Molecule(Structure):
             site_props = getattr(result, 'site_properties', None)
             return cls(result.species, result.cart_positions.tolist(), site_properties=site_props)
         
+        if not isinstance(result, Molecule):
+            raise TypeError(
+                f"File contains {type(result).__name__}, not Molecule. "
+                f"Use Crystal.from_file() for crystal structures."
+            )
+        
         return result
     
-    def to_file(self, filename: str, format: Optional[str] = None) -> None:
+    def to_file(self, filename: str, format: Optional[str] = None, **kwargs) -> None:
         """
         Write Molecule to a file.
         
         Automatically detects file format from extension if not specified.
         Supported formats: .xyz, .pdb, .mol, .json
         
+        This method uses the high-level write() interface. For more control,
+        use matsimpy.io.write() directly.
+        
         Args:
             filename: Output filename
             format: Optional format specification (e.g., 'xyz', 'pdb').
                    If None, format is detected from file extension.
+            **kwargs: Additional arguments passed to the format-specific writer
+                     (e.g., title for file headers)
         
         Raises:
             ValueError: If format is not supported
+        
+        Examples:
+            >>> molecule.to_file('molecule.xyz')
+            >>> molecule.to_file('molecule.pdb', title='Water')
         """
-        from ..io import detect_format, get_reader_writer
-        from ..io import write_XYZ, write_PDB, write_MOL, to_json
-        
-        # Detect format if not specified
-        if format is None:
-            format_ext = detect_format(filename)
-            if format_ext is None:
-                raise ValueError(f"Could not detect file format from extension: {filename}")
-        else:
-            # Map format string to extension
-            format_map = {
-                'xyz': '.xyz', 'pdb': '.pdb', 'mol': '.mol', 'json': '.json'
-            }
-            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
-        
-        # Get appropriate writer
-        _, writer_name = get_reader_writer(format_ext)
-        if writer_name is None:
-            raise ValueError(f"Unsupported format for Molecule: {format_ext}")
-        
-        # Call appropriate writer function
-        writers = {
-            'write_XYZ': write_XYZ,
-            'write_PDB': write_PDB,
-            'write_MOL': write_MOL,
-            'to_json': lambda s, f: to_json(s, filename=f),
-        }
-        
-        writer = writers.get(writer_name)
-        if writer is None:
-            raise ValueError(f"Writer not found for format: {format_ext}")
-        
-        writer(self, filename)
+        from ..io import write
+        write(self, filename, format=format, **kwargs)
     
     def to_pymatgen(self):
         """

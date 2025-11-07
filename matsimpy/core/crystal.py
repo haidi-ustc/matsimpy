@@ -392,6 +392,9 @@ class Crystal(Structure):
         Automatically detects file format from extension if not specified.
         Supported formats: .vasp, .poscar, .contcar, .cif, .xsf, .json, .ase
         
+        This method uses the high-level read() interface. For more control,
+        use matsimpy.io.read() directly.
+        
         Args:
             filename: Path to the structure file
             format: Optional format specification (e.g., 'vasp', 'cif').
@@ -403,101 +406,50 @@ class Crystal(Structure):
         Raises:
             FileNotFoundError: If file doesn't exist
             ValueError: If format is not supported or file format is invalid
+            TypeError: If file contains a Molecule instead of Crystal
+        
+        Examples:
+            >>> crystal = Crystal.from_file('structure.vasp')
+            >>> crystal = Crystal.from_file('structure.cif', format='cif')
         """
-        from ..io import detect_format, get_reader_writer
-        from ..io import (
-            read_POSCAR, read_CIF, read_XSF, from_json, read_ASE
-        )
+        from ..io import read
         
-        # Detect format if not specified
-        if format is None:
-            format_ext = detect_format(filename)
-            if format_ext is None:
-                raise ValueError(f"Could not detect file format from extension: {filename}")
-        else:
-            # Map format string to extension
-            format_map = {
-                'vasp': '.vasp', 'poscar': '.vasp', 'contcar': '.contcar',
-                'cif': '.cif', 'xsf': '.xsf', 'json': '.json',
-                'ase': '.ase'
-            }
-            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
+        result = read(filename, format=format)
         
-        # Get appropriate reader
-        reader_name, _ = get_reader_writer(format_ext)
-        if reader_name is None:
-            raise ValueError(f"Unsupported format for Crystal: {format_ext}")
+        if not isinstance(result, Crystal):
+            raise TypeError(
+                f"File contains {type(result).__name__}, not Crystal. "
+                f"Use Molecule.from_file() for molecular structures."
+            )
         
-        # Call appropriate reader function
-        readers = {
-            'read_POSCAR': read_POSCAR,
-            'read_CONTCAR': read_POSCAR,  # Alias
-            'read_CIF': read_CIF,
-            'read_XSF': read_XSF,
-            'from_json': lambda f: from_json(filename=f),
-            'read_ASE': read_ASE,
-        }
-        
-        reader = readers.get(reader_name)
-        if reader is None:
-            raise ValueError(f"Reader not found for format: {format_ext}")
-        
-        return reader(filename)
+        return result
     
-    def to_file(self, filename: str, format: Optional[str] = None) -> None:
+    def to_file(self, filename: str, format: Optional[str] = None, **kwargs) -> None:
         """
         Write Crystal to a file.
         
         Automatically detects file format from extension if not specified.
         Supported formats: .vasp, .poscar, .contcar, .cif, .xsf, .json, .ase
         
+        This method uses the high-level write() interface. For more control,
+        use matsimpy.io.write() directly.
+        
         Args:
             filename: Output filename
             format: Optional format specification (e.g., 'vasp', 'cif').
                    If None, format is detected from file extension.
+            **kwargs: Additional arguments passed to the format-specific writer
+                     (e.g., title for file headers)
         
         Raises:
             ValueError: If format is not supported
+        
+        Examples:
+            >>> crystal.to_file('structure.vasp')
+            >>> crystal.to_file('structure.cif', title='My Crystal')
         """
-        from ..io import detect_format, get_reader_writer
-        from ..io import (
-            write_POSCAR, write_CIF, write_XSF, to_json, write_ASE
-        )
-        
-        # Detect format if not specified
-        if format is None:
-            format_ext = detect_format(filename)
-            if format_ext is None:
-                raise ValueError(f"Could not detect file format from extension: {filename}")
-        else:
-            # Map format string to extension
-            format_map = {
-                'vasp': '.vasp', 'poscar': '.vasp', 'contcar': '.contcar',
-                'cif': '.cif', 'xsf': '.xsf', 'json': '.json',
-                'ase': '.ase'
-            }
-            format_ext = format_map.get(format.lower(), f'.{format.lower()}')
-        
-        # Get appropriate writer
-        _, writer_name = get_reader_writer(format_ext)
-        if writer_name is None:
-            raise ValueError(f"Unsupported format for Crystal: {format_ext}")
-        
-        # Call appropriate writer function
-        writers = {
-            'write_POSCAR': write_POSCAR,
-            'write_CONTCAR': write_POSCAR,  # Alias
-            'write_CIF': write_CIF,
-            'write_XSF': write_XSF,
-            'to_json': lambda s, f: to_json(s, filename=f),
-            'write_ASE': write_ASE,
-        }
-        
-        writer = writers.get(writer_name)
-        if writer is None:
-            raise ValueError(f"Writer not found for format: {format_ext}")
-        
-        writer(self, filename)
+        from ..io import write
+        write(self, filename, format=format, **kwargs)
     
     def to_pymatgen(self):
         """
