@@ -8,8 +8,19 @@ This module provides support for:
 - PDB (Protein Data Bank)
 - XSF (XCrySDen format)
 - JSON (serialization)
+- ASE format
+- MOL (MDL Molfile) format
+
+High-level interface:
+    >>> from matsimpy.io import read, write
+    >>> crystal = read('structure.vasp')  # Auto-detect format
+    >>> write(crystal, 'output.cif')       # Auto-detect format
 """
 
+# High-level interface (recommended)
+from .core import read, write
+
+# Format-specific readers/writers (for advanced use)
 from .vasp import read_POSCAR, write_POSCAR, read_CONTCAR, write_CONTCAR
 from .cif import read_CIF, write_CIF
 from .xyz import read_XYZ, write_XYZ, read_XYZ_multiframe
@@ -22,6 +33,8 @@ from .utils import detect_format, get_reader_writer, is_crystal_format, is_molec
 from .converters import to_pymatgen, from_pymatgen, to_ase, from_ase
 
 __all__ = [
+    # High-level interface (recommended)
+    'read', 'write',
     # VASP
     'read_POSCAR', 'write_POSCAR', 'read_CONTCAR', 'write_CONTCAR',
     # CIF
