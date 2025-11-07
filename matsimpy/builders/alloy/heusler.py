@@ -11,8 +11,7 @@ that exhibit interesting magnetic and electronic properties.
 """
 
 from typing import List, Optional, Union
-from ...core import Crystal, Lattice
-from ...periodic_table import Element
+from ...core import Crystal, Lattice, Element
 
 
 def build_heusler(
