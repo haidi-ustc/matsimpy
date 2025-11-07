@@ -480,6 +480,20 @@ from matsimpy import (
 )
 ```
 
+### I/O Module
+
+```python
+from matsimpy.io import read, write  # High-level interface (recommended)
+
+# Or use class methods
+from matsimpy.core import Crystal, Molecule
+crystal = Crystal.from_file('structure.vasp')
+crystal.to_file('output.cif')
+
+# Or format-specific functions
+from matsimpy.io import read_POSCAR, write_POSCAR, read_XYZ, write_XYZ
+```
+
 ### Builders Module
 
 ```python
