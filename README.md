@@ -358,9 +358,16 @@ matsimpy/
 │       └── batch.py       # BatchProcessor
 │
 ├── io/                # File format support
+│   ├── core.py        # High-level read/write interface
 │   ├── vasp.py        # VASP POSCAR/CONTCAR
+│   ├── cif.py         # CIF format
 │   ├── xyz.py         # XYZ format
-│   └── json.py        # JSON serialization
+│   ├── pdb.py         # PDB format
+│   ├── mol.py         # MOL format
+│   ├── xsf.py         # XSF format
+│   ├── ase.py         # ASE format
+│   ├── json.py        # JSON serialization
+│   └── utils.py       # Format detection utilities
 │
 ├── calculator/        # Energy/force calculators
 │   ├── base.py        # Base Calculator class
