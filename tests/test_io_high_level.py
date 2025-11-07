@@ -112,6 +112,9 @@ class TestHighLevelIO(unittest.TestCase):
     def test_read_unknown_format(self):
         """Test reading with unknown format raises error."""
         filename = os.path.join(self.temp_dir, 'test.unknown')
+        # Create file first so FileNotFoundError doesn't occur
+        with open(filename, 'w') as f:
+            f.write('test content')
         with self.assertRaises(ValueError):
             read(filename)
     
