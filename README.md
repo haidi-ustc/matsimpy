@@ -207,16 +207,43 @@ for result in results:
 
 ### File I/O
 
+**High-level interface (recommended):**
+
+```python
+from matsimpy.io import read, write
+
+# Auto-detect format from file extension
+write(crystal, 'structure.vasp')
+write(molecule, 'molecule.xyz')
+
+# Read structures (format auto-detected)
+crystal = read('structure.vasp')
+molecule = read('molecule.xyz')
+
+# Explicit format specification
+crystal = read('file.txt', format='vasp')
+write(crystal, 'output.txt', format='cif', title='My Structure')
+```
+
+**Class methods (alternative):**
+
+```python
+# Using class methods
+crystal = Crystal.from_file('structure.vasp')
+crystal.to_file('output.cif', title='My Crystal')
+
+molecule = Molecule.from_file('molecule.xyz')
+molecule.to_file('output.pdb', title='Water')
+```
+
+**Format-specific functions (advanced use):**
+
 ```python
 from matsimpy.io.vasp import write_POSCAR, read_POSCAR
 from matsimpy.io.xyz import write_XYZ, read_XYZ
 
-# Write structures
+# Direct format-specific access
 write_POSCAR(crystal, 'structure.vasp')
-write_XYZ(molecule, 'molecule.xyz')
-
-# Read structures
-crystal = read_POSCAR('structure.vasp')
 molecule = read_XYZ('molecule.xyz')
 ```
 
