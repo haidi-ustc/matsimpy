@@ -69,10 +69,6 @@ class Structure(MSONable):
         self._cached_composition: Optional[Composition] = None
         self._cached_formula: Optional[str] = None
         self._formula_dirty = True
-        
-        # Initialize cached properties
-        self.formula = self.get_formula()
-        self.composition = self.get_composition()
 
     def as_dict(self):
         """
@@ -107,7 +103,8 @@ class Structure(MSONable):
         lattice = Lattice.from_dict(d["lattice"]) if d.get("lattice") is not None else None
         return cls(species, positions, lattice)
 
-    def get_formula(self):
+    @property
+    def formula(self) -> str:
         """
         Calculates the chemical formula of the structure with caching.
 
@@ -122,6 +119,16 @@ class Structure(MSONable):
             self._cached_formula = formula
             self._formula_dirty = False
         return self._cached_formula
+
+    def get_formula(self):
+        """
+        Calculates the chemical formula of the structure with caching.
+        This method is kept for backward compatibility.
+
+        Returns:
+            (str): Chemical formula of the structure.
+        """
+        return self.formula
 
     def copy(self):
         """
@@ -146,16 +153,27 @@ class Structure(MSONable):
         hash_str = str(self.as_dict()).encode('utf-8')
         return int(hashlib.sha256(hash_str).hexdigest(), 16)
 
-    def get_composition(self):
+    @property
+    def composition(self) -> Composition:
         """
         Calculates the composition of the structure with caching.
 
         Returns:
             (Composition): Composition object.
         """
-        if self._cached_composition is None:
-            self._cached_composition = Composition(self.get_formula())
+        if self._cached_composition is None or self._formula_dirty:
+            self._cached_composition = Composition(self.formula)
         return self._cached_composition
+
+    def get_composition(self):
+        """
+        Calculates the composition of the structure with caching.
+        This method is kept for backward compatibility.
+
+        Returns:
+            (Composition): Composition object.
+        """
+        return self.composition
 
     def add_atom(self, species: str, position: List[float]) -> None:
         """

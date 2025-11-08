@@ -235,10 +235,8 @@ def from_prototype(
         substitution_map = {unique_template[i]: species[i] for i in range(len(species))}
         crystal = substitute(crystal, list(range(len(crystal))), substitution_map, inplace=False)
     
-    # Ensure formula and composition attributes are updated after substitution
-    # Both attributes are set during initialization and need to be explicitly updated
-    crystal.formula = crystal.get_formula()
-    crystal.composition = crystal.get_composition()  # Update composition attribute
+    # Formula and composition are now properties that automatically update
+    # when species change, so no manual update is needed
     
     return crystal
 
