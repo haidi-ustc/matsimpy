@@ -93,8 +93,8 @@ print(comp['O'])   # 3
 
 ```python
 from matsimpy.builders import (
-    from_prototype, generate_slab, generate_random_alloy,
-    build_tetrahedral, create_vacancy, build_nanotube
+    from_prototype, generate_slab, generate_random_alloy, create_interstitial,
+    build_tetrahedral, create_vacancy, build_nanotube,build_carbon_nanotube
 )
 
 # Build bulk structures from prototypes
