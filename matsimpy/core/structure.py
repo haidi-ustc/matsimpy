@@ -204,17 +204,17 @@ class Structure(MSONable):
         Args:
             index (int): Index of atom to be removed.
         """
-        if 0 <= index < len(self.species):
-            # Maintain tuple immutability
-            species_list = list(self.species)
-            species_list.pop(index)
-            self.species = tuple(species_list)
-            self.positions = np.delete(self.positions, index, axis=0)
-            self._formula_dirty = True
-            self._cached_composition = None
-            # Properties computed lazily on access
-        else:
+        if not (0 <= index < len(self.species)):
             raise IndexError("Invalid atom index.")
+        
+        # Maintain tuple immutability
+        species_list = list(self.species)
+        species_list.pop(index)
+        self.species = tuple(species_list)
+        self.positions = np.delete(self.positions, index, axis=0)
+        self._formula_dirty = True
+        self._cached_composition = None
+        # Properties computed lazily on access
 
     def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
                    new_species: Union[str, List[str], Dict[str, str]]) -> None:
