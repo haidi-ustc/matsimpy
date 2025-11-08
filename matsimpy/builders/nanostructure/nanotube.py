@@ -8,6 +8,7 @@ and any other 2D crystal structure.
 """
 
 from typing import List, Tuple, Optional, Union
+from math import sqrt, gcd, atan2, sin, cos, pi
 import numpy as np
 from ...core import Crystal, Lattice
 
@@ -75,189 +76,215 @@ def build_nanotube(
     if n == 0 and m == 0:
         raise ValueError("Chirality indices cannot both be zero")
     
-    # Get 2D lattice vectors (assuming they're in the xy plane)
+    # Extract 2D lattice vectors from the base structure
     lattice_2d = base_2d.lattice
-    a1_full = lattice_2d.lattice_vectors[0]
-    a2_full = lattice_2d.lattice_vectors[1]
+    a1_3d = lattice_2d.lattice_vectors[0]
+    a2_3d = lattice_2d.lattice_vectors[1]
     
-    # Extract only xy components (first 2 dimensions) for 2D operations
-    a1 = a1_full[:2]
-    a2 = a2_full[:2]
+    # Work with 2D projections (xy plane)
+    a1 = a1_3d[:2]
+    a2 = a2_3d[:2]
     
-    # Calculate chiral vector C = n*a1 + m*a2 (in 2D)
-    C = n * a1 + m * a2
+    # Compute the chiral vector: C = n*a1 + m*a2
+    # This vector wraps around the tube circumference
+    chiral_vec = n * a1 + m * a2
+    circumference = np.linalg.norm(chiral_vec)
+    radius = circumference / (2 * pi)
     
-    # Calculate nanotube diameter
-    diameter = np.linalg.norm(C) / np.pi
+    # Find the translational vector T perpendicular to C
+    # T defines the repeat unit along the tube axis
+    # For general 2D lattices, we find T = t1*a1 + t2*a2 such that T·C = 0
+    translation_vec, t1, t2 = _find_translation_vector(a1, a2, n, m)
+    tube_period = np.linalg.norm(translation_vec)
     
-    # Calculate translation vector T (perpendicular to C in the 2D plane)
-    # T = t1*a1 + t2*a2, where t1 and t2 are integers
-    # T should be the smallest vector that makes the nanotube periodic
-    # For a general 2D material, we find T such that T is perpendicular to C
-    # and has the smallest period along the nanotube axis
-    # The general formula: T = (m*a1 - n*a2) / gcd(2n+m, 2m+n) for hexagonal lattices
-    # For other lattices, we use a more general approach
-    # Check if lattice is hexagonal-like (60 degree angle between a1 and a2)
-    cos_angle = np.dot(a1, a2) / (np.linalg.norm(a1) * np.linalg.norm(a2))
-    is_hexagonal = abs(cos_angle - 0.5) < 0.1  # cos(60°) = 0.5
-    
-    if is_hexagonal:
-        # Use hexagonal formula
-        gcd = _gcd(2 * n + m, 2 * m + n)
-        if gcd != 0:
-            t1 = (2 * m + n) // gcd
-            t2 = -(2 * n + m) // gcd
-        else:
-            t1, t2 = 1, 0
-    else:
-        # General approach: find T perpendicular to C
-        # T should satisfy: T · C = 0, and T should be a linear combination of a1, a2
-        # Use perpendicular vector in 2D: if C = (Cx, Cy), then T = (-Cy, Cx)
-        # But we need T in terms of a1, a2
-        # For now, use a simple approximation: T ≈ (m*a1 - n*a2)
-        t1 = m
-        t2 = -n
-    
-    # Translation vector T (in 2D)
-    T = t1 * a1 + t2 * a2
-    T_length = np.linalg.norm(T)
-    
-    # Determine the nanotube axis length
+    # Determine how many unit cells to generate
     if length is None:
-        axis_length = T_length
+        axial_length = tube_period
+        num_periods = 1
     else:
-        axis_length = length
+        num_periods = max(1, int(np.ceil(length / tube_period)))
+        axial_length = num_periods * tube_period
     
-    # Generate atoms directly in the fundamental parallelogram defined by C and T
-    # This avoids duplicate issues from supercell wrapping
-    # The fundamental parallelogram contains all unique atoms for one nanotube unit cell
+    # Create a coordinate system for the nanotube
+    # x_hat: along chiral direction (circumference)
+    # y_hat: along translation direction (axis)
+    x_hat = chiral_vec / circumference
+    y_hat = translation_vec / tube_period
     
-    # Get unit cell lattice vectors
-    a1_full_vec = base_2d.lattice.lattice_vectors[0]
-    a2_full_vec = base_2d.lattice.lattice_vectors[1]
-    a1_2d = a1_full_vec[:2]  # xy components only
-    a2_2d = a2_full_vec[:2]  # xy components only
+    # Compute the transformation matrix: 2D sheet coords -> (circumferential, axial)
+    transform = np.column_stack([x_hat, y_hat])
     
-    # Calculate how many unit cells fit in the fundamental parallelogram
-    # The fundamental parallelogram area is |det(C, T)|
-    # Unit cell area is |det(a1, a2)|
-    unit_cell_area = abs(np.linalg.det(np.array([a1_2d, a2_2d])))
-    fundamental_area = abs(np.linalg.det(np.array([C, T])))
-    num_unit_cells = int(np.round(fundamental_area / unit_cell_area))
-    
-    # Generate atoms by tiling unit cells within the fundamental parallelogram
-    # Find the range of unit cell indices needed
-    # We need enough cells to cover the parallelogram
-    max_cells_a1 = max(abs(n), abs(m), abs(t1)) + 2
-    max_cells_a2 = max(abs(n), abs(m), abs(t2)) + 2
-    
-    # Collect all atoms from unit cells that fall within or overlap the fundamental region
-    all_atoms = []
-    for i in range(-max_cells_a1, max_cells_a1 + 1):
-        for j in range(-max_cells_a2, max_cells_a2 + 1):
-            # Position of this unit cell origin in cartesian
-            cell_origin_2d = i * a1_2d + j * a2_2d
-            
-            # Add atoms from this unit cell
-            for species, pos_frac in zip(base_2d.species, base_2d.positions):
-                # Atom position in cartesian (2D)
-                atom_pos_2d = cell_origin_2d + pos_frac[0] * a1_2d + pos_frac[1] * a2_2d
-                all_atoms.append((species, atom_pos_2d))
-    
+    # Generate the nanotube by tiling and wrapping the 2D structure
     species_list = []
     positions_list = []
     
-    # Build transformation matrix from (C, T) coordinates to (a1, a2) coordinates
-    # We want to find coefficients (u, v) such that: pos = u*C + v*T
-    # This defines the fundamental region: 0 <= u < 1, 0 <= v < 1
-    # Matrix: [C_x, T_x; C_y, T_y] * [u; v] = [pos_x; pos_y]
-    transform_matrix = np.array([[C[0], T[0]], [C[1], T[1]]])
-    inv_transform = np.linalg.inv(transform_matrix)
+    # Determine how many 2D unit cells we need to cover the nanotube unit cell
+    # The nanotube unit cell in 2D sheet coords is the parallelogram defined by C and T
+    sheet_area = abs(np.cross(a1, a2))
+    nanotube_area = abs(np.cross(chiral_vec, translation_vec))
+    num_unit_cells = int(np.round(nanotube_area / sheet_area))
     
-    # Use a set to track unique (u, v) pairs to avoid duplicates
-    seen_uv = set()
+    # Generate atoms by tiling the 2D structure
+    # We need to tile enough to cover the nanotube unit cell plus some margin
+    max_range = max(abs(n), abs(m), abs(t1), abs(t2)) + 3
     
-    for species, pos_2d_cart in all_atoms:
-        # Convert to (C, T) coordinates  
-        u_v = inv_transform @ pos_2d_cart
-        
-        # Wrap to fundamental region [0, 1) x [0, 1)
-        u = u_v[0] % 1.0
-        v = u_v[1] % 1.0
-        
-        # Check if this (u, v) pair has been seen (with tolerance for floating point)
-        uv_rounded = (round(u, 8), round(v, 8))
-        if uv_rounded in seen_uv:
-            continue  # Skip duplicate
-        seen_uv.add(uv_rounded)
-        
-        # Calculate angle around the nanotube (0 to 2π)
-        # u goes from 0 to 1 along the circumference
-        angle = 2 * np.pi * u
-        
-        # Calculate radius (constant for cylindrical nanotube)
-        radius = diameter / 2
-        
-        # Convert to cylindrical coordinates (nanotube surface)
-        x = radius * np.cos(angle)
-        y = radius * np.sin(angle)
-        
-        # z coordinate is along the translation vector
-        # v goes from 0 to 1 along the axis
-        if length is not None:
-            z = v * length
-        else:
-            z = v * T_length
-        
-        positions_list.append([x, y, z])
-        species_list.append(species)
+    seen_positions = set()
+    tolerance = 1e-6
     
+    for i in range(-max_range, max_range + 1):
+        for j in range(-max_range, max_range + 1):
+            # Offset for this unit cell replica
+            cell_offset_2d = i * a1 + j * a2
+            
+            # Process each atom in the base unit cell
+            for species, frac_pos in zip(base_2d.species, base_2d.positions):
+                # Convert fractional to Cartesian in 2D
+                atom_pos_2d = cell_offset_2d + frac_pos[0] * a1 + frac_pos[1] * a2
+                
+                # Transform to (circumferential, axial) coordinates
+                circ_axial = transform.T @ atom_pos_2d
+                u = circ_axial[0] / circumference  # Fraction around circumference
+                v = circ_axial[1] / tube_period     # Fraction along axis
+                
+                # Wrap to fundamental domain [0, 1) × [0, 1)
+                u = u % 1.0
+                v = v % 1.0
+                
+                # Check for duplicates using rounded coordinates
+                pos_key = (round(u, 9), round(v, 9))
+                if pos_key in seen_positions:
+                    continue
+                seen_positions.add(pos_key)
+                
+                # Convert to cylindrical coordinates
+                theta = 2 * pi * u
+                z_base = v * tube_period
+                
+                # Create 3D position on cylinder surface
+                x = radius * cos(theta)
+                y = radius * sin(theta)
+                
+                # Replicate along the axis for the requested length
+                for period_idx in range(num_periods):
+                    z = z_base + period_idx * tube_period
+                    positions_list.append([x, y, z])
+                    species_list.append(species)
     
-    # Create nanotube lattice
-    # The lattice vectors are: [circumference direction, T direction, perpendicular]
-    # For a nanotube, we use a rectangular-like lattice
+    # Create the nanotube lattice
     if periodic:
-        # Periodic along the axis
-        c_length = axis_length
+        cell_c = axial_length
     else:
-        # Add some vacuum in z-direction
-        c_length = axis_length + 10.0  # 10 Angstrom vacuum
+        cell_c = axial_length + 10.0  # Add vacuum for non-periodic
     
-    # Create lattice for nanotube
-    # Use a rectangular lattice with the nanotube axis as c
-    # Note: using orthorhomic (typo in Lattice class) or manual construction
+    # Box size should contain the nanotube with some margin
+    box_size = 2 * radius + 10.0
+    
     try:
-        nanotube_lattice = Lattice.orthorhomic(
-            a=np.pi * diameter,  # Circumference
-            b=np.pi * diameter,  # Perpendicular (for periodic boundary)
-            c=c_length  # Axis direction
-        )
+        nanotube_lattice = Lattice.orthorhomic(a=box_size, b=box_size, c=cell_c)
     except AttributeError:
-        # Fallback: create lattice manually
-        lattice_vectors = np.array([
-            [np.pi * diameter, 0, 0],  # Circumference direction
-            [0, np.pi * diameter, 0],  # Perpendicular (for periodic boundary)
-            [0, 0, c_length]  # Axis direction
+        lattice_vecs = np.array([
+            [box_size, 0, 0],
+            [0, box_size, 0],
+            [0, 0, cell_c]
         ])
-        nanotube_lattice = Lattice(lattice_vectors)
+        nanotube_lattice = Lattice(lattice_vecs)
     
-    # Create crystal with cartesian coordinates (positions are in Angstroms)
-    nanotube = Crystal(species_list, positions_list, nanotube_lattice, coords_are_cartesian=True)
+    # Create the Crystal object
+    nanotube = Crystal(
+        species_list, 
+        positions_list, 
+        nanotube_lattice, 
+        coords_are_cartesian=True
+    )
     
-    # Center the nanotube in xy plane if requested
+    # Center the structure if requested
     if center:
-        # Calculate center of mass in xy plane (x and y components only)
         positions_array = np.array(positions_list)
-        com_xy = np.mean(positions_array[:, :2], axis=0)  # Only x, y components
-        com_z = np.mean(positions_array[:, 2])  # z component separately
+        center_xy = np.mean(positions_array[:, :2], axis=0)
+        center_z = np.mean(positions_array[:, 2])
         
-        # Translate to center xy plane at origin, and center z at origin
-        translation_vector = [-com_xy[0], -com_xy[1], -com_z]
+        shift = [-center_xy[0], -center_xy[1], -center_z]
         
         from ...transformation.geometric import translate
-        nanotube = translate(nanotube, translation_vector, inplace=False)
+        nanotube = translate(nanotube, shift, inplace=False)
     
     return nanotube
+
+
+def _find_translation_vector(
+    a1: np.ndarray, 
+    a2: np.ndarray, 
+    n: int, 
+    m: int
+) -> Tuple[np.ndarray, int, int]:
+    """
+    Find the translational vector T perpendicular to the chiral vector C.
+    
+    The translation vector T = t1*a1 + t2*a2 must satisfy:
+    1. T · C = 0 (perpendicular to chiral vector)
+    2. T should be the smallest such vector (defines minimal unit cell)
+    
+    Args:
+        a1, a2: 2D lattice vectors
+        n, m: Chirality indices
+    
+    Returns:
+        Tuple of (T vector, t1 coefficient, t2 coefficient)
+    """
+    # Chiral vector
+    C = n * a1 + m * a2
+    
+    # For hexagonal lattices, there's a known formula
+    # Check if this is approximately hexagonal
+    cos_angle = np.dot(a1, a2) / (np.linalg.norm(a1) * np.linalg.norm(a2))
+    is_hexagonal = abs(cos_angle - 0.5) < 0.15  # cos(60°) = 0.5
+    
+    if is_hexagonal and abs(np.linalg.norm(a1) - np.linalg.norm(a2)) < 0.1:
+        # Use specialized formula for hexagonal lattices
+        d = gcd(n, m)
+        if d == 0:
+            d = 1
+        
+        # Determine symmetry
+        if (n - m) % (3 * d) == 0:
+            dR = 3 * d
+        else:
+            dR = d
+        
+        t1 = (2 * m + n) // dR
+        t2 = -(2 * n + m) // dR
+    else:
+        # General approach: find smallest T perpendicular to C
+        # We search for integer coefficients t1, t2 that minimize |T|
+        # subject to T · C = 0
+        
+        # T · C = 0 means: (t1*a1 + t2*a2) · (n*a1 + m*a2) = 0
+        # Expanding: t1*n*(a1·a1) + t1*m*(a1·a2) + t2*n*(a2·a1) + t2*m*(a2·a2) = 0
+        # Simplifying: t1*n*|a1|² + (t1*m + t2*n)*(a1·a2) + t2*m*|a2|² = 0
+        
+        # For a first approximation, use the perpendicular in 2D space
+        # If C = (Cx, Cy), then perpendicular is (-Cy, Cx)
+        perp = np.array([-C[1], C[0]])
+        
+        # Express perpendicular in terms of a1, a2
+        # Solve: t1*a1 + t2*a2 ≈ perp
+        A = np.column_stack([a1, a2])
+        try:
+            coeffs = np.linalg.solve(A, perp)
+            t1 = round(coeffs[0])
+            t2 = round(coeffs[1])
+            
+            # Ensure we have a non-zero vector
+            if t1 == 0 and t2 == 0:
+                t1 = -m if m != 0 else 1
+                t2 = n
+        except np.linalg.LinAlgError:
+            # Fallback for singular matrices
+            t1 = -m if m != 0 else 1
+            t2 = n
+    
+    T = t1 * a1 + t2 * a2
+    return T, t1, t2
 
 
 def build_carbon_nanotube(
@@ -302,57 +329,42 @@ def build_carbon_nanotube(
         >>> # Chiral (7, 3) nanotube
         >>> chiral = build_carbon_nanotube(7, 3)
     """
-    # Create a simple graphene sheet
-    # For a proper implementation, we'd use a graphene builder
-    # Here we create a minimal graphene unit cell
     graphene = _create_graphene_sheet(bond_length)
-    
-    # Build nanotube from graphene using the general function
-    return build_nanotube(graphene, (n, m), length=length, periodic=periodic, center=center, **kwargs)
+    return build_nanotube(graphene, (n, m), length=length, periodic=periodic, 
+                         center=center, **kwargs)
 
 
 def _create_graphene_sheet(bond_length: float = 1.42) -> Crystal:
     """
-    Create a simple graphene sheet structure.
-    
-    This is a helper function that creates a minimal graphene unit cell.
-    For a more accurate graphene structure, use a dedicated graphene builder.
+    Create a graphene sheet structure.
     
     Args:
         bond_length: C-C bond length in Angstroms
     
     Returns:
-        Crystal: Graphene sheet structure
+        Crystal: Graphene sheet structure with proper hexagonal unit cell
     """
-    # Graphene unit cell: 2 atoms in a hexagonal arrangement
-    # Lattice vectors
-    a = bond_length * np.sqrt(3)  # Lattice parameter
-    a1 = np.array([a, 0, 0])
-    a2 = np.array([a / 2, a * np.sqrt(3) / 2, 0])
+    # Graphene lattice parameter
+    a = sqrt(3.0) * bond_length
     
-    # Create 2D lattice
-    lattice_2d = Lattice(np.array([
-        a1,
-        a2,
-        [0, 0, 10.0]  # Large c for 2D structure
-    ]))
+    # Hexagonal lattice vectors
+    a1 = np.array([a, 0.0, 0.0])
+    a2 = np.array([0.5 * a, 0.5 * sqrt(3) * a, 0.0])
+    a3 = np.array([0.0, 0.0, 10.0])  # Vacuum in z direction
     
-    # Two carbon atoms in graphene unit cell
+    lattice = Lattice(np.array([a1, a2, a3]))
+    
+    # Two carbon atoms per unit cell (A and B sublattices)
     species = ['C', 'C']
+    
+    # Positions in fractional coordinates
+    # These are the standard positions for graphene's hexagonal unit cell
     positions = [
-        [0.0, 0.0, 0.0],
-        [a / 3, a / np.sqrt(3) / 3, 0.0]
+        [0.0, 0.0, 0.0],           # A sublattice
+        [1.0/3.0, 1.0/3.0, 0.0]    # B sublattice
     ]
     
-    return Crystal(species, positions, lattice_2d)
-
-
-def _gcd(a: int, b: int) -> int:
-    """Calculate greatest common divisor."""
-    while b:
-        a, b = b, a % b
-    return abs(a)
+    return Crystal(species, positions, lattice)
 
 
 __all__ = ['build_nanotube', 'build_carbon_nanotube']
-
