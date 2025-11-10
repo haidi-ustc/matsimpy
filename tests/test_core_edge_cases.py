@@ -96,7 +96,7 @@ class TestStructureEdgeCases(unittest.TestCase):
         """Test structure with empty species."""
         # Empty species should work (empty structure)
         try:
-            struct = Structure([], [], Lattice.cubic(10.0))
+            struct = Crystal([], [], Lattice.cubic(10.0))
             self.assertEqual(len(struct), 0)
         except (IndexError, ValueError):
             # Or it might raise an error, both are acceptable

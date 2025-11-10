@@ -9,7 +9,7 @@ This test suite covers:
 """
 import unittest
 import numpy as np
-from matsimpy.core import Structure, Lattice, Composition, Element
+from matsimpy.core import Structure, Crystal, Molecule, Lattice, Composition, Element
 
 
 class TestStructureInitialization(unittest.TestCase):
@@ -19,7 +19,7 @@ class TestStructureInitialization(unittest.TestCase):
         """Test initialization with string species."""
         species = ['H', 'O', 'H']
         positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        struct = Structure(species, positions)
+        struct = Molecule(species, positions)
         self.assertEqual(len(struct.species), 3)
         self.assertEqual(struct.species, ('H', 'O', 'H'))
         np.testing.assert_array_equal(struct.positions, positions)
@@ -28,14 +28,14 @@ class TestStructureInitialization(unittest.TestCase):
         """Test initialization with atomic numbers."""
         species = [1, 8, 1]  # H, O, H
         positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        struct = Structure(species, positions)
+        struct = Molecule(species, positions)
         self.assertEqual(struct.species, ('H', 'O', 'H'))
     
     def test_init_with_element_objects(self):
         """Test initialization with Element objects."""
         species = [Element('H'), Element('O'), Element('H')]
         positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        struct = Structure(species, positions)
+        struct = Molecule(species, positions)
         self.assertEqual(struct.species, ('H', 'O', 'H'))
     
     def test_init_with_lattice(self):
@@ -43,7 +43,7 @@ class TestStructureInitialization(unittest.TestCase):
         lattice = Lattice([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         species = ['H', 'O']
         positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         self.assertEqual(struct.lattice, lattice)
     
     def test_init_mismatched_lengths(self):
@@ -51,28 +51,28 @@ class TestStructureInitialization(unittest.TestCase):
         species = ['H', 'O']
         positions = [[0, 0, 0]]  # Only one position
         with self.assertRaises(ValueError):
-            Structure(species, positions)
+            Molecule(species, positions)
     
     def test_init_non_3d_positions(self):
         """Test that non-3D positions raise ValueError."""
         species = ['H', 'O']
         positions = [[0, 0], [1, 1]]  # 2D positions
         with self.assertRaises(ValueError):
-            Structure(species, positions)
+            Molecule(species, positions)
     
     def test_init_invalid_species_type(self):
         """Test that mixed species types raise TypeError."""
         species = ['H', 8, 'O']  # Mixed types
         positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
         with self.assertRaises(TypeError):
-            Structure(species, positions)
+            Molecule(species, positions)
     
     def test_init_empty_structure(self):
         """Test initialization with empty structure."""
         # Empty structure is not supported due to position validation
         # This is expected behavior - structures need at least one atom
         with self.assertRaises(ValueError):
-            Structure([], [])
+            Molecule([], [])
 
 
 class TestStructureProperties(unittest.TestCase):
@@ -82,7 +82,7 @@ class TestStructureProperties(unittest.TestCase):
         """Set up test fixtures."""
         self.species = ['H', 'O', 'H']
         self.positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        self.struct = Structure(self.species, self.positions)
+        self.struct = Molecule(self.species, self.positions)
     
     def test_formula_property(self):
         """Test formula property."""
@@ -117,7 +117,7 @@ class TestStructureMethods(unittest.TestCase):
         """Set up test fixtures."""
         self.species = ['H', 'O', 'H']
         self.positions = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        self.struct = Structure(self.species, self.positions)
+        self.struct = Molecule(self.species, self.positions)
     
     def test_add_atom(self):
         """Test adding an atom."""
@@ -183,7 +183,7 @@ class TestStructureSubstitution(unittest.TestCase):
         self.species = ['Si', 'O', 'Si', 'O']
         self.positions = [[0, 0, 0], [0.25, 0.25, 0.25], 
                           [0.5, 0.5, 0.5], [0.75, 0.75, 0.75]]
-        self.struct = Structure(self.species, self.positions)
+        self.struct = Molecule(self.species, self.positions)
     
     def test_substitute_single_atom(self):
         """Test substituting a single atom."""
@@ -245,7 +245,7 @@ class TestStructureSorting(unittest.TestCase):
         """Set up test fixtures."""
         self.species = ['O', 'H', 'C', 'N']
         self.positions = [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]
-        self.struct = Structure(self.species, self.positions)
+        self.struct = Molecule(self.species, self.positions)
     
     def test_sort_atoms_by_element(self):
         """Test sorting atoms by element (atomic number)."""
@@ -291,7 +291,7 @@ class TestStructureSerialization(unittest.TestCase):
         self.lattice = Lattice([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.species = ['H', 'O']
         self.positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        self.struct = Structure(self.species, self.positions, self.lattice)
+        self.struct = Crystal(self.species, self.positions, self.lattice)
     
     def test_as_dict(self):
         """Test as_dict method."""
@@ -301,7 +301,7 @@ class TestStructureSerialization(unittest.TestCase):
         self.assertIn('species', d)
         self.assertIn('positions', d)
         self.assertIn('lattice', d)
-        self.assertEqual(d['species'], list(self.struct.species))
+        self.assertEqual(d['species'], ['H', 'O'])
         np.testing.assert_array_almost_equal(
             d['positions'], self.struct.positions.tolist()
         )
@@ -309,7 +309,7 @@ class TestStructureSerialization(unittest.TestCase):
     def test_from_dict(self):
         """Test from_dict class method."""
         d = self.struct.as_dict()
-        new_struct = Structure.from_dict(d)
+        new_struct = Crystal.from_dict(d)
         self.assertEqual(new_struct.species, self.struct.species)
         np.testing.assert_array_almost_equal(
             new_struct.positions, self.struct.positions
@@ -318,9 +318,9 @@ class TestStructureSerialization(unittest.TestCase):
     
     def test_from_dict_no_lattice(self):
         """Test from_dict with no lattice."""
-        struct = Structure(self.species, self.positions)
+        struct = Molecule(self.species, self.positions)
         d = struct.as_dict()
-        new_struct = Structure.from_dict(d)
+        new_struct = Molecule.from_dict(d)
         self.assertIsNone(new_struct.lattice)
     
     def test_hash(self):
@@ -330,7 +330,7 @@ class TestStructureSerialization(unittest.TestCase):
         self.assertEqual(hash1, hash2)  # Should be consistent
         
         # Different structure should have different hash
-        struct2 = Structure(['H', 'H'], [[0, 0, 0], [1, 1, 1]])
+        struct2 = Molecule(['H', 'H'], [[0, 0, 0], [1, 1, 1]])
         self.assertNotEqual(hash(self.struct), hash(struct2))
 
 
@@ -339,7 +339,7 @@ class TestStructureEdgeCases(unittest.TestCase):
     
     def test_single_atom_structure(self):
         """Test structure with single atom."""
-        struct = Structure(['H'], [[0, 0, 0]])
+        struct = Molecule(['H'], [[0, 0, 0]])
         self.assertEqual(len(struct), 1)
         self.assertEqual(struct.formula, 'H')
     
@@ -348,19 +348,19 @@ class TestStructureEdgeCases(unittest.TestCase):
         n_atoms = 1000
         species = ['H'] * n_atoms
         positions = [[i, i, i] for i in range(n_atoms)]
-        struct = Structure(species, positions)
+        struct = Molecule(species, positions)
         self.assertEqual(len(struct), n_atoms)
     
     def test_structure_with_duplicate_positions(self):
         """Test structure with duplicate positions (should be allowed)."""
         species = ['H', 'H']
         positions = [[0, 0, 0], [0, 0, 0]]
-        struct = Structure(species, positions)
+        struct = Molecule(species, positions)
         self.assertEqual(len(struct), 2)
     
     def test_formula_cache_invalidation(self):
         """Test that formula cache is invalidated on modification."""
-        struct = Structure(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
+        struct = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
         formula1 = struct.formula  # Get initial formula
         struct.add_atom('C', [2, 2, 2])
         # Check that _formula_dirty flag is set
@@ -371,7 +371,7 @@ class TestStructureEdgeCases(unittest.TestCase):
     
     def test_composition_cache_invalidation(self):
         """Test that composition cache is invalidated on modification."""
-        struct = Structure(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
+        struct = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
         comp1 = struct.composition  # Get initial composition
         struct.add_atom('C', [2, 2, 2])
         # Check that cache is cleared
@@ -386,12 +386,13 @@ class TestStructureNeighborList(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.struct = Structure(['H', 'H'], [[0, 0, 0], [1, 0, 0]])
+        self.struct = Molecule(['H', 'H'], [[0, 0, 0], [1, 0, 0]])
     
-    def test_get_neighbor_list_not_implemented(self):
-        """Test that get_neighbor_list raises NotImplementedError."""
-        with self.assertRaises(NotImplementedError):
-            self.struct.get_neighbor_list(5.0)
+    def test_get_neighbor_list_implemented(self):
+        """Test that get_neighbor_list is implemented in Molecule."""
+        # Molecule implements get_neighbor_list with different signature
+        neighbors = self.struct.get_neighbor_list(0, 5.0)
+        self.assertIsInstance(neighbors, list)
 
 
 if __name__ == '__main__':

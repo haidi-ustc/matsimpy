@@ -6,7 +6,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from matsimpy.core import Structure, Lattice, Element
+from matsimpy.core import Structure, Crystal, Molecule, Lattice, Element
 
 
 class TestStructureComprehensive(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         self.assertEqual(len(struct), 2)
         self.assertEqual(struct.species, ('Si', 'O'))
@@ -27,7 +27,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = [14, 8]  # Si, O
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         self.assertEqual(struct.species, ('Si', 'O'))
     
@@ -36,7 +36,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = [Element('Si'), Element('O')]
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         self.assertEqual(struct.species, ('Si', 'O'))
     
@@ -47,14 +47,14 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         
         with self.assertRaises(TypeError):
-            Structure(species, positions, lattice)
+            Crystal(species, positions, lattice)
     
     def test_structure_positions(self):
         """Test positions property."""
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         np.testing.assert_array_equal(struct.positions, np.array([[0, 0, 0]]))
     
@@ -63,7 +63,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O', 'O']
         positions = [[0, 0, 0], [1, 1, 1], [2, 2, 2]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         formula = struct.formula
         self.assertIn('Si', formula)
@@ -74,7 +74,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         formula1 = struct.formula
         formula2 = struct.formula
@@ -87,7 +87,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O', 'O']
         positions = [[0, 0, 0], [1, 1, 1], [2, 2, 2]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         comp = struct.composition
         self.assertEqual(comp['Si'], 1)
@@ -98,7 +98,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         comp1 = struct.composition
         comp2 = struct.composition
@@ -109,7 +109,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         struct.add_atom('O', [1, 1, 1])
         self.assertEqual(len(struct), 2)
@@ -120,7 +120,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         formula1 = struct.formula
         struct.add_atom('O', [1, 1, 1])
@@ -132,7 +132,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         struct.remove_atom(0)
         self.assertEqual(len(struct), 1)
@@ -143,7 +143,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         with self.assertRaises(IndexError):
             struct.remove_atom(10)
@@ -153,7 +153,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         formula1 = struct.formula
         struct.remove_atom(0)
@@ -165,7 +165,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O', 'O']
         positions = [[0, 0, 0], [1, 1, 1], [2, 2, 2]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         self.assertEqual(len(struct), 3)
     
@@ -174,8 +174,8 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct1 = Structure(species, positions, lattice)
-        struct2 = Structure(species, positions, lattice)
+        struct1 = Crystal(species, positions, lattice)
+        struct2 = Crystal(species, positions, lattice)
         
         # Same structure should have same hash
         self.assertEqual(hash(struct1), hash(struct2))
@@ -185,7 +185,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         d = struct.as_dict()
         self.assertIn('species', d)
@@ -196,7 +196,7 @@ class TestStructureComprehensive(unittest.TestCase):
         """Test dictionary representation without lattice."""
         species = ['H', 'H']
         positions = [[0, 0, 0], [1, 1, 1]]
-        struct = Structure(species, positions, None)
+        struct = Molecule(species, positions)
         
         d = struct.as_dict()
         self.assertNotIn('lattice', d)
@@ -210,7 +210,7 @@ class TestStructureComprehensive(unittest.TestCase):
                 'lattice_vectors': [[10, 0, 0], [0, 10, 0], [0, 0, 10]]
             }
         }
-        struct = Structure.from_dict(d)
+        struct = Crystal.from_dict(d)
         self.assertEqual(len(struct), 2)
     
     def test_structure_from_dict_no_lattice(self):
@@ -219,7 +219,7 @@ class TestStructureComprehensive(unittest.TestCase):
             'species': ['H', 'H'],
             'positions': [[0, 0, 0], [1, 1, 1]]
         }
-        struct = Structure.from_dict(d)
+        struct = Molecule.from_dict(d)
         self.assertIsNone(struct.lattice)
     
     def test_structure_formula_single_element(self):
@@ -227,7 +227,7 @@ class TestStructureComprehensive(unittest.TestCase):
         species = ['Si'] * 10
         positions = [[i, i, i] for i in range(10)]
         lattice = Lattice.cubic(10.0)
-        struct = Structure(species, positions, lattice)
+        struct = Crystal(species, positions, lattice)
         
         formula = struct.formula
         self.assertIn('Si', formula)

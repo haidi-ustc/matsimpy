@@ -2,15 +2,18 @@ import numpy as np
 from typing import List, Union, Optional, Dict, Tuple
 import hashlib
 from collections import Counter
+from abc import ABC, abstractmethod
 from monty.json import MSONable
 
 from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
 
-class Structure(MSONable):
+class Structure(ABC, MSONable):
     """
-    A base class for representing crystal and molecule structures.
+    An abstract base class for representing crystal and molecule structures.
+    
+    This class should not be instantiated directly. Use Crystal or Molecule instead.
 
     Args:
         species (List[str]): List of atomic species.
@@ -358,19 +361,17 @@ class Structure(MSONable):
             if hasattr(self, '_initialize_sites'):
                 self._sites = self._initialize_sites()
 
-    def get_neighbor_list(self, cutoff: float, use_pbc: bool = True) -> Dict[int, List[Tuple[int, float]]]:
+    @abstractmethod
+    def get_neighbor_list(self, *args, **kwargs):
         """
-        Get neighbor list. To be implemented by subclasses.
+        Get neighbor list. Must be implemented by subclasses.
         
-        Args:
-            cutoff: Cutoff radius for neighbor finding
-            use_pbc: Whether to use periodic boundary conditions
-            
-        Returns:
-            Dict mapping atom index to list of (neighbor_index, distance) tuples
-            
+        Note: Subclasses (Crystal and Molecule) have different signatures:
+        - Crystal: get_neighbor_list(cutoff, use_pbc=True) -> Dict[int, List[Tuple[int, float]]]
+        - Molecule: get_neighbor_list(atom_index, cutoff) -> List[int]
+        
         Raises:
-            NotImplementedError: Must be implemented by subclasses
+            NotImplementedError: If not implemented by subclass
         """
         raise NotImplementedError("get_neighbor_list must be implemented by subclasses")
 
