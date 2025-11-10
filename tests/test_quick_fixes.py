@@ -48,12 +48,12 @@ def test_property_caching():
     crystal = Crystal(species, positions, lattice)
     
     # First call should compute
-    formula1 = crystal.get_formula()
+    formula1 = crystal.formula
     
     # Second call should use cache
     import time
     start = time.time()
-    formula2 = crystal.get_formula()
+    formula2 = crystal.formula
     elapsed = time.time() - start
     
     assert formula1 == formula2

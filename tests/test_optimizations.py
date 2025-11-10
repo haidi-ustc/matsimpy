@@ -62,12 +62,12 @@ class TestPropertyCaching(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         
         # First call computes
-        formula1 = crystal.get_formula()
+        formula1 = crystal.formula
         self.assertIsNotNone(formula1)
         
         # Second call should use cache (much faster)
         start = time.time()
-        formula2 = crystal.get_formula()
+        formula2 = crystal.formula
         elapsed = time.time() - start
         
         self.assertEqual(formula1, formula2)
@@ -81,10 +81,10 @@ class TestPropertyCaching(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         
         # First call computes
-        comp1 = crystal.get_composition()
+        comp1 = crystal.composition
         
         # Second call should use cache
-        comp2 = crystal.get_composition()
+        comp2 = crystal.composition
         
         self.assertEqual(comp1, comp2)
         self.assertIs(crystal._cached_composition, comp2)  # Should be same object
@@ -97,15 +97,15 @@ class TestPropertyCaching(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         
         # Get formula and composition
-        formula1 = crystal.get_formula()
-        comp1 = crystal.get_composition()
+        formula1 = crystal.formula
+        comp1 = crystal.composition
         
         # Add atom
         crystal.add_atom('O', [1.0, 1.0, 1.0])
         
         # Formula and composition should be different
-        formula2 = crystal.get_formula()
-        comp2 = crystal.get_composition()
+        formula2 = crystal.formula
+        comp2 = crystal.composition
         
         self.assertNotEqual(formula1, formula2)
         self.assertNotEqual(comp1.formula, comp2.formula)
@@ -117,9 +117,9 @@ class TestPropertyCaching(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
         
-        formula1 = crystal.get_formula()
+        formula1 = crystal.formula
         crystal.remove_atom(0)
-        formula2 = crystal.get_formula()
+        formula2 = crystal.formula
         
         self.assertNotEqual(formula1, formula2)
 
@@ -308,8 +308,8 @@ class TestIntegration(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         
         # Test caching
-        formula1 = crystal.get_formula()
-        formula2 = crystal.get_formula()
+        formula1 = crystal.formula
+        formula2 = crystal.formula
         self.assertEqual(formula1, formula2)
         
         # Test neighbor finding
@@ -318,7 +318,7 @@ class TestIntegration(unittest.TestCase):
         
         # Test adding atom (invalidates cache)
         crystal.add_atom('N', [3.0, 3.0, 3.0])
-        formula3 = crystal.get_formula()
+        formula3 = crystal.formula
         self.assertNotEqual(formula1, formula3)
         
         # Test neighbor finding again (should rebuild tree)
@@ -340,7 +340,7 @@ class TestIntegration(unittest.TestCase):
         self.assertIsNotNone(crystal.lattice)
         
         # Test operations work
-        formula = crystal.get_formula()
+        formula = crystal.formula
         self.assertIsNotNone(formula)
         
         neighbors = crystal.get_neighbor_list(5.0)

@@ -27,8 +27,8 @@ class Structure(MSONable):
     Methods:
         as_dict(): Returns a dictionary representation of the structure.
         from_dict(d): Constructs the structure from a dictionary.
-        get_formula(): Calculates the chemical formula of the structure.
-        get_composition(): Calculates the composition of the structure.
+        formula: Chemical formula property (cached).
+        composition: Composition property (cached).
         add_atom(species, position): Adds an atom to the structure.
         remove_atom(index): Removes an atom from the structure.
         get_neighbor_list(cutoff): Returns a list of atoms within a cutoff radius of each atom.
@@ -120,16 +120,6 @@ class Structure(MSONable):
             self._formula_dirty = False
         return self._cached_formula
 
-    def get_formula(self):
-        """
-        Calculates the chemical formula of the structure with caching.
-        This method is kept for backward compatibility.
-
-        Returns:
-            (str): Chemical formula of the structure.
-        """
-        return self.formula
-
     def copy(self):
         """
         Create a copy of the structure.
@@ -164,16 +154,6 @@ class Structure(MSONable):
         if self._cached_composition is None or self._formula_dirty:
             self._cached_composition = Composition(self.formula)
         return self._cached_composition
-
-    def get_composition(self):
-        """
-        Calculates the composition of the structure with caching.
-        This method is kept for backward compatibility.
-
-        Returns:
-            (Composition): Composition object.
-        """
-        return self.composition
 
     def add_atom(self, species: str, position: List[float]) -> None:
         """

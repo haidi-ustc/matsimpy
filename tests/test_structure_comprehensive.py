@@ -65,7 +65,7 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        formula = struct.get_formula()
+        formula = struct.formula
         self.assertIn('Si', formula)
         self.assertIn('O', formula)
     
@@ -76,20 +76,20 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        formula1 = struct.get_formula()
-        formula2 = struct.get_formula()
+        formula1 = struct.formula
+        formula2 = struct.formula
         self.assertEqual(formula1, formula2)
         # Should use cache on second call
         self.assertFalse(struct._formula_dirty)
     
-    def test_structure_get_composition(self):
+    def test_structure_composition(self):
         """Test composition calculation."""
         species = ['Si', 'O', 'O']
         positions = [[0, 0, 0], [1, 1, 1], [2, 2, 2]]
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        comp = struct.get_composition()
+        comp = struct.composition
         self.assertEqual(comp['Si'], 1)
         self.assertEqual(comp['O'], 2)
     
@@ -100,8 +100,8 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        comp1 = struct.get_composition()
-        comp2 = struct.get_composition()
+        comp1 = struct.composition
+        comp2 = struct.composition
         self.assertIs(comp1, comp2)  # Should be same object
     
     def test_structure_add_atom(self):
@@ -122,9 +122,9 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        formula1 = struct.get_formula()
+        formula1 = struct.formula
         struct.add_atom('O', [1, 1, 1])
-        formula2 = struct.get_formula()
+        formula2 = struct.formula
         self.assertNotEqual(formula1, formula2)
     
     def test_structure_remove_atom(self):
@@ -155,9 +155,9 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        formula1 = struct.get_formula()
+        formula1 = struct.formula
         struct.remove_atom(0)
-        formula2 = struct.get_formula()
+        formula2 = struct.formula
         self.assertNotEqual(formula1, formula2)
     
     def test_structure_len(self):
@@ -229,7 +229,7 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Structure(species, positions, lattice)
         
-        formula = struct.get_formula()
+        formula = struct.formula
         self.assertIn('Si', formula)
         self.assertIn('10', formula)
 

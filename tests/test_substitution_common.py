@@ -66,7 +66,7 @@ class TestMoleculeSubstitution(unittest.TestCase):
         self.assertEqual(molecule.species[1], 'C')
         
         # Formula should be recalculated (force recalculation)
-        new_formula = molecule.get_formula()  # Use get_formula to force recalculation
+        new_formula = molecule.formula
         self.assertNotEqual(original_formula, new_formula)
         # Formula should contain both C and N (order may vary)
         self.assertIn('C', new_formula)
@@ -137,7 +137,7 @@ class TestCrystalSubstitution(unittest.TestCase):
         self.assertEqual(crystal.species[1], 'Si')
         
         # Formula should be recalculated (force recalculation)
-        new_formula = crystal.get_formula()  # Use get_formula to force recalculation
+        new_formula = crystal.formula
         self.assertNotEqual(original_formula, new_formula)
         # Formula should contain both Si and Ge (order may vary)
         self.assertIn('Si', new_formula)

@@ -131,8 +131,8 @@ class TestStructureMethods(unittest.TestCase):
         np.testing.assert_array_almost_equal(
             self.struct.positions[-1], [2, 2, 2]
         )
-        # Formula should be updated - force recalculation
-        formula = self.struct.get_formula()
+        # Formula should be updated
+        formula = self.struct.formula
         self.assertIn('C', formula)
     
     def test_add_atom_invalid_position(self):
@@ -150,8 +150,8 @@ class TestStructureMethods(unittest.TestCase):
         self.struct.remove_atom(0)
         self.assertEqual(len(self.struct), initial_len - 1)
         self.assertNotEqual(self.struct.species[0], original_species)
-        # Formula should be updated - force recalculation
-        formula = self.struct.get_formula()
+        # Formula should be updated
+        formula = self.struct.formula
         # After removing one H from H2O, we should have HO
         self.assertEqual(formula, 'HO')
     
@@ -162,16 +162,14 @@ class TestStructureMethods(unittest.TestCase):
         with self.assertRaises(IndexError):
             self.struct.remove_atom(-1)  # Negative index
     
-    def test_get_formula(self):
-        """Test get_formula method."""
-        formula = self.struct.get_formula()
+    def test_formula_property(self):
+        """Test formula property."""
+        formula = self.struct.formula
         self.assertEqual(formula, 'H2O')
-        # Should be same as property
-        self.assertEqual(formula, self.struct.formula)
     
-    def test_get_composition(self):
-        """Test get_composition method."""
-        comp = self.struct.get_composition()
+    def test_composition_property(self):
+        """Test composition property."""
+        comp = self.struct.composition
         self.assertIsInstance(comp, Composition)
         self.assertEqual(comp['H'], 2)
         self.assertEqual(comp['O'], 1)
@@ -363,22 +361,22 @@ class TestStructureEdgeCases(unittest.TestCase):
     def test_formula_cache_invalidation(self):
         """Test that formula cache is invalidated on modification."""
         struct = Structure(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
-        formula1 = struct.get_formula()  # Get initial formula
+        formula1 = struct.formula  # Get initial formula
         struct.add_atom('C', [2, 2, 2])
         # Check that _formula_dirty flag is set
         self.assertTrue(struct._formula_dirty)
-        formula2 = struct.get_formula()  # Get updated formula
+        formula2 = struct.formula  # Get updated formula
         self.assertNotEqual(formula1, formula2)
         self.assertIn('C', formula2)
     
     def test_composition_cache_invalidation(self):
         """Test that composition cache is invalidated on modification."""
         struct = Structure(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
-        comp1 = struct.get_composition()  # Get initial composition
+        comp1 = struct.composition  # Get initial composition
         struct.add_atom('C', [2, 2, 2])
         # Check that cache is cleared
         self.assertIsNone(struct._cached_composition)
-        comp2 = struct.get_composition()  # Get updated composition
+        comp2 = struct.composition  # Get updated composition
         self.assertNotEqual(comp1.formula, comp2.formula)
         self.assertIn('C', comp2.composition)
 
