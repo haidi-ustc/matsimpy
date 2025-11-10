@@ -301,7 +301,7 @@ class TestStructureSerialization(unittest.TestCase):
         self.assertIn('species', d)
         self.assertIn('positions', d)
         self.assertIn('lattice', d)
-        self.assertEqual(d['species'], ['H', 'O'])
+        self.assertEqual(list(d['species']), ['H', 'O'])
         np.testing.assert_array_almost_equal(
             d['positions'], self.struct.positions.tolist()
         )
