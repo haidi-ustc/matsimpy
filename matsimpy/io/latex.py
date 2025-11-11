@@ -14,7 +14,8 @@ def crystals_to_latex_table(
     caption: str = "Crystal Structures",
     label: str = "tab:crystals",
     include_columns: Optional[List[str]] = None,
-    custom_formatters: Optional[dict] = None
+    custom_formatters: Optional[dict] = None,
+    use_mhchem: bool = False
 ) -> str:
     """
     Export list of crystals to LaTeX table.
@@ -32,6 +33,9 @@ def crystals_to_latex_table(
                         'Volume', 'Density', 'Atoms'.
         custom_formatters: Dictionary mapping column names to custom formatting functions.
                           Each function takes (crystal, index) and returns string.
+        use_mhchem: If True, use \\ce{} from mhchem package for formulas.
+                   If False, use standard LaTeX subscripts.
+                   Requires \\usepackage[version=4]{mhchem} in preamble.
     
     Returns:
         LaTeX table code as string.
@@ -44,8 +48,12 @@ def crystals_to_latex_table(
         ...     Crystal(['Si'], [[0,0,0]], Lattice(5.43)),
         ...     Crystal(['Fe'], [[0,0,0]], Lattice(2.87))
         ... ]
+        >>> # Standard LaTeX
         >>> latex = crystals_to_latex_table(crystals, caption="My Crystals")
-        >>> print(latex)
+        >>> 
+        >>> # With mhchem package
+        >>> latex = crystals_to_latex_table(crystals, use_mhchem=True)
+        >>> # Formulas will use \\ce{H2O} instead of H$_2$O
     """
     if not crystals:
         raise ValueError("Crystal list cannot be empty")
@@ -81,7 +89,7 @@ def crystals_to_latex_table(
                 value = custom_formatters[col](crystal, idx)
             else:
                 # Use default formatters
-                value = _format_crystal_column(crystal, col, idx)
+                value = _format_crystal_column(crystal, col, idx, use_mhchem)
             
             row_data.append(value)
         
@@ -101,7 +109,8 @@ def molecules_to_latex_table(
     caption: str = "Molecular Structures",
     label: str = "tab:molecules",
     include_columns: Optional[List[str]] = None,
-    custom_formatters: Optional[dict] = None
+    custom_formatters: Optional[dict] = None,
+    use_mhchem: bool = False
 ) -> str:
     """
     Export list of molecules to LaTeX table.
@@ -119,6 +128,9 @@ def molecules_to_latex_table(
                         'Mass', 'COM'.
         custom_formatters: Dictionary mapping column names to custom formatting functions.
                           Each function takes (molecule, index) and returns string.
+        use_mhchem: If True, use \\ce{} from mhchem package for formulas.
+                   If False, use standard LaTeX subscripts.
+                   Requires \\usepackage[version=4]{mhchem} in preamble.
     
     Returns:
         LaTeX table code as string.
@@ -131,8 +143,12 @@ def molecules_to_latex_table(
         ...     Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]]),
         ...     Molecule(['H', 'H', 'O'], [[0,0,0], [0.76,0.59,0], [-0.76,0.59,0]])
         ... ]
+        >>> # Standard LaTeX
         >>> latex = molecules_to_latex_table(molecules, caption="My Molecules")
-        >>> print(latex)
+        >>> 
+        >>> # With mhchem package
+        >>> latex = molecules_to_latex_table(molecules, use_mhchem=True)
+        >>> # Formulas will use \\ce{H2O} instead of H$_2$O
     """
     if not molecules:
         raise ValueError("Molecule list cannot be empty")
@@ -168,7 +184,7 @@ def molecules_to_latex_table(
                 value = custom_formatters[col](molecule, idx)
             else:
                 # Use default formatters
-                value = _format_molecule_column(molecule, col, idx)
+                value = _format_molecule_column(molecule, col, idx, use_mhchem)
             
             row_data.append(value)
         
@@ -183,7 +199,7 @@ def molecules_to_latex_table(
     return '\n'.join(lines)
 
 
-def _format_crystal_column(crystal: Crystal, column: str, index: int) -> str:
+def _format_crystal_column(crystal: Crystal, column: str, index: int, use_mhchem: bool = False) -> str:
     """
     Format a single column value for crystal table.
     
@@ -191,6 +207,7 @@ def _format_crystal_column(crystal: Crystal, column: str, index: int) -> str:
         crystal: Crystal object.
         column: Column name.
         index: Crystal index (1-based).
+        use_mhchem: Use \\ce{} notation from mhchem package.
     
     Returns:
         Formatted string for LaTeX table cell.
@@ -199,8 +216,11 @@ def _format_crystal_column(crystal: Crystal, column: str, index: int) -> str:
         return str(index)
     
     elif column == 'Formula':
-        # Use LaTeX formatting from composition
-        return crystal.composition.to_latex()
+        # Use mhchem or standard LaTeX formatting
+        if use_mhchem:
+            return f'\\ce{{{crystal.formula}}}'
+        else:
+            return crystal.composition.to_latex()
     
     elif column == 'Space Group':
         # Try to get space group if available
@@ -231,7 +251,7 @@ def _format_crystal_column(crystal: Crystal, column: str, index: int) -> str:
         return 'N/A'
 
 
-def _format_molecule_column(molecule: Molecule, column: str, index: int) -> str:
+def _format_molecule_column(molecule: Molecule, column: str, index: int, use_mhchem: bool = False) -> str:
     """
     Format a single column value for molecule table.
     
@@ -239,6 +259,7 @@ def _format_molecule_column(molecule: Molecule, column: str, index: int) -> str:
         molecule: Molecule object.
         column: Column name.
         index: Molecule index (1-based).
+        use_mhchem: Use \\ce{} notation from mhchem package.
     
     Returns:
         Formatted string for LaTeX table cell.
@@ -247,8 +268,11 @@ def _format_molecule_column(molecule: Molecule, column: str, index: int) -> str:
         return str(index)
     
     elif column == 'Formula':
-        # Use LaTeX formatting from composition
-        return molecule.composition.to_latex()
+        # Use mhchem or standard LaTeX formatting
+        if use_mhchem:
+            return f'\\ce{{{molecule.formula}}}'
+        else:
+            return molecule.composition.to_latex()
     
     elif column == 'Point Group':
         # Try to get point group if available
@@ -276,7 +300,8 @@ def structures_to_latex_table(
     structures: List[Union[Crystal, Molecule]],
     caption: str = "Structures",
     label: str = "tab:structures",
-    separate_by_type: bool = True
+    separate_by_type: bool = True,
+    use_mhchem: bool = False
 ) -> str:
     """
     Export mixed list of structures to LaTeX table(s).
@@ -287,6 +312,7 @@ def structures_to_latex_table(
         label: Base label for table(s).
         separate_by_type: If True, create separate tables for crystals and molecules.
                          If False, create single table with type column.
+        use_mhchem: If True, use \\ce{} from mhchem package for formulas.
     
     Returns:
         LaTeX table code as string (may include multiple tables).
@@ -295,6 +321,9 @@ def structures_to_latex_table(
         >>> structures = [crystal1, molecule1, crystal2, molecule2]
         >>> latex = structures_to_latex_table(structures, separate_by_type=True)
         >>> # Creates two tables: one for crystals, one for molecules
+        >>> 
+        >>> # With mhchem
+        >>> latex = structures_to_latex_table(structures, use_mhchem=True)
     """
     if not structures:
         raise ValueError("Structure list cannot be empty")
@@ -310,7 +339,8 @@ def structures_to_latex_table(
             crystal_table = crystals_to_latex_table(
                 crystals,
                 caption=f"{caption} - Crystals",
-                label=f"{label}:crystals"
+                label=f"{label}:crystals",
+                use_mhchem=use_mhchem
             )
             tables.append(crystal_table)
         
@@ -318,7 +348,8 @@ def structures_to_latex_table(
             molecule_table = molecules_to_latex_table(
                 molecules,
                 caption=f"{caption} - Molecules",
-                label=f"{label}:molecules"
+                label=f"{label}:molecules",
+                use_mhchem=use_mhchem
             )
             tables.append(molecule_table)
         
@@ -340,7 +371,13 @@ def structures_to_latex_table(
         
         for idx, struct in enumerate(structures, start=1):
             struct_type = 'Crystal' if isinstance(struct, Crystal) else 'Molecule'
-            formula = struct.composition.to_latex()
+            
+            # Format formula with mhchem if requested
+            if use_mhchem:
+                formula = f'\\ce{{{struct.formula}}}'
+            else:
+                formula = struct.composition.to_latex()
+            
             n_atoms = len(struct)
             
             row = f'        {idx} & {struct_type} & {formula} & {n_atoms} \\\\'

@@ -305,6 +305,82 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIn(r'\begin{table}', latex)
 
 
+class TestMhchemSupport(unittest.TestCase):
+    """Test mhchem package support."""
+    
+    def test_crystals_with_mhchem(self):
+        """Test crystal table with mhchem formatting."""
+        crystals = [
+            Crystal(['Fe', 'Fe', 'O', 'O', 'O'], 
+                   [[0,0,0], [0.5,0,0], [0.25,0,0], [0.75,0,0], [0.5,0.5,0]], 
+                   Lattice(10))
+        ]
+        
+        latex = crystals_to_latex_table(crystals, use_mhchem=True)
+        
+        # Should use \ce{} notation
+        self.assertIn(r'\ce{', latex)
+        self.assertNotIn('$_', latex)  # Should NOT have standard subscripts
+    
+    def test_crystals_without_mhchem(self):
+        """Test crystal table with standard LaTeX."""
+        crystals = [
+            Crystal(['Fe', 'Fe', 'O', 'O', 'O'], 
+                   [[0,0,0], [0.5,0,0], [0.25,0,0], [0.75,0,0], [0.5,0.5,0]], 
+                   Lattice(10))
+        ]
+        
+        latex = crystals_to_latex_table(crystals, use_mhchem=False)
+        
+        # Should use standard subscripts
+        self.assertIn('$_', latex)
+        self.assertNotIn(r'\ce{', latex)
+    
+    def test_molecules_with_mhchem(self):
+        """Test molecule table with mhchem formatting."""
+        molecules = [
+            Molecule(['H', 'H', 'O'], [[0,0,0], [0.76,0.59,0], [-0.76,0.59,0]])
+        ]
+        
+        latex = molecules_to_latex_table(molecules, use_mhchem=True)
+        
+        self.assertIn(r'\ce{', latex)
+    
+    def test_molecules_without_mhchem(self):
+        """Test molecule table with standard LaTeX."""
+        molecules = [
+            Molecule(['H', 'H', 'O'], [[0,0,0], [0.76,0.59,0], [-0.76,0.59,0]])
+        ]
+        
+        latex = molecules_to_latex_table(molecules, use_mhchem=False)
+        
+        self.assertIn('$_', latex)
+    
+    def test_structures_mixed_with_mhchem(self):
+        """Test mixed structures with mhchem."""
+        structures = [
+            Crystal(['Si'], [[0,0,0]], Lattice(5.43)),
+            Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        ]
+        
+        latex = structures_to_latex_table(structures, separate_by_type=True, use_mhchem=True)
+        
+        # Both tables should use \ce{}
+        self.assertIn(r'\ce{', latex)
+        self.assertEqual(latex.count(r'\ce{'), 2)  # One for each structure
+    
+    def test_single_table_with_mhchem(self):
+        """Test single table mode with mhchem."""
+        structures = [
+            Crystal(['Si'], [[0,0,0]], Lattice(5.43)),
+            Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        ]
+        
+        latex = structures_to_latex_table(structures, separate_by_type=False, use_mhchem=True)
+        
+        self.assertIn(r'\ce{', latex)
+
+
 if __name__ == '__main__':
     unittest.main()
 
