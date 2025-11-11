@@ -4,14 +4,72 @@ from monty.json import MSONable
 from scipy.spatial.distance import pdist, squareform
 
 class Lattice(MSONable):
-    def __init__(self, lattice_vectors: List[List[float]]):
+    def __init__(self, lattice_vectors: Union[float, int, List[float], List[List[float]]]):
         """
-        Initialize a Lattice object with the given lattice vectors.
+        Initialize a Lattice object with flexible input formats.
+        
+        Supports multiple convenient input formats:
+        - Full lattice vectors: [[a1,a2,a3], [b1,b2,b3], [c1,c2,c3]]
+        - Cubic: single number (e.g., 5 or 5.0) -> cubic lattice with that parameter
+        - Orthorhombic box: list of 3 numbers [a, b, c] -> orthorhombic lattice
         
         Args:
-            lattice_vectors: A list of 3 lists representing the lattice vectors.
+            lattice_vectors: Can be:
+                - List[List[float]]: Full 3x3 lattice vectors
+                - float/int: Single value for cubic lattice (a=b=c)
+                - List[float]: Three values [a, b, c] for orthorhombic lattice
+        
+        Raises:
+            ValueError: If input format is invalid or lattice vectors are degenerate.
+            
+        Examples:
+            >>> # Traditional full lattice vectors
+            >>> lat = Lattice([[5, 0, 0], [0, 5, 0], [0, 0, 5]])
+            
+            >>> # Convenient cubic syntax
+            >>> lat = Lattice(5)  # cubic with a=5
+            
+            >>> # Convenient orthorhombic box syntax  
+            >>> lat = Lattice([3, 4, 5])  # orthorhombic with a=3, b=4, c=5
         """
-        self.lattice_vectors = np.array(lattice_vectors, dtype=float)
+        # Handle different input formats
+        if isinstance(lattice_vectors, (int, float, np.integer, np.floating)):
+            # Single number -> cubic lattice
+            a = float(lattice_vectors)
+            if a <= 0:
+                raise ValueError(f"Lattice parameter must be positive, got {a}")
+            self.lattice_vectors = np.array([
+                [a, 0.0, 0.0],
+                [0.0, a, 0.0],
+                [0.0, 0.0, a]
+            ], dtype=float)
+        elif isinstance(lattice_vectors, (list, np.ndarray)):
+            # Convert to numpy array for uniform handling
+            arr = np.array(lattice_vectors, dtype=float)
+            if arr.ndim == 1 and len(arr) == 3:
+                # List of 3 numbers -> orthorhombic lattice
+                a, b, c = arr
+                if a <= 0 or b <= 0 or c <= 0:
+                    raise ValueError(f"Lattice parameters must be positive, got [{a}, {b}, {c}]")
+                self.lattice_vectors = np.array([
+                    [a, 0.0, 0.0],
+                    [0.0, b, 0.0],
+                    [0.0, 0.0, c]
+                ], dtype=float)
+            elif arr.ndim == 2 and arr.shape == (3, 3):
+                # Full 3x3 lattice vectors
+                self.lattice_vectors = arr
+            else:
+                raise ValueError(
+                    f"Invalid lattice_vectors shape: {arr.shape}. "
+                    f"Expected 3x3 matrix, 1x3 array, or scalar."
+                )
+        else:
+            raise TypeError(
+                f"lattice_vectors must be numeric scalar, list, or numpy array, "
+                f"got {type(lattice_vectors)}"
+            )
+        
         self._validate_lattice_vectors()
         # Cache inverse matrix
         self._inv_matrix: Optional[np.ndarray] = None
@@ -130,6 +188,10 @@ class Lattice(MSONable):
             ValueError: If gamma is 0 or 180 degrees (a and b vectors would be parallel,
                        making the lattice linearly dependent)
         """
+        for param in [a, b, c]:
+            if param <= 0:
+                raise ValueError(f"Lattice parameter must be positive, got {param}")
+        
         alpha = np.radians(alpha)
         beta = np.radians(beta)
         gamma = np.radians(gamma)
