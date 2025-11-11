@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 from typing import List, Optional, Union, Dict, Any
 from monty.json import MSONable
 from .lattice import Lattice
@@ -105,20 +106,39 @@ class Site(MSONable):
             
         Raises:
             TypeError: If position is not a list or numpy array
-            ValueError: If position doesn't have 3 elements
+            ValueError: If position doesn't have 3 elements or contains NaN/inf
+            
+        Warnings:
+            UserWarning: If position coordinates are unusually large (> 1e6 Angstroms)
         """
         if isinstance(position, np.ndarray):
             if position.shape != (3,):
                 raise ValueError(f"Position array must have shape (3,), got {position.shape}")
-            return position.astype(np.float64)
-        if not isinstance(position, list):
+            position = position.astype(np.float64)
+        elif isinstance(position, list):
+            if len(position) != 3:
+                raise ValueError("Position must have three elements.")
+            for coord in position:
+                if not isinstance(coord, (int, float)):
+                    raise TypeError("Position elements must be integers or floats.")
+            position = np.array(position, dtype=np.float64)
+        else:
             raise TypeError("Position must be a list or numpy array.")
-        if len(position) != 3:
-            raise ValueError("Position must have three elements.")
-        for coord in position:
-            if not isinstance(coord, (int, float)):
-                raise TypeError("Position elements must be integers or floats.")
-        return np.array(position, dtype=np.float64)
+        
+        # Check for NaN or inf
+        if not np.all(np.isfinite(position)):
+            raise ValueError("Position coordinates must be finite numbers (no NaN or inf)")
+        
+        # Check if coordinates are in reasonable range
+        # 1e6 Angstroms = 100 km, clearly unreasonable for atomic structures
+        if np.any(np.abs(position) > 1e6):
+            warnings.warn(
+                f"Position coordinates seem unusually large: {position}. "
+                f"Values > 1e6 Angstroms may indicate an error.",
+                UserWarning
+            )
+        
+        return position
 
     @property
     def properties(self) -> Dict[str, Any]:
