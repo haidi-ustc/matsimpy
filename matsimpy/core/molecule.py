@@ -145,8 +145,11 @@ class Molecule(Structure):
         # Chemical reasonableness check - validate interatomic distances
         if len(self.positions) > 0:
             # Convert to array for processing
-            if isinstance(position, list) and len(position) > 0:
-                if isinstance(position[0], (int, float)):
+            if isinstance(position, list):
+                if len(position) == 0:
+                    # Empty list - nothing to check
+                    new_positions = []
+                elif isinstance(position[0], (int, float)):
                     # Single position [x, y, z]
                     new_positions = [position]
                 else:
@@ -157,16 +160,17 @@ class Molecule(Structure):
             
             # Check each new position against existing atoms
             for new_pos in new_positions:
-                new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
-                min_distance = np.min(cdist(new_pos_array, self.positions))
-                
-                # Warn if atoms are too close (< 0.5 Å is unrealistic)
-                if min_distance < 0.5:
-                    warnings.warn(
-                        f"Very small interatomic distance detected: {min_distance:.3f} Å. "
-                        f"This may indicate overlapping atoms or incorrect units.",
-                        UserWarning
-                    )
+                if len(new_pos) == 3:  # Valid 3D position
+                    new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
+                    min_distance = np.min(cdist(new_pos_array, self.positions))
+                    
+                    # Warn if atoms are too close (< 0.5 Å is unrealistic)
+                    if min_distance < 0.5:
+                        warnings.warn(
+                            f"Very small interatomic distance detected: {min_distance:.3f} Å. "
+                            f"This may indicate overlapping atoms or incorrect units.",
+                            UserWarning
+                        )
         
         # Determine number of atoms being added
         n_atoms_before = len(self.species)
