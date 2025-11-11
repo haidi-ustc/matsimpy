@@ -213,6 +213,39 @@ class Element:
     @property
     def rigidity_modulus(self):
         return self._data["Rigidity modulus"]
+    
+    def __getattr__(self, name):
+        """
+        Provide better error messages for non-existent attributes.
+        
+        This method is called when an attribute is not found through normal lookup.
+        It checks if the attribute exists in the element's data dictionary and
+        provides helpful error messages listing available attributes.
+        
+        Args:
+            name: Attribute name being accessed
+            
+        Returns:
+            Value from _data dictionary if attribute exists there
+            
+        Raises:
+            AttributeError: With helpful message listing available attributes
+            
+        Examples:
+            >>> element = Element('Fe')
+            >>> element.atomic_mass  # Works - defined as property
+            >>> element.invalid_attr  # Raises AttributeError with helpful message
+        """
+        # Check if attribute exists in data dictionary
+        if name in self._data:
+            return self._data[name]
+        
+        # Provide helpful error message with available attributes
+        available_attrs = sorted(self._data.keys())
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
+            f"Available data attributes: {', '.join(available_attrs)}"
+        )
 
 if __name__ == '__main__':
     h=Element('H')
