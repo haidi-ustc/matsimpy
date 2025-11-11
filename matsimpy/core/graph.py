@@ -1,17 +1,576 @@
 """
-Graph conversion utilities for Crystal and Molecule structures.
+Graph representation for Crystal and Molecule structures.
 
-Provides functions to convert MatSimPy structures to graph representations
-compatible with ML frameworks, compute graph properties, and analyze structure
-connectivity. Supports both molecular graphs and crystal graphs with PBC.
+Provides object-oriented graph classes for analyzing molecular and crystal
+structure connectivity. Supports graph algorithms, ML framework integration,
+and topological analysis.
+
+Classes:
+    - StructureGraph: Base class for structure graphs
+    - MoleculeGraph: Graph representation of molecules
+    - CrystalGraph: Graph representation of crystals with PBC support
 """
 
 import numpy as np
 from typing import Optional, Union, Dict, Any, List, Tuple, Set
 from scipy.spatial.distance import cdist
+from abc import ABC, abstractmethod
 from .crystal import Crystal
 from .molecule import Molecule
 
+
+class StructureGraph(ABC):
+    """
+    Abstract base class for structure graph representations.
+    
+    Provides common graph algorithms and properties for both molecular
+    and crystal structure graphs.
+    
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges.
+        
+    Attributes:
+        structure: The underlying structure object.
+        cutoff: Edge cutoff distance.
+        
+    Examples:
+        >>> # Use MoleculeGraph or CrystalGraph subclasses
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> graph = MoleculeGraph(mol, cutoff=2.0)
+        >>> print(graph.num_nodes)  # 2
+    """
+    
+    def __init__(self, structure: Union[Crystal, Molecule], cutoff: float = 3.0):
+        """
+        Initialize the structure graph.
+        
+        Args:
+            structure: Crystal or Molecule object.
+            cutoff: Cutoff distance in Angstroms for defining edges.
+        """
+        self.structure = structure
+        self.cutoff = cutoff
+        self._adjacency_matrix: Optional[np.ndarray] = None
+        self._distance_matrix: Optional[np.ndarray] = None
+        self._edge_list: Optional[List[Tuple[int, int]]] = None
+    
+    @property
+    def num_nodes(self) -> int:
+        """Get number of nodes (atoms)."""
+        return len(self.structure)
+    
+    @property
+    @abstractmethod
+    def adjacency_matrix(self) -> np.ndarray:
+        """Get adjacency matrix (computed lazily)."""
+        pass
+    
+    @property
+    @abstractmethod
+    def distance_matrix(self) -> np.ndarray:
+        """Get distance matrix (computed lazily)."""
+        pass
+    
+    @property
+    def edge_list(self) -> List[Tuple[int, int, float]]:
+        """
+        Get edge list with distances.
+        
+        Returns:
+            List of (source, target, distance) tuples.
+        """
+        if self._edge_list is None:
+            edges = []
+            adj = self.adjacency_matrix
+            dist = self.distance_matrix
+            
+            for i in range(self.num_nodes):
+                for j in range(i + 1, self.num_nodes):
+                    if adj[i, j] == 1:
+                        edges.append((i, j, dist[i, j]))
+            
+            self._edge_list = edges
+        
+        return self._edge_list
+    
+    @property
+    def num_edges(self) -> int:
+        """Get number of edges."""
+        return len(self.edge_list)
+    
+    @property
+    def coordination_numbers(self) -> Dict[int, int]:
+        """
+        Get coordination number for each atom.
+        
+        Returns:
+            Dictionary mapping atom index to coordination number.
+        """
+        adj = self.adjacency_matrix
+        return {i: int(adj[i].sum()) for i in range(self.num_nodes)}
+    
+    @property
+    def degree_distribution(self) -> Dict[int, int]:
+        """
+        Get degree distribution.
+        
+        Returns:
+            Dictionary mapping coordination number to count.
+        """
+        from collections import Counter
+        coord = self.coordination_numbers
+        return dict(Counter(coord.values()))
+    
+    @property
+    def is_connected(self) -> bool:
+        """
+        Check if graph is connected.
+        
+        Returns:
+            True if there's a path between any two atoms.
+        """
+        if self.num_nodes <= 1:
+            return True
+        
+        # BFS
+        visited = {0}
+        queue = [0]
+        adj = self.adjacency_matrix
+        
+        while queue:
+            node = queue.pop(0)
+            for neighbor in range(self.num_nodes):
+                if adj[node, neighbor] == 1 and neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        
+        return len(visited) == self.num_nodes
+    
+    @property
+    def connected_components(self) -> List[List[int]]:
+        """
+        Find connected components.
+        
+        Returns:
+            List of components, each is a list of atom indices.
+        """
+        if self.num_nodes == 0:
+            return []
+        
+        adj = self.adjacency_matrix
+        visited = set()
+        components = []
+        
+        for start in range(self.num_nodes):
+            if start in visited:
+                continue
+            
+            # BFS
+            component = []
+            queue = [start]
+            visited.add(start)
+            
+            while queue:
+                node = queue.pop(0)
+                component.append(node)
+                
+                for neighbor in range(self.num_nodes):
+                    if adj[node, neighbor] == 1 and neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+            
+            components.append(sorted(component))
+        
+        return components
+    
+    def get_shortest_path(self, start_idx: int, end_idx: int) -> Optional[List[int]]:
+        """
+        Find shortest path between two atoms.
+        
+        Args:
+            start_idx: Starting atom index.
+            end_idx: Ending atom index.
+        
+        Returns:
+            List of atom indices in path, or None if no path exists.
+            
+        Raises:
+            IndexError: If indices are out of range.
+        """
+        if not (0 <= start_idx < self.num_nodes):
+            raise IndexError(f"start_idx {start_idx} out of range")
+        if not (0 <= end_idx < self.num_nodes):
+            raise IndexError(f"end_idx {end_idx} out of range")
+        
+        if start_idx == end_idx:
+            return [start_idx]
+        
+        # BFS with path tracking
+        adj = self.adjacency_matrix
+        visited = {start_idx}
+        queue = [(start_idx, [start_idx])]
+        
+        while queue:
+            node, path = queue.pop(0)
+            
+            for neighbor in range(self.num_nodes):
+                if adj[node, neighbor] == 1:
+                    if neighbor == end_idx:
+                        return path + [neighbor]
+                    
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append((neighbor, path + [neighbor]))
+        
+        return None
+    
+    @property
+    def diameter(self) -> Optional[int]:
+        """
+        Get graph diameter (longest shortest path).
+        
+        Returns:
+            Diameter as integer, or None if disconnected.
+        """
+        if not self.is_connected:
+            return None
+        
+        if self.num_nodes <= 1:
+            return 0
+        
+        max_dist = 0
+        for i in range(self.num_nodes):
+            for j in range(i + 1, self.num_nodes):
+                path = self.get_shortest_path(i, j)
+                if path:
+                    max_dist = max(max_dist, len(path) - 1)
+        
+        return max_dist
+    
+    @property
+    def node_features(self) -> np.ndarray:
+        """
+        Get node features for GNN.
+        
+        Returns:
+            Feature matrix of shape (N, F).
+        """
+        from .periodic_table import Element
+        
+        atomic_numbers = np.array([
+            Element.get_element(spec).atomic_no
+            for spec in self.structure.species
+        ]).reshape(-1, 1)
+        
+        return atomic_numbers
+    
+    @property
+    def laplacian(self) -> np.ndarray:
+        """
+        Get graph Laplacian matrix.
+        
+        Returns:
+            Laplacian matrix L = D - A.
+        """
+        adj = self.adjacency_matrix
+        degree = adj.sum(axis=1)
+        D = np.diag(degree)
+        return D - adj
+    
+    def get_normalized_laplacian(self) -> np.ndarray:
+        """
+        Get normalized graph Laplacian.
+        
+        Returns:
+            Normalized Laplacian L = I - D^(-1/2) A D^(-1/2).
+        """
+        adj = self.adjacency_matrix
+        degree = adj.sum(axis=1)
+        D_inv_sqrt = np.diag(1.0 / np.sqrt(degree + 1e-10))
+        I = np.eye(self.num_nodes)
+        return I - D_inv_sqrt @ adj @ D_inv_sqrt
+    
+    @property
+    def statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive graph statistics.
+        
+        Returns:
+            Dictionary with graph properties.
+        """
+        coord_values = list(self.coordination_numbers.values())
+        
+        return {
+            'num_nodes': self.num_nodes,
+            'num_edges': self.num_edges,
+            'is_connected': self.is_connected,
+            'num_components': len(self.connected_components),
+            'diameter': self.diameter,
+            'avg_coordination': np.mean(coord_values) if coord_values else 0.0,
+            'max_coordination': max(coord_values) if coord_values else 0,
+            'min_coordination': min(coord_values) if coord_values else 0,
+            'degree_distribution': self.degree_distribution,
+        }
+    
+    def to_networkx(self):
+        """
+        Convert to NetworkX graph.
+        
+        Returns:
+            NetworkX Graph object.
+            
+        Raises:
+            ImportError: If networkx is not installed.
+        """
+        try:
+            import networkx as nx
+        except ImportError:
+            raise ImportError(
+                "NetworkX is required. Install with: pip install networkx"
+            )
+        
+        G = nx.Graph()
+        
+        # Add nodes
+        for i, (spec, pos) in enumerate(zip(self.structure.species, self.structure.positions)):
+            G.add_node(i, species=spec, position=pos.tolist())
+        
+        # Add edges
+        for i, j, dist in self.edge_list:
+            G.add_edge(i, j, distance=dist)
+        
+        return G
+    
+    def find_rings(self, max_ring_size: int = 10) -> List[List[int]]:
+        """
+        Find ring structures in the graph.
+        
+        Args:
+            max_ring_size: Maximum ring size to search for.
+        
+        Returns:
+            List of rings (each is a list of atom indices).
+        """
+        try:
+            import networkx as nx
+        except ImportError:
+            raise ImportError(
+                "NetworkX is required for ring finding. "
+                "Install with: pip install networkx"
+            )
+        
+        G = self.to_networkx()
+        
+        try:
+            cycles = list(nx.simple_cycles(G.to_directed()))
+            rings = []
+            seen_rings = set()
+            
+            for cycle in cycles:
+                if 3 <= len(cycle) <= max_ring_size:
+                    normalized = tuple(sorted(cycle))
+                    if normalized not in seen_rings:
+                        seen_rings.add(normalized)
+                        rings.append(cycle)
+            
+            return rings
+        except:
+            return []
+    
+    def __repr__(self) -> str:
+        """String representation."""
+        return (f"{self.__class__.__name__}(nodes={self.num_nodes}, "
+                f"edges={self.num_edges}, cutoff={self.cutoff})")
+
+
+class MoleculeGraph(StructureGraph):
+    """
+    Graph representation of a Molecule structure.
+    
+    Args:
+        molecule: Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges.
+        
+    Examples:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import MoleculeGraph
+        >>> 
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> graph = MoleculeGraph(mol, cutoff=2.0)
+        >>> print(graph.num_nodes)  # 2
+        >>> print(graph.num_edges)  # 1
+        >>> print(graph.is_connected)  # True
+    """
+    
+    def __init__(self, molecule: Molecule, cutoff: float = 3.0):
+        """
+        Initialize molecule graph.
+        
+        Args:
+            molecule: Molecule object.
+            cutoff: Cutoff distance in Angstroms.
+        """
+        if not isinstance(molecule, Molecule):
+            raise TypeError(f"Expected Molecule, got {type(molecule)}")
+        super().__init__(molecule, cutoff)
+    
+    @property
+    def adjacency_matrix(self) -> np.ndarray:
+        """
+        Get adjacency matrix (cached).
+        
+        Returns:
+            Binary adjacency matrix of shape (N, N).
+        """
+        if self._adjacency_matrix is None:
+            positions = self.structure.positions
+            dist_matrix = cdist(positions, positions)
+            self._adjacency_matrix = (dist_matrix < self.cutoff).astype(int)
+            np.fill_diagonal(self._adjacency_matrix, 0)
+        
+        return self._adjacency_matrix
+    
+    @property
+    def distance_matrix(self) -> np.ndarray:
+        """
+        Get distance matrix (cached).
+        
+        Returns:
+            Distance matrix of shape (N, N).
+        """
+        if self._distance_matrix is None:
+            positions = self.structure.positions
+            self._distance_matrix = cdist(positions, positions)
+        
+        return self._distance_matrix
+
+
+class CrystalGraph(StructureGraph):
+    """
+    Graph representation of a Crystal structure with PBC support.
+    
+    Args:
+        crystal: Crystal object.
+        cutoff: Cutoff distance in Angstroms for defining edges.
+        use_pbc: Use periodic boundary conditions (default: True).
+        
+    Examples:
+        >>> from matsimpy.core import Crystal, Lattice
+        >>> from matsimpy.core.graph import CrystalGraph
+        >>> 
+        >>> lat = Lattice(10)
+        >>> crystal = Crystal(['Si', 'O'], [[0,0,0], [0.5,0.5,0.5]], lat)
+        >>> graph = CrystalGraph(crystal, cutoff=5.0)
+        >>> print(graph.num_nodes)  # 2
+        >>> coord = graph.coordination_numbers
+        >>> print(coord)  # {0: X, 1: Y}
+    """
+    
+    def __init__(self, crystal: Crystal, cutoff: float = 3.0, use_pbc: bool = True):
+        """
+        Initialize crystal graph.
+        
+        Args:
+            crystal: Crystal object.
+            cutoff: Cutoff distance in Angstroms.
+            use_pbc: Use periodic boundary conditions.
+        """
+        if not isinstance(crystal, Crystal):
+            raise TypeError(f"Expected Crystal, got {type(crystal)}")
+        super().__init__(crystal, cutoff)
+        self.use_pbc = use_pbc
+    
+    @property
+    def adjacency_matrix(self) -> np.ndarray:
+        """
+        Get adjacency matrix with PBC support (cached).
+        
+        Returns:
+            Binary adjacency matrix of shape (N, N).
+        """
+        if self._adjacency_matrix is None:
+            n_atoms = self.num_nodes
+            adj = np.zeros((n_atoms, n_atoms), dtype=int)
+            
+            if self.use_pbc:
+                neighbors = self.structure.get_neighbor_list(self.cutoff, use_pbc=True)
+                for i, neighbor_list in neighbors.items():
+                    for j, dist in neighbor_list:
+                        adj[i, j] = 1
+            else:
+                positions = self.structure.cart_positions
+                dist_matrix = cdist(positions, positions)
+                adj = (dist_matrix < self.cutoff).astype(int)
+                np.fill_diagonal(adj, 0)
+            
+            self._adjacency_matrix = adj
+        
+        return self._adjacency_matrix
+    
+    @property
+    def distance_matrix(self) -> np.ndarray:
+        """
+        Get distance matrix with PBC support (cached).
+        
+        Returns:
+            Distance matrix of shape (N, N).
+        """
+        if self._distance_matrix is None:
+            if self.use_pbc:
+                n_atoms = self.num_nodes
+                dist_matrix = np.full((n_atoms, n_atoms), np.inf)
+                np.fill_diagonal(dist_matrix, 0.0)
+                
+                # Use neighbor list with large cutoff
+                neighbors = self.structure.get_neighbor_list(cutoff=20.0, use_pbc=True)
+                for i, neighbor_list in neighbors.items():
+                    for j, dist in neighbor_list:
+                        dist_matrix[i, j] = dist
+                
+                self._distance_matrix = dist_matrix
+            else:
+                positions = self.structure.cart_positions
+                self._distance_matrix = cdist(positions, positions)
+        
+        return self._distance_matrix
+
+
+# Convenience factory function
+def create_structure_graph(
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: bool = None
+) -> StructureGraph:
+    """
+    Factory function to create appropriate graph for structure.
+    
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms.
+        use_pbc: Use PBC (only for Crystal). If None, defaults to True for Crystal.
+    
+    Returns:
+        MoleculeGraph or CrystalGraph instance.
+        
+    Examples:
+        >>> graph = create_structure_graph(molecule, cutoff=2.0)
+        >>> # Returns MoleculeGraph automatically
+    """
+    if isinstance(structure, Molecule):
+        return MoleculeGraph(structure, cutoff)
+    elif isinstance(structure, Crystal):
+        if use_pbc is None:
+            use_pbc = True
+        return CrystalGraph(structure, cutoff, use_pbc)
+    else:
+        raise TypeError(f"Expected Crystal or Molecule, got {type(structure)}")
+
+
+# ============================================================================
+# Backward Compatibility: Functional Interface
+# ============================================================================
+# These functions maintain the old API while using the new OOP implementation
 
 def structure_to_graph_data(
     structure: Union[Crystal, Molecule],
@@ -22,47 +581,28 @@ def structure_to_graph_data(
     """
     Convert MatSimPy structure to graph data format.
     
-    Extracts all necessary structure information (positions, species, cell, pbc)
-    directly from Crystal or Molecule objects for use with ML frameworks.
+    Note: This is a legacy function. Consider using create_structure_graph() for OOP API.
     
     Args:
-        structure: Crystal or Molecule object
-        cutoff: Cutoff radius for graph construction (Å)
-        threebody_cutoff: Cutoff for three-body interactions (Å)
-        **kwargs: Additional parameters
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff radius for graph construction (Å).
+        threebody_cutoff: Cutoff for three-body interactions (Å).
+        **kwargs: Additional parameters.
         
     Returns:
-        Dictionary containing:
-            - positions: Atomic positions (N, 3) in Cartesian coordinates
-            - species: List of atomic species (N,)
-            - cell: Lattice vectors (3, 3) for crystals, None for molecules
-            - pbc: Periodic boundary conditions (3,) for crystals, [False,False,False] for molecules
-            - num_atoms: Number of atoms
-            - is_crystal: Whether structure is a crystal
-            
-    Example:
-        >>> from matsimpy.builders.bulk import from_prototype
-        >>> from matsimpy.core.graph import structure_to_graph_data
-        >>> 
-        >>> # Use proper diamond structure (2 atoms in primitive cell)
-        >>> si_crystal = from_prototype('diamond', 'Si', 5.43)
-        >>> graph_data = structure_to_graph_data(si_crystal)
-        >>> print(graph_data['positions'].shape)  # (2, 3)
-        >>> print(graph_data['species'])  # ['Si', 'Si']
+        Dictionary containing graph data.
     """
-    # Extract positions (already in Cartesian)
     if isinstance(structure, Crystal):
         positions = np.array(structure.cart_positions, dtype=np.float64)
         cell = np.array(structure.lattice.lattice_vectors, dtype=np.float64)
         pbc = np.array(structure.pbc, dtype=bool)
         is_crystal = True
-    else:  # Molecule
+    else:
         positions = np.array(structure.positions, dtype=np.float64)
         cell = None
         pbc = np.array([False, False, False], dtype=bool)
         is_crystal = False
     
-    # Extract species
     species = list(structure.species)
     
     return {
@@ -82,96 +622,18 @@ def get_adjacency_matrix(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> np.ndarray:
-    """
-    Compute adjacency matrix for the structure.
-    
-    Creates a binary adjacency matrix where entry (i,j) is 1 if atoms i and j
-    are within cutoff distance, 0 otherwise.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect
-                (True for Crystal, False for Molecule).
-    
-    Returns:
-        Binary adjacency matrix of shape (N, N) where N is number of atoms.
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> adj = get_adjacency_matrix(molecule, cutoff=2.0)
-        >>> print(adj)  # [[0, 1], [1, 0]]
-    """
-    if use_pbc is None:
-        use_pbc = isinstance(structure, Crystal)
-    
-    n_atoms = len(structure)
-    adj_matrix = np.zeros((n_atoms, n_atoms), dtype=int)
-    
-    if isinstance(structure, Crystal) and use_pbc:
-        # Use Crystal's neighbor list with PBC
-        neighbors = structure.get_neighbor_list(cutoff, use_pbc=True)
-        for i, neighbor_list in neighbors.items():
-            for j, dist in neighbor_list:
-                adj_matrix[i, j] = 1
-    else:
-        # Use distance-based approach for molecules or non-PBC
-        if isinstance(structure, Crystal):
-            positions = structure.cart_positions
-        else:
-            positions = structure.positions
-        
-        dist_matrix = cdist(positions, positions)
-        adj_matrix = (dist_matrix < cutoff).astype(int)
-        np.fill_diagonal(adj_matrix, 0)  # No self-loops
-    
-    return adj_matrix
+    """Get adjacency matrix (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.adjacency_matrix
 
 
 def get_distance_matrix(
     structure: Union[Crystal, Molecule],
     use_pbc: bool = None
 ) -> np.ndarray:
-    """
-    Compute pairwise distance matrix for all atoms.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        Distance matrix of shape (N, N) with pairwise distances in Angstroms.
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> dist = get_distance_matrix(molecule)
-        >>> print(dist[0,1])  # 1.2
-    """
-    if use_pbc is None:
-        use_pbc = isinstance(structure, Crystal)
-    
-    if isinstance(structure, Crystal):
-        positions = structure.cart_positions
-    else:
-        positions = structure.positions
-    
-    if isinstance(structure, Crystal) and use_pbc:
-        # For crystals with PBC, need to consider periodic images
-        # Simple approach: use distance from neighbor list
-        n_atoms = len(structure)
-        dist_matrix = np.full((n_atoms, n_atoms), np.inf)
-        np.fill_diagonal(dist_matrix, 0.0)
-        
-        # Get neighbors with large cutoff to capture most interactions
-        neighbors = structure.get_neighbor_list(cutoff=20.0, use_pbc=True)
-        for i, neighbor_list in neighbors.items():
-            for j, dist in neighbor_list:
-                dist_matrix[i, j] = dist
-        
-        return dist_matrix
-    else:
-        # Simple Euclidean distances for molecules
-        return cdist(positions, positions)
+    """Get distance matrix (functional API)."""
+    graph = create_structure_graph(structure, cutoff=20.0, use_pbc=use_pbc)
+    return graph.distance_matrix
 
 
 def get_edge_list(
@@ -180,54 +642,12 @@ def get_edge_list(
     use_pbc: bool = None,
     include_distances: bool = False
 ) -> Union[List[Tuple[int, int]], List[Tuple[int, int, float]]]:
-    """
-    Get edge list representation of the structure graph.
+    """Get edge list (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    edges = graph.edge_list
     
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-        include_distances: If True, include edge distances as third element.
-    
-    Returns:
-        List of edges as (i, j) tuples, or (i, j, distance) if include_distances=True.
-        Edges are undirected (only includes i < j).
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'O', 'H'], [[0,0,0], [1.2,0,0], [2.5,0,0]])
-        >>> edges = get_edge_list(molecule, cutoff=2.0)
-        >>> print(edges)  # [(0, 1), (1, 2)]
-        
-        >>> edges_dist = get_edge_list(molecule, cutoff=2.0, include_distances=True)
-        >>> print(edges_dist)  # [(0, 1, 1.2), (1, 2, 1.3)]
-    """
-    if use_pbc is None:
-        use_pbc = isinstance(structure, Crystal)
-    
-    edges = []
-    
-    if isinstance(structure, Crystal) and use_pbc:
-        neighbors = structure.get_neighbor_list(cutoff, use_pbc=True)
-        for i, neighbor_list in neighbors.items():
-            for j, dist in neighbor_list:
-                if i < j:  # Undirected edges
-                    if include_distances:
-                        edges.append((i, j, dist))
-                    else:
-                        edges.append((i, j))
-    else:
-        adj_matrix = get_adjacency_matrix(structure, cutoff, use_pbc=False)
-        if include_distances:
-            dist_matrix = get_distance_matrix(structure, use_pbc=False)
-        
-        for i in range(len(structure)):
-            for j in range(i + 1, len(structure)):
-                if adj_matrix[i, j] == 1:
-                    if include_distances:
-                        edges.append((i, j, dist_matrix[i, j]))
-                    else:
-                        edges.append((i, j))
-    
+    if not include_distances:
+        return [(i, j) for i, j, d in edges]
     return edges
 
 
@@ -236,46 +656,9 @@ def get_coordination_numbers(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> Dict[int, int]:
-    """
-    Compute coordination number for each atom.
-    
-    Coordination number is the number of neighboring atoms within cutoff distance.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        Dictionary mapping atom index to coordination number.
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'H', 'H', 'H', 'H'], 
-        ...                     [[0,0,0], [1,0,0], [-1,0,0], [0,1,0], [0,-1,0]])
-        >>> coord = get_coordination_numbers(molecule, cutoff=1.5)
-        >>> print(coord[0])  # 4 (C bonded to 4 H atoms)
-    """
-    if use_pbc is None:
-        use_pbc = isinstance(structure, Crystal)
-    
-    coord_numbers = {}
-    
-    if isinstance(structure, Crystal) and use_pbc:
-        neighbors = structure.get_neighbor_list(cutoff, use_pbc=True)
-        for i in range(len(structure)):
-            coord_numbers[i] = len(neighbors.get(i, []))
-    else:
-        if isinstance(structure, Molecule):
-            all_neighbors = structure.get_all_neighbor_lists(cutoff)
-            for i, neighbor_list in enumerate(all_neighbors):
-                coord_numbers[i] = len(neighbor_list)
-        else:
-            # Crystal without PBC
-            neighbors = structure.get_neighbor_list(cutoff, use_pbc=False)
-            for i in range(len(structure)):
-                coord_numbers[i] = len(neighbors.get(i, []))
-    
-    return coord_numbers
+    """Get coordination numbers (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.coordination_numbers
 
 
 def get_degree_distribution(
@@ -283,28 +666,9 @@ def get_degree_distribution(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> Dict[int, int]:
-    """
-    Get degree (coordination number) distribution.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        Dictionary mapping coordination number to count of atoms with that coordination.
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'H', 'H'], [[0,0,0], [1,0,0], [-1,0,0]])
-        >>> dist = get_degree_distribution(molecule, cutoff=1.5)
-        >>> print(dist)  # {2: 1, 1: 2} - one C with 2 bonds, two H with 1 bond
-    """
-    coord_numbers = get_coordination_numbers(structure, cutoff, use_pbc)
-    
-    from collections import Counter
-    distribution = Counter(coord_numbers.values())
-    
-    return dict(distribution)
+    """Get degree distribution (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.degree_distribution
 
 
 def is_connected(
@@ -312,49 +676,9 @@ def is_connected(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> bool:
-    """
-    Check if structure graph is connected.
-    
-    A graph is connected if there's a path between any two atoms.
-    For molecules, checks if molecule is a single connected component.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        True if graph is connected, False otherwise.
-        
-    Examples:
-        >>> # Single molecule
-        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> print(is_connected(mol, cutoff=2.0))  # True
-        
-        >>> # Two separate molecules
-        >>> mol2 = Molecule(['C', 'C'], [[0,0,0], [10,0,0]])
-        >>> print(is_connected(mol2, cutoff=2.0))  # False
-    """
-    if len(structure) == 0:
-        return True
-    
-    if len(structure) == 1:
-        return True
-    
-    # BFS to check connectivity
-    adj_matrix = get_adjacency_matrix(structure, cutoff, use_pbc)
-    
-    visited = set([0])
-    queue = [0]
-    
-    while queue:
-        node = queue.pop(0)
-        for neighbor in range(len(structure)):
-            if adj_matrix[node, neighbor] == 1 and neighbor not in visited:
-                visited.add(neighbor)
-                queue.append(neighbor)
-    
-    return len(visited) == len(structure)
+    """Check if graph is connected (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.is_connected
 
 
 def get_connected_components(
@@ -362,57 +686,9 @@ def get_connected_components(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> List[List[int]]:
-    """
-    Find connected components in the structure graph.
-    
-    Useful for identifying separate molecules in a multi-molecule system
-    or detecting fragmented structures.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        List of components, where each component is a list of atom indices.
-        
-    Examples:
-        >>> # Two separate molecules
-        >>> mol = Molecule(['C', 'O', 'N', 'H'], 
-        ...                [[0,0,0], [1.2,0,0], [10,0,0], [11,0,0]])
-        >>> components = get_connected_components(mol, cutoff=2.0)
-        >>> print(len(components))  # 2
-        >>> print(components)  # [[0, 1], [2, 3]]
-    """
-    if len(structure) == 0:
-        return []
-    
-    adj_matrix = get_adjacency_matrix(structure, cutoff, use_pbc)
-    
-    visited = set()
-    components = []
-    
-    for start_node in range(len(structure)):
-        if start_node in visited:
-            continue
-        
-        # BFS from this node
-        component = []
-        queue = [start_node]
-        visited.add(start_node)
-        
-        while queue:
-            node = queue.pop(0)
-            component.append(node)
-            
-            for neighbor in range(len(structure)):
-                if adj_matrix[node, neighbor] == 1 and neighbor not in visited:
-                    visited.add(neighbor)
-                    queue.append(neighbor)
-        
-        components.append(sorted(component))
-    
-    return components
+    """Get connected components (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.connected_components
 
 
 def get_shortest_path(
@@ -422,54 +698,9 @@ def get_shortest_path(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> Optional[List[int]]:
-    """
-    Find shortest path between two atoms in the graph.
-    
-    Uses BFS to find the shortest path through bonded atoms.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        start_idx: Index of starting atom.
-        end_idx: Index of ending atom.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        List of atom indices representing shortest path from start to end,
-        or None if no path exists.
-        
-    Examples:
-        >>> mol = Molecule(['C', 'C', 'C'], [[0,0,0], [1,0,0], [2,0,0]])
-        >>> path = get_shortest_path(mol, 0, 2, cutoff=1.5)
-        >>> print(path)  # [0, 1, 2]
-    """
-    if not (0 <= start_idx < len(structure)):
-        raise IndexError(f"start_idx {start_idx} out of range")
-    if not (0 <= end_idx < len(structure)):
-        raise IndexError(f"end_idx {end_idx} out of range")
-    
-    if start_idx == end_idx:
-        return [start_idx]
-    
-    adj_matrix = get_adjacency_matrix(structure, cutoff, use_pbc)
-    
-    # BFS with path tracking
-    visited = {start_idx}
-    queue = [(start_idx, [start_idx])]
-    
-    while queue:
-        node, path = queue.pop(0)
-        
-        for neighbor in range(len(structure)):
-            if adj_matrix[node, neighbor] == 1:
-                if neighbor == end_idx:
-                    return path + [neighbor]
-                
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    queue.append((neighbor, path + [neighbor]))
-    
-    return None  # No path found
+    """Get shortest path (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.get_shortest_path(start_idx, end_idx)
 
 
 def get_graph_diameter(
@@ -477,85 +708,18 @@ def get_graph_diameter(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> Optional[int]:
-    """
-    Compute graph diameter (longest shortest path).
-    
-    Diameter is the maximum shortest path length between any two atoms.
-    Returns None if graph is disconnected.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        Diameter as integer (number of edges), or None if disconnected.
-        
-    Examples:
-        >>> # Linear molecule
-        >>> mol = Molecule(['C', 'C', 'C'], [[0,0,0], [1,0,0], [2,0,0]])
-        >>> diameter = get_graph_diameter(mol, cutoff=1.5)
-        >>> print(diameter)  # 2 (path from atom 0 to atom 2)
-    """
-    if not is_connected(structure, cutoff, use_pbc):
-        return None
-    
-    if len(structure) <= 1:
-        return 0
-    
-    max_distance = 0
-    
-    # Check all pairs (could be optimized with better algorithm)
-    for i in range(len(structure)):
-        for j in range(i + 1, len(structure)):
-            path = get_shortest_path(structure, i, j, cutoff, use_pbc)
-            if path is not None:
-                path_length = len(path) - 1  # Number of edges
-                max_distance = max(max_distance, path_length)
-    
-    return max_distance
+    """Get graph diameter (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.diameter
 
 
 def get_node_features(
     structure: Union[Crystal, Molecule],
     include_properties: bool = True
 ) -> np.ndarray:
-    """
-    Extract node (atom) features for graph neural networks.
-    
-    Features include atomic number and optionally site properties.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        include_properties: Include site properties as features.
-    
-    Returns:
-        Feature matrix of shape (N, F) where N is atoms, F is features.
-        Default features: [atomic_number]
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> features = get_node_features(molecule)
-        >>> print(features.shape)  # (2, 1)
-        >>> print(features)  # [[6], [8]] - atomic numbers
-    """
-    from .periodic_table import Element
-    
-    # Get atomic numbers
-    atomic_numbers = np.array([
-        Element.get_element(spec).atomic_no 
-        for spec in structure.species
-    ]).reshape(-1, 1)
-    
-    features = [atomic_numbers]
-    
-    if include_properties and hasattr(structure, 'site_properties'):
-        if structure.site_properties:
-            # Extract numeric site properties
-            # This is a simple implementation - could be extended
-            pass
-    
-    return np.hstack(features) if len(features) > 1 else features[0]
+    """Get node features (functional API)."""
+    graph = create_structure_graph(structure, cutoff=3.0)
+    return graph.node_features
 
 
 def get_graph_statistics(
@@ -563,55 +727,9 @@ def get_graph_statistics(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ) -> Dict[str, Any]:
-    """
-    Compute comprehensive graph statistics for the structure.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        Dictionary containing:
-            - num_nodes: Number of atoms
-            - num_edges: Number of edges (bonds)
-            - is_connected: Whether graph is connected
-            - num_components: Number of connected components
-            - diameter: Graph diameter (or None if disconnected)
-            - avg_coordination: Average coordination number
-            - max_coordination: Maximum coordination number
-            - min_coordination: Minimum coordination number
-            - degree_distribution: Distribution of coordination numbers
-            
-    Examples:
-        >>> molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> stats = get_graph_statistics(molecule, cutoff=2.0)
-        >>> print(stats['num_nodes'])  # 2
-        >>> print(stats['avg_coordination'])  # 1.0
-    """
-    if use_pbc is None:
-        use_pbc = isinstance(structure, Crystal)
-    
-    edges = get_edge_list(structure, cutoff, use_pbc)
-    coord_numbers = get_coordination_numbers(structure, cutoff, use_pbc)
-    components = get_connected_components(structure, cutoff, use_pbc)
-    connected = is_connected(structure, cutoff, use_pbc)
-    diameter = get_graph_diameter(structure, cutoff, use_pbc) if connected else None
-    degree_dist = get_degree_distribution(structure, cutoff, use_pbc)
-    
-    coord_values = list(coord_numbers.values())
-    
-    return {
-        'num_nodes': len(structure),
-        'num_edges': len(edges),
-        'is_connected': connected,
-        'num_components': len(components),
-        'diameter': diameter,
-        'avg_coordination': np.mean(coord_values) if coord_values else 0.0,
-        'max_coordination': max(coord_values) if coord_values else 0,
-        'min_coordination': min(coord_values) if coord_values else 0,
-        'degree_distribution': degree_dist,
-    }
+    """Get graph statistics (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.statistics
 
 
 def structure_to_networkx(
@@ -619,56 +737,9 @@ def structure_to_networkx(
     cutoff: float = 3.0,
     use_pbc: bool = None
 ):
-    """
-    Convert structure to NetworkX graph.
-    
-    Requires networkx to be installed (optional dependency).
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        NetworkX Graph object with atoms as nodes and bonds as edges.
-        
-    Raises:
-        ImportError: If networkx is not installed.
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> G = structure_to_networkx(molecule, cutoff=2.0)
-        >>> print(G.number_of_nodes())  # 2
-        >>> print(G.number_of_edges())  # 1
-    """
-    try:
-        import networkx as nx
-    except ImportError:
-        raise ImportError(
-            "NetworkX is required for this function. "
-            "Install with: pip install networkx"
-        )
-    
-    if use_pbc is None:
-        use_pbc = isinstance(structure, Crystal)
-    
-    G = nx.Graph()
-    
-    # Add nodes with attributes
-    for i, (spec, pos) in enumerate(zip(structure.species, structure.positions)):
-        G.add_node(i, species=spec, position=pos.tolist())
-    
-    # Add edges
-    edges = get_edge_list(structure, cutoff, use_pbc, include_distances=True)
-    for edge in edges:
-        if len(edge) == 3:
-            i, j, dist = edge
-            G.add_edge(i, j, distance=dist)
-        else:
-            i, j = edge
-            G.add_edge(i, j)
-    
-    return G
+    """Convert to NetworkX graph (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.to_networkx()
 
 
 def get_rings(
@@ -677,63 +748,9 @@ def get_rings(
     max_ring_size: int = 10,
     use_pbc: bool = None
 ) -> List[List[int]]:
-    """
-    Find ring structures (cycles) in the graph.
-    
-    Identifies closed loops of atoms, useful for aromatic systems,
-    zeolites, MOFs, etc.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        max_ring_size: Maximum ring size to search for.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-    
-    Returns:
-        List of rings, where each ring is a list of atom indices.
-        Only returns minimal cycles (not larger rings that contain smaller ones).
-        
-    Examples:
-        >>> # Benzene-like structure
-        >>> mol = Molecule(['C']*6, [[i,0,0] for i in range(6)])
-        >>> rings = get_rings(mol, cutoff=1.5)
-        >>> print(len(rings))  # Should find the 6-membered ring
-        
-    Note:
-        This is a basic implementation. For complex structures, consider using
-        structure_to_networkx() with NetworkX's cycle finding algorithms.
-    """
-    try:
-        import networkx as nx
-    except ImportError:
-        raise ImportError(
-            "NetworkX is required for ring finding. "
-            "Install with: pip install networkx"
-        )
-    
-    G = structure_to_networkx(structure, cutoff, use_pbc)
-    
-    # Find all cycles using NetworkX
-    try:
-        # Find simple cycles (minimal cycles)
-        cycles = list(nx.simple_cycles(G.to_directed()))
-        
-        # Filter by size and convert back to undirected representation
-        rings = []
-        seen_rings = set()
-        
-        for cycle in cycles:
-            if 3 <= len(cycle) <= max_ring_size:
-                # Normalize cycle representation (smallest index first)
-                normalized = tuple(sorted(cycle))
-                if normalized not in seen_rings:
-                    seen_rings.add(normalized)
-                    rings.append(cycle)
-        
-        return rings
-    except:
-        # Fallback: return empty list if cycle finding fails
-        return []
+    """Find rings (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    return graph.find_rings(max_ring_size)
 
 
 def get_graph_laplacian(
@@ -742,43 +759,20 @@ def get_graph_laplacian(
     use_pbc: bool = None,
     normalized: bool = False
 ) -> np.ndarray:
-    """
-    Compute graph Laplacian matrix.
-    
-    Laplacian is useful for spectral graph analysis and finding
-    eigenmodes of the structure.
-    
-    Args:
-        structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
-        use_pbc: Use periodic boundary conditions. If None, auto-detect.
-        normalized: If True, compute normalized Laplacian.
-    
-    Returns:
-        Laplacian matrix of shape (N, N).
-        - Unnormalized: L = D - A (degree matrix minus adjacency)
-        - Normalized: L = I - D^(-1/2) A D^(-1/2)
-        
-    Examples:
-        >>> molecule = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> L = get_graph_laplacian(molecule, cutoff=2.0)
-        >>> print(L)  # [[1, -1], [-1, 1]]
-    """
-    adj_matrix = get_adjacency_matrix(structure, cutoff, use_pbc)
-    degree = adj_matrix.sum(axis=1)
-    
-    if not normalized:
-        # L = D - A
-        D = np.diag(degree)
-        return D - adj_matrix
-    else:
-        # Normalized: L = I - D^(-1/2) A D^(-1/2)
-        D_inv_sqrt = np.diag(1.0 / np.sqrt(degree + 1e-10))  # Add small epsilon
-        I = np.eye(len(structure))
-        return I - D_inv_sqrt @ adj_matrix @ D_inv_sqrt
+    """Get graph Laplacian (functional API)."""
+    graph = create_structure_graph(structure, cutoff, use_pbc)
+    if normalized:
+        return graph.get_normalized_laplacian()
+    return graph.laplacian
 
 
 __all__ = [
+    # OOP API (recommended)
+    'StructureGraph',
+    'MoleculeGraph',
+    'CrystalGraph',
+    'create_structure_graph',
+    # Functional API (backward compatibility)
     'structure_to_graph_data',
     'get_adjacency_matrix',
     'get_distance_matrix',
@@ -795,4 +789,3 @@ __all__ = [
     'get_rings',
     'get_graph_laplacian',
 ]
-
