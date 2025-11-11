@@ -1,20 +1,28 @@
 import re
 import json
 from collections import Counter
-from typing import Optional
+from typing import Optional, Dict, List, Tuple, Any
 from monty.json import MSONable
 from .periodic_table import Element
 
+
 class Composition(MSONable):
     """
-    A class representing the composition of a chemical formula.
+    Chemical composition with formula parsing and property calculation.
+    
+    Parses chemical formulas and provides access to elemental composition,
+    mass calculations, and formatted output (HTML, LaTeX).
 
     Args:
-        formula (str): A string representing the chemical formula.
+        formula: Chemical formula string (e.g., 'H2O', 'Fe2O3', 'Ca(OH)2').
+        sort_by: Sorting method for formula - 'alphabet' or 'element' (by atomic number).
 
     Attributes:
-        formula (str): The chemical formula.
-        composition (collections.Counter): A Counter object representing the composition of the formula.
+        formula: Normalized chemical formula string.
+        composition: Counter of element symbols to counts.
+
+    Raises:
+        ValueError: If formula is empty or has invalid format.
 
     Examples:
         >>> c = Composition('H2O')
@@ -24,263 +32,393 @@ class Composition(MSONable):
         Counter({'H': 2, 'O': 1})
         >>> c['H']
         2
+        >>> c.mass
+        18.01528
     """
-    def __init__(self, formula: str ,sort_by: str = 'alphabet'):
+    
+    def __init__(self, formula: str, sort_by: str = 'alphabet'):
+        """
+        Initialize Composition from chemical formula.
+        
+        Args:
+            formula: Chemical formula string.
+            sort_by: Sorting method - 'alphabet' or 'element'.
+            
+        Raises:
+            ValueError: If formula is empty or invalid.
+        """
+        # Initialize element cache for performance
+        self._element_cache: Dict[str, Element] = {}
+        
+        # Parse and validate formula
         self.composition = self._parse_formula(formula)
         self.formula = self._chemical_formula(sort_by=sort_by)
+        
+        # Cache for mass calculation
+        self._cached_mass: Optional[float] = None
 
     def _chemical_formula(self, sort_by: str = 'alphabet') -> str:
+        """
+        Generate chemical formula string from composition.
+        
+        Args:
+            sort_by: Sorting method - 'alphabet' or 'element'.
+        
+        Returns:
+            Formatted chemical formula string.
+            
+        Raises:
+            ValueError: If sort_by is invalid.
+        """
         element_counts = self.composition
-        if sort_by == 'alphabet':
-            sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
-        elif sort_by == 'element':
-            sorted_elements = sorted(element_counts.items(), key=lambda x: Element(x[0]).atomic_no)
-        else:
-            raise ValueError("sort_by must be either 'alphabet' or 'Element.Z'")
-    
-        formula = ''.join([f'{element}{count if count > 1 else ""}' for element, count in sorted_elements])
+        sorted_elements = self._get_sorted_element_counts(element_counts, sort_by)
+        
+        formula = ''.join([
+            f'{element}{count if count > 1 else ""}' 
+            for element, count in sorted_elements
+        ])
         return formula
+    
+    @staticmethod
+    def _get_sorted_element_counts(
+        element_counts: Dict[str, int], 
+        sort_by: str
+    ) -> List[Tuple[str, int]]:
+        """
+        Get sorted element counts.
+        
+        Helper method to eliminate code duplication in sorting logic.
+        
+        Args:
+            element_counts: Dictionary mapping elements to counts.
+            sort_by: Sorting method - 'alphabet' or 'element'.
+        
+        Returns:
+            Sorted list of (element, count) tuples.
+            
+        Raises:
+            ValueError: If sort_by is not 'alphabet' or 'element'.
+        """
+        if sort_by == 'alphabet':
+            return sorted(element_counts.items(), key=lambda x: x[0])
+        elif sort_by == 'element':
+            return sorted(
+                element_counts.items(), 
+                key=lambda x: Element.get_element(x[0]).atomic_no
+            )
+        else:
+            raise ValueError(
+                f"sort_by must be 'alphabet' or 'element', got '{sort_by}'"
+            )
 
     def _parse_formula(self, formula: str) -> Counter:
         """
-        Parse the given chemical formula and return a Counter object with elements and their counts.
+        Parse chemical formula into element counts.
+        
+        Supports formulas with parentheses, e.g., Ca(OH)2.
 
         Args:
-            formula (str): A string representing the chemical formula.
+            formula: Chemical formula string.
 
         Returns:
-            collections.Counter: A Counter object representing the composition of the formula.
+            Counter mapping element symbols to counts.
+            
+        Raises:
+            ValueError: If formula is empty or has invalid format.
 
         Examples:
-            >>> c = Composition._parse_formula('H2O')
-            >>> c
+            >>> c = Composition('H2O')
+            >>> c._parse_formula('H2O')
             Counter({'H': 2, 'O': 1})
+            >>> c._parse_formula('Ca(OH)2')
+            Counter({'Ca': 1, 'O': 2, 'H': 2})
         """
+        # Validate formula
+        if not formula or not formula.strip():
+            raise ValueError("Formula cannot be empty")
+        
+        # Basic format validation
+        if not re.match(r'^[A-Za-z0-9()]+$', formula):
+            raise ValueError(
+                f"Invalid formula format: '{formula}'. "
+                f"Formula must contain only letters, numbers, and parentheses."
+            )
 
         def parse_subformula(sub_formula, count):
+            """Parse a subformula and add to composition."""
             sub_counts = re.findall(element_pattern, sub_formula)
             for element, sub_count in sub_counts:
-                composition[element] += int(sub_count) if sub_count else 1 * count
+                composition[element] += (int(sub_count) if sub_count else 1) * count
 
         element_pattern = r"([A-Z][a-z]*)(\d*)"
         group_pattern = r"\(([^\)]+)\)(\d*)"
 
         composition = Counter()
 
+        # Parse groups (parentheses)
         groups = re.findall(group_pattern, formula)
         for group, count in groups:
             parse_subformula(group, int(count) if count else 1)
             formula = formula.replace(f"({group}){count}", "")
 
+        # Parse remaining formula
         parse_subformula(formula, 1)
+        
+        # Validate that we got some elements
+        if not composition:
+            raise ValueError("No valid elements found in formula")
 
         return composition
+    
+    def _get_cached_element(self, symbol: str) -> Element:
+        """
+        Get Element instance with caching for performance.
+        
+        Args:
+            symbol: Element symbol.
+        
+        Returns:
+            Element instance (cached).
+        """
+        if symbol not in self._element_cache:
+            self._element_cache[symbol] = Element.get_element(symbol)
+        return self._element_cache[symbol]
 
     def __getitem__(self, element: str) -> int:
-        """Get the count of the specified element in the composition.
+        """
+        Get count of specified element.
 
         Args:
-            element (str): A string representing the element to get the count of.
+            element: Element symbol.
 
         Returns:
-            int: The count of the specified element.
+            Count of element in composition (0 if not present).
 
         Examples:
             >>> c = Composition('H2O')
             >>> c['H']
             2
+            >>> c['C']
+            0
         """
         return self.composition[element]
 
     def __str__(self) -> str:
+        """String representation (returns formula)."""
         return self.formula
 
     def __repr__(self) -> str:
+        """Unambiguous representation for debugging."""
         return f"Composition('{self.formula}')"
+    
+    def __eq__(self, other) -> bool:
+        """
+        Check equality with another Composition.
+        
+        Args:
+            other: Another Composition object.
+        
+        Returns:
+            True if compositions are equal.
+        """
+        if isinstance(other, Composition):
+            return self.composition == other.composition
+        return False
 
-    def as_dict(self):
-        d = {
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary representation.
+        
+        Returns:
+            Dictionary with module, class, and formula.
+        """
+        return {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "formula": self.formula
         }
-        return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[str, Any]) -> 'Composition':
+        """
+        Create Composition from dictionary.
+        
+        Args:
+            d: Dictionary with 'formula' key.
+        
+        Returns:
+            Composition instance.
+        """
         formula = d["formula"]
         return cls(formula=formula)
 
-    def to_json(self):
+    def to_json(self) -> str:
+        """
+        Convert to JSON string.
+        
+        Returns:
+            JSON string representation.
+        """
         return json.dumps(self.as_dict())
 
     @classmethod
-    def from_json(cls, json_string):
+    def from_json(cls, json_string: str) -> 'Composition':
+        """
+        Create Composition from JSON string.
+        
+        Args:
+            json_string: JSON string.
+        
+        Returns:
+            Composition instance.
+        """
         return cls.from_dict(json.loads(json_string))
 
-
-    def __eq__(self, other):
-        if isinstance(other, Composition):
-            return self.composition == other.composition
-        else:
-            return False
-
     @property
-    def mass(self):
+    def mass(self) -> float:
         """
-        Calculate the mass of the composition with cached Element instances.
+        Calculate molecular/formula mass with caching.
+        
+        Uses cached Element instances for performance. Mass is cached after
+        first calculation.
 
         Returns:
-            float: The mass of the composition.
+            Total mass in atomic mass units (amu).
 
         Examples:
             >>> c = Composition('H2O')
             >>> c.mass
             18.01528
+            >>> c = Composition('Fe2O3')
+            >>> c.mass
+            159.6882
         """
+        if self._cached_mass is not None:
+            return self._cached_mass
+        
         mass = 0.0
         for element, count in self.composition.items():
-            # Use cached Element.get_element for better performance
-            elem = Element.get_element(element) if hasattr(Element, 'get_element') else Element(element)
+            elem = self._get_cached_element(element)
             mass += elem.atomic_mass * count
+        
+        self._cached_mass = mass
         return mass
 
-    def mass_fractions(self):
+    def mass_fractions(self) -> Dict[str, float]:
         """
-        Calculate the mass fractions of the composition.
+        Calculate mass fractions of each element.
+        
+        Mass fraction is the fraction of total mass contributed by each element (0-1).
 
         Returns:
-            dict: A dictionary containing the mass fractions of the composition (0-1).
+            Dictionary mapping elements to mass fractions.
 
         Examples:
             >>> c = Composition('H2O')
             >>> fractions = c.mass_fractions()
-            >>> fractions['H']  # Mass fraction of H
+            >>> fractions['H']  # ~0.112
             0.111898...
-            >>> fractions['O']  # Mass fraction of O
+            >>> fractions['O']  # ~0.888
             0.888102...
+            >>> sum(fractions.values())  # Should be 1.0
+            1.0
         """
         total_mass = self.mass
         fractions = {}
+        
         for element, count in self.composition.items():
-            # Use cached Element.get_element for better performance
-            elem = Element.get_element(element) if hasattr(Element, 'get_element') else Element(element)
+            elem = self._get_cached_element(element)
             mass_fraction = elem.atomic_mass * count / total_mass
             fractions[element] = mass_fraction
+        
         return fractions
 
-    def weight_percent(self):
+    def weight_percent(self) -> Dict[str, float]:
         """
-        Calculate the weight percent (weight percentage) of each element in the composition.
+        Calculate weight percentage of each element.
+        
+        Weight percent is mass fraction × 100.
 
         Returns:
-            dict: A dictionary containing the weight percentages of each element (0-100).
+            Dictionary mapping elements to weight percentages (0-100).
 
         Examples:
             >>> c = Composition('H2O')
             >>> weight_pct = c.weight_percent()
-            >>> weight_pct['H']  # Weight percent of H
+            >>> weight_pct['H']  # ~11.19%
             11.1898...
-            >>> weight_pct['O']  # Weight percent of O
+            >>> weight_pct['O']  # ~88.81%
             88.8102...
-            >>> sum(weight_pct.values())  # Should sum to ~100
+            >>> sum(weight_pct.values())  # Should be 100
             100.0
         """
-        total_mass = self.mass
-        weight_percentages = {}
-        for element, count in self.composition.items():
-            # Use cached Element.get_element for better performance
-            elem = Element.get_element(element) if hasattr(Element, 'get_element') else Element(element)
-            mass = elem.atomic_mass * count
-            weight_percent = (mass / total_mass) * 100.0
-            weight_percentages[element] = weight_percent
-        return weight_percentages
+        fractions = self.mass_fractions()
+        return {element: fraction * 100.0 for element, fraction in fractions.items()}
 
     def to_html(self, sort_by: Optional[str] = None) -> str:
         """
-        Convert the chemical formula to HTML string with subscript formatting.
+        Convert formula to HTML with subscript formatting.
         
         Args:
-            sort_by: Sorting method ('alphabet' or 'element'). If None, uses the
-                    original sort_by from initialization.
+            sort_by: Sorting method - 'alphabet' or 'element'. 
+                    If None, uses 'alphabet'.
         
         Returns:
-            str: HTML string with subscripts (e.g., "Fe<sub>2</sub>O<sub>3</sub>")
+            HTML string with subscripts.
+            
+        Raises:
+            ValueError: If sort_by is invalid.
             
         Examples:
             >>> c = Composition('Fe2O3')
             >>> c.to_html()
             'Fe<sub>2</sub>O<sub>3</sub>'
-            >>> c = Composition('H2O')
-            >>> c.to_html()
-            'H<sub>2</sub>O'
-            >>> c = Composition('Fe2O3', sort_by='element')
-            >>> c.to_html()
-            'Fe<sub>2</sub>O<sub>3</sub>'  # Uses element sorting
+            >>> c.to_html(sort_by='element')
+            'Fe<sub>2</sub>O<sub>3</sub>'
         """
-        html_formula = []
-        element_counts = self.composition
-        
-        # Use provided sort_by or determine from original formula
         if sort_by is None:
-            # Try to infer from formula order (if element sort, use element; else alphabet)
-            # For simplicity, default to alphabet unless explicitly specified
             sort_by = 'alphabet'
         
-        if sort_by == 'alphabet':
-            sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
-        elif sort_by == 'element':
-            sorted_elements = sorted(element_counts.items(), key=lambda x: Element(x[0]).atomic_no)
-        else:
-            raise ValueError("sort_by must be either 'alphabet' or 'element'")
+        sorted_elements = self._get_sorted_element_counts(self.composition, sort_by)
         
+        html_parts = []
         for element, count in sorted_elements:
-            html_formula.append(element)
+            html_parts.append(element)
             if count > 1:
-                html_formula.append(f'<sub>{count}</sub>')
+                html_parts.append(f'<sub>{count}</sub>')
         
-        return ''.join(html_formula)
+        return ''.join(html_parts)
 
     def to_latex(self, sort_by: Optional[str] = None) -> str:
         """
-        Convert the chemical formula to LaTeX string with subscript formatting.
+        Convert formula to LaTeX with subscript formatting.
         
         Args:
-            sort_by: Sorting method ('alphabet' or 'element'). If None, uses the
-                    original sort_by from initialization.
+            sort_by: Sorting method - 'alphabet' or 'element'.
+                    If None, uses 'alphabet'.
         
         Returns:
-            str: LaTeX string with subscripts (e.g., "Fe$_2$O$_3$")
+            LaTeX string with subscripts.
+            
+        Raises:
+            ValueError: If sort_by is invalid.
             
         Examples:
             >>> c = Composition('Fe2O3')
             >>> c.to_latex()
             'Fe$_2$O$_3$'
-            >>> c = Composition('H2O')
-            >>> c.to_latex()
-            'H$_2$O'
-            >>> c = Composition('Fe2O3', sort_by='element')
-            >>> c.to_latex()
-            'Fe$_2$O$_3$'  # Uses element sorting
+            >>> c.to_latex(sort_by='element')
+            'Fe$_2$O$_3$'
         """
-        latex_formula = []
-        element_counts = self.composition
-        
-        # Use provided sort_by or default to alphabet
         if sort_by is None:
             sort_by = 'alphabet'
         
-        if sort_by == 'alphabet':
-            sorted_elements = sorted(element_counts.items(), key=lambda x: x[0])
-        elif sort_by == 'element':
-            sorted_elements = sorted(element_counts.items(), key=lambda x: Element(x[0]).atomic_no)
-        else:
-            raise ValueError("sort_by must be either 'alphabet' or 'element'")
+        sorted_elements = self._get_sorted_element_counts(self.composition, sort_by)
         
+        latex_parts = []
         for element, count in sorted_elements:
-            latex_formula.append(element)
+            latex_parts.append(element)
             if count > 1:
-                latex_formula.append(f'$_{{{count}}}$')
+                latex_parts.append(f'$_{{{count}}}$')
         
-        return ''.join(latex_formula)
-
+        return ''.join(latex_parts)

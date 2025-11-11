@@ -236,12 +236,22 @@ class Element:
             >>> element.atomic_mass  # Works - defined as property
             >>> element.invalid_attr  # Raises AttributeError with helpful message
         """
+        # Avoid recursion during pickling/copying - check for special attributes
+        if name in ('__setstate__', '__getstate__', '__getnewargs__', '__getnewargs_ex__'):
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        
         # Check if attribute exists in data dictionary
-        if name in self._data:
-            return self._data[name]
+        # Use object.__getattribute__ to avoid recursion
+        try:
+            data = object.__getattribute__(self, '_data')
+        except AttributeError:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        
+        if name in data:
+            return data[name]
         
         # Provide helpful error message with available attributes
-        available_attrs = sorted(self._data.keys())
+        available_attrs = sorted(data.keys())
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'. "
             f"Available data attributes: {', '.join(available_attrs)}"
