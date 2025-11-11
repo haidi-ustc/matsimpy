@@ -31,6 +31,12 @@ from .ase import read_ASE, write_ASE
 from .mol import read_MOL, write_MOL
 from .utils import detect_format, get_reader_writer, is_crystal_format, is_molecule_format
 from .converters import to_pymatgen, from_pymatgen, to_ase, from_ase
+from .latex import (
+    crystals_to_latex_table, 
+    molecules_to_latex_table, 
+    structures_to_latex_table, 
+    save_latex_table
+)
 
 __all__ = [
     # High-level interface (recommended)
@@ -55,5 +61,8 @@ __all__ = [
     'detect_format', 'get_reader_writer', 'is_crystal_format', 'is_molecule_format',
     # Converters
     'to_pymatgen', 'from_pymatgen', 'to_ase', 'from_ase',
+    # LaTeX export
+    'crystals_to_latex_table', 'molecules_to_latex_table', 
+    'structures_to_latex_table', 'save_latex_table',
 ]
 
