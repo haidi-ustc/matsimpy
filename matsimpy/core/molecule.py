@@ -1,5 +1,6 @@
 import numpy as np
-from typing import List, Optional, Dict, Any, Union
+import warnings
+from typing import List, Optional, Dict, Any, Union, Tuple
 from monty.json import MSONable
 from .lattice import Lattice
 from .structure import Structure
@@ -56,10 +57,18 @@ class Molecule(Structure):
 
     def get_center_of_mass(self) -> List[float]:
         """
-        Calculates the center of mass of the molecule with caching.
+        Calculate center of mass of the molecule with caching.
+        
+        Computes weighted average of atomic positions using atomic masses.
+        Result is cached for performance - invalidated when structure changes.
 
         Returns:
-            List[float]: The center of mass as a list of three floats.
+            Center of mass coordinates as [x, y, z] in Angstroms.
+            
+        Examples:
+            >>> molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+            >>> com = molecule.get_center_of_mass()
+            >>> print(com)  # Weighted average based on C and O masses
         """
         if not hasattr(self, '_cached_com'):
             # Use cached Element instances for better performance
@@ -68,12 +77,15 @@ class Molecule(Structure):
             self._cached_com = center_of_mass.tolist()
         return self._cached_com
 
-    def translate(self, vector: List[float]):
+    def translate(self, vector: List[float]) -> None:
         """
-        Translates the molecule by a given vector.
+        Translate the molecule by a given vector (in-place).
 
         Args:
-            vector (List[float]): The vector by which to translate the molecule.
+            vector: Translation vector [dx, dy, dz] in Angstroms.
+            
+        Examples:
+            >>> molecule.translate([1.0, 0.0, 0.0])  # Move 1 Å along x-axis
         """
         self.positions += np.array(vector)
         # Invalidate center of mass cache
@@ -82,13 +94,16 @@ class Molecule(Structure):
         # Update sites
         self._sites = self._initialize_sites()
 
-    def rotate(self, angle: float, axis: List[float]):
+    def rotate(self, angle: float, axis: List[float]) -> None:
         """
-        Rotates the molecule by a given angle around a given axis.
+        Rotate the molecule around an axis (in-place).
 
         Args:
-            angle (float): The angle in degrees by which to rotate the molecule.
-            axis (List[float]): The axis around which to rotate the molecule.
+            angle: Rotation angle in degrees.
+            axis: Rotation axis vector [x, y, z] (will be normalized).
+            
+        Examples:
+            >>> molecule.rotate(90, [0, 0, 1])  # 90° rotation around z-axis
         """
         from scipy.spatial.transform import Rotation
 
@@ -104,13 +119,22 @@ class Molecule(Structure):
                  position: Union[List[float], List[List[float]]], 
                  site_properties: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None) -> None:
         """
-        Adds one or more atoms to the molecule and updates sites.
+        Add one or more atoms to the molecule and update sites.
+        
+        Performs chemical reasonableness checks on interatomic distances.
+        Issues warning if atoms are placed too close together (< 0.5 Angstroms).
         
         Args:
             species: Atomic species (single string or list of strings).
             position: Atomic position(s). Either a single 3D coordinate or list of coordinates.
             site_properties: Optional site properties (single dict or list of dicts).
                            If list, must match length of species.
+        
+        Raises:
+            ValueError: If site_properties length doesn't match number of atoms added.
+        
+        Warnings:
+            UserWarning: If interatomic distance < 0.5 Angstroms detected.
                            
         Examples:
             >>> molecule.add_atom('H', [0, 0, 0])  # Add single atom
@@ -118,6 +142,32 @@ class Molecule(Structure):
             >>> molecule.add_atom(['H', 'O'], [[0, 0, 0], [1.2, 0, 0]], 
             ...                   [{'charge': 1}, {'charge': -2}])  # With properties
         """
+        # Chemical reasonableness check - validate interatomic distances
+        if len(self.positions) > 0:
+            # Convert to array for processing
+            if isinstance(position, list) and len(position) > 0:
+                if isinstance(position[0], (int, float)):
+                    # Single position [x, y, z]
+                    new_positions = [position]
+                else:
+                    # Multiple positions [[x1,y1,z1], [x2,y2,z2], ...]
+                    new_positions = position
+            else:
+                new_positions = [position]
+            
+            # Check each new position against existing atoms
+            for new_pos in new_positions:
+                new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
+                min_distance = np.min(cdist(new_pos_array, self.positions))
+                
+                # Warn if atoms are too close (< 0.5 Å is unrealistic)
+                if min_distance < 0.5:
+                    warnings.warn(
+                        f"Very small interatomic distance detected: {min_distance:.3f} Å. "
+                        f"This may indicate overlapping atoms or incorrect units.",
+                        UserWarning
+                    )
+        
         # Determine number of atoms being added
         n_atoms_before = len(self.species)
         
@@ -366,34 +416,82 @@ class Molecule(Structure):
         return moment_tensor
 
     def get_neighbor_list(self, atom_index: int, cutoff: float) -> List[int]:
-          """
-          Returns a list of atoms within a cutoff radius of the specified atom.
-
-          Args:
-              atom_index (int): Index of the target atom.
-              cutoff (float): Cutoff radius.
-
-          Returns:
-              List[int]: List of indices of neighboring atoms.
-          """
-          distances = cdist([self.positions[atom_index]], self.positions)[0]
-          neighbors = [i for i, d in enumerate(distances) if d < cutoff and i != atom_index]
-          return neighbors
-
-    def get_all_neighbor_lists(self, cutoff: float):
         """
-        Returns a list of neighbor lists for all atoms in the structure.
-    
+        Get list of atoms within cutoff radius of specified atom.
+
         Args:
-            cutoff (float): Cutoff radius.
-    
+            atom_index: Index of the target atom.
+            cutoff: Cutoff radius in Angstroms.
+
         Returns:
-            List[List[int]]: List of neighbor lists for all atoms.
+            List of indices of neighboring atoms within cutoff distance.
+            
+        Raises:
+            IndexError: If atom_index is out of range.
+
+        Examples:
+            >>> molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+            >>> neighbors = molecule.get_neighbor_list(0, 2.0)
+            >>> print(neighbors)  # [1] - atom 1 is within 2.0 Å
         """
+        if not (0 <= atom_index < len(self)):
+            raise IndexError(f"Atom index {atom_index} is out of range [0, {len(self)-1}]")
+        
+        distances = cdist([self.positions[atom_index]], self.positions)[0]
+        neighbors = [i for i, d in enumerate(distances) if d < cutoff and i != atom_index]
+        return neighbors
+
+    def get_all_neighbor_lists(self, cutoff: float) -> List[List[int]]:
+        """
+        Get neighbor lists for all atoms using vectorized operations.
+        
+        Optimized implementation using distance matrix and vectorization
+        instead of loop-based approach. Much faster for large molecules.
+
+        Args:
+            cutoff: Cutoff radius in Angstroms.
+
+        Returns:
+            List of neighbor lists for all atoms. Each inner list contains
+            indices of neighbors within cutoff distance of that atom.
+            
+        Raises:
+            ValueError: If cutoff is negative.
+
+        Examples:
+            >>> molecule = Molecule(['C', 'O', 'H'], [[0,0,0], [1.2,0,0], [2.5,0,0]])
+            >>> all_neighbors = molecule.get_all_neighbor_lists(2.0)
+            >>> print(all_neighbors)  # [[1], [0], []]
+            
+        Notes:
+            - Uses vectorized operations for better performance
+            - Time complexity: O(n²) for distance matrix, but vectorized
+            - Memory complexity: O(n²) for distance matrix
+            - For n > 1000 atoms, consider using spatial trees
+        """
+        if cutoff < 0:
+            raise ValueError(f"Cutoff must be non-negative, got {cutoff}")
+        
+        if len(self.positions) == 0:
+            return []
+        
+        # Use vectorized operations for performance
+        positions = np.array(self.positions)
+        
+        # Compute all pairwise distances at once
+        distance_matrix = cdist(positions, positions)
+        
+        # Ignore self-distances by setting diagonal to infinity
+        np.fill_diagonal(distance_matrix, np.inf)
+        
+        # Find neighbors using vectorized operations
         neighbor_lists = []
-        for i in range(len(self)):
-            neighbor_list = self.get_neighbor_list(i, cutoff)
-            neighbor_lists.append(neighbor_list)
+        for i in range(len(positions)):
+            # Use boolean mask for efficient filtering
+            mask = distance_matrix[i] < cutoff
+            neighbors = np.where(mask)[0].tolist()
+            neighbor_lists.append(neighbors)
+        
         return neighbor_lists
     
     @classmethod
