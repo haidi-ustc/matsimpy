@@ -158,24 +158,59 @@ class Structure(ABC, MSONable):
             self._cached_composition = Composition(self.formula)
         return self._cached_composition
 
-    def add_atom(self, species: str, position: List[float]) -> None:
+    def add_atom(self, species: Union[str, List[str]], 
+                 position: Union[List[float], List[List[float]]]) -> None:
         """
-        Adds an atom to the structure and invalidates cache.
+        Adds one or more atoms to the structure and invalidates cache.
 
         Args:
-            species (str): Atomic species.
-            position (List[float]): Atomic position (must be 3D).
+            species: Atomic species (single string or list of strings).
+            position: Atomic position(s). Either a single 3D coordinate [x, y, z]
+                     or a list of 3D coordinates [[x1, y1, z1], [x2, y2, z2], ...].
+                     
+        Raises:
+            ValueError: If position is not 3D or if species/position counts don't match.
+            
+        Examples:
+            >>> structure.add_atom('H', [0, 0, 0])  # Add single atom
+            >>> structure.add_atom(['H', 'O'], [[0, 0, 0], [1, 0, 0]])  # Add multiple
         """
-        # Validate position is 3D
-        position = np.array(position, dtype=np.float64)
-        if position.ndim != 1 or len(position) != 3:
-            raise ValueError("Position must be a 3D coordinate")
+        # Handle single atom case
+        if isinstance(species, str):
+            species = [species]
+            position = [position]
         
-        # Maintain tuple immutability
+        # Validate inputs
+        if len(species) != len(position):
+            raise ValueError(
+                f"Number of species ({len(species)}) must match "
+                f"number of positions ({len(position)})"
+            )
+        
+        if not species:
+            return  # Nothing to add
+        
+        # Validate all positions are 3D
+        positions_array = np.array(position, dtype=np.float64)
+        if positions_array.ndim == 1:
+            # Single atom: [x, y, z]
+            if len(positions_array) != 3:
+                raise ValueError("Position must be a 3D coordinate")
+            positions_array = positions_array.reshape(1, 3)
+        elif positions_array.ndim == 2:
+            # Multiple atoms: [[x1, y1, z1], ...]
+            if positions_array.shape[1] != 3:
+                raise ValueError("Positions must be 3D coordinates")
+        else:
+            raise ValueError("Position must be a 3D coordinate or list of 3D coordinates")
+        
+        # Add atoms
         species_list = list(self.species)
-        species_list.append(species)
+        species_list.extend(species)
         self.species = tuple(species_list)
-        self.positions = np.vstack([self.positions, position])
+        self.positions = np.vstack([self.positions, positions_array])
+        
+        # Invalidate caches
         self._formula_dirty = True
         self._cached_composition = None
         # Properties computed lazily on access

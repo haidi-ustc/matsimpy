@@ -34,32 +34,65 @@ class Crystal(Structure):
         self._neighbor_tree_cutoff: Optional[float] = None
         self._neighbor_tree_positions: Optional[np.ndarray] = None
     
-    def add_atom(self, species: str, position: List[float], site_properties: Optional[dict] = None) -> None:
+    def add_atom(self, species: Union[str, List[str]], 
+                 position: Union[List[float], List[List[float]]], 
+                 site_properties: Optional[Union[dict, List[dict]]] = None) -> None:
         """
-        Adds an atom to the crystal structure and updates coordinates.
+        Adds one or more atoms to the crystal structure and updates coordinates.
         
         Args:
-            species (str): Atomic species.
-            position (List[float]): Atomic position (fractional coordinates).
-            site_properties (Optional[dict]): Optional site properties for the new atom.
+            species: Atomic species (single string or list of strings).
+            position: Atomic position(s) in fractional coordinates.
+                     Either a single 3D coordinate or list of coordinates.
+            site_properties: Optional site properties (single dict or list of dicts).
+                           If list, must match length of species.
+                           
+        Examples:
+            >>> crystal.add_atom('H', [0, 0, 0])  # Add single atom
+            >>> crystal.add_atom(['H', 'O'], [[0, 0, 0], [0.5, 0, 0]])  # Add multiple
+            >>> crystal.add_atom(['H', 'O'], [[0, 0, 0], [0.5, 0, 0]], 
+            ...                  [{'charge': 1}, {'charge': -2}])  # With properties
         """
+        # Determine number of atoms being added
+        n_atoms_before = len(self.species)
+        
+        # Call parent to add atoms
         super().add_atom(species, position)
+        
+        n_atoms_added = len(self.species) - n_atoms_before
+        
         # Update fractional and cartesian positions
         self.frac_positions = self.positions
         self.cart_positions = self._convert_to_cartesian()
+        
         # Invalidate neighbor tree
         self._neighbor_tree = None
         self._neighbor_tree_positions = None
+        
         # Update site properties
-        # Only maintain site_properties if we're actively using them
         if site_properties is not None:
+            # Normalize to list
+            if isinstance(site_properties, dict):
+                site_properties_list = [site_properties] * n_atoms_added
+            else:
+                site_properties_list = site_properties
+            
+            # Validate length
+            if len(site_properties_list) != n_atoms_added:
+                raise ValueError(
+                    f"Number of site_properties ({len(site_properties_list)}) "
+                    f"must match number of atoms added ({n_atoms_added})"
+                )
+            
+            # Initialize site_properties if needed
             if not self.site_properties:
-                # Initialize with empty dicts for existing atoms
-                self.site_properties = [{}] * (len(self.species) - 1)
-            self.site_properties.append(site_properties)
+                self.site_properties = [{}] * n_atoms_before
+            
+            self.site_properties.extend(site_properties_list)
         elif self.site_properties:
-            # If we have site_properties, maintain them (add empty dict)
-            self.site_properties.append({})
+            # Maintain existing site_properties with empty dicts
+            self.site_properties.extend([{}] * n_atoms_added)
+        
         # Reinitialize sites
         self._sites = self._initialize_sites()
     
