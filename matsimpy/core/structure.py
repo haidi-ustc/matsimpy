@@ -202,10 +202,12 @@ class Structure(ABC, MSONable):
     def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
                    new_species: Union[str, List[str], Dict[str, str]]) -> None:
         """
-        Substitute atoms with new species.
+        Substitute atoms with new species (in-place).
         
-        This is a common operation for modifying structures. For functional
-        style (returning new object), use matsimpy.transformation.substitute().
+        This is a convenience method that modifies the structure directly.
+        For functional style (returning new object), use matsimpy.transformation.substitute().
+        
+        Note: This method delegates to the transformation module for the actual implementation.
         
         Args:
             indices: Atom index, list of indices, or AtomSelection object to substitute
@@ -227,69 +229,18 @@ class Structure(ABC, MSONable):
             >>> # Using dict mapping (maps old species to new species)
             >>> structure.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
-        # Handle AtomSelection object
-        from ..utils.selection import AtomSelection
-        if isinstance(indices, AtomSelection):
-            if indices.structure is not self:
-                raise ValueError("AtomSelection must be created from this structure")
-            indices = indices.indices
-        
-        # Handle dict-based species mapping
-        if isinstance(new_species, dict):
-            # Convert dict to list based on current species at selected indices
-            new_species_list = []
-            for idx in indices:
-                old_spec = self.species[idx]
-                if old_spec not in new_species:
-                    raise KeyError(f"Species '{old_spec}' at index {idx} not found in substitution mapping")
-                new_species_list.append(new_species[old_spec])
-            new_species = new_species_list
-        
-        # Normalize inputs
-        if isinstance(indices, int):
-            indices = [indices]
-            if isinstance(new_species, str):
-                new_species = [new_species]
-            else:
-                new_species = [new_species[0]]  # Take first if list
-        elif isinstance(new_species, str):
-            # Multiple indices, single species
-            new_species = [new_species] * len(indices)
-        elif isinstance(new_species, list):
-            # Both are lists
-            pass
-        else:
-            raise TypeError(f"new_species must be str, List[str], or Dict[str, str], got {type(new_species)}")
-        
-        if len(indices) != len(new_species):
-            raise ValueError(
-                f"Number of indices ({len(indices)}) must match "
-                f"number of species ({len(new_species)})"
-            )
-        
-        # Validate indices
-        for idx in indices:
-            if not (0 <= idx < len(self.species)):
-                raise IndexError(f"Atom index {idx} is out of range [0, {len(self.species)-1}]")
-        
-        # Perform substitutions
-        species_list = list(self.species)
-        for idx, species in zip(indices, new_species):
-            species_list[idx] = species
-        
-        # Update species tuple
-        self.species = tuple(species_list)
-        
-        # Invalidate caches
-        self._formula_dirty = True
-        self._cached_composition = None
+        # Delegate to transformation module for implementation
+        from ..transformation.chemical.substitution import substitute
+        substitute(self, indices, new_species, inplace=True)
     
     def substitute_all(self, old_species: str, new_species: str) -> None:
         """
-        Substitute all atoms of a given species with a new species.
+        Substitute all atoms of a given species with a new species (in-place).
         
-        This is a convenience method for bulk substitution. For functional
-        style (returning new object), use matsimpy.transformation.substitute_all().
+        This is a convenience method that modifies the structure directly.
+        For functional style (returning new object), use matsimpy.transformation.substitute_all().
+        
+        Note: This method delegates to the transformation module for the actual implementation.
         
         Args:
             old_species: Species to replace
@@ -298,15 +249,9 @@ class Structure(ABC, MSONable):
         Examples:
             >>> structure.substitute_all('Si', 'Ge')  # Replace all Si with Ge
         """
-        # Find all indices of old_species
-        indices = [i for i, spec in enumerate(self.species) if spec == old_species]
-        
-        if not indices:
-            # No substitution needed
-            return
-        
-        # Substitute all at once
-        self.substitute(indices, [new_species] * len(indices))
+        # Delegate to transformation module for implementation
+        from ..transformation.chemical.substitution import substitute_all
+        substitute_all(self, old_species, new_species, inplace=True)
     
     def sort_atoms(self, sort_by: str = 'element') -> None:
         """
