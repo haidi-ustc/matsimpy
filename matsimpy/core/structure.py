@@ -142,9 +142,64 @@ class Structure(ABC, MSONable):
         return self.from_dict(self.as_dict())
 
     def __hash__(self):
-        # Use hashlib to generate a SHA256 hash of the structure's dictionary representation
-        hash_str = str(self.as_dict()).encode('utf-8')
+        """
+        Generate a hash for the structure.
+        
+        Positions are rounded to 8 decimal places to handle floating-point precision issues.
+        This ensures that structures with nearly identical positions (within tolerance)
+        hash to the same value.
+        
+        Returns:
+            int: Hash value for the structure
+        """
+        # Create a normalized dictionary with rounded positions
+        hash_dict = {
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "species": list(self.species),
+            "positions": np.round(self.positions, decimals=8).tolist(),
+        }
+        if self.lattice is not None:
+            hash_dict["lattice"] = self.lattice.as_dict()
+        
+        # Use hashlib to generate a SHA256 hash
+        hash_str = str(hash_dict).encode('utf-8')
         return int(hashlib.sha256(hash_str).hexdigest(), 16)
+    
+    def __eq__(self, other):
+        """
+        Test equality between structures.
+        
+        Two structures are equal if they have the same species and positions
+        (within floating-point tolerance of 1e-8).
+        
+        Args:
+            other: Another Structure object
+            
+        Returns:
+            bool: True if structures are equal
+        """
+        if not isinstance(other, Structure):
+            return False
+        
+        # Check species
+        if self.species != other.species:
+            return False
+        
+        # Check positions with tolerance
+        if not np.allclose(self.positions, other.positions, atol=1e-8, rtol=0):
+            return False
+        
+        # Check lattice (if both have lattices)
+        if self.lattice is not None and other.lattice is not None:
+            # Compare lattice matrices
+            if not np.allclose(self.lattice.matrix, other.lattice.matrix, atol=1e-8, rtol=0):
+                return False
+        elif self.lattice is not None or other.lattice is not None:
+            # One has lattice, other doesn't
+            return False
+        
+        return True
 
     @property
     def composition(self) -> Composition:
