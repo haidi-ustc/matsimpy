@@ -1,7 +1,8 @@
 import numpy as np
 from tabulate import tabulate
-from typing import List, Optional, Union, Dict, Tuple, Any
+from typing import List, Optional, Union, Dict, Tuple, Any, Callable
 from scipy.spatial import cKDTree
+from collections import Counter
 from .structure import Structure
 from .lattice import Lattice
 from .periodic_table import Element
@@ -34,6 +35,96 @@ class Crystal(Structure):
         self._neighbor_tree_cutoff: Optional[float] = None
         self._neighbor_tree_positions: Optional[np.ndarray] = None
     
+    # ========================================================================
+    # Helper Methods - Reduce Code Duplication
+    # ========================================================================
+    
+    def _invalidate_neighbor_tree(self) -> None:
+        """
+        Invalidate neighbor tree cache.
+        
+        Called when structure changes (add/remove atoms, substitute, etc.).
+        """
+        self._neighbor_tree = None
+        self._neighbor_tree_positions = None
+        self._neighbor_tree_cutoff = None
+    
+    def _update_coordinates_after_modification(self) -> None:
+        """
+        Update fractional and Cartesian coordinates after modification.
+        
+        Ensures consistency between frac_positions and cart_positions.
+        """
+        self.frac_positions = self.positions
+        self.cart_positions = self._convert_to_cartesian()
+    
+    def _get_sorted_sites(self, sort_by: str = 'element') -> List[CrystalSite]:
+        """
+        Get sites sorted by specified criterion.
+        
+        Args:
+            sort_by: Sorting method - 'element' (by atomic number) or 'alphabet'.
+        
+        Returns:
+            Sorted list of CrystalSite objects.
+            
+        Raises:
+            ValueError: If sort_by is not 'element' or 'alphabet'.
+        """
+        if sort_by == 'element':
+            # Sort by atomic number, then by fractional coordinates
+            return sorted(
+                self.sites,
+                key=lambda s: (
+                    Element.get_element(s.specie).atomic_no,
+                    s.frac_position[0],
+                    s.frac_position[1],
+                    s.frac_position[2]
+                )
+            )
+        elif sort_by == 'alphabet':
+            # Sort alphabetically by species, then by coordinates
+            return sorted(
+                self.sites,
+                key=lambda s: (
+                    s.specie,
+                    s.frac_position[0],
+                    s.frac_position[1],
+                    s.frac_position[2]
+                )
+            )
+        else:
+            raise ValueError(f"sort_by must be 'element' or 'alphabet', got '{sort_by}'")
+    
+    @staticmethod
+    def _get_sorted_element_counts(element_counts: Dict[str, int], sort_by: str) -> List[Tuple[str, int]]:
+        """
+        Get sorted element counts for formula generation.
+        
+        Args:
+            element_counts: Dictionary mapping element symbols to counts.
+            sort_by: Sorting method - 'element' or 'alphabet'.
+        
+        Returns:
+            Sorted list of (element, count) tuples.
+            
+        Raises:
+            ValueError: If sort_by is invalid.
+        """
+        if sort_by == 'alphabet':
+            return sorted(element_counts.items(), key=lambda x: x[0])
+        elif sort_by == 'element':
+            return sorted(
+                element_counts.items(),
+                key=lambda x: Element.get_element(x[0]).atomic_no
+            )
+        else:
+            raise ValueError(f"sort_by must be 'element' or 'alphabet', got '{sort_by}'")
+    
+    # ========================================================================
+    # Atom Modification Methods
+    # ========================================================================
+    
     def add_atom(self, species: Union[str, List[str]], 
                  position: Union[List[float], List[List[float]]], 
                  site_properties: Optional[Union[dict, List[dict]]] = None) -> None:
@@ -61,13 +152,9 @@ class Crystal(Structure):
         
         n_atoms_added = len(self.species) - n_atoms_before
         
-        # Update fractional and cartesian positions
-        self.frac_positions = self.positions
-        self.cart_positions = self._convert_to_cartesian()
-        
-        # Invalidate neighbor tree
-        self._neighbor_tree = None
-        self._neighbor_tree_positions = None
+        # Update coordinates and invalidate caches
+        self._update_coordinates_after_modification()
+        self._invalidate_neighbor_tree()
         
         # Update site properties
         if site_properties is not None:
@@ -98,21 +185,24 @@ class Crystal(Structure):
     
     def remove_atom(self, index: int) -> None:
         """
-        Removes an atom from the crystal structure and updates coordinates.
+        Remove an atom from the crystal structure and update coordinates.
         
         Args:
-            index (int): Index of atom to be removed.
+            index: Index of atom to be removed.
+            
+        Raises:
+            IndexError: If index is out of range.
         """
         super().remove_atom(index)
-        # Update fractional and cartesian positions
-        self.frac_positions = self.positions
-        self.cart_positions = self._convert_to_cartesian()
-        # Invalidate neighbor tree
-        self._neighbor_tree = None
-        self._neighbor_tree_positions = None
+        
+        # Update coordinates and caches
+        self._update_coordinates_after_modification()
+        self._invalidate_neighbor_tree()
+        
         # Update site properties
         if self.site_properties and len(self.site_properties) > index:
             self.site_properties.pop(index)
+        
         # Reinitialize sites
         self._sites = self._initialize_sites()
     
@@ -144,10 +234,9 @@ class Crystal(Structure):
             >>> crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
         super().substitute(indices, new_species)
-        # Invalidate neighbor tree (species changed)
-        self._neighbor_tree = None
-        self._neighbor_tree_positions = None
-        # Reinitialize sites
+        
+        # Invalidate caches and reinitialize
+        self._invalidate_neighbor_tree()
         self._sites = self._initialize_sites()
 
     def _initialize_sites(self) -> List[CrystalSite]:
@@ -225,11 +314,8 @@ class Crystal(Structure):
         if has_properties:
             headers.append("Properties")
         
-        # Sort sites by element (alphabetically, then by atomic number for same element)
-        sorted_sites = sorted(
-            self.sites,
-            key=lambda s: (Element.get_element(s.specie).atomic_no, s.frac_position[0], s.frac_position[1], s.frac_position[2])
-        )
+        # Sort sites using helper method
+        sorted_sites = self._get_sorted_sites(sort_by='element')
         
         rows = []
         for site in sorted_sites:
@@ -265,54 +351,42 @@ class Crystal(Structure):
         """
         Sort atoms in the crystal by element (in-place).
         
-        This method actually reorders the internal species and positions arrays,
+        This method reorders internal species and positions arrays,
         unlike __str__ which only sorts for display.
         
         Args:
-            sort_by: Sorting method ('element' for atomic number, 'alphabet' for alphabetical)
+            sort_by: Sorting method - 'element' (atomic number) or 'alphabet'.
+            
+        Raises:
+            ValueError: If sort_by is not 'element' or 'alphabet'.
             
         Examples:
             >>> crystal.sort_atoms('element')  # Sort by atomic number
             >>> crystal.sort_atoms('alphabet')  # Sort alphabetically
-            
-        Note:
-            This will invalidate the neighbor tree and reinitialize sites.
         """
         # Call parent method to sort species and positions
         super().sort_atoms(sort_by)
         
-        # Update fractional/Cartesian positions for crystal
-        self.frac_positions = self.positions
-        self.cart_positions = self._convert_to_cartesian()
-        
-        # Invalidate neighbor tree (positions changed)
-        self._neighbor_tree = None
-        self._neighbor_tree_positions = None
-        
-        # Reinitialize sites
+        # Update coordinates and caches using helper methods
+        self._update_coordinates_after_modification()
+        self._invalidate_neighbor_tree()
         self._sites = self._initialize_sites()
 
-    def _convert_to_cartesian(self):
+    def _convert_to_cartesian(self) -> np.ndarray:
         """
-        Converts fractional coordinates to Cartesian coordinates.
-
-        Args:
-            frac_positions (np.ndarray): Numpy array of fractional positions.
+        Convert fractional coordinates to Cartesian coordinates.
 
         Returns:
-            (np.ndarray): Numpy array of Cartesian positions.
+            Numpy array of Cartesian positions.
         """
         return np.dot(self.frac_positions, self.lattice.matrix)
 
-    def _convert_to_fractional(self):
+    def _convert_to_fractional(self) -> np.ndarray:
         """
-        Converts Cartesian coordinates to fractional coordinates.
-
-        Args:
-            cart_positions (np.ndarray): Numpy array of Cartesian positions.
+        Convert Cartesian coordinates to fractional coordinates.
 
         Returns:
-            (np.ndarray): Numpy array of fractional positions.
+            Numpy array of fractional positions.
         """
         # Use cached inverse matrix
         return np.dot(self.cart_positions, self.lattice.inv_matrix)
