@@ -314,11 +314,11 @@ class Crystal(Structure):
         if has_properties:
             headers.append("Properties")
         
-        # Sort sites using helper method
-        sorted_sites = self._get_sorted_sites(sort_by='element')
+        # Display sites in insertion order to match internal species ordering
+        display_sites = list(self.sites)
         
         rows = []
-        for site in sorted_sites:
+        for site in display_sites:
             element = str(site.specie)
             frac_coords = f"({site.frac_position[0]:.4f}, {site.frac_position[1]:.4f}, {site.frac_position[2]:.4f})"
             cart_coords = f"({site.cart_position[0]:.4f}, {site.cart_position[1]:.4f}, {site.cart_position[2]:.4f})"

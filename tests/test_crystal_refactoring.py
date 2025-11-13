@@ -106,6 +106,25 @@ class TestCrystalHelperMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             Crystal._get_sorted_element_counts(counts, 'invalid')
 
+    def test_str_preserves_species_order(self):
+        """Crystal.__str__ should display atoms in insertion order."""
+        lattice = Lattice(10)
+        crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
+        crystal.add_atom('O', [0.25, 0.25, 0.25])
+
+        representation = str(crystal)
+        lines = [line for line in representation.splitlines() if line]
+
+        header = "Element    Fractional Coordinates    Cartesian Coordinates"
+        self.assertIn(header, lines)
+        header_index = lines.index(header)
+
+        first_row = lines[header_index + 1]
+        second_row = lines[header_index + 2]
+
+        self.assertTrue(first_row.startswith('Si'), msg=f"Expected first row to describe 'Si', got: {first_row}")
+        self.assertTrue(second_row.startswith('O'), msg=f"Expected second row to describe 'O', got: {second_row}")
+
 
 class TestCrystalCodeDeduplication(unittest.TestCase):
     """Test that helper methods reduce code duplication."""
