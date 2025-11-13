@@ -101,7 +101,8 @@ print(comp.mass)      # Fast! (cached)
 
 ```python
 from matsimpy.core.graph import MoleculeGraph, create_structure_graph
-
+from matsimpy import Molecule
+molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
 # OOP API (recommended)
 graph = MoleculeGraph(molecule, cutoff=2.0)
 print(graph.num_nodes)       # Number of atoms
@@ -111,7 +112,7 @@ print(graph.diameter)        # Graph diameter
 print(graph.statistics)      # All stats at once
 
 # Find shortest path
-path = graph.get_shortest_path(0, 5)
+path = graph.get_shortest_path(0, 2)
 
 # Convert to NetworkX
 nx_graph = graph.to_networkx()
@@ -126,18 +127,23 @@ coord = get_coordination_numbers(crystal, cutoff=5.0)
 
 ```python
 from matsimpy.io import crystals_to_latex_table, molecules_to_latex_table
+from matsimpy import Molecule,Crystal,Lattice
 
 # Export crystals to LaTeX table
+crystal1 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.63))
+crystal2 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.64))
+crystal3 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.65))
 crystals = [crystal1, crystal2, crystal3]
 latex = crystals_to_latex_table(
     crystals,
-    caption='Silicon Polymorphs',
+    caption='NaCl',
     label='tab:si_polymorphs',
     include_columns=['ID', 'Formula', 'Lattice', 'Volume'],
     use_mhchem=True  # Use \ce{} from mhchem package
 )
 
 # Export molecules
+molecules = [molecule, molecule]
 latex = molecules_to_latex_table(
     molecules,
     caption='Organic Molecules',
