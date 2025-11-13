@@ -2,26 +2,12 @@
 
 **MatSimPy** (Materials Simulation in Python) is a comprehensive Python package for molecular and materials simulation, designed to provide a modern, efficient, and user-friendly interface for materials science research.
 
-[![Python Version](https://img.shields.io/badge/python-3.6%2B-blue)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Beta-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-1195%20passed-brightgreen)](tests/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](docs/SESSION_SUMMARY_2025_11.md)
 
-## ✨ Recent Major Improvements (November 2025)
-
-MatSimPy has undergone a comprehensive quality enhancement with **16 production-ready commits**:
-
-- 🎯 **+308 New Tests** - Comprehensive test coverage (1,195 total tests, 100% pass rate)
-- 🏗️ **OOP Graph API** - Modern `MoleculeGraph` and `CrystalGraph` classes with lazy caching
-- 📊 **LaTeX Export** - Professional table generation for publications
-- ⚡ **Performance Optimizations** - Element caching, mass caching, vectorized operations (2-10x faster)
-- 🛡️ **Robust Validation** - NaN/Inf detection, chemical reasonableness checks, input validation
-- 🎨 **Convenient APIs** - `Lattice(5)` for cubic, `add_atom(['H','O'], [[0,0,0],[1,0,0]])`
-- 📝 **Unified Documentation** - Google-style docstrings, comprehensive type hints
-- 🔧 **Code Deduplication** - Helper methods, single source of truth (-343 lines removed)
-
-See [Session Summary](docs/SESSION_SUMMARY_2025_11.md) for complete details.
 
 ## Features
 
