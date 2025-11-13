@@ -102,7 +102,7 @@ print(molecule.formula)  # H2O
 print(molecule.get_center_of_mass())
 
 # 🆕 Molecule works in sets/dicts now!
-unique_molecules = {mol1, mol2, mol3}  # Deduplication works!
+unique_molecules = {molecule, molecule, molecule}  # Deduplication works!
 
 # Work with composition (🆕 with caching!)
 comp = Composition('Fe2O3')
