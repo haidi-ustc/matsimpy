@@ -139,11 +139,14 @@ class TransformationPipeline:
         
         if parallel:
             try:
-                from multiprocessing import Pool
+                import multiprocessing
                 from functools import partial
                 
+                # Use 'spawn' context to avoid fork() warnings in Python 3.12+
+                # when running in multi-threaded environments
+                ctx = multiprocessing.get_context('spawn')
                 apply_func = partial(self.apply, inplace=False)
-                with Pool(n_workers) as pool:
+                with ctx.Pool(n_workers) as pool:
                     results = pool.map(apply_func, structures)
                 return results
             except Exception as e:

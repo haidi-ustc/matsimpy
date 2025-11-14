@@ -218,9 +218,12 @@ class BatchProcessor:
     def _process_parallel(self, items: List[tuple]) -> List[BatchResult]:
         """Process structures in parallel."""
         try:
-            from multiprocessing import Pool
+            import multiprocessing
             from functools import partial
             
+            # Use 'spawn' context to avoid fork() warnings in Python 3.12+
+            # when running in multi-threaded environments
+            ctx = multiprocessing.get_context('spawn')
             process_func = self._process_single
             
             # Try to use tqdm for progress if available
@@ -229,7 +232,7 @@ class BatchProcessor:
                     from tqdm import tqdm
                     from functools import partial as partial_func
                     
-                    with Pool(self.n_workers) as pool:
+                    with ctx.Pool(self.n_workers) as pool:
                         # Use imap for progress tracking
                         results = []
                         with tqdm(total=len(items), desc="Processing structures") as pbar:
@@ -249,7 +252,7 @@ class BatchProcessor:
                     pass
             
             # Regular parallel processing without progress
-            with Pool(self.n_workers) as pool:
+            with ctx.Pool(self.n_workers) as pool:
                 results = pool.map(process_func, items)
                 
                 # Check for errors if error_handling is 'raise'
