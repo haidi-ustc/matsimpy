@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+import warnings
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -231,7 +232,10 @@ class TestEdgeCases(unittest.TestCase):
             [[i * 0.5, 0, 0] for i in range(n)]
         )
         
-        graph = structure_to_graph(molecule, cutoff=2.0)
+        with warnings.catch_warnings():
+            # Suppress expected warning about no PBC for molecules
+            warnings.filterwarnings("ignore", category=UserWarning, message="No PBC detected")
+            graph = structure_to_graph(molecule, cutoff=2.0)
         
         self.assertEqual(graph.num_atoms, n)
     

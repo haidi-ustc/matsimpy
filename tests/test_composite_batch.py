@@ -3,6 +3,7 @@ Tests for BatchProcessor class.
 """
 
 import unittest
+import warnings
 from matsimpy.transformation.composite import BatchProcessor, BatchResult
 from matsimpy.transformation import make_supercell, translate
 from matsimpy.builders.bulk import from_prototype
@@ -88,7 +89,10 @@ class TestBatchProcessor(unittest.TestCase):
         )
         
         crystals = [self.crystal, self.crystal, self.crystal]
-        results = processor.process(crystals)
+        with warnings.catch_warnings():
+            # Suppress parallel processing fallback warning if it occurs
+            warnings.filterwarnings("ignore", category=UserWarning, message="Parallel processing failed")
+            results = processor.process(crystals)
         
         self.assertEqual(len(results), 3)
         for result in results:

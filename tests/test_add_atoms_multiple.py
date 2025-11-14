@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+import warnings
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -59,23 +60,29 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
     
     def test_add_atoms_validates_length_mismatch(self):
         """Test that mismatched species/position lengths raise error."""
-        with self.assertRaises(ValueError) as context:
-            self.molecule.add_atom(['H', 'N'], [[0, 0, 0]])
-        
-        self.assertIn("must match", str(context.exception))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            with self.assertRaises(ValueError) as context:
+                self.molecule.add_atom(['H', 'N'], [[0, 0, 0]])
+            
+            self.assertIn("must match", str(context.exception))
     
     def test_add_atoms_validates_3d_coordinates(self):
         """Test that non-3D coordinates raise error."""
-        with self.assertRaises(ValueError):
-            self.molecule.add_atom('H', [0, 0])  # 2D
-        
-        with self.assertRaises(ValueError):
-            self.molecule.add_atom(['H', 'O'], [[0, 0, 0], [1, 2]])  # One 2D
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            with self.assertRaises(ValueError):
+                self.molecule.add_atom('H', [0, 0])  # 2D
+            
+            with self.assertRaises(ValueError):
+                self.molecule.add_atom(['H', 'O'], [[0, 0, 0], [1, 2]])  # One 2D
     
     def test_formula_updated_after_adding_multiple(self):
         """Test that formula is correctly updated after adding atoms."""
         original_formula = self.molecule.formula
-        self.molecule.add_atom(['H', 'H', 'N'], [[1, 0, 0], [2, 0, 0], [3, 0, 0]])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            self.molecule.add_atom(['H', 'H', 'N'], [[1, 0, 0], [2, 0, 0], [3, 0, 0]])
         
         new_formula = self.molecule.formula
         self.assertNotEqual(original_formula, new_formula)
@@ -84,7 +91,9 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
     
     def test_composition_updated_after_adding_multiple(self):
         """Test that composition is correctly updated."""
-        self.molecule.add_atom(['N', 'N'], [[1, 0, 0], [2, 0, 0]])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            self.molecule.add_atom(['N', 'N'], [[1, 0, 0], [2, 0, 0]])
         
         composition = self.molecule.composition
         self.assertIn('N', composition.composition)
@@ -264,7 +273,9 @@ class TestEdgeCases(unittest.TestCase):
         species = ['H'] * n
         positions = [[i * 0.1, 0, 0] for i in range(n)]
         
-        self.molecule.add_atom(species, positions)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            self.molecule.add_atom(species, positions)
         
         self.assertEqual(len(self.molecule), n + 1)
     

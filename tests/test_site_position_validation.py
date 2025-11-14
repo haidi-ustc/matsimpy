@@ -157,8 +157,11 @@ class TestCrystalSitePositionValidation(unittest.TestCase):
     
     def test_fractional_position_with_inf(self):
         """Test that inf in fractional coordinates raises error."""
-        with self.assertRaises(ValueError):
-            CrystalSite([np.inf, 0.5, 0.5], 'Si', self.lattice)
+        with warnings.catch_warnings():
+            # Suppress RuntimeWarning from dot product with inf values
+            warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in dot")
+            with self.assertRaises(ValueError):
+                CrystalSite([np.inf, 0.5, 0.5], 'Si', self.lattice)
     
     def test_large_fractional_coordinates_warning(self):
         """Test that very large fractional coordinates trigger warning."""
