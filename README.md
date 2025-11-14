@@ -159,7 +159,7 @@ save_latex_table(crystals, 'structures.tex')
 
 ```python
 from matsimpy.builders import (
-    from_prototype, generate_slab, generate_random_alloy, create_interstitial,
+    from_prototype, generate_slab, create_interstitial,
     build_tetrahedral, create_vacancy, build_nanotube,build_carbon_nanotube
 )
 
@@ -171,10 +171,9 @@ diamond_c = from_prototype('diamond', 'C', 3.57)
 # Create surface slabs
 slab = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=10.0, min_vacuum_size=15.0)
 
-# Generate alloys
+# Generate supercell
 from matsimpy.transformation.structural import make_supercell
 supercell = make_supercell(fcc_cu, [4, 4, 4])
-alloy = generate_random_alloy(supercell, ['Ni'], 'Cu', [0.25])
 
 # Build molecules
 ch4 = build_tetrahedral('C', ['H', 'H', 'H', 'H'], 1.09)
