@@ -63,7 +63,8 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             with self.assertRaises(ValueError) as context:
-                self.molecule.add_atom(['H', 'N'], [[0, 0, 0]])
+                # Use position that doesn't conflict with existing atoms
+                self.molecule.add_atom(['H', 'N'], [[2.0, 0, 0]])
             
             self.assertIn("must match", str(context.exception))
     
@@ -182,7 +183,8 @@ class TestCrystalAddAtomsWithSiteProperties(unittest.TestCase):
     def test_site_properties_mismatch_raises_error(self):
         """Test that mismatched site_properties length raises error."""
         with self.assertRaises(ValueError) as context:
-            self.crystal.add_atom(['H', 'O'], [[0, 0, 0], [0.5, 0, 0]], [{'charge': 1}])
+            # Use positions that don't conflict with existing atoms
+            self.crystal.add_atom(['H', 'O'], [[0.1, 0, 0], [0.2, 0, 0]], [{'charge': 1}])
         
         self.assertIn("must match", str(context.exception))
     
@@ -266,12 +268,15 @@ class TestEdgeCases(unittest.TestCase):
     def setUp(self):
         """Set up test structures."""
         self.molecule = Molecule(['C'], [[0, 0, 0]])
+        self.lattice = Lattice.cubic(10.0)
+        self.crystal = Crystal(['O'], [[0.5, 0.5, 0.5]], self.lattice)
     
     def test_large_batch_add(self):
         """Test adding many atoms at once."""
         n = 100
         species = ['H'] * n
-        positions = [[i * 0.1, 0, 0] for i in range(n)]
+        # Use spacing > 0.1 Å to avoid validation errors, and start from 1.0 to avoid conflict with existing atom at [0,0,0]
+        positions = [[1.0 + i * 0.2, 0, 0] for i in range(n)]
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -301,6 +306,35 @@ class TestEdgeCases(unittest.TestCase):
         
         self.assertEqual(len(mol), 3)
         self.assertEqual(mol.species, ('C', 'H', 'O'))
+    
+    def test_duplicate_position_raises_error_molecule(self):
+        """Test that adding atom at duplicate position raises error."""
+        with self.assertRaises(ValueError) as context:
+            self.molecule.add_atom('O', [0, 0, 0])
+        
+        self.assertIn("already exists", str(context.exception).lower())
+    
+    def test_duplicate_position_raises_error_crystal(self):
+        """Test that adding atom at duplicate position raises error in crystal."""
+        with self.assertRaises(ValueError) as context:
+            self.crystal.add_atom('O', [0.5, 0.5, 0.5])
+        
+        self.assertIn("already exists", str(context.exception).lower())
+    
+    def test_very_close_atoms_raise_error(self):
+        """Test that atoms too close (< 0.1 Å) raise error."""
+        with self.assertRaises(ValueError) as context:
+            self.molecule.add_atom('O', [0.05, 0, 0])
+        
+        self.assertIn("too close", str(context.exception).lower())
+        self.assertIn("0.1", str(context.exception))
+    
+    def test_duplicate_within_new_atoms_raises_error(self):
+        """Test that duplicate positions within new atoms raise error."""
+        with self.assertRaises(ValueError) as context:
+            self.molecule.add_atom(['H', 'H'], [[1, 0, 0], [1, 0, 0]])
+        
+        self.assertIn("duplicate", str(context.exception).lower())
 
 
 class TestIntegrationWithOtherMethods(unittest.TestCase):

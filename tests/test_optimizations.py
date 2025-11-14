@@ -100,8 +100,8 @@ class TestPropertyCaching(unittest.TestCase):
         formula1 = crystal.formula
         comp1 = crystal.composition
         
-        # Add atom
-        crystal.add_atom('O', [1.0, 1.0, 1.0])
+        # Add atom at a position that doesn't conflict (use fractional coords that don't map to existing positions)
+        crystal.add_atom('O', [0.3, 0.3, 0.3])
         
         # Formula and composition should be different
         formula2 = crystal.formula
@@ -145,7 +145,7 @@ class TestSpeciesImmutability(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         
         self.assertIsInstance(crystal.species, tuple)
-        crystal.add_atom('O', [1.0, 1.0, 1.0])
+        crystal.add_atom('O', [0.3, 0.3, 0.3])
         self.assertIsInstance(crystal.species, tuple)
         self.assertEqual(crystal.species, ('Si', 'O'))
     
@@ -317,7 +317,8 @@ class TestIntegration(unittest.TestCase):
         self.assertIsInstance(neighbors, dict)
         
         # Test adding atom (invalidates cache)
-        crystal.add_atom('N', [3.0, 3.0, 3.0])
+        # Use fractional coords that don't conflict (3.0 maps to 0.0 with PBC, so use 0.3 instead)
+        crystal.add_atom('N', [0.3, 0.3, 0.3])
         formula3 = crystal.formula
         self.assertNotEqual(formula1, formula3)
         

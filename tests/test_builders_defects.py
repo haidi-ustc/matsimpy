@@ -74,8 +74,9 @@ class TestInterstitial(unittest.TestCase):
     
     def test_create_multiple_interstitials(self):
         """Test creating multiple interstitials."""
+        # Use positions that don't conflict with existing atoms (diamond has atoms at [0,0,0] and [0.25,0.25,0.25])
         with_interstitials = create_interstitial(
-            self.fcc, ['H', 'H'], [[0.5, 0.5, 0.5], [0.25, 0.25, 0.25]]
+            self.fcc, ['H', 'H'], [[0.5, 0.5, 0.5], [0.1, 0.1, 0.1]]
         )
         
         self.assertIsInstance(with_interstitials, Crystal)
@@ -144,7 +145,8 @@ class TestFrenkel(unittest.TestCase):
     
     def test_create_frenkel(self):
         """Test creating a Frenkel defect."""
-        with_frenkel = create_frenkel(self.nacl, 0, [0.5, 0.5, 0.5])
+        # Use a position that doesn't conflict with existing atoms (rocksalt has atoms at [0,0,0] and [0.5,0.5,0.5])
+        with_frenkel = create_frenkel(self.nacl, 0, [0.25, 0.25, 0.25])
         
         self.assertIsInstance(with_frenkel, Crystal)
         # Should have same number of atoms (atom moved, not removed)

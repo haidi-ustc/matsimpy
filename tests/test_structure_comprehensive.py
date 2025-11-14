@@ -111,7 +111,8 @@ class TestStructureComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         struct = Crystal(species, positions, lattice)
         
-        struct.add_atom('O', [1, 1, 1])
+        # Use fractional coords that don't conflict (1.0 maps to 0.0 with PBC, so use 0.3 instead)
+        struct.add_atom('O', [0.3, 0.3, 0.3])
         self.assertEqual(len(struct), 2)
         self.assertEqual(struct.species, ('Si', 'O'))
     
@@ -123,7 +124,8 @@ class TestStructureComprehensive(unittest.TestCase):
         struct = Crystal(species, positions, lattice)
         
         formula1 = struct.formula
-        struct.add_atom('O', [1, 1, 1])
+        # Use fractional coords that don't conflict (1.0 maps to 0.0 with PBC, so use 0.3 instead)
+        struct.add_atom('O', [0.3, 0.3, 0.3])
         formula2 = struct.formula
         self.assertNotEqual(formula1, formula2)
     

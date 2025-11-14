@@ -131,12 +131,20 @@ class Crystal(Structure):
         """
         Adds one or more atoms to the crystal structure and updates coordinates.
         
+        Performs chemical reasonableness checks on interatomic distances with PBC support.
+        Prevents adding duplicate atoms at the same position or atoms that are too close.
+        
         Args:
             species: Atomic species (single string or list of strings).
             position: Atomic position(s) in fractional coordinates.
                      Either a single 3D coordinate or list of coordinates.
             site_properties: Optional site properties (single dict or list of dicts).
                            If list, must match length of species.
+        
+        Raises:
+            ValueError: If site_properties length doesn't match number of atoms added.
+            ValueError: If duplicate positions are detected (distance < 1e-6 Å).
+            ValueError: If atoms are too close (distance < 0.1 Å).
                            
         Examples:
             >>> crystal.add_atom('H', [0, 0, 0])  # Add single atom
@@ -144,6 +152,83 @@ class Crystal(Structure):
             >>> crystal.add_atom(['H', 'O'], [[0, 0, 0], [0.5, 0, 0]], 
             ...                  [{'charge': 1}, {'charge': -2}])  # With properties
         """
+        # Chemical reasonableness check - validate interatomic distances with PBC
+        # Convert to array for processing
+        if isinstance(position, list):
+            if len(position) == 0:
+                # Empty list - nothing to check
+                new_frac_positions = []
+            elif isinstance(position[0], (int, float)):
+                # Single position [x, y, z]
+                new_frac_positions = [position]
+            else:
+                # Multiple positions [[x1,y1,z1], [x2,y2,z2], ...]
+                new_frac_positions = position
+        else:
+            new_frac_positions = [position]
+        
+        # Convert fractional positions to Cartesian for distance calculation
+        if new_frac_positions:
+            new_frac_array = np.array(new_frac_positions, dtype=np.float64)
+            new_cart_positions = np.dot(new_frac_array, self.lattice.matrix)
+        else:
+            new_cart_positions = np.array([]).reshape(0, 3)
+        
+        # Check for duplicates within new positions
+        if len(new_cart_positions) > 1:
+            # Check pairwise distances within new positions
+            for i in range(len(new_cart_positions)):
+                for j in range(i + 1, len(new_cart_positions)):
+                    dist = np.linalg.norm(new_cart_positions[i] - new_cart_positions[j])
+                    if dist < 1e-6:  # Essentially zero distance (duplicate)
+                        raise ValueError(
+                            f"Duplicate positions detected in new atoms: "
+                            f"positions {i} and {j} are at the same location "
+                            f"({new_frac_positions[i]})."
+                        )
+                    elif dist < 0.1:  # Very small distance
+                        raise ValueError(
+                            f"Atoms being added are too close: distance between "
+                            f"positions {i} and {j} is {dist:.6f} Å. "
+                            f"Minimum allowed distance is 0.1 Å."
+                        )
+        
+        # Check each new position against existing atoms (with PBC)
+        if len(self.frac_positions) > 0:
+            existing_frac = self.frac_positions
+            
+            for idx, new_frac_pos in enumerate(new_frac_positions):
+                # Calculate minimum distance considering PBC using minimum image convention
+                # For each existing atom, find the minimum distance across periodic images
+                min_distance = np.inf
+                
+                for existing_frac_pos in existing_frac:
+                    # Calculate fractional difference
+                    frac_diff = np.array(new_frac_pos) - np.array(existing_frac_pos)
+                    
+                    # Apply minimum image convention for each PBC direction
+                    for dim in range(3):
+                        if self.pbc[dim]:
+                            frac_diff[dim] = frac_diff[dim] - np.round(frac_diff[dim])
+                    
+                    # Convert to Cartesian and calculate distance
+                    cart_diff = np.dot(frac_diff, self.lattice.matrix)
+                    dist = np.linalg.norm(cart_diff)
+                    min_distance = min(min_distance, dist)
+                
+                # Raise error for duplicates or very small distances
+                if min_distance < 1e-6:  # Essentially zero distance (duplicate)
+                    raise ValueError(
+                        f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                        f"atom already exists at this location (distance: {min_distance:.6f} Å)."
+                    )
+                elif min_distance < 0.1:  # Very small distance
+                    raise ValueError(
+                        f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                        f"too close to existing atom (distance: {min_distance:.6f} Å). "
+                        f"Minimum allowed distance is 0.1 Å."
+                    )
+        
         # Determine number of atoms being added
         n_atoms_before = len(self.species)
         

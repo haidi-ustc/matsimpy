@@ -122,7 +122,7 @@ class Molecule(Structure):
         Add one or more atoms to the molecule and update sites.
         
         Performs chemical reasonableness checks on interatomic distances.
-        Issues warning if atoms are placed too close together (< 0.5 Angstroms).
+        Prevents adding duplicate atoms at the same position or atoms that are too close.
         
         Args:
             species: Atomic species (single string or list of strings).
@@ -132,9 +132,11 @@ class Molecule(Structure):
         
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
+            ValueError: If duplicate positions are detected (distance < 1e-6 Å).
+            ValueError: If atoms are too close (distance < 0.1 Å).
         
         Warnings:
-            UserWarning: If interatomic distance < 0.5 Angstroms detected.
+            UserWarning: If interatomic distance < 0.5 Angstroms detected (but >= 0.1 Å).
                            
         Examples:
             >>> molecule.add_atom('H', [0, 0, 0])  # Add single atom
@@ -143,29 +145,60 @@ class Molecule(Structure):
             ...                   [{'charge': 1}, {'charge': -2}])  # With properties
         """
         # Chemical reasonableness check - validate interatomic distances
-        if len(self.positions) > 0:
-            # Convert to array for processing
-            if isinstance(position, list):
-                if len(position) == 0:
-                    # Empty list - nothing to check
-                    new_positions = []
-                elif isinstance(position[0], (int, float)):
-                    # Single position [x, y, z]
-                    new_positions = [position]
-                else:
-                    # Multiple positions [[x1,y1,z1], [x2,y2,z2], ...]
-                    new_positions = position
-            else:
+        # Convert to array for processing
+        if isinstance(position, list):
+            if len(position) == 0:
+                # Empty list - nothing to check
+                new_positions = []
+            elif isinstance(position[0], (int, float)):
+                # Single position [x, y, z]
                 new_positions = [position]
-            
-            # Check each new position against existing atoms
-            for new_pos in new_positions:
+            else:
+                # Multiple positions [[x1,y1,z1], [x2,y2,z2], ...]
+                new_positions = position
+        else:
+            new_positions = [position]
+        
+        # Check for duplicates within new positions
+        if len(new_positions) > 1:
+            new_positions_array = np.array(new_positions, dtype=np.float64)
+            # Check pairwise distances within new positions
+            for i in range(len(new_positions_array)):
+                for j in range(i + 1, len(new_positions_array)):
+                    dist = np.linalg.norm(new_positions_array[i] - new_positions_array[j])
+                    if dist < 1e-6:  # Essentially zero distance (duplicate)
+                        raise ValueError(
+                            f"Duplicate positions detected in new atoms: "
+                            f"positions {i} and {j} are at the same location "
+                            f"({new_positions[i]})."
+                        )
+                    elif dist < 0.1:  # Very small distance
+                        raise ValueError(
+                            f"Atoms being added are too close: distance between "
+                            f"positions {i} and {j} is {dist:.6f} Å. "
+                            f"Minimum allowed distance is 0.1 Å."
+                        )
+        
+        # Check each new position against existing atoms
+        if len(self.positions) > 0:
+            for idx, new_pos in enumerate(new_positions):
                 if len(new_pos) == 3:  # Valid 3D position
                     new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
                     min_distance = np.min(cdist(new_pos_array, self.positions))
                     
-                    # Warn if atoms are too close (< 0.5 Å is unrealistic)
-                    if min_distance < 0.5:
+                    # Raise error for duplicates or very small distances
+                    if min_distance < 1e-6:  # Essentially zero distance (duplicate)
+                        raise ValueError(
+                            f"Cannot add atom at position {new_pos}: atom already exists "
+                            f"at this location (distance: {min_distance:.6f} Å)."
+                        )
+                    elif min_distance < 0.1:  # Very small distance
+                        raise ValueError(
+                            f"Cannot add atom at position {new_pos}: too close to existing "
+                            f"atom (distance: {min_distance:.6f} Å). "
+                            f"Minimum allowed distance is 0.1 Å."
+                        )
+                    elif min_distance < 0.5:  # Small but potentially valid distance
                         warnings.warn(
                             f"Very small interatomic distance detected: {min_distance:.3f} Å. "
                             f"This may indicate overlapping atoms or incorrect units.",
