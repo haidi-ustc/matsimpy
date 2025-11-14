@@ -89,6 +89,38 @@ class TestCompositionComprehensive(unittest.TestCase):
         self.assertIn('O', fractions)
         self.assertAlmostEqual(sum(fractions.values()), 1.0, places=5)
     
+    def test_composition_mole_fractions(self):
+        """Test mole fractions calculation."""
+        comp = Composition('H2O')
+        fractions = comp.mole_fractions()
+        
+        self.assertIsInstance(fractions, dict)
+        self.assertIn('H', fractions)
+        self.assertIn('O', fractions)
+        # H2O: 2 H + 1 O = 3 total atoms
+        # H fraction = 2/3, O fraction = 1/3
+        self.assertAlmostEqual(fractions['H'], 2/3, places=5)
+        self.assertAlmostEqual(fractions['O'], 1/3, places=5)
+        self.assertAlmostEqual(sum(fractions.values()), 1.0, places=5)
+        
+        # Test with Fe2O3
+        comp2 = Composition('Fe2O3')
+        fractions2 = comp2.mole_fractions()
+        # Fe2O3: 2 Fe + 3 O = 5 total atoms
+        # Fe fraction = 2/5 = 0.4, O fraction = 3/5 = 0.6
+        self.assertAlmostEqual(fractions2['Fe'], 0.4, places=5)
+        self.assertAlmostEqual(fractions2['O'], 0.6, places=5)
+        self.assertAlmostEqual(sum(fractions2.values()), 1.0, places=5)
+        
+        # Test with NaCl
+        comp3 = Composition('NaCl')
+        fractions3 = comp3.mole_fractions()
+        # NaCl: 1 Na + 1 Cl = 2 total atoms
+        # Both should be 0.5
+        self.assertAlmostEqual(fractions3['Na'], 0.5, places=5)
+        self.assertAlmostEqual(fractions3['Cl'], 0.5, places=5)
+        self.assertAlmostEqual(sum(fractions3.values()), 1.0, places=5)
+    
     def test_composition_to_json(self):
         """Test JSON serialization."""
         comp = Composition('H2O')

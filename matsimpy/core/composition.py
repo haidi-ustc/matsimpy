@@ -355,6 +355,43 @@ class Composition(MSONable):
         fractions = self.mass_fractions()
         return {element: fraction * 100.0 for element, fraction in fractions.items()}
 
+    def mole_fractions(self) -> Dict[str, float]:
+        """
+        Calculate mole fractions of each element.
+        
+        Mole fraction is the number of atoms of each element divided by the total
+        number of atoms in the composition. This represents the fraction of atoms
+        (or moles) contributed by each element.
+
+        Returns:
+            Dictionary mapping elements to mole fractions (0-1).
+
+        Examples:
+            >>> c = Composition('H2O')
+            >>> fractions = c.mole_fractions()
+            >>> fractions['H']  # 2/3 ≈ 0.667
+            0.666666...
+            >>> fractions['O']  # 1/3 ≈ 0.333
+            0.333333...
+            >>> sum(fractions.values())  # Should be 1.0
+            1.0
+            >>> c = Composition('Fe2O3')
+            >>> fractions = c.mole_fractions()
+            >>> fractions['Fe']  # 2/5 = 0.4
+            0.4
+            >>> fractions['O']  # 3/5 = 0.6
+            0.6
+        """
+        total_atoms = sum(self.composition.values())
+        if total_atoms == 0:
+            return {}
+        
+        fractions = {}
+        for element, count in self.composition.items():
+            fractions[element] = count / total_atoms
+        
+        return fractions
+
     def to_html(self, sort_by: Optional[str] = None) -> str:
         """
         Convert formula to HTML with subscript formatting.
