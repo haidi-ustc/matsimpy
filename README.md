@@ -5,7 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Beta-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1195%20passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1223%20passed-brightgreen)](tests/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](docs/SESSION_SUMMARY_2025_11.md)
 
 
@@ -647,7 +647,7 @@ pytest tests/ -v --durations=10            # Show slowest tests
 ```
 
 **Test Statistics**:
-- 1,195 total tests
+- 1,223 total tests
 - 100% pass rate
 - Coverage across all core modules
 - Unit, integration, and edge case tests
