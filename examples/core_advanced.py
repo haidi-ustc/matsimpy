@@ -114,7 +114,7 @@ print(f"Initial: {crystal.formula}, {len(crystal)} atoms")
 
 # Add atoms
 crystal.add_atom('Cl', [0, 0, 0])
-crystal.add_atom('Na', [1, 0, 0])
+crystal.add_atom('Na', [.5, 0, 0])
 print(f"After adding 2 atoms: {crystal.formula}, {len(crystal)} atoms")
 
 # Remove an atom
