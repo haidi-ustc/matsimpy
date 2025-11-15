@@ -268,6 +268,7 @@ class Structure(ABC, MSONable):
         # Invalidate caches
         self._formula_dirty = True
         self._cached_composition = None
+        self._cached_formula = None
         # Properties computed lazily on access
 
     def remove_atom(self, index: int) -> None:
