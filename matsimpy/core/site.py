@@ -16,6 +16,7 @@ class Site(MSONable):
         position: 3D position coordinates [x, y, z]
         specie: Atomic species (string symbol, atomic number, or Element object)
         properties: Optional dictionary of site properties (e.g., charge, magmom)
+        coords_type: Type of coordinates - "cartesian" (default) or "fractional"
         
     Examples:
         >>> site = Site([0, 0, 0], 'Fe')
@@ -23,25 +24,28 @@ class Site(MSONable):
         >>> site = Site([0, 0, 0], 26)  # Atomic number
     """
     def __init__(self, position: Union[List[float], np.ndarray], 
-            specie: Union[str, int, Element] = 'X',
-            properties: Optional[Dict[str, Any]] = None):
+                 specie: Union[str, int, Element] = 'X',
+                 properties: Optional[Dict[str, Any]] = None,
+                 coords_type: str = "cartesian"):
         self._position = self._validate_position(position)
         self._specie = self._validate_specie(specie)
         self._properties = self._validate_properties(properties)
+        self._coords_type = self._validate_coords_type(coords_type)
 
     def as_dict(self) -> Dict[str, Any]:
         """
         Returns a dictionary representation of the Site.
         
         Returns:
-            Dictionary containing position, specie, and properties
+            Dictionary containing position, specie, properties, and coords_type
         """
         return {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "position": self.position.tolist(),
             "specie": self.specie,
-            "properties": self.properties
+            "properties": self.properties,
+            "coords_type": self.coords_type
         }
 
     @classmethod
@@ -50,7 +54,7 @@ class Site(MSONable):
         Creates a Site object from a dictionary representation.
         
         Args:
-            d: Dictionary containing position, specie, and properties
+            d: Dictionary containing position, specie, properties, and coords_type
             
         Returns:
             Site object
@@ -58,24 +62,59 @@ class Site(MSONable):
         return cls(
             position=d["position"],
             specie=d.get("specie", 'X'),
-            properties=d.get("properties")
+            properties=d.get("properties"),
+            coords_type=d.get("coords_type", "cartesian")
         )
 
-    def _validate_specie(self, specie: Optional[Union[str, int, Element]]) -> Optional[Union[str, int, Element]]:
-        if specie is not None:
-            if not isinstance(specie, (str, int, Element)):
-                raise TypeError("Specie must be a string, integer, or Element object.")
-            if isinstance(specie, int):
-                # Validate atomic number before creating Element
-                if not (0 < specie <= 103):  # Valid atomic numbers
-                    raise ValueError(f"Invalid atomic number: {specie}. Must be between 1 and 103.")
-                return Element.from_Z(specie).symbol
-            if isinstance(specie, str):
-                return specie
-            if isinstance(specie, Element):
-                return specie.symbol
+    def _validate_coords_type(self, coords_type: str) -> str:
+        """
+        Validate coordinate type.
+        
+        Args:
+            coords_type: "cartesian" or "fractional"
+            
+        Returns:
+            Validated coordinate type
+            
+        Raises:
+            ValueError: If coords_type is not valid
+        """
+        if coords_type not in ["cartesian", "fractional"]:
+            raise ValueError(f"coords_type must be 'cartesian' or 'fractional', got '{coords_type}'")
+        return coords_type
 
-        return specie
+    def _validate_specie(self, specie: Optional[Union[str, int, Element]]) -> str:
+        """
+        Validate and normalize atomic species.
+        
+        Args:
+            specie: Atomic species as string, integer, or Element object
+            
+        Returns:
+            Normalized species as string symbol
+            
+        Raises:
+            TypeError: If specie is not valid type
+            ValueError: If atomic number is invalid
+        """
+        if specie is None:
+            return 'X'
+            
+        if not isinstance(specie, (str, int, Element)):
+            raise TypeError("Specie must be a string, integer, or Element object.")
+        
+        if isinstance(specie, int):
+            # Validate atomic number before creating Element
+            if not (1 <= specie <= 118):  # Extended to current periodic table
+                raise ValueError(f"Invalid atomic number: {specie}. Must be between 1 and 118.")
+            return Element.from_Z(specie).symbol
+        elif isinstance(specie, str):
+            # Basic validation for element symbols
+            if len(specie) < 1 or len(specie) > 2:
+                warnings.warn(f"Element symbol '{specie}' may be invalid", UserWarning)
+            return specie
+        elif isinstance(specie, Element):
+            return specie.symbol
 
     def _validate_properties(self, properties: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -91,7 +130,7 @@ class Site(MSONable):
             TypeError: If properties is not a dictionary
         """
         if properties is not None and not isinstance(properties, dict):
-            raise TypeError("Properties must be a dictionary.")
+            raise TypeError("Properties must be a dictionary or None.")
         return properties or {}
 
     def _validate_position(self, position: Union[List[float], np.ndarray]) -> np.ndarray:
@@ -117,7 +156,7 @@ class Site(MSONable):
             position = position.astype(np.float64)
         elif isinstance(position, list):
             if len(position) != 3:
-                raise ValueError("Position must have three elements.")
+                raise ValueError("Position must have exactly three elements.")
             for coord in position:
                 if not isinstance(coord, (int, float)):
                     raise TypeError("Position elements must be integers or floats.")
@@ -139,6 +178,11 @@ class Site(MSONable):
             )
         
         return position
+
+    @property
+    def coords_type(self) -> str:
+        """Get coordinate type ('cartesian' or 'fractional')."""
+        return self._coords_type
 
     @property
     def properties(self) -> Dict[str, Any]:
@@ -183,12 +227,23 @@ class Site(MSONable):
     def __repr__(self) -> str:
         """String representation of Site."""
         props_str = f", properties={self.properties}" if self.properties else ""
-        return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str})"
+        coords_type_str = f", coords_type='{self.coords_type}'"
+        return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str}{coords_type_str})"
 
     def __str__(self) -> str:
         """Human-readable string representation."""
         props_str = f", {self.properties}" if self.properties else ""
-        return f"{self.specie} @ {self.position.tolist()}{props_str}"
+        return f"{self.specie} @ {self.position.tolist()} ({self.coords_type}){props_str}"
+
+    def __eq__(self, other) -> bool:
+        """Check equality with another Site."""
+        if not isinstance(other, Site):
+            return False
+        return (self.specie == other.specie and 
+                np.allclose(self.position, other.position) and
+                self.properties == other.properties and
+                self.coords_type == other.coords_type)
+
 
 class CrystalSite(Site):
     """
@@ -219,29 +274,37 @@ class CrystalSite(Site):
         coords_are_cartesian: bool = False
     ):
         self._lattice = self._validate_lattice(lattice)
-       
+        self._coords_are_cartesian = coords_are_cartesian
+        
+        # Calculate both coordinate representations
         if coords_are_cartesian:
-            self.cart_position = np.array(position, dtype=np.float64)
-            self.frac_position = self._convert_to_fractional()
+            self._cart_position = self._validate_position(position)
+            self._frac_position = self._convert_to_fractional()
         else:
-            self.frac_position = np.array(position, dtype=np.float64)
-            self.cart_position = self._convert_to_cartesian()
+            self._frac_position = self._validate_position(position)
+            self._cart_position = self._convert_to_cartesian()
 
-        # Store fractional position as base position (Site uses this)
-        position = self.frac_position
-        super().__init__(position, specie, properties)
-
+        # Determine coordinate type for base class
+        coords_type = "cartesian" if coords_are_cartesian else "fractional"
+        base_position = self._cart_position if coords_are_cartesian else self._frac_position
+        
+        super().__init__(
+            position=base_position,
+            specie=specie,
+            properties=properties,
+            coords_type=coords_type
+        )
 
     def as_dict(self) -> Dict[str, Any]:
         """
         Returns a dictionary representation of the CrystalSite.
         
         Returns:
-            Dictionary containing position, specie, properties, and lattice
+            Dictionary containing position, specie, properties, lattice, and coordinate type
         """
         d = super().as_dict()
-        d["lattice"] = self._lattice.as_dict()
-        d["coords_are_cartesian"] = False  # Always store as fractional
+        d["lattice"] = self.lattice.as_dict()
+        d["coords_are_cartesian"] = self._coords_are_cartesian
         return d
 
     @classmethod
@@ -259,48 +322,43 @@ class CrystalSite(Site):
         specie = d.get("specie", 'X')
         properties = d.get("properties")
         lattice_dict = d.get("lattice")
+        coords_are_cartesian = d.get("coords_are_cartesian", False)
+        
         if lattice_dict is None:
             raise ValueError("Lattice is required for CrystalSite")
+        
         lattice = Lattice.from_dict(lattice_dict)
         return cls(
             position=position,
             specie=specie,
-            properties=properties,
             lattice=lattice,
-            coords_are_cartesian=False  # Always stored as fractional
+            properties=properties,
+            coords_are_cartesian=coords_are_cartesian
         )
 
-    def __repr__(self) -> str:
-        """String representation of CrystalSite."""
-        props_str = f", properties={self.properties}" if self.properties else ""
-        return f"CrystalSite(position={self.frac_position.tolist()}, specie='{self.specie}'{props_str}, lattice={self.lattice})"
-
-    def __str__(self) -> str:
-        """Human-readable string representation."""
-        props_str = f", {self.properties}" if self.properties else ""
-        return f"{self.specie} @ frac={self.frac_position.tolist()} cart={self.cart_position.tolist()}{props_str}"
-
-    def _validate_lattice(self, lattice: Union[List[List[float]],Lattice]) -> Lattice:
-
-        if  isinstance(lattice, Lattice):
+    def _validate_lattice(self, lattice: Union[List[List[float]], Lattice]) -> Lattice:
+        """
+        Validate and convert lattice input to Lattice object.
+        
+        Args:
+            lattice: Lattice object or list of lattice vectors
+            
+        Returns:
+            Validated Lattice object
+            
+        Raises:
+            TypeError: If lattice is not valid type
+        """
+        if isinstance(lattice, Lattice):
             return lattice
-
-        if not isinstance(lattice, list):
-            raise TypeError("Lattice must be a list of lists of floats.")
-        if len(lattice) != 3:
-            raise ValueError("Lattice must have three vectors.")
-        for vector in lattice:
-            if not isinstance(vector, list):
-                raise TypeError("Lattice vectors must be lists of floats.")
-            if len(vector) != 3:
-                raise ValueError("Lattice vectors must have three elements.")
-            for coord in vector:
-                if not isinstance(coord, (int, float)):
-                    raise TypeError("Lattice vector elements must be integers or floats.")
-        return Lattice(lattice_vectors=lattice)
+        elif isinstance(lattice, list):
+            return Lattice(lattice_vectors=lattice)
+        else:
+            raise TypeError(f"Lattice must be Lattice object or list, got {type(lattice)}")
 
     @property
     def lattice(self) -> Lattice:
+        """Get the lattice object."""
         return self._lattice
 
     @lattice.setter
@@ -308,10 +366,31 @@ class CrystalSite(Site):
         """Set lattice and recalculate coordinates."""
         old_lattice = self._lattice
         self._lattice = self._validate_lattice(lattice)
+        
         # Recalculate coordinates if lattice changed
         if old_lattice is not None:
-            # Keep fractional position, recalculate Cartesian
-            self.cart_position = self._convert_to_cartesian()
+            # Keep fractional position consistent, recalculate Cartesian
+            self._cart_position = self._convert_to_cartesian()
+
+    @property
+    def frac_position(self) -> np.ndarray:
+        """
+        Get fractional coordinates.
+        
+        Returns:
+            Fractional coordinates as numpy array
+        """
+        return np.array(self._frac_position, dtype=np.float64)
+
+    @property
+    def cart_position(self) -> np.ndarray:
+        """
+        Get Cartesian coordinates.
+        
+        Returns:
+            Cartesian coordinates as numpy array
+        """
+        return np.array(self._cart_position, dtype=np.float64)
 
     def _convert_to_fractional(self) -> np.ndarray:
         """
@@ -322,7 +401,7 @@ class CrystalSite(Site):
         Returns:
             Fractional coordinates as numpy array
         """
-        return np.dot(self.cart_position, self.lattice.inv_matrix)
+        return np.dot(self._cart_position, self.lattice.inv_matrix)
 
     def _convert_to_cartesian(self) -> np.ndarray:
         """
@@ -331,24 +410,25 @@ class CrystalSite(Site):
         Returns:
             Cartesian coordinates as numpy array
         """
-        return np.dot(self.frac_position, self.lattice.matrix)
-    
-    @property
-    def frac_coords(self) -> np.ndarray:
-        """
-        Get fractional coordinates.
+        return np.dot(self._frac_position, self.lattice.matrix)
+
+    def __repr__(self) -> str:
+        """String representation of CrystalSite."""
+        props_str = f", properties={self.properties}" if self.properties else ""
+        coord_type = "cartesian" if self._coords_are_cartesian else "fractional"
+        return f"CrystalSite(position={self.position.tolist()}, specie='{self.specie}'{props_str}, lattice={self.lattice}, coords_type='{coord_type}')"
+
+    def __str__(self) -> str:
+        """Human-readable string representation."""
+        props_str = f", {self.properties}" if self.properties else ""
+        coord_type = "cart" if self._coords_are_cartesian else "frac"
+        return f"{self.specie} @ {self.position.tolist()} ({coord_type}){props_str}"
+
+    def __eq__(self, other) -> bool:
+        """Check equality with another CrystalSite."""
+        if not isinstance(other, CrystalSite):
+            return False
         
-        Returns:
-            Fractional coordinates as numpy array
-        """
-        return self.frac_position
-    
-    @property
-    def cart_coords(self) -> np.ndarray:
-        """
-        Get Cartesian coordinates.
-        
-        Returns:
-            Cartesian coordinates as numpy array
-        """
-        return self.cart_position
+        return (super().__eq__(other) and
+                np.allclose(self.lattice.matrix, other.lattice.matrix) and
+                self._coords_are_cartesian == other._coords_are_cartesian)

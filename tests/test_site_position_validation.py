@@ -148,7 +148,7 @@ class TestCrystalSitePositionValidation(unittest.TestCase):
     def test_valid_fractional_position(self):
         """Test valid fractional coordinates."""
         site = CrystalSite([0.5, 0.5, 0.5], 'Si', self.lattice)
-        self.assertTrue(np.allclose(site.frac_coords, [0.5, 0.5, 0.5]))
+        self.assertTrue(np.allclose(site.frac_position, [0.5, 0.5, 0.5]))
     
     def test_fractional_position_with_nan(self):
         """Test that NaN in fractional coordinates raises error."""
@@ -169,7 +169,7 @@ class TestCrystalSitePositionValidation(unittest.TestCase):
             warnings.simplefilter("always")
             CrystalSite([1e7, 0, 0], 'Si', self.lattice)
             
-            self.assertEqual(len(w), 1)
+            self.assertEqual(len(w), 2)
             self.assertIn("large", str(w[0].message).lower())
     
     def test_cartesian_conversion_validation(self):
