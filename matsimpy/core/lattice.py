@@ -257,7 +257,7 @@ class Lattice(MSONable):
         return cls(lattice_vectors)
 
     @classmethod
-    def orthorhomic(cls, a: float, b: float, c: float):
+    def orthorhombic(cls, a: float, b: float, c: float):
         """
         Initialize an orthorhombic Lattice object.
 
@@ -338,14 +338,19 @@ class Lattice(MSONable):
         """
         Initialize an orthorhombic Lattice object.
         
-        This is an alias for orthorhomic() with correct spelling.
+        This is an alias for orthorhombic() with correct spelling.
         
         Args:
             a: The length of the a lattice vector.
             b: The length of the b lattice vector.
             c: The length of the c lattice vector.
         """
-        return cls.orthorhomic(a, b, c)
+        lattice_vectors = [
+        [a, 0.0, 0.0],
+        [0.0, b, 0.0],
+        [0.0, 0.0, c]
+        ]
+        return cls(lattice_vectors)
 
 
     def __hash__(self):

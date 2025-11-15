@@ -204,7 +204,7 @@ tests/test_io_xsf.py    # Test XSF read/write, crystal/molecule support
 
 **Issues Found:**
 - Some TODOs in code (VASP, QE output parsing)
-- Typo: `orthorhomic` instead of `orthorhombic` in Lattice class (noted in comments)
+- Typo: `orthorhombic` instead of `orthorhombic` in Lattice class (noted in comments)
 - Some modules have inconsistent error handling
 
 **Recommendation:**
@@ -454,7 +454,7 @@ tests/test_io_xsf.py    # Test XSF read/write, crystal/molecule support
 
 ## 8. Quick Wins (Easy Improvements)
 
-1. **Fix Typo:** `orthorhomic` → `orthorhombic` in Lattice class
+1. **Fix Typo:** `orthorhombic` → `orthorhombic` in Lattice class
 2. **Add Missing Tests:** PDB, XSF, code/base.py
 3. **Documentation:** Add more docstring examples
 4. **Error Messages:** Improve clarity and consistency

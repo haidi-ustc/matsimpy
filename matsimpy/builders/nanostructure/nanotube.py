@@ -180,7 +180,7 @@ def build_nanotube(
     box_size = 2 * radius + 10.0
     
     try:
-        nanotube_lattice = Lattice.orthorhomic(a=box_size, b=box_size, c=cell_c)
+        nanotube_lattice = Lattice.orthorhombic(a=box_size, b=box_size, c=cell_c)
     except AttributeError:
         lattice_vecs = np.array([
             [box_size, 0, 0],

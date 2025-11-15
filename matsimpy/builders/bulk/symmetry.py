@@ -235,8 +235,8 @@ def _create_lattice_from_system_by_name(
             a = lattice_params if isinstance(lattice_params, (int, float)) else lattice_params[0]
             b = a
             c = a
-        # Use orthorhomic (note: misspelled in Lattice class)
-        return Lattice.orthorhomic(a, b, c)
+        # Use orthorhombic (note: misspelled in Lattice class)
+        return Lattice.orthorhombic(a, b, c)
     
     elif crystal_system in ['hexagonal', 'trigonal']:
         if isinstance(lattice_params, (list, tuple)):

@@ -97,9 +97,9 @@ class TestLatticeComprehensive(unittest.TestCase):
         self.assertEqual(lattice.b, 5.0)
         self.assertEqual(lattice.c, 10.0)
     
-    def test_lattice_orthorhomic(self):
+    def test_lattice_orthorhombic(self):
         """Test orthorhombic lattice creation."""
-        lattice = Lattice.orthorhomic(a=5.0, b=6.0, c=7.0)
+        lattice = Lattice.orthorhombic(a=5.0, b=6.0, c=7.0)
         self.assertEqual(lattice.a, 5.0)
         self.assertEqual(lattice.b, 6.0)
         self.assertEqual(lattice.c, 7.0)
@@ -154,8 +154,8 @@ class TestLatticeComprehensive(unittest.TestCase):
         self.assertEqual(lattice.a, 5.0)
         self.assertEqual(lattice.b, 6.0)
         self.assertEqual(lattice.c, 7.0)
-        # Should be the same as orthorhomic
-        lattice2 = Lattice.orthorhomic(a=5.0, b=6.0, c=7.0)
+        # Should be the same as orthorhombic
+        lattice2 = Lattice.orthorhombic(a=5.0, b=6.0, c=7.0)
         np.testing.assert_array_almost_equal(lattice.matrix, lattice2.matrix)
     
     def test_lattice_str(self):

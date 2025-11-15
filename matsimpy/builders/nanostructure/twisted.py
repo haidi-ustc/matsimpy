@@ -142,7 +142,7 @@ def build_twisted_bilayer(
         min_pos = np.min(combined_positions, axis=0)
         size = max_pos - min_pos + 10.0  # Add 10 Angstrom padding
         try:
-            new_lattice = Lattice.orthorhomic(size[0], size[1], size[2])
+            new_lattice = Lattice.orthorhombic(size[0], size[1], size[2])
         except AttributeError:
             # Fallback: create lattice manually
             lattice_vectors = np.array([
@@ -319,7 +319,7 @@ def build_twisted_multilayer(
             min_pos = np.min(combined_positions, axis=0)
             size = max_pos - min_pos + 10.0
             try:
-                new_lattice = Lattice.orthorhomic(size[0], size[1], size[2])
+                new_lattice = Lattice.orthorhombic(size[0], size[1], size[2])
             except AttributeError:
                 # Fallback: create lattice manually
                 lattice_vectors = np.array([

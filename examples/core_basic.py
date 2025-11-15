@@ -76,7 +76,7 @@ print("-" * 70)
 # Create different lattice types
 cubic = Lattice.cubic(4.0)
 tetragonal = Lattice.tetragonal(3.0, 5.0)
-orthorhombic = Lattice.orthorhomic(3.0, 4.0, 5.0)
+orthorhombic = Lattice.orthorhombic(3.0, 4.0, 5.0)
 
 # Create from parameters (a, b, c, alpha, beta, gamma)
 monoclinic = Lattice.from_parameters(

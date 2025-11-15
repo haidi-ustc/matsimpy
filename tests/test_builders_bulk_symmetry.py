@@ -1,6 +1,10 @@
 """Tests for symmetry-based bulk crystal generation."""
+import os
 import unittest
 import numpy as np
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk.symmetry import (
     from_space_group,
