@@ -323,6 +323,9 @@ class Structure(ABC, MSONable):
         # Delegate to transformation module for implementation
         from ..transformation.chemical.substitution import substitute
         substitute(self, indices, new_species, inplace=True)
+        self._formula_dirty = True
+        self._cached_composition = None
+        self._cached_formula = None
     
     def substitute_all(self, old_species: str, new_species: str) -> None:
         """
@@ -343,6 +346,9 @@ class Structure(ABC, MSONable):
         # Delegate to transformation module for implementation
         from ..transformation.chemical.substitution import substitute_all
         substitute_all(self, old_species, new_species, inplace=True)
+        self._formula_dirty = True
+        self._cached_composition = None
+        self._cached_formula = None
     
     def sort_atoms(self, sort_by: str = 'element') -> None:
         """
