@@ -15,7 +15,8 @@ class Composition(MSONable):
 
     Args:
         formula: Chemical formula string (e.g., 'H2O', 'Fe2O3', 'Ca(OH)2').
-        sort_by: Sorting method for formula - 'alphabet' or 'element' (by atomic number).
+        sort_by: Sorting method - None (original order), 'alphabet', or 'element'
+                Default is None to preserve input formula order.
 
     Attributes:
         formula: Normalized chemical formula string.
@@ -36,7 +37,7 @@ class Composition(MSONable):
         18.01528
     """
     
-    def __init__(self, formula: str, sort_by: str = 'alphabet'):
+    def __init__(self, formula: str, sort_by: str = 'element'):
         """
         Initialize Composition from chemical formula.
         
@@ -57,7 +58,7 @@ class Composition(MSONable):
         # Cache for mass calculation
         self._cached_mass: Optional[float] = None
 
-    def _chemical_formula(self, sort_by: str = 'alphabet') -> str:
+    def _chemical_formula(self, sort_by: Optional[str] = None) -> str:
         """
         Generate chemical formula string from composition.
         
@@ -71,11 +72,14 @@ class Composition(MSONable):
             ValueError: If sort_by is invalid.
         """
         element_counts = self.composition
-        sorted_elements = self._get_sorted_element_counts(element_counts, sort_by)
+        if sort_by is None:
+           elements = list(element_counts.items())
+        else:
+           elements = self._get_sorted_element_counts(element_counts, sort_by)
         
         formula = ''.join([
             f'{element}{count if count > 1 else ""}' 
-            for element, count in sorted_elements
+            for element, count in elements
         ])
         return formula
     
