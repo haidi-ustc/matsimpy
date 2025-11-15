@@ -39,7 +39,7 @@ class Structure(ABC, MSONable):
     """
     def __init__(self, species: Union[List[str], List[int], List[Element]],
                  positions: List[List[float]], 
-                 lattice: Lattice = None):
+                 lattice: Lattice = None) -> None:
         # Convert to list first, then tuple for immutability
         if all(isinstance(s, str) for s in species):
             species_list = list(species)

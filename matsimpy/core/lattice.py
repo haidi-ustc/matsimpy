@@ -92,7 +92,7 @@ class Lattice(MSONable):
 
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
-            "lattice_vectors": self.lattice_vectors.tolist()
+            "lattice_vectors": np.round(self.lattice_vectors, decimals=8).tolist() 
         }
         return d
 
@@ -346,3 +346,20 @@ class Lattice(MSONable):
             c: The length of the c lattice vector.
         """
         return cls.orthorhomic(a, b, c)
+
+
+    def __hash__(self):
+        """
+        Generate a hash for the lattice with consistent floating-point handling.
+    
+        Lattice vectors are rounded to 8 decimal places to handle floating-point
+        precision issues, matching the approach used in Structure.
+    
+        Returns:
+            int: Hash value for the lattice
+        """
+        import hashlib
+    
+        hash_dict = self.as_dict()
+        hash_str = str(hash_dict).encode('utf-8')
+        return int(hashlib.sha256(hash_str).hexdigest(), 16)
