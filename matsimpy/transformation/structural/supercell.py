@@ -60,6 +60,9 @@ def make_supercell(crystal: Crystal,
     if scaling_matrix.shape != (3, 3):
         raise ValueError("Scaling matrix must be 3x3 or [a, b, c] format")
     
+    # Check if matrix is diagonal for simpler processing
+    is_diagonal = np.allclose(scaling_matrix, np.diag(np.diag(scaling_matrix)))
+    
     # Calculate new lattice vectors
     new_lattice_vectors = np.dot(scaling_matrix, crystal.lattice.lattice_vectors)
     new_lattice = Lattice(new_lattice_vectors)
@@ -69,39 +72,72 @@ def make_supercell(crystal: Crystal,
     new_positions = []
     new_site_properties = [] if crystal.site_properties else None
     
-    # Iterate over all unit cell replications
-    for i in range(scaling_matrix[0, 0] * scaling_matrix[1, 1] * scaling_matrix[2, 2]):
-        # Calculate replication indices
-        # This is a simplified approach - for general matrices, need more complex logic
-        # For now, handle simple diagonal case
-        if np.allclose(scaling_matrix, np.diag(np.diag(scaling_matrix))):
-            # Simple diagonal case
-            diag = np.diag(scaling_matrix)
-            na, nb, nc = diag
-            
-            # Calculate i, j, k from linear index
-            k = i // (na * nb)
-            j = (i // na) % nb
-            ii = i % na
-            
-            # Add offset to fractional positions
-            offset = np.array([ii, j, k], dtype=np.float64)
-            
-            for atom_idx, (spec, pos) in enumerate(zip(crystal.species, crystal.positions)):
-                new_pos = pos + offset
-                # Wrap to [0, 1) for fractional coordinates
-                new_pos = new_pos % 1.0
-                new_species.append(spec)
-                new_positions.append(new_pos.tolist())
-                
-                if new_site_properties is not None and crystal.site_properties:
-                    new_site_properties.append(crystal.site_properties[atom_idx].copy())
-        else:
-            # General matrix case - more complex
-            # For now, raise NotImplementedError for non-diagonal matrices
-            raise NotImplementedError(
-                "General (non-diagonal) scaling matrices not yet implemented. "
-                "Use simple [a, b, c] format or diagonal matrix."
+    if is_diagonal:
+        # Simple diagonal case - use optimized approach
+        diag = np.diag(scaling_matrix)
+        na, nb, nc = diag
+        
+        # Generate all translation vectors
+        for i in range(na):
+            for j in range(nb):
+                for k in range(nc):
+                    offset = np.array([i, j, k], dtype=np.float64)
+                    
+                    for atom_idx, (spec, pos) in enumerate(zip(crystal.species, crystal.positions)):
+                        new_pos = pos + offset
+                        # Scale by supercell dimensions and wrap to [0, 1)
+                        new_pos = new_pos / diag
+                        new_pos = new_pos % 1.0
+                        
+                        new_species.append(spec)
+                        new_positions.append(new_pos.tolist())
+                        
+                        if new_site_properties is not None and crystal.site_properties:
+                            new_site_properties.append(crystal.site_properties[atom_idx].copy())
+    else:
+        # General matrix case - use more robust approach
+        # Calculate the determinant to get number of unit cells
+        det = int(round(np.linalg.det(scaling_matrix)))
+        if det <= 0:
+            raise ValueError("Scaling matrix must have positive determinant")
+        
+        # Generate all translation vectors in the supercell
+        # We need to find all integer combinations that satisfy:
+        # 0 <= i*a1 + j*b1 + k*c1 < 1, etc.
+        # This is complex, so we use a simpler approach: iterate over a reasonable range
+        
+        # Estimate range needed based on matrix elements
+        max_elem = np.max(np.abs(scaling_matrix))
+        range_estimate = max_elem + 2
+        
+        for i in range(-range_estimate, range_estimate + 1):
+            for j in range(-range_estimate, range_estimate + 1):
+                for k in range(-range_estimate, range_estimate + 1):
+                    translation = np.array([i, j, k])
+                    # Apply inverse scaling matrix to get fractional coordinates in new cell
+                    frac_coords = np.linalg.solve(scaling_matrix.T, translation)
+                    
+                    # Check if these coordinates are within [0, 1) in the supercell
+                    if np.all(frac_coords >= 0) and np.all(frac_coords < 1):
+                        # This is a valid translation in the supercell
+                        for atom_idx, (spec, pos) in enumerate(zip(crystal.species, crystal.positions)):
+                            new_pos = pos + frac_coords
+                            new_pos = new_pos % 1.0  # Wrap to [0, 1)
+                            
+                            new_species.append(spec)
+                            new_positions.append(new_pos.tolist())
+                            
+                            if new_site_properties is not None and crystal.site_properties:
+                                new_site_properties.append(crystal.site_properties[atom_idx].copy())
+        
+        # Verify we found the correct number of atoms
+        expected_atoms = len(crystal.species) * det
+        actual_atoms = len(new_species)
+        if actual_atoms != expected_atoms:
+            raise RuntimeError(
+                f"Supercell generation failed: expected {expected_atoms} atoms, "
+                f"but found {actual_atoms}. This may indicate an issue with the "
+                f"scaling matrix or the algorithm."
             )
     
     # Create new crystal
@@ -119,6 +155,7 @@ def make_supercell(crystal: Crystal,
         crystal._sites = crystal._initialize_sites()
         crystal._formula_dirty = True
         crystal._cached_composition = None
+        crystal._cached_formula = None
         return crystal
     else:
         # Create new crystal
