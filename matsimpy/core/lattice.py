@@ -45,7 +45,7 @@ class Lattice(MSONable):
             ], dtype=float)
         elif isinstance(lattice_vectors, (list, np.ndarray)):
             # Convert to numpy array for uniform handling
-            arr = np.array(lattice_vectors, dtype=float)
+            arr = np.array(lattice_vectors, dtype=float,copy=True)
             if arr.ndim == 1 and len(arr) == 3:
                 # List of 3 numbers -> orthorhombic lattice
                 a, b, c = arr
@@ -173,6 +173,28 @@ class Lattice(MSONable):
         volume = np.dot(a, np.cross(b, c))
         return abs(volume)
 
+    def _format_lattice_params(self, include_units: bool = True) -> str:
+        """
+        Format lattice parameters as a string.
+        
+        Helper method to avoid duplication between Lattice and Crystal __str__ methods.
+        Matches the format used in Crystal.__str__.
+        
+        Args:
+            include_units: If True, include Å units for lengths (default: True).
+        
+        Returns:
+            Formatted string with lattice parameters on two lines.
+        """
+        if include_units:
+            lengths = f"a={self.a:.4f} Å, b={self.b:.4f} Å, c={self.c:.4f} Å"
+        else:
+            lengths = f"a={self.a:.4f}, b={self.b:.4f}, c={self.c:.4f}"
+        
+        angles = f"α={self.alpha:.2f}°, β={self.beta:.2f}°, γ={self.gamma:.2f}°"
+        
+        return f"{lengths}\n           {angles}"
+
     def __str__(self) -> str:
         """
         Human-readable string representation of the lattice.
@@ -180,11 +202,8 @@ class Lattice(MSONable):
         Returns:
             String showing lattice parameters and vectors.
         """
-        # Format lattice parameters
-        params = (
-            f"a={self.a:.4f}, b={self.b:.4f}, c={self.c:.4f}, "
-            f"α={self.alpha:.1f}°, β={self.beta:.1f}°, γ={self.gamma:.1f}°"
-        )
+        # Format lattice parameters (matching Crystal format)
+        params = self._format_lattice_params(include_units=True)
         
         # Format lattice vectors
         vectors = [
@@ -193,7 +212,7 @@ class Lattice(MSONable):
         ]
         
         return (
-            f"Lattice({params})\n"
+            f"Lattice: {params}\n"
             f"Lattice vectors:\n{vectors[0]}\n{vectors[1]}\n{vectors[2]}"
         )
         

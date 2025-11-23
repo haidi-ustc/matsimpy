@@ -381,9 +381,8 @@ class Crystal(Structure):
         info = f"{self.__class__.__name__}: {self.formula}\n"
         info += f"  Sites: {len(self)} atoms\n"
         
-        # Lattice parameters
-        info += f"  Lattice: a={self.lattice.a:.4f} Å, b={self.lattice.b:.4f} Å, c={self.lattice.c:.4f} Å\n"
-        info += f"           α={self.lattice.alpha:.2f}°, β={self.lattice.beta:.2f}°, γ={self.lattice.gamma:.2f}°\n"
+        # Lattice parameters (use helper method from Lattice to avoid duplication)
+        info += f"  Lattice: {self.lattice._format_lattice_params(include_units=True)}\n"
         
         # Volume and density
         info += f"  Volume: {self.volume:.4f} Å³\n"
