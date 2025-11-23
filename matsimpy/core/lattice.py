@@ -120,7 +120,7 @@ class Lattice(MSONable):
         Returns:
             (np.ndarray): Lattice vectors as a 3x3 matrix.
         """
-        return np.array(self.lattice_vectors , dtype=np.float64).reshape((3, 3))
+        return self.lattice_vectors.reshape((3, 3))
     
     @property
     def inv_matrix(self) -> np.ndarray:
@@ -169,9 +169,7 @@ class Lattice(MSONable):
 
     def volume(self) -> float:
         """Calculate the volume of the unit cell."""
-        a, b, c = self.lattice_vectors
-        volume = np.dot(a, np.cross(b, c))
-        return abs(volume)
+        return abs(np.linalg.det(self.matrix))
 
     def _format_lattice_params(self, include_units: bool = True) -> str:
         """
