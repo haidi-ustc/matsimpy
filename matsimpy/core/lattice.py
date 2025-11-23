@@ -174,12 +174,41 @@ class Lattice(MSONable):
         return abs(volume)
 
     def __str__(self) -> str:
-        vectors = [f" {vector[0]:.4f} {vector[1]:.4f} {vector[2]:.4f}" for vector in self.lattice_vectors]
-        return f"Lattice with lattice vectors:\n{vectors[0]}\n{vectors[1]}\n{vectors[2]}"
-
+        """
+        Human-readable string representation of the lattice.
+        
+        Returns:
+            String showing lattice parameters and vectors.
+        """
+        # Format lattice parameters
+        params = (
+            f"a={self.a:.4f}, b={self.b:.4f}, c={self.c:.4f}, "
+            f"α={self.alpha:.1f}°, β={self.beta:.1f}°, γ={self.gamma:.1f}°"
+        )
+        
+        # Format lattice vectors
+        vectors = [
+            f"  [{vector[0]:8.4f} {vector[1]:8.4f} {vector[2]:8.4f}]"
+            for vector in self.lattice_vectors
+        ]
+        
+        return (
+            f"Lattice({params})\n"
+            f"Lattice vectors:\n{vectors[0]}\n{vectors[1]}\n{vectors[2]}"
+        )
         
     def __repr__(self) -> str:
-        return f"Lattice(lattice_vectors={self.lattice_vectors.tolist()})"
+        """
+        Unambiguous string representation for debugging.
+        
+        Returns a string that can be used to recreate the Lattice object.
+        
+        Returns:
+            String representation that can be evaluated to recreate the lattice.
+        """
+        # Round to 8 decimal places for consistency with as_dict
+        rounded_vectors = np.round(self.lattice_vectors, decimals=8).tolist()
+        return f"Lattice(lattice_vectors={rounded_vectors})"
 
 
     @classmethod
