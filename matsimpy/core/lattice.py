@@ -76,20 +76,31 @@ class Lattice(MSONable):
 
     def _validate_lattice_vectors(self) -> None:
         """
-        Validate the lattice vectors.
-    
+        Enhanced validation of lattice vectors.
+        
         Raises:
-            ValueError: If the lattice vectors are not 3D or are linearly dependent.
+            ValueError: If the lattice vectors are invalid, contain non-finite values,
+                       are linearly dependent, or have too small volume.
         """
         if len(self.lattice_vectors) != 3:
             raise ValueError("Lattice vectors must be 3-dimensional.")
+        
+        # Check for NaN or Inf values
+        if not np.all(np.isfinite(self.lattice_vectors)):
+            raise ValueError("Lattice vectors must contain finite values.")
+        
+        # Check determinant
         det = np.linalg.det(self.matrix)
-        if np.isclose(det, 0):
+        if np.isclose(det, 0, atol=1e-10):
             raise ValueError("Lattice vectors must be linearly independent.")
+        
+        # Check volume is reasonable
+        volume = self.volume()
+        if volume <= 1e-10:  # Very small volume
+            raise ValueError(f"Lattice volume is too small: {volume}")
 
     def as_dict(self):
         d = {
-
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "lattice_vectors": np.round(self.lattice_vectors, decimals=8).tolist() 
@@ -333,25 +344,6 @@ class Lattice(MSONable):
         # Triclinic: all parameters can vary
         return cls.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
 
-    @classmethod
-    def orthorhombic(cls, a: float, b: float, c: float):
-        """
-        Initialize an orthorhombic Lattice object.
-        
-        This is an alias for orthorhombic() with correct spelling.
-        
-        Args:
-            a: The length of the a lattice vector.
-            b: The length of the b lattice vector.
-            c: The length of the c lattice vector.
-        """
-        lattice_vectors = [
-        [a, 0.0, 0.0],
-        [0.0, b, 0.0],
-        [0.0, 0.0, c]
-        ]
-        return cls(lattice_vectors)
-
 
     def __hash__(self):
         """
@@ -368,3 +360,48 @@ class Lattice(MSONable):
         hash_dict = self.as_dict()
         hash_str = str(hash_dict).encode('utf-8')
         return int(hashlib.sha256(hash_str).hexdigest(), 16)
+
+    def __eq__(self, other):
+        """
+        Equality comparison with tolerance for floating-point numbers.
+        
+        Args:
+            other: Another Lattice object to compare with.
+        
+        Returns:
+            True if lattices are equal within tolerance, False otherwise.
+        """
+        if not isinstance(other, Lattice):
+            return False
+        
+        # Compare with tolerance
+        return np.allclose(self.lattice_vectors, other.lattice_vectors, rtol=1e-8)
+
+    def get_reciprocal_lattice(self) -> 'Lattice':
+        """Get the reciprocal lattice."""
+        # Reciprocal lattice vectors are 2π times the transpose of the inverse
+        reciprocal_vectors = 2 * np.pi * self.inv_matrix.T
+        return Lattice(reciprocal_vectors)
+
+    def get_cartesian_coords(self, fractional_coords: np.ndarray) -> np.ndarray:
+        """Convert fractional coordinates to Cartesian coordinates."""
+        return np.dot(fractional_coords, self.matrix)
+
+    def get_fractional_coords(self, cartesian_coords: np.ndarray) -> np.ndarray:
+        """Convert Cartesian coordinates to fractional coordinates."""
+        return np.dot(cartesian_coords, self.inv_matrix)
+
+    def is_orthogonal(self, tol: float = 1e-8) -> bool:
+        """Check if the lattice is orthogonal (all angles are 90°)."""
+        return (abs(self.alpha - 90) < tol and 
+                abs(self.beta - 90) < tol and 
+                abs(self.gamma - 90) < tol)
+
+    @property
+    def parameters(self) -> dict:
+        """Get all lattice parameters as a dictionary."""
+        return {
+            'a': self.a, 'b': self.b, 'c': self.c,
+            'alpha': self.alpha, 'beta': self.beta, 'gamma': self.gamma,
+            'volume': self.volume()
+        }
