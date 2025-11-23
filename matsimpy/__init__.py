@@ -13,7 +13,7 @@ from .core import (
     Composition,
     Site,
     CrystalSite,
-    Element
+    Element,
 )
 
 # Version
@@ -21,15 +21,14 @@ __version__ = "0.1.0"
 
 __all__ = [
     # Core classes
-    'Structure',
-    'Crystal',
-    'Molecule',
-    'Lattice',
-    'Composition',
-    'Site',
-    'CrystalSite',
-    'Element',
+    "Structure",
+    "Crystal",
+    "Molecule",
+    "Lattice",
+    "Composition",
+    "Site",
+    "CrystalSite",
+    "Element",
     # Version
-    '__version__',
+    "__version__",
 ]
-

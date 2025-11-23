@@ -13,11 +13,11 @@ and interface optimization.
 Examples:
     >>> from matsimpy import Crystal, Lattice
     >>> from matsimpy.builders.interface import create_simple_interface
-    >>> 
+    >>>
     >>> from matsimpy.builders.bulk import from_prototype
     >>> si = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
     >>> ge = Crystal(['Ge'], [[0,0,0]], Lattice.cubic(5.65))
-    >>> 
+    >>>
     >>> # Simple stacking interface (placeholder)
     >>> # interface = create_simple_interface(si, ge, vacuum=5.0)
 """
@@ -26,4 +26,3 @@ Examples:
 # For now, just define the structure
 
 __all__ = []
-

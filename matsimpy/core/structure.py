@@ -9,10 +9,11 @@ from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
 
+
 class Structure(ABC, MSONable):
     """
     An abstract base class for representing crystal and molecule structures.
-    
+
     This class should not be instantiated directly. Use Crystal or Molecule instead.
 
     Args:
@@ -37,9 +38,13 @@ class Structure(ABC, MSONable):
         get_neighbor_list(cutoff): Returns a list of atoms within a cutoff radius of each atom.
 
     """
-    def __init__(self, species: Union[List[str], List[int], List[Element]],
-                 positions: List[List[float]], 
-                 lattice: Lattice = None) -> None:
+
+    def __init__(
+        self,
+        species: Union[List[str], List[int], List[Element]],
+        positions: List[List[float]],
+        lattice: Lattice = None,
+    ) -> None:
         # Convert to list first, then tuple for immutability
         if all(isinstance(s, str) for s in species):
             species_list = list(species)
@@ -48,9 +53,11 @@ class Structure(ABC, MSONable):
         elif all(isinstance(s, Element) for s in species):
             species_list = [s.symbol for s in species]
         else:
-            raise TypeError("Invalid type for species. \
+            raise TypeError(
+                "Invalid type for species. \
                     Must be a list of atomic symbols, \
-                    a list of atomic numbers, or a list of Element objects.")
+                    a list of atomic numbers, or a list of Element objects."
+            )
 
         # Validate input lengths match
         if len(species_list) != len(positions):
@@ -61,13 +68,13 @@ class Structure(ABC, MSONable):
 
         self.species = tuple(species_list)  # Make immutable
         self.positions = np.array(positions, dtype=np.float64)
-        
+
         # Validate positions are 3D
         if self.positions.ndim != 2 or self.positions.shape[1] != 3:
             raise ValueError("Positions must be a list of 3D coordinates")
-        
+
         self.lattice = lattice
-        
+
         # Add cache attributes
         self._cached_composition: Optional[Composition] = None
         self._cached_formula: Optional[str] = None
@@ -103,7 +110,9 @@ class Structure(ABC, MSONable):
         """
         species = d["species"]
         positions = d["positions"]
-        lattice = Lattice.from_dict(d["lattice"]) if d.get("lattice") is not None else None
+        lattice = (
+            Lattice.from_dict(d["lattice"]) if d.get("lattice") is not None else None
+        )
         return cls(species, positions, lattice)
 
     @property
@@ -126,10 +135,10 @@ class Structure(ABC, MSONable):
     def copy(self):
         """
         Create a copy of the structure.
-        
+
         Returns:
             Structure: A new instance of the structure with copied data.
-            
+
         Examples:
             >>> from matsimpy.core import Crystal, Lattice
             >>> crystal = Crystal(['Si', 'Si'], [[0,0,0], [0.25,0.25,0.25]], Lattice.cubic(5.43))
@@ -144,11 +153,11 @@ class Structure(ABC, MSONable):
     def __hash__(self):
         """
         Generate a hash for the structure.
-        
+
         Positions are rounded to 8 decimal places to handle floating-point precision issues.
         This ensures that structures with nearly identical positions (within tolerance)
         hash to the same value.
-        
+
         Returns:
             int: Hash value for the structure
         """
@@ -161,44 +170,46 @@ class Structure(ABC, MSONable):
         }
         if self.lattice is not None:
             hash_dict["lattice"] = self.lattice.as_dict()
-        
+
         # Use hashlib to generate a SHA256 hash
-        hash_str = str(hash_dict).encode('utf-8')
+        hash_str = str(hash_dict).encode("utf-8")
         return int(hashlib.sha256(hash_str).hexdigest(), 16)
-    
+
     def __eq__(self, other):
         """
         Test equality between structures.
-        
+
         Two structures are equal if they have the same species and positions
         (within floating-point tolerance of 1e-8).
-        
+
         Args:
             other: Another Structure object
-            
+
         Returns:
             bool: True if structures are equal
         """
         if not isinstance(other, Structure):
             return False
-        
+
         # Check species
         if self.species != other.species:
             return False
-        
+
         # Check positions with tolerance
         if not np.allclose(self.positions, other.positions, atol=1e-8, rtol=0):
             return False
-        
+
         # Check lattice (if both have lattices)
         if self.lattice is not None and other.lattice is not None:
             # Compare lattice matrices
-            if not np.allclose(self.lattice.matrix, other.lattice.matrix, atol=1e-8, rtol=0):
+            if not np.allclose(
+                self.lattice.matrix, other.lattice.matrix, atol=1e-8, rtol=0
+            ):
                 return False
         elif self.lattice is not None or other.lattice is not None:
             # One has lattice, other doesn't
             return False
-        
+
         return True
 
     @property
@@ -213,8 +224,11 @@ class Structure(ABC, MSONable):
             self._cached_composition = Composition(self.formula)
         return self._cached_composition
 
-    def add_atom(self, species: Union[str, List[str]], 
-                 position: Union[List[float], List[List[float]]]) -> None:
+    def add_atom(
+        self,
+        species: Union[str, List[str]],
+        position: Union[List[float], List[List[float]]],
+    ) -> None:
         """
         Adds one or more atoms to the structure and invalidates cache.
 
@@ -222,10 +236,10 @@ class Structure(ABC, MSONable):
             species: Atomic species (single string or list of strings).
             position: Atomic position(s). Either a single 3D coordinate [x, y, z]
                      or a list of 3D coordinates [[x1, y1, z1], [x2, y2, z2], ...].
-                     
+
         Raises:
             ValueError: If position is not 3D or if species/position counts don't match.
-            
+
         Examples:
             >>> structure.add_atom('H', [0, 0, 0])  # Add single atom
             >>> structure.add_atom(['H', 'O'], [[0, 0, 0], [1, 0, 0]])  # Add multiple
@@ -234,17 +248,17 @@ class Structure(ABC, MSONable):
         if isinstance(species, str):
             species = [species]
             position = [position]
-        
+
         # Validate inputs
         if len(species) != len(position):
             raise ValueError(
                 f"Number of species ({len(species)}) must match "
                 f"number of positions ({len(position)})"
             )
-        
+
         if not species:
             return  # Nothing to add
-        
+
         # Validate all positions are 3D
         positions_array = np.array(position, dtype=np.float64)
         if positions_array.ndim == 1:
@@ -257,14 +271,16 @@ class Structure(ABC, MSONable):
             if positions_array.shape[1] != 3:
                 raise ValueError("Positions must be 3D coordinates")
         else:
-            raise ValueError("Position must be a 3D coordinate or list of 3D coordinates")
-        
+            raise ValueError(
+                "Position must be a 3D coordinate or list of 3D coordinates"
+            )
+
         # Add atoms
         species_list = list(self.species)
         species_list.extend(species)
         self.species = tuple(species_list)
         self.positions = np.vstack([self.positions, positions_array])
-        
+
         # Invalidate caches
         self._formula_dirty = True
         self._cached_composition = None
@@ -280,7 +296,7 @@ class Structure(ABC, MSONable):
         """
         if not (0 <= index < len(self.species)):
             raise IndexError("Invalid atom index.")
-        
+
         # Maintain tuple immutability
         species_list = list(self.species)
         species_list.pop(index)
@@ -290,26 +306,29 @@ class Structure(ABC, MSONable):
         self._cached_composition = None
         # Properties computed lazily on access
 
-    def substitute(self, indices: Union[int, List[int], 'AtomSelection'], 
-                   new_species: Union[str, List[str], Dict[str, str]]) -> None:
+    def substitute(
+        self,
+        indices: Union[int, List[int], "AtomSelection"],
+        new_species: Union[str, List[str], Dict[str, str]],
+    ) -> None:
         """
         Substitute atoms with new species (in-place).
-        
+
         This is a convenience method that modifies the structure directly.
         For functional style (returning new object), use matsimpy.transformation.substitute().
-        
+
         Note: This method delegates to the transformation module for the actual implementation.
-        
+
         Args:
             indices: Atom index, list of indices, or AtomSelection object to substitute
             new_species: New species symbol, list of symbols, or dict mapping old->new species.
                        If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'})
-            
+
         Raises:
             IndexError: If index is out of range
             ValueError: If number of indices doesn't match number of species
             KeyError: If dict mapping doesn't contain a species
-            
+
         Examples:
             >>> structure.substitute(0, 'Ge')  # Substitute atom at index 0
             >>> structure.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
@@ -322,102 +341,103 @@ class Structure(ABC, MSONable):
         """
         # Delegate to transformation module for implementation
         from ..transformation.chemical.substitution import substitute
+
         substitute(self, indices, new_species, inplace=True)
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None
-    
+
     def substitute_all(self, old_species: str, new_species: str) -> None:
         """
         Substitute all atoms of a given species with a new species (in-place).
-        
+
         This is a convenience method that modifies the structure directly.
         For functional style (returning new object), use matsimpy.transformation.substitute_all().
-        
+
         Note: This method delegates to the transformation module for the actual implementation.
-        
+
         Args:
             old_species: Species to replace
             new_species: Replacement species
-            
+
         Examples:
             >>> structure.substitute_all('Si', 'Ge')  # Replace all Si with Ge
         """
         # Delegate to transformation module for implementation
         from ..transformation.chemical.substitution import substitute_all
+
         substitute_all(self, old_species, new_species, inplace=True)
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None
-    
-    def sort_atoms(self, sort_by: str = 'element') -> None:
+
+    def sort_atoms(self, sort_by: str = "element") -> None:
         """
         Sort atoms in the structure by element (in-place).
-        
+
         This method actually reorders the internal species and positions arrays,
         unlike __str__ which only sorts for display.
-        
+
         Args:
             sort_by: Sorting method ('element' for atomic number, 'alphabet' for alphabetical)
-            
+
         Examples:
             >>> structure.sort_atoms('element')  # Sort by atomic number
             >>> structure.sort_atoms('alphabet')  # Sort alphabetically
         """
         # Create list of (index, specie, position) tuples
         atoms = list(zip(range(len(self.species)), self.species, self.positions))
-        
+
         # Sort by element
-        if sort_by == 'element':
+        if sort_by == "element":
             # Sort by atomic number, then by position for same element
             sorted_atoms = sorted(
                 atoms,
                 key=lambda a: (
                     Element.get_element(a[1]).atomic_no,
-                    a[2][0], a[2][1], a[2][2]
-                )
+                    a[2][0],
+                    a[2][1],
+                    a[2][2],
+                ),
             )
-        elif sort_by == 'alphabet':
+        elif sort_by == "alphabet":
             # Sort alphabetically by species symbol, then by position
             sorted_atoms = sorted(
-                atoms,
-                key=lambda a: (a[1], a[2][0], a[2][1], a[2][2])
+                atoms, key=lambda a: (a[1], a[2][0], a[2][1], a[2][2])
             )
         else:
             raise ValueError("sort_by must be 'element' or 'alphabet'")
-        
+
         # Extract sorted species and positions
         sorted_species = [a[1] for a in sorted_atoms]
         sorted_positions = np.array([a[2] for a in sorted_atoms])
-        
+
         # Update internal data
         self.species = tuple(sorted_species)
         self.positions = sorted_positions
-        
+
         # Invalidate caches
         self._formula_dirty = True
         self._cached_composition = None
-        
+
         # Reinitialize sites if they exist
-        if hasattr(self, '_sites'):
-            if hasattr(self, '_initialize_sites'):
+        if hasattr(self, "_sites"):
+            if hasattr(self, "_initialize_sites"):
                 self._sites = self._initialize_sites()
 
     @abstractmethod
     def get_neighbor_list(self, *args, **kwargs):
         """
         Get neighbor list. Must be implemented by subclasses.
-        
+
         Note: Subclasses (Crystal and Molecule) have different signatures:
         - Crystal: get_neighbor_list(cutoff, use_pbc=True) -> Dict[int, List[Tuple[int, float]]]
         - Molecule: get_neighbor_list(atom_index, cutoff) -> List[int]
-        
+
         Raises:
             NotImplementedError: If not implemented by subclass
         """
         raise NotImplementedError("get_neighbor_list must be implemented by subclasses")
 
-
     def __len__(self):
         return len(self.species)
-

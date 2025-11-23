@@ -8,5 +8,4 @@ This module provides interfaces for different AI protocols:
 
 from .mcp import MCPInterface
 
-__all__ = ['MCPInterface']
-
+__all__ = ["MCPInterface"]

@@ -14,9 +14,8 @@ from .analysis import AIAnalysis
 from .optimization import AIOptimization
 
 __all__ = [
-    'AIGeneration',
-    'PropertyPrediction',
-    'AIAnalysis',
-    'AIOptimization',
+    "AIGeneration",
+    "PropertyPrediction",
+    "AIAnalysis",
+    "AIOptimization",
 ]
-

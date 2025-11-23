@@ -12,4 +12,3 @@ Functions for analyzing geometric properties of structures.
 #     pass
 
 __all__ = []
-

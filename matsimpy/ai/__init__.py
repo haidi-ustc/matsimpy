@@ -10,14 +10,14 @@ This module supports multiple AI protocols:
 
 Examples:
     >>> from matsimpy.ai import MCPInterface, AIGeneration, get_ai_interface
-    >>> 
+    >>>
     >>> # Direct usage
     >>> mcp = MCPInterface(transport="stdio")
     >>> mcp.connect({"command": "python", "args": ["server.py"]})
     >>> gen = AIGeneration(mcp)
     >>> structure = gen.generate_from_composition("TiO2")
     >>> mcp.disconnect()
-    >>> 
+    >>>
     >>> # Factory pattern
     >>> ai = get_ai_interface("mcp", transport="stdio")
     >>> ai.connect({"command": "python", "args": ["server.py"]})
@@ -32,12 +32,7 @@ from .base import AIInterface, AIOperation
 from .interfaces import MCPInterface
 
 # Operations
-from .operations import (
-    AIGeneration,
-    PropertyPrediction,
-    AIAnalysis,
-    AIOptimization
-)
+from .operations import AIGeneration, PropertyPrediction, AIAnalysis, AIOptimization
 
 # Utilities
 from .utils import get_ai_interface, list_available_protocols, prompts, formatting
@@ -47,27 +42,22 @@ from .models import ModelRegistry, ResponseCache, cached
 
 __all__ = [
     # Base classes
-    'AIInterface',
-    'AIOperation',
-    
+    "AIInterface",
+    "AIOperation",
     # Interfaces
-    'MCPInterface',
-    
+    "MCPInterface",
     # Operations
-    'AIGeneration',
-    'PropertyPrediction',
-    'AIAnalysis',
-    'AIOptimization',
-    
+    "AIGeneration",
+    "PropertyPrediction",
+    "AIAnalysis",
+    "AIOptimization",
     # Utilities
-    'get_ai_interface',
-    'list_available_protocols',
-    'prompts',
-    'formatting',
-    
+    "get_ai_interface",
+    "list_available_protocols",
+    "prompts",
+    "formatting",
     # Models
-    'ModelRegistry',
-    'ResponseCache',
-    'cached',
+    "ModelRegistry",
+    "ResponseCache",
+    "cached",
 ]
-

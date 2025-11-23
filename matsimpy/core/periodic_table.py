@@ -4,14 +4,115 @@ from typing import Optional
 
 fpdt = str(Path(__file__).absolute().parent / "periodic_table.json")
 _pdt = loadfn(fpdt)
-ELEMENTS = ['H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne', 'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar', 'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', \
-         'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr', 'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag',\
-         'Cd', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe', 'Cs', 'Ba', 'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb',\
-         'Lu', 'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'Fr', 'Ra', 'Ac', 'Th', 'Pa', 'U', 'Np', \
-         'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr']
+ELEMENTS = [
+    "H",
+    "He",
+    "Li",
+    "Be",
+    "B",
+    "C",
+    "N",
+    "O",
+    "F",
+    "Ne",
+    "Na",
+    "Mg",
+    "Al",
+    "Si",
+    "P",
+    "S",
+    "Cl",
+    "Ar",
+    "K",
+    "Ca",
+    "Sc",
+    "Ti",
+    "V",
+    "Cr",
+    "Mn",
+    "Fe",
+    "Co",
+    "Ni",
+    "Cu",
+    "Zn",
+    "Ga",
+    "Ge",
+    "As",
+    "Se",
+    "Br",
+    "Kr",
+    "Rb",
+    "Sr",
+    "Y",
+    "Zr",
+    "Nb",
+    "Mo",
+    "Tc",
+    "Ru",
+    "Rh",
+    "Pd",
+    "Ag",
+    "Cd",
+    "In",
+    "Sn",
+    "Sb",
+    "Te",
+    "I",
+    "Xe",
+    "Cs",
+    "Ba",
+    "La",
+    "Ce",
+    "Pr",
+    "Nd",
+    "Pm",
+    "Sm",
+    "Eu",
+    "Gd",
+    "Tb",
+    "Dy",
+    "Ho",
+    "Er",
+    "Tm",
+    "Yb",
+    "Lu",
+    "Hf",
+    "Ta",
+    "W",
+    "Re",
+    "Os",
+    "Ir",
+    "Pt",
+    "Au",
+    "Hg",
+    "Tl",
+    "Pb",
+    "Bi",
+    "Po",
+    "At",
+    "Rn",
+    "Fr",
+    "Ra",
+    "Ac",
+    "Th",
+    "Pa",
+    "U",
+    "Np",
+    "Pu",
+    "Am",
+    "Cm",
+    "Bk",
+    "Cf",
+    "Es",
+    "Fm",
+    "Md",
+    "No",
+    "Lr",
+]
 
 # Cache for Element instances to avoid repeated creation
-_element_cache: dict[str, 'Element'] = {}
+_element_cache: dict[str, "Element"] = {}
+
 
 class Element:
 
@@ -28,20 +129,20 @@ class Element:
         return f"Element : {self.symbol}"
 
     @classmethod
-    def from_Z(cls, Z: int) -> 'Element':
+    def from_Z(cls, Z: int) -> "Element":
         """Create Element from atomic number Z."""
         if not (0 < Z <= len(ELEMENTS)):
             raise ValueError(f"Z must be between 1 and {len(ELEMENTS)}, got {Z}")
-        symbol = ELEMENTS[Z-1]
+        symbol = ELEMENTS[Z - 1]
         # Use cache if available
         if symbol in _element_cache:
             return _element_cache[symbol]
         element = cls(symbol)
         _element_cache[symbol] = element
         return element
-    
+
     @classmethod
-    def get_element(cls, symbol: str) -> 'Element':
+    def get_element(cls, symbol: str) -> "Element":
         """Get Element instance with caching."""
         symbol = symbol.capitalize()  # Normalize case
         if symbol in _element_cache:
@@ -52,17 +153,17 @@ class Element:
 
     @property
     def atomic_no(self):
-        return self._data['Atomic no']
+        return self._data["Atomic no"]
 
     @property
     def name(self):
         """Element name. Try both keys for compatibility."""
-        return self._data.get("Name") or self._data.get('name')
+        return self._data.get("Name") or self._data.get("name")
 
     @property
     def X(self):
         """Electronegativity (X)."""
-        return self._data.get("X") or self._data.get('x')
+        return self._data.get("X") or self._data.get("x")
 
     @property
     def x(self):
@@ -71,11 +172,11 @@ class Element:
 
     @property
     def radius(self):
-        return self._data.get('radius')
+        return self._data.get("radius")
 
     @property
     def calculated_radius(self):
-        return self._data.get('calculated_radius')
+        return self._data.get("calculated_radius")
 
     @property
     def shannon_radii(self):
@@ -113,12 +214,11 @@ class Element:
     def iupac_ordering(self):
         """IUPAC ordering number."""
         # Try both keys for compatibility
-        return self._data.get("IUPAC ordering") or self._data.get('iupac_ordering')
+        return self._data.get("IUPAC ordering") or self._data.get("iupac_ordering")
 
     @property
     def atomic_mass(self):
         return self._data["Atomic mass"]
-
 
     @property
     def atomic_orbitals(self):
@@ -213,43 +313,52 @@ class Element:
     @property
     def rigidity_modulus(self):
         return self._data["Rigidity modulus"]
-    
+
     def __getattr__(self, name):
         """
         Provide better error messages for non-existent attributes.
-        
+
         This method is called when an attribute is not found through normal lookup.
         It checks if the attribute exists in the element's data dictionary and
         provides helpful error messages listing available attributes.
-        
+
         Args:
             name: Attribute name being accessed
-            
+
         Returns:
             Value from _data dictionary if attribute exists there
-            
+
         Raises:
             AttributeError: With helpful message listing available attributes
-            
+
         Examples:
             >>> element = Element('Fe')
             >>> element.atomic_mass  # Works - defined as property
             >>> element.invalid_attr  # Raises AttributeError with helpful message
         """
         # Avoid recursion during pickling/copying - check for special attributes
-        if name in ('__setstate__', '__getstate__', '__getnewargs__', '__getnewargs_ex__'):
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-        
+        if name in (
+            "__setstate__",
+            "__getstate__",
+            "__getnewargs__",
+            "__getnewargs_ex__",
+        ):
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            )
+
         # Check if attribute exists in data dictionary
         # Use object.__getattribute__ to avoid recursion
         try:
-            data = object.__getattribute__(self, '_data')
+            data = object.__getattribute__(self, "_data")
         except AttributeError:
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-        
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            )
+
         if name in data:
             return data[name]
-        
+
         # Provide helpful error message with available attributes
         available_attrs = sorted(data.keys())
         raise AttributeError(
@@ -257,11 +366,10 @@ class Element:
             f"Available data attributes: {', '.join(available_attrs)}"
         )
 
-if __name__ == '__main__':
-    h=Element('H')
+
+if __name__ == "__main__":
+    h = Element("H")
     print(h)
-    he=Element.from_Z(2)
+    he = Element.from_Z(2)
     print(he)
     print(he.atomic_no)
-
-    

@@ -18,11 +18,10 @@ from .point import (
 )
 
 __all__ = [
-    'create_vacancy',
-    'create_interstitial',
-    'create_substitution',
-    'create_frenkel',
-    'create_schottky',
-    'create_antisite',
+    "create_vacancy",
+    "create_interstitial",
+    "create_substitution",
+    "create_frenkel",
+    "create_schottky",
+    "create_antisite",
 ]
-

@@ -12,11 +12,11 @@ Organized by calculator type:
 Usage:
     # Direct import (backward compatible)
     >>> from matsimpy.calculator import LennardJones, Mattersim
-    
+
     # Category import (recommended)
     >>> from matsimpy.calculator.classical import LennardJones
     >>> from matsimpy.calculator.ml import Mattersim
-    
+
     # Category module import
     >>> from matsimpy.calculator import classical, ml
     >>> calc1 = classical.LennardJones(...)
@@ -42,20 +42,16 @@ from . import dft
 
 __all__ = [
     # Base
-    'Calculator',
-    
+    "Calculator",
     # Classical
-    'LennardJones',
-    
+    "LennardJones",
     # ML
-    'Mattersim',
-    'BaseML',
-    
+    "Mattersim",
+    "BaseML",
     # DFT
-    'BaseDFT',
-    
+    "BaseDFT",
     # Categories
-    'classical',
-    'ml',
-    'dft',
+    "classical",
+    "ml",
+    "dft",
 ]

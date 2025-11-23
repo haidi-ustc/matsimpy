@@ -12,57 +12,60 @@ from typing import Union, Optional
 from ..core import Crystal, Molecule, Structure
 
 
-def to_json(structure: Union[Structure, Crystal, Molecule], 
-            filename: Optional[str] = None,
-            indent: Optional[int] = 2) -> Optional[str]:
+def to_json(
+    structure: Union[Structure, Crystal, Molecule],
+    filename: Optional[str] = None,
+    indent: Optional[int] = 2,
+) -> Optional[str]:
     """
     Serialize a structure to JSON format.
-    
+
     This function uses the structure's as_dict() method to create a JSON
     representation. The JSON can be written to a file or returned as a string.
-    
+
     Args:
         structure: Structure, Crystal, or Molecule object to serialize
         filename: Optional filename to write JSON to. If None, returns JSON string
         indent: JSON indentation level (default: 2, None for compact)
-        
+
     Returns:
         str or None: JSON string if filename is None, otherwise None
-        
+
     Raises:
         ValueError: If structure is not serializable
         TypeError: If structure doesn't have as_dict method
     """
-    if not hasattr(structure, 'as_dict'):
+    if not hasattr(structure, "as_dict"):
         raise TypeError(f"Object {type(structure)} does not support JSON serialization")
-    
+
     data = structure.as_dict()
     json_str = json.dumps(data, indent=indent, default=str)
-    
+
     if filename is not None:
         filepath = Path(filename)
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             f.write(json_str)
         return None
     else:
         return json_str
 
 
-def from_json(json_string: Optional[str] = None,
-              filename: Optional[str] = None) -> Union[Crystal, Molecule, Structure]:
+def from_json(
+    json_string: Optional[str] = None, filename: Optional[str] = None
+) -> Union[Crystal, Molecule, Structure]:
     """
     Deserialize a structure from JSON format.
-    
+
     This function reads JSON (either from a string or file) and reconstructs
     the appropriate structure object (Crystal, Molecule, or Structure).
-    
+
     Args:
         json_string: JSON string to parse (if filename is None)
         filename: Path to JSON file to read (if json_string is None)
-        
+
     Returns:
         Crystal, Molecule, or Structure: Reconstructed structure object
-        
+
     Raises:
         ValueError: If both or neither json_string and filename are provided
         FileNotFoundError: If filename doesn't exist
@@ -72,28 +75,28 @@ def from_json(json_string: Optional[str] = None,
         raise ValueError("Either json_string or filename must be provided")
     if json_string is not None and filename is not None:
         raise ValueError("Provide either json_string or filename, not both")
-    
+
     if filename is not None:
         filepath = Path(filename)
         if not filepath.exists():
             raise FileNotFoundError(f"JSON file not found: {filename}")
-        with open(filepath, 'r') as f:
+        with open(filepath, "r") as f:
             json_string = f.read()
-    
+
     data = json.loads(json_string)
-    
+
     # Determine structure type from data
-    class_name = data.get('@class', '')
-    module_name = data.get('@module', '')
-    
-    if 'Crystal' in class_name:
+    class_name = data.get("@class", "")
+    module_name = data.get("@module", "")
+
+    if "Crystal" in class_name:
         return Crystal.from_dict(data)
-    elif 'Molecule' in class_name:
+    elif "Molecule" in class_name:
         return Molecule.from_dict(data)
-    elif 'Structure' in class_name:
+    elif "Structure" in class_name:
         return Structure.from_dict(data)
     else:
         raise ValueError(f"Unknown structure type in JSON: {class_name}")
 
 
-__all__ = ['to_json', 'from_json']
+__all__ = ["to_json", "from_json"]

@@ -6,7 +6,7 @@ This module provides:
 - Bond analysis
 - Topological analysis
 
-Note: 
+Note:
 - Symmetry analysis is in matsimpy.symmetry module.
 - Defect builders are in matsimpy.builders.defects module.
 """
@@ -17,4 +17,3 @@ Note:
 # from .topology import TopologyAnalyzer
 
 __all__ = []
-

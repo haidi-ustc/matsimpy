@@ -9,14 +9,12 @@ from .organization import sort_atoms, center_structure, perturb_positions
 
 __all__ = [
     # Manipulation
-    'move_atoms',
-    'swap_atoms',
-    'merge_atoms',
-    'split_atom',
-    
+    "move_atoms",
+    "swap_atoms",
+    "merge_atoms",
+    "split_atom",
     # Organization
-    'sort_atoms',
-    'center_structure',
-    'perturb_positions',
+    "sort_atoms",
+    "center_structure",
+    "perturb_positions",
 ]
-

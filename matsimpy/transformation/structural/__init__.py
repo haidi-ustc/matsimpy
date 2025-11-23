@@ -15,12 +15,10 @@ from .molecular import (
 
 __all__ = [
     # Supercell
-    'make_supercell',
-    
+    "make_supercell",
     # Molecular
-    'fragment_molecule',
-    'align_molecules',
-    'generate_conformers',
-    'merge_molecules',
+    "fragment_molecule",
+    "align_molecules",
+    "generate_conformers",
+    "merge_molecules",
 ]
-

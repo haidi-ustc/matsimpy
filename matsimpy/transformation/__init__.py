@@ -34,19 +34,19 @@ Usage:
     >>> new_molecule = translate(molecule, [1, 1, 1])
     >>> rotated = rotate(new_molecule, 90, [0, 0, 1])
     >>> strained = apply_strain(crystal, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
-    
+
     # In-place (modifies existing)
     >>> translate(molecule, [1, 1, 1], inplace=True)
-    
+
     # Lattice operations
     >>> from matsimpy.transformation.lattice import scale_lattice
     >>> scaled = scale_lattice(crystal, 1.1)
-    
+
     # Atom operations
     >>> from matsimpy.transformation.atomic import move_atoms, sort_atoms
     >>> moved = move_atoms(crystal, [0, 1], [0.1, 0, 0])
     >>> sorted_struct = sort_atoms(crystal, key='species')
-    
+
     # Molecular operations
     >>> from matsimpy.transformation.structural import align_molecules
     >>> aligned = align_molecules(mol1, mol2, [0,1,2], [0,1,2])
@@ -77,12 +77,12 @@ from .composite import chain, apply_transformations
 
 # Combine all exports
 __all__ = (
-    _geometric_all + 
-    _lattice_all + 
-    _atomic_all + 
-    _chemical_all + 
-    _structural_all +
-    ['chain', 'apply_transformations']
+    _geometric_all
+    + _lattice_all
+    + _atomic_all
+    + _chemical_all
+    + _structural_all
+    + ["chain", "apply_transformations"]
 )
 
 # Allow direct access to submodules

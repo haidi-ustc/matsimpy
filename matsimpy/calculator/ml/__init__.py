@@ -9,7 +9,6 @@ from .base_ml import BaseML
 from .mattersim import Mattersim
 
 __all__ = [
-    'BaseML',
-    'Mattersim',
+    "BaseML",
+    "Mattersim",
 ]
-

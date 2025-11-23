@@ -8,6 +8,5 @@ by writing input files, executing calculations, and reading output files.
 from .base_dft import BaseDFT
 
 __all__ = [
-    'BaseDFT',
+    "BaseDFT",
 ]
-

@@ -15,25 +15,25 @@ from ...core import Crystal, Molecule
 class LennardJones(Calculator):
     """
     Lennard-Jones potential calculator.
-    
+
     The Lennard-Jones potential is given by:
         V(r) = 4*epsilon * [(sigma/r)^12 - (sigma/r)^6]
-    
+
     where:
         - epsilon: Well depth (energy parameter)
         - sigma: Distance at which potential is zero (size parameter)
         - r: Distance between atoms
-    
+
     Attributes:
         sigma (float): LJ size parameter in Å
         epsilon (float): LJ energy parameter in eV
         cutoff (float): Cutoff distance in Å (default: 3*sigma)
         rc_smooth (float): Smoothing distance for cutoff (default: cutoff)
-        
+
     Example:
         >>> from matsimpy import Crystal, Lattice
         >>> from matsimpy.calculator import LennardJones
-        >>> 
+        >>>
         >>> # Create Ar crystal
         >>> crystal = Crystal(['Ar'], [[0,0,0]], Lattice.cubic(5.0))
         >>> calc = LennardJones(sigma=3.4, epsilon=0.0104)
@@ -41,16 +41,18 @@ class LennardJones(Calculator):
         >>> calc.calculate(crystal)
         >>> energy = calc.get_potential_energy()
     """
-    
-    def __init__(self, 
-                 sigma: float = 3.4,
-                 epsilon: float = 0.0104,
-                 cutoff: Optional[float] = None,
-                 rc_smooth: Optional[float] = None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        sigma: float = 3.4,
+        epsilon: float = 0.0104,
+        cutoff: Optional[float] = None,
+        rc_smooth: Optional[float] = None,
+        **kwargs
+    ):
         """
         Initialize Lennard-Jones calculator.
-        
+
         Args:
             sigma: LJ size parameter in Å (default: 3.4 for Ar)
             epsilon: LJ energy parameter in eV (default: 0.0104 for Ar)
@@ -59,21 +61,21 @@ class LennardJones(Calculator):
             **kwargs: Additional parameters (passed to parent)
         """
         super().__init__(sigma=sigma, epsilon=epsilon, **kwargs)
-        
+
         # Set cutoff
         if cutoff is None:
             cutoff = 3.0 * sigma
-        self.parameters['cutoff'] = cutoff
-        
+        self.parameters["cutoff"] = cutoff
+
         # Set smoothing distance
         if rc_smooth is None:
             rc_smooth = cutoff
-        self.parameters['rc_smooth'] = rc_smooth
-        
+        self.parameters["rc_smooth"] = rc_smooth
+
     def _compute(self) -> None:
         """
         Compute LJ energy and forces.
-        
+
         Stores results in self.results:
             - 'energy': Total potential energy in eV
             - 'forces': Forces array of shape (N, 3) in eV/Å
@@ -81,12 +83,12 @@ class LennardJones(Calculator):
         """
         if self.structure is None:
             raise ValueError("Structure not set. Call calculate(structure) first.")
-            
-        sigma = self.parameters['sigma']
-        epsilon = self.parameters['epsilon']
-        cutoff = self.parameters['cutoff']
-        rc_smooth = self.parameters['rc_smooth']
-        
+
+        sigma = self.parameters["sigma"]
+        epsilon = self.parameters["epsilon"]
+        cutoff = self.parameters["cutoff"]
+        rc_smooth = self.parameters["rc_smooth"]
+
         # Get positions (always use Cartesian)
         if isinstance(self.structure, Crystal):
             positions = self.structure.cart_positions
@@ -97,12 +99,12 @@ class LennardJones(Calculator):
             positions = np.array(self.structure.positions)
             lattice = None
             pbc = [False, False, False]
-        
+
         n_atoms = len(positions)
         energy = 0.0
         forces = np.zeros((n_atoms, 3))
         stress = np.zeros((3, 3))
-        
+
         # Build neighbor list using KDTree
         if lattice is not None and any(pbc):
             # For periodic systems, use minimum image convention
@@ -114,47 +116,49 @@ class LennardJones(Calculator):
             energy, forces = self._compute_non_periodic(
                 positions, sigma, epsilon, cutoff, rc_smooth
             )
-        
+
         # Store results
-        self.results['energy'] = energy
-        self.results['forces'] = forces
+        self.results["energy"] = energy
+        self.results["forces"] = forces
         if lattice is not None:
-            self.results['stress'] = stress
-        
-    def _compute_non_periodic(self,
-                             positions: np.ndarray,
-                             sigma: float,
-                             epsilon: float,
-                             cutoff: float,
-                             rc_smooth: float) -> Tuple[float, np.ndarray]:
+            self.results["stress"] = stress
+
+    def _compute_non_periodic(
+        self,
+        positions: np.ndarray,
+        sigma: float,
+        epsilon: float,
+        cutoff: float,
+        rc_smooth: float,
+    ) -> Tuple[float, np.ndarray]:
         """
         Compute LJ energy and forces for non-periodic system.
-        
+
         Args:
             positions: Atomic positions (N, 3)
             sigma: LJ size parameter
             epsilon: LJ energy parameter
             cutoff: Cutoff distance
             rc_smooth: Smoothing distance
-            
+
         Returns:
             Tuple of (energy, forces)
         """
         n_atoms = len(positions)
         energy = 0.0
         forces = np.zeros((n_atoms, 3))
-        
+
         # Build KDTree for efficient neighbor finding
         tree = cKDTree(positions)
-        
+
         # Find all pairs within cutoff
-        pairs = tree.query_pairs(cutoff, output_type='ndarray')
-        
+        pairs = tree.query_pairs(cutoff, output_type="ndarray")
+
         # Compute LJ interactions
         for i, j in pairs:
             r_vec = positions[j] - positions[i]
             r = np.linalg.norm(r_vec)
-            
+
             if r < cutoff:
                 # Apply smoothing function if rc_smooth < cutoff
                 if rc_smooth < cutoff and r > rc_smooth:
@@ -164,40 +168,43 @@ class LennardJones(Calculator):
                 else:
                     f = 1.0
                     df_dr = 0.0
-                
+
                 # LJ potential: V(r) = 4*epsilon * [(sigma/r)^12 - (sigma/r)^6]
                 sr6 = (sigma / r) ** 6
-                sr12 = sr6 ** 2
+                sr12 = sr6**2
                 v = 4.0 * epsilon * (sr12 - sr6) * f
                 energy += v
-                
+
                 # Force: F = -dV/dr * r_hat
                 # dV/dr = 4*epsilon * [12*sigma^12/r^13 - 6*sigma^6/r^7] * f
                 #        + 4*epsilon * (sr12 - sr6) * df_dr
-                dv_dr = 4.0 * epsilon * (
-                    (12.0 * sr12 - 6.0 * sr6) / r * f +
-                    (sr12 - sr6) * df_dr
+                dv_dr = (
+                    4.0
+                    * epsilon
+                    * ((12.0 * sr12 - 6.0 * sr6) / r * f + (sr12 - sr6) * df_dr)
                 )
                 force_vec = dv_dr * r_vec / r
-                
+
                 forces[i] -= force_vec
                 forces[j] += force_vec
-        
+
         return energy, forces
-        
-    def _compute_periodic(self,
-                         positions: np.ndarray,
-                         lattice,
-                         pbc: list,
-                         sigma: float,
-                         epsilon: float,
-                         cutoff: float,
-                         rc_smooth: float) -> Tuple[float, np.ndarray, np.ndarray]:
+
+    def _compute_periodic(
+        self,
+        positions: np.ndarray,
+        lattice,
+        pbc: list,
+        sigma: float,
+        epsilon: float,
+        cutoff: float,
+        rc_smooth: float,
+    ) -> Tuple[float, np.ndarray, np.ndarray]:
         """
         Compute LJ energy and forces for periodic system.
-        
+
         Uses minimum image convention for periodic boundary conditions.
-        
+
         Args:
             positions: Atomic positions in fractional coordinates
             lattice: Lattice object
@@ -206,7 +213,7 @@ class LennardJones(Calculator):
             epsilon: LJ energy parameter
             cutoff: Cutoff distance
             rc_smooth: Smoothing distance
-            
+
         Returns:
             Tuple of (energy, forces, stress)
         """
@@ -214,20 +221,20 @@ class LennardJones(Calculator):
         energy = 0.0
         forces = np.zeros((n_atoms, 3))
         stress = np.zeros((3, 3))
-        
+
         # Convert fractional to Cartesian for neighbor finding
         # positions are in fractional, convert using lattice matrix
         cart_positions = np.dot(positions, lattice.matrix)
-        
+
         # For periodic systems, we need to check interactions with periodic images
         # Generate all atom pairs: (i, j) where j can be in the same cell or periodic images
         # Use minimum image convention to avoid double counting
-        
+
         # Calculate how many unit cells we need to check in each direction
         # based on cutoff distance
         cell_lengths = np.array([lattice.a, lattice.b, lattice.c])
         max_cells = np.ceil(cutoff / cell_lengths).astype(int) + 1
-        
+
         # Generate periodic image offsets (in fractional coordinates)
         image_offsets = []
         for nx in range(-max_cells[0], max_cells[0] + 1):
@@ -238,7 +245,7 @@ class LennardJones(Calculator):
                         continue
                     image_offsets.append([nx, ny, nz])
         image_offsets = np.array(image_offsets)
-        
+
         # Compute interactions: for each atom i, check interactions with:
         # 1. Other atoms j in the same cell (i < j to avoid double counting)
         # 2. Periodic images of all atoms (including self-images)
@@ -247,7 +254,7 @@ class LennardJones(Calculator):
             for j in range(i + 1, n_atoms):
                 r_vec_cart = cart_positions[j] - cart_positions[i]
                 r = np.linalg.norm(r_vec_cart)
-                
+
                 if r < cutoff and r > 1e-10:
                     # Apply smoothing and compute LJ interaction
                     if rc_smooth < cutoff and r > rc_smooth:
@@ -256,23 +263,24 @@ class LennardJones(Calculator):
                     else:
                         f = 1.0
                         df_dr = 0.0
-                    
+
                     sr6 = (sigma / r) ** 6
-                    sr12 = sr6 ** 2
+                    sr12 = sr6**2
                     v = 4.0 * epsilon * (sr12 - sr6) * f
                     energy += v
-                    
-                    dv_dr = 4.0 * epsilon * (
-                        (12.0 * sr12 - 6.0 * sr6) / r * f +
-                        (sr12 - sr6) * df_dr
+
+                    dv_dr = (
+                        4.0
+                        * epsilon
+                        * ((12.0 * sr12 - 6.0 * sr6) / r * f + (sr12 - sr6) * df_dr)
                     )
                     force_vec = dv_dr * r_vec_cart / r
-                    
+
                     forces[i] -= force_vec
                     forces[j] += force_vec
-                    
+
                     stress += -np.outer(force_vec, r_vec_cart)
-            
+
             # Interactions with periodic images (including self-images)
             for offset in image_offsets:
                 # For each atom j (including i itself for self-images)
@@ -280,46 +288,48 @@ class LennardJones(Calculator):
                     # Get position of atom j in the periodic image
                     pos_j_frac = positions[j] + offset
                     pos_j_cart = np.dot(pos_j_frac, lattice.matrix)
-                    
+
                     # Distance vector in Cartesian
                     r_vec_cart = pos_j_cart - cart_positions[i]
                     r = np.linalg.norm(r_vec_cart)
-                    
+
                     if r < cutoff and r > 1e-10:
                         # Apply smoothing
                         if rc_smooth < cutoff and r > rc_smooth:
-                            f = 1.0 / (1.0 + np.exp((r - rc_smooth) / (cutoff - rc_smooth)))
+                            f = 1.0 / (
+                                1.0 + np.exp((r - rc_smooth) / (cutoff - rc_smooth))
+                            )
                             df_dr = -f * (1.0 - f) / (cutoff - rc_smooth)
                         else:
                             f = 1.0
                             df_dr = 0.0
-                        
+
                         # LJ potential
                         sr6 = (sigma / r) ** 6
-                        sr12 = sr6 ** 2
+                        sr12 = sr6**2
                         v = 4.0 * epsilon * (sr12 - sr6) * f
                         energy += v
-                        
+
                         # Force (only on atom i, since j is an image)
-                        dv_dr = 4.0 * epsilon * (
-                            (12.0 * sr12 - 6.0 * sr6) / r * f +
-                            (sr12 - sr6) * df_dr
+                        dv_dr = (
+                            4.0
+                            * epsilon
+                            * ((12.0 * sr12 - 6.0 * sr6) / r * f + (sr12 - sr6) * df_dr)
                         )
                         force_vec = dv_dr * r_vec_cart / r
                         forces[i] -= force_vec
-                        
+
                         # Stress contribution
                         stress += -np.outer(force_vec, r_vec_cart)
-        
+
         # Forces are already in Cartesian
-        
+
         # Stress in eV/Å³ (volume is in Å³)
         volume = lattice.volume()  # volume is a method
         if volume > 0:
             stress = stress / volume
-        
+
         return energy, forces, stress
 
 
-__all__ = ['LennardJones']
-
+__all__ = ["LennardJones"]

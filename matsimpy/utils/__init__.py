@@ -19,15 +19,14 @@ from .selection import (
 )
 
 __all__ = [
-    'select_by_species',
-    'select_by_indices',
-    'select_by_position',
-    'select_by_box',
-    'select_by_property',
-    'select_by_custom',
-    'combine_selections',
-    'select_all',
-    'select_none',
-    'AtomSelection',
+    "select_by_species",
+    "select_by_indices",
+    "select_by_position",
+    "select_by_box",
+    "select_by_property",
+    "select_by_custom",
+    "combine_selections",
+    "select_all",
+    "select_none",
+    "AtomSelection",
 ]
-
