@@ -16,7 +16,7 @@ class Site(MSONable):
         position: 3D position coordinates [x, y, z]
         specie: Atomic species (string symbol, atomic number, or Element object)
         properties: Optional dictionary of site properties (e.g., charge, magmom)
-        coords_type: Type of coordinates - "cartesian" (default) or "fractional"
+        coords_are_cartesian: If True, position is Cartesian; if False, fractional (default)
         
     Examples:
         >>> site = Site([0, 0, 0], 'Fe')
@@ -26,18 +26,18 @@ class Site(MSONable):
     def __init__(self, position: Union[List[float], np.ndarray], 
                  specie: Union[str, int, Element] = 'X',
                  properties: Optional[Dict[str, Any]] = None,
-                 coords_type: str = "cartesian"):
+                 coords_are_cartesian: bool = False):
         self._position = self._validate_position(position)
         self._specie = self._validate_specie(specie)
         self._properties = self._validate_properties(properties)
-        self._coords_type = self._validate_coords_type(coords_type)
+        self._coords_are_cartesian = coords_are_cartesian
 
     def as_dict(self) -> Dict[str, Any]:
         """
         Returns a dictionary representation of the Site.
         
         Returns:
-            Dictionary containing position, specie, properties, and coords_type
+            Dictionary containing position, specie, properties, and coords_are_cartesian
         """
         return {
             "@module": self.__class__.__module__,
@@ -45,7 +45,7 @@ class Site(MSONable):
             "position": self.position.tolist(),
             "specie": self.specie,
             "properties": self.properties,
-            "coords_type": self.coords_type
+            "coords_are_cartesian": self.coords_are_cartesian
         }
 
     @classmethod
@@ -54,34 +54,26 @@ class Site(MSONable):
         Creates a Site object from a dictionary representation.
         
         Args:
-            d: Dictionary containing position, specie, properties, and coords_type
+            d: Dictionary containing position, specie, properties, and coords_are_cartesian
             
         Returns:
             Site object
         """
+        # Handle backward compatibility: if coords_type exists, convert it
+        if "coords_are_cartesian" in d:
+            coords_are_cartesian = d["coords_are_cartesian"]
+        elif "coords_type" in d:
+            coords_are_cartesian = d["coords_type"] == "cartesian"
+        else:
+            coords_are_cartesian = False
+        
         return cls(
             position=d["position"],
             specie=d.get("specie", 'X'),
             properties=d.get("properties"),
-            coords_type=d.get("coords_type", "cartesian")
+            coords_are_cartesian=coords_are_cartesian
         )
 
-    def _validate_coords_type(self, coords_type: str) -> str:
-        """
-        Validate coordinate type.
-        
-        Args:
-            coords_type: "cartesian" or "fractional"
-            
-        Returns:
-            Validated coordinate type
-            
-        Raises:
-            ValueError: If coords_type is not valid
-        """
-        if coords_type not in ["cartesian", "fractional"]:
-            raise ValueError(f"coords_type must be 'cartesian' or 'fractional', got '{coords_type}'")
-        return coords_type
 
     def _validate_specie(self, specie: Optional[Union[str, int, Element]]) -> str:
         """
@@ -180,9 +172,14 @@ class Site(MSONable):
         return position
 
     @property
+    def coords_are_cartesian(self) -> bool:
+        """Get whether coordinates are Cartesian (True) or fractional (False)."""
+        return self._coords_are_cartesian
+    
+    @property
     def coords_type(self) -> str:
-        """Get coordinate type ('cartesian' or 'fractional')."""
-        return self._coords_type
+        """Get coordinate type as string ('cartesian' or 'fractional') for backward compatibility."""
+        return "cartesian" if self._coords_are_cartesian else "fractional"
 
     @property
     def properties(self) -> Dict[str, Any]:
@@ -227,7 +224,7 @@ class Site(MSONable):
     def __repr__(self) -> str:
         """String representation of Site."""
         props_str = f", properties={self.properties}" if self.properties else ""
-        coords_type_str = f", coords_type='{self.coords_type}'"
+        coords_type_str = f", coords_are_cartesian={self.coords_are_cartesian}"
         return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str}{coords_type_str})"
 
     def __str__(self) -> str:
@@ -242,7 +239,7 @@ class Site(MSONable):
         return (self.specie == other.specie and 
                 np.allclose(self.position, other.position) and
                 self.properties == other.properties and
-                self.coords_type == other.coords_type)
+                self.coords_are_cartesian == other.coords_are_cartesian)
 
 
 class CrystalSite(Site):
@@ -284,15 +281,14 @@ class CrystalSite(Site):
             self._frac_position = self._validate_position(position)
             self._cart_position = self._convert_to_cartesian()
 
-        # Determine coordinate type for base class
-        coords_type = "cartesian" if coords_are_cartesian else "fractional"
+        # Determine base position
         base_position = self._cart_position if coords_are_cartesian else self._frac_position
         
         super().__init__(
             position=base_position,
             specie=specie,
             properties=properties,
-            coords_type=coords_type
+            coords_are_cartesian=coords_are_cartesian
         )
 
     def as_dict(self) -> Dict[str, Any]:
