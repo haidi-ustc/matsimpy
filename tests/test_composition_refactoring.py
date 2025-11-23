@@ -141,7 +141,7 @@ class TestCompositionHelperMethod(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             Composition._get_sorted_element_counts(counts, 'invalid')
         
-        self.assertIn("'alphabet' or 'element'", str(context.exception))
+        self.assertIn("None, 'alphabet', or 'element'", str(context.exception))
 
 
 class TestCompositionCodeDeduplication(unittest.TestCase):

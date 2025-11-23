@@ -63,7 +63,7 @@ class Composition(MSONable):
         Generate chemical formula string from composition.
         
         Args:
-            sort_by: Sorting method - 'alphabet' or 'element'.
+            sort_by: Sorting method - None (original order), 'alphabet', or 'element'.
         
         Returns:
             Formatted chemical formula string.
@@ -86,7 +86,7 @@ class Composition(MSONable):
     @staticmethod
     def _get_sorted_element_counts(
         element_counts: Dict[str, int], 
-        sort_by: str
+        sort_by: Optional[str] = None
     ) -> List[Tuple[str, int]]:
         """
         Get sorted element counts.
@@ -95,15 +95,17 @@ class Composition(MSONable):
         
         Args:
             element_counts: Dictionary mapping elements to counts.
-            sort_by: Sorting method - 'alphabet' or 'element'.
+            sort_by: Sorting method - None (original order), 'alphabet', or 'element'.
         
         Returns:
-            Sorted list of (element, count) tuples.
+            List of (element, count) tuples (sorted or in original order).
             
         Raises:
-            ValueError: If sort_by is not 'alphabet' or 'element'.
+            ValueError: If sort_by is not None, 'alphabet', or 'element'.
         """
-        if sort_by == 'alphabet':
+        if sort_by is None:
+            return list(element_counts.items())
+        elif sort_by == 'alphabet':
             return sorted(element_counts.items(), key=lambda x: x[0])
         elif sort_by == 'element':
             return sorted(
@@ -112,7 +114,7 @@ class Composition(MSONable):
             )
         else:
             raise ValueError(
-                f"sort_by must be 'alphabet' or 'element', got '{sort_by}'"
+                f"sort_by must be None, 'alphabet', or 'element', got '{sort_by}'"
             )
 
     def _parse_formula(self, formula: str) -> Counter:
@@ -228,6 +230,56 @@ class Composition(MSONable):
         if isinstance(other, Composition):
             return self.composition == other.composition
         return False
+    
+    def __add__(self, other: 'Composition') -> 'Composition':
+        """
+        Add two Composition objects together.
+        
+        Combines the element counts from both compositions.
+        
+        Args:
+            other: Another Composition object to add.
+        
+        Returns:
+            New Composition with combined element counts.
+            
+        Examples:
+            >>> c1 = Composition('H2O')
+            >>> c2 = Composition('CO2')
+            >>> c3 = c1 + c2
+            >>> c3.composition
+            Counter({'H': 2, 'O': 3, 'C': 1})
+            >>> c3.formula
+            'CH2O3'
+        """
+        if not isinstance(other, Composition):
+            return NotImplemented
+        
+        # Combine the Counters
+        combined = Counter(self.composition)
+        combined.update(other.composition)
+        
+        # Build formula string from combined composition
+        # Preserve order: first from self, then new elements from other
+        seen = set()
+        formula_parts = []
+        
+        # Add elements from self first
+        for element, count in self.composition.items():
+            new_count = combined[element]
+            formula_parts.append(f'{element}{new_count if new_count > 1 else ""}')
+            seen.add(element)
+        
+        # Add elements from other that aren't in self
+        for element, count in other.composition.items():
+            if element not in seen:
+                new_count = combined[element]
+                formula_parts.append(f'{element}{new_count if new_count > 1 else ""}')
+        
+        formula_str = ''.join(formula_parts)
+        
+        # Create new Composition from the combined formula
+        return Composition(formula_str, sort_by=None)
 
     def as_dict(self) -> Dict[str, Any]:
         """
