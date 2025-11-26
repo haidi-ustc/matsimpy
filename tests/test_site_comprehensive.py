@@ -89,16 +89,20 @@ class TestSiteComprehensive(unittest.TestCase):
         self.assertEqual(site.properties['magmom'], 2.5)
     
     def test_site_repr(self):
-        """Test representation."""
+        """Test representation (concise format)."""
         site = Site([0, 0, 0], specie='Fe')
         repr_str = repr(site)
-        self.assertIn('Site', repr_str)
+        # __repr__ should be concise: "Fe @ [0.0, 0.0, 0.0] (fractional)"
         self.assertIn('Fe', repr_str)
+        self.assertIn('@', repr_str)
+        self.assertIn('fractional', repr_str)
     
     def test_site_str(self):
-        """Test string representation."""
+        """Test string representation (verbose format)."""
         site = Site([0, 0, 0], specie='Fe')
         str_repr = str(site)
+        # __str__ should be verbose: "Site(position=[...], specie='Fe', ...)"
+        self.assertIn('Site', str_repr)
         self.assertIn('Fe', str_repr)
 
 class TestCrystalSiteComprehensive(unittest.TestCase):
@@ -181,20 +185,24 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         self.assertIsInstance(site.lattice, Lattice)
     
     def test_crystalsite_repr(self):
-        """Test representation."""
+        """Test representation (concise format)."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
         
         repr_str = repr(site)
-        self.assertIn('CrystalSite', repr_str)
+        # __repr__ should be concise: "Fe @ [0.5, 0.5, 0.5] (frac)"
         self.assertIn('Fe', repr_str)
+        self.assertIn('@', repr_str)
+        self.assertIn('frac', repr_str)
     
     def test_crystalsite_str(self):
-        """Test string representation."""
+        """Test string representation (verbose format)."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
         
         str_repr = str(site)
+        # __str__ should be verbose: "CrystalSite(position=[...], specie='Fe', lattice=..., ...)"
+        self.assertIn('CrystalSite', str_repr)
         self.assertIn('Fe', str_repr)
 
 if __name__ == '__main__':
