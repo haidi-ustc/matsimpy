@@ -308,13 +308,19 @@ class Crystal(Structure):
                             f"Minimum allowed distance is 0.5 Å."
                         )
 
-        # Store old state for rollback in case of exception
+        # Store complete state for rollback in case of exception
         n_atoms_before = len(self.species)
         old_species = self.species
         old_positions = self.positions.copy()
+        old_frac_positions = self.frac_positions.copy()
+        old_cart_positions = self.cart_positions.copy()
+        old_sites = self._sites.copy() if self._sites else None
         old_site_properties = (
             self.site_properties.copy() if self.site_properties else None
         )
+        old_formula_dirty = self._formula_dirty
+        old_cached_composition = self._cached_composition
+        old_cached_formula = self._cached_formula
 
         try:
             # Call parent to add atoms
@@ -354,13 +360,18 @@ class Crystal(Structure):
             self._sites = self._initialize_sites()
 
         except Exception as e:
-            # Rollback on failure to maintain consistency
+            # Complete rollback to restore all state
             self.species = old_species
             self.positions = old_positions
+            self.frac_positions = old_frac_positions
+            self.cart_positions = old_cart_positions
+            self._sites = old_sites
             if old_site_properties is not None:
                 self.site_properties = old_site_properties
-            # Revert coordinate updates
-            self._update_coordinates_after_modification()
+            # Restore cache flags
+            self._formula_dirty = old_formula_dirty
+            self._cached_composition = old_cached_composition
+            self._cached_formula = old_cached_formula
             # Re-raise the original exception
             raise
 
