@@ -152,8 +152,9 @@ class TestStructureMethods(unittest.TestCase):
         self.assertNotEqual(self.struct.species[0], original_species)
         # Formula should be updated
         formula = self.struct.formula
-        # After removing one H from H2O, we should have HO
-        self.assertEqual(formula, 'HO')
+        # After removing first H from H2O (species=['H', 'O', 'H']),
+        # species becomes ['O', 'H'], so formula is 'OH' (preserves order)
+        self.assertEqual(formula, 'OH')
     
     def test_remove_atom_invalid_index(self):
         """Test removing atom with invalid index raises IndexError."""

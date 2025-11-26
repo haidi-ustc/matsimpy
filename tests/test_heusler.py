@@ -23,7 +23,8 @@ class TestHeuslerAlloys(unittest.TestCase):
         
         # Check structure properties
         self.assertEqual(len(crystal), 16)  # Conventional cell
-        self.assertEqual(crystal.formula, 'Al4Cu8Mn4')
+        # Formula preserves original species order: Cu, Mn, Al
+        self.assertEqual(crystal.formula, 'Cu8Mn4Al4')
         
         # Check lattice
         self.assertAlmostEqual(crystal.lattice.a, 5.95, places=2)
@@ -37,7 +38,8 @@ class TestHeuslerAlloys(unittest.TestCase):
         
         # Check structure properties
         self.assertEqual(len(crystal), 3)  # Primitive cell
-        self.assertEqual(crystal.formula, 'MnNiSb')
+        # Formula preserves original species order: Ni, Mn, Sb
+        self.assertEqual(crystal.formula, 'NiMnSb')
         
         # Check lattice
         self.assertAlmostEqual(crystal.lattice.a, 5.93, places=2)
@@ -49,7 +51,8 @@ class TestHeuslerAlloys(unittest.TestCase):
         
         # Check structure properties
         self.assertEqual(len(crystal), 16)  # Conventional cell
-        self.assertEqual(crystal.formula, 'Al4Co4Mn8')
+        # Formula preserves original species order: Mn, Co, Al
+        self.assertEqual(crystal.formula, 'Mn8Co4Al4')
         
         # Check lattice
         self.assertAlmostEqual(crystal.lattice.a, 5.85, places=2)
@@ -66,14 +69,16 @@ class TestHeuslerAlloys(unittest.TestCase):
         crystal = build_heusler('Co', 'Ti', 'Sb', 5.90, 'half')
         
         self.assertEqual(len(crystal), 3)
-        self.assertEqual(crystal.formula, 'CoSbTi')
+        # Formula preserves original species order: Co, Ti, Sb
+        self.assertEqual(crystal.formula, 'CoTiSb')
     
     def test_build_heusler_generic_inverse(self):
         """Test generic build_heusler function with inverse type."""
         crystal = build_heusler('Mn', 'V', 'Al', 5.80, 'inverse')
         
         self.assertEqual(len(crystal), 16)
-        self.assertEqual(crystal.formula, 'Al4Mn8V4')
+        # Formula preserves original species order: Mn, V, Al
+        self.assertEqual(crystal.formula, 'Mn8V4Al4')
     
     def test_build_heusler_invalid_type(self):
         """Test that invalid Heusler type raises error."""
