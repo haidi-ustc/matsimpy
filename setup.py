@@ -20,6 +20,7 @@ setup(
     ],
     package_data={
         "matsimpy.core": ["periodic_table.json"],
+        "matsimpy.ui.cli": ["matsimpy_menu.json"],
         "tests": ["POSCAR-cart.vasp","POSCAR-frac.vasp"]
     },
     extras_require={
