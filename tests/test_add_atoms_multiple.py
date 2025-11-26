@@ -42,7 +42,7 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
     def test_add_multiple_different_species(self):
         """Test adding multiple atoms of different species."""
         original_len = len(self.crystal)
-        self.crystal.add_atom(['H', 'N', 'O'], [[0.1, 0, 0], [0.2, 0, 0], [0.3, 0, 0]])
+        self.crystal.add_atom(['H', 'N', 'O'], [[0.1, 0, 0], [0.2, 0, 0], [0.3, 0, 0]])  # 0.5, 1.0, 1.5 Å in Cartesian
         
         self.assertEqual(len(self.crystal), original_len + 3)
         self.assertEqual(self.crystal.species[-3], 'H')
@@ -83,7 +83,7 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
         original_formula = self.molecule.formula
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            self.molecule.add_atom(['H', 'H', 'N'], [[1, 0, 0], [2, 0, 0], [3, 0, 0]])
+            self.molecule.add_atom(['H', 'H', 'N'], [[2.0, 0, 0], [3.0, 0, 0], [4.0, 0, 0]])  # >= 0.5 Å from existing
         
         new_formula = self.molecule.formula
         self.assertNotEqual(original_formula, new_formula)
@@ -94,7 +94,7 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
         """Test that composition is correctly updated."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            self.molecule.add_atom(['N', 'N'], [[1, 0, 0], [2, 0, 0]])
+            self.molecule.add_atom(['N', 'N'], [[2.0, 0, 0], [3.0, 0, 0]])  # >= 0.5 Å from existing
         
         composition = self.molecule.composition
         self.assertIn('N', composition.composition)
@@ -275,8 +275,8 @@ class TestEdgeCases(unittest.TestCase):
         """Test adding many atoms at once."""
         n = 100
         species = ['H'] * n
-        # Use spacing > 0.1 Å to avoid validation errors, and start from 1.0 to avoid conflict with existing atom at [0,0,0]
-        positions = [[1.0 + i * 0.2, 0, 0] for i in range(n)]
+        # Use spacing >= 0.5 Å to avoid validation errors, and start from 1.0 to avoid conflict with existing atom at [0,0,0]
+        positions = [[1.0 + i * 0.6, 0, 0] for i in range(n)]  # 0.6 Å spacing > 0.5 Å threshold
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -322,12 +322,12 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIn("already exists", str(context.exception).lower())
     
     def test_very_close_atoms_raise_error(self):
-        """Test that atoms too close (< 0.1 Å) raise error."""
+        """Test that atoms too close (< 0.5 Å) raise error."""
         with self.assertRaises(ValueError) as context:
             self.molecule.add_atom('O', [0.05, 0, 0])
         
         self.assertIn("too close", str(context.exception).lower())
-        self.assertIn("0.1", str(context.exception))
+        self.assertIn("0.5", str(context.exception))
     
     def test_duplicate_within_new_atoms_raises_error(self):
         """Test that duplicate positions within new atoms raise error."""

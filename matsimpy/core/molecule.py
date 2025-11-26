@@ -147,10 +147,7 @@ class Molecule(Structure):
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
             ValueError: If duplicate positions are detected (distance < 1e-6 Å).
-            ValueError: If atoms are too close (distance < 0.1 Å).
-
-        Warnings:
-            UserWarning: If interatomic distance < 0.5 Angstroms detected (but >= 0.1 Å).
+            ValueError: If atoms are too close (distance < 0.5 Å).
 
         Examples:
             >>> molecule.add_atom('H', [0, 0, 0])  # Add single atom
@@ -188,11 +185,11 @@ class Molecule(Structure):
                             f"positions {i} and {j} are at the same location "
                             f"({new_positions[i]})."
                         )
-                    elif dist < 0.1:  # Very small distance
+                    elif dist < 0.5:  # Too close
                         raise ValueError(
                             f"Atoms being added are too close: distance between "
                             f"positions {i} and {j} is {dist:.6f} Å. "
-                            f"Minimum allowed distance is 0.1 Å."
+                            f"Minimum allowed distance is 0.5 Å."
                         )
 
         # Check each new position against existing atoms
@@ -202,23 +199,17 @@ class Molecule(Structure):
                     new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
                     min_distance = np.min(cdist(new_pos_array, self.positions))
 
-                    # Raise error for duplicates or very small distances
+                    # Raise error for duplicates or too close
                     if min_distance < 1e-6:  # Essentially zero distance (duplicate)
                         raise ValueError(
                             f"Cannot add atom at position {new_pos}: atom already exists "
                             f"at this location (distance: {min_distance:.6f} Å)."
                         )
-                    elif min_distance < 0.1:  # Very small distance
+                    elif min_distance < 0.5:  # Too close
                         raise ValueError(
                             f"Cannot add atom at position {new_pos}: too close to existing "
                             f"atom (distance: {min_distance:.6f} Å). "
-                            f"Minimum allowed distance is 0.1 Å."
-                        )
-                    elif min_distance < 0.5:  # Small but potentially valid distance
-                        warnings.warn(
-                            f"Very small interatomic distance detected: {min_distance:.3f} Å. "
-                            f"This may indicate overlapping atoms or incorrect units.",
-                            UserWarning,
+                            f"Minimum allowed distance is 0.5 Å."
                         )
 
         # Determine number of atoms being added

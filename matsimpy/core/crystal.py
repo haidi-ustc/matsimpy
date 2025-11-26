@@ -164,7 +164,7 @@ class Crystal(Structure):
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
             ValueError: If duplicate positions are detected (distance < 1e-6 Å).
-            ValueError: If atoms are too close (distance < 0.1 Å).
+            ValueError: If atoms are too close (distance < 0.5 Å).
 
         Examples:
             >>> from matsimpy.core import Crystal, Lattice
@@ -228,7 +228,7 @@ class Crystal(Structure):
                     f"positions {i} and {j} are at the same location "
                     f"({new_frac_positions[i]})."
                 )
-            elif np.any(distances_condensed < 0.1):  # Very small distance
+            elif np.any(distances_condensed < 0.5):  # Too close
                 # Convert to square form to easily find indices
                 distances_square = squareform(distances_condensed)
                 # Find the pair with minimum distance (excluding diagonal)
@@ -238,7 +238,7 @@ class Crystal(Structure):
                 raise ValueError(
                     f"Atoms being added are too close: distance between "
                     f"positions {i} and {j} is {min_dist:.6f} Å. "
-                    f"Minimum allowed distance is 0.1 Å."
+                    f"Minimum allowed distance is 0.5 Å."
                 )
 
         # Check each new position against existing atoms (with PBC)
@@ -261,11 +261,11 @@ class Crystal(Structure):
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
                             f"atom already exists at this location (distance: {min_dist:.6f} Å)."
                         )
-                    elif min_dist < 0.1:
+                    elif min_dist < 0.5:
                         raise ValueError(
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
                             f"too close to existing atom (distance: {min_dist:.6f} Å). "
-                            f"Minimum allowed distance is 0.1 Å."
+                            f"Minimum allowed distance is 0.5 Å."
                         )
             else:
                 # PBC case: need minimum image convention
@@ -301,11 +301,11 @@ class Crystal(Structure):
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
                             f"atom already exists at this location (distance: {min_dist:.6f} Å)."
                         )
-                    elif min_dist < 0.1:
+                    elif min_dist < 0.5:
                         raise ValueError(
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
                             f"too close to existing atom (distance: {min_dist:.6f} Å). "
-                            f"Minimum allowed distance is 0.1 Å."
+                            f"Minimum allowed distance is 0.5 Å."
                         )
 
         # Store old state for rollback in case of exception
