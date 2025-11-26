@@ -9,7 +9,6 @@ from matsimpy.ai import (
     AIInterface
 )
 
-
 class TestPropertyPrediction(unittest.TestCase):
     """Tests for PropertyPrediction operation."""
     
@@ -94,7 +93,6 @@ class TestPropertyPrediction(unittest.TestCase):
         result = pred.execute(crystal=self.crystal, properties=['band_gap'])
         
         self.assertIn("band_gap", result)
-
 
 class TestAIAnalysis(unittest.TestCase):
     """Tests for AIAnalysis operation."""
@@ -207,7 +205,6 @@ class TestAIAnalysis(unittest.TestCase):
         
         self.assertIsInstance(result, dict)
 
-
 class TestAIOptimization(unittest.TestCase):
     """Tests for AIOptimization operation."""
     
@@ -307,7 +304,6 @@ class TestAIOptimization(unittest.TestCase):
         )
         
         self.assertIsInstance(optimized, Crystal)
-
 
 if __name__ == '__main__':
     unittest.main()

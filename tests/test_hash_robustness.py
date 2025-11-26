@@ -1,13 +1,8 @@
 """Tests for robust hash implementation with floating-point rounding."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
-
 
 class TestHashRounding(unittest.TestCase):
     """Test that hash properly rounds positions for consistency."""
@@ -67,7 +62,6 @@ class TestHashRounding(unittest.TestCase):
         
         self.assertNotEqual(hash(mol1), hash(mol2))
 
-
 class TestHashCrystal(unittest.TestCase):
     """Test hash for Crystal structures with lattice."""
     
@@ -104,7 +98,6 @@ class TestHashCrystal(unittest.TestCase):
         crystal2 = Crystal(['Si'], [[0, 0, 0]], lattice2)
         
         self.assertEqual(hash(crystal1), hash(crystal2))
-
 
 class TestHashUseCases(unittest.TestCase):
     """Test hash in practical use cases."""
@@ -181,7 +174,6 @@ class TestHashUseCases(unittest.TestCase):
         # Should have same hash despite potential floating-point noise
         self.assertEqual(hash(crystal), hash(crystal2))
 
-
 class TestHashPrecision(unittest.TestCase):
     """Test the precision level of hash rounding."""
     
@@ -224,7 +216,6 @@ class TestHashPrecision(unittest.TestCase):
         
         self.assertEqual(hash(mol1), hash(mol2))
 
-
 class TestHashEdgeCases(unittest.TestCase):
     """Test edge cases for hash implementation."""
     
@@ -256,7 +247,6 @@ class TestHashEdgeCases(unittest.TestCase):
         
         self.assertEqual(hash1, hash2)
         self.assertEqual(hash2, hash3)
-
 
 if __name__ == '__main__':
     unittest.main()

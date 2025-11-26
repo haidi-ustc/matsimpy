@@ -1,17 +1,12 @@
 """Tests for JSON IO module."""
-import os
-import sys
 import unittest
 import tempfile
 import json
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.io import to_json, from_json
-
 
 class TestJSONIo(unittest.TestCase):
     """Tests for JSON serialization."""
@@ -125,7 +120,6 @@ class TestJSONIo(unittest.TestCase):
             self.molecule.positions,
             decimal=6
         )
-
 
 if __name__ == '__main__':
     unittest.main()

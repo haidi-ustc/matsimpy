@@ -1,12 +1,7 @@
 """Comprehensive tests for Element and periodic_table module."""
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Element
-
 
 class TestElementComprehensive(unittest.TestCase):
     """Comprehensive tests for Element class."""
@@ -188,7 +183,6 @@ class TestElementComprehensive(unittest.TestCase):
         # All should have same symbol
         self.assertEqual(h1.symbol, h2.symbol)
         self.assertEqual(h1.symbol, h3.symbol)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -10,7 +10,6 @@ from matsimpy.ai import (
     list_available_protocols
 )
 
-
 class TestAIModule(unittest.TestCase):
     """Tests for AI module structure."""
     
@@ -40,7 +39,6 @@ class TestAIModule(unittest.TestCase):
         """Test MCP interface with invalid transport."""
         with self.assertRaises(ValueError):
             MCPInterface(transport="invalid")
-
 
 class TestMCPInterface(unittest.TestCase):
     """Tests for MCP interface."""
@@ -86,7 +84,6 @@ class TestMCPInterface(unittest.TestCase):
         # Should not raise even if not connected
         self.mcp.disconnect()
         self.assertFalse(self.mcp.is_connected)
-
 
 class TestAIGeneration(unittest.TestCase):
     """Tests for AI generation operation."""
@@ -135,7 +132,6 @@ class TestAIGeneration(unittest.TestCase):
         # Verify constraints were passed
         call_args = self.mock_interface.call.call_args
         self.assertIn("constraints", call_args[1]["inputs"])
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -13,7 +13,6 @@ from matsimpy.builders.nanostructure import (
     build_twisted_multilayer,
 )
 
-
 class TestNanotube:
     """Test nanotube builders."""
     
@@ -105,7 +104,6 @@ class TestNanotube:
         # Note: For zigzag nanotubes, the ratio may not be exactly 1:1
         # Just verify both species are present
 
-
 class TestTwistedBilayer:
     """Test twisted bilayer builders."""
     
@@ -178,7 +176,6 @@ class TestTwistedBilayer:
         
         assert isinstance(twisted, Crystal)
 
-
 class TestMagicAngleTwisted:
     """Test magic-angle twisted builders."""
     
@@ -197,7 +194,6 @@ class TestMagicAngleTwisted:
         
         assert isinstance(twisted, Crystal)
         assert len(twisted.species) == 4
-
 
 class TestTwistedMultilayer:
     """Test twisted multilayer builders."""

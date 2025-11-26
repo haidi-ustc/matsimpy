@@ -1,10 +1,6 @@
 """Tests for transformation module."""
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.transformation import (
@@ -14,7 +10,6 @@ from matsimpy.transformation import (
     make_supercell,
     chain, apply_transformations
 )
-
 
 class TestTranslation(unittest.TestCase):
     """Tests for translation transformations."""
@@ -66,7 +61,6 @@ class TestTranslation(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate(self.molecule, [1, 1])  # Not 3D
 
-
 class TestRotation(unittest.TestCase):
     """Tests for rotation transformations."""
     
@@ -104,7 +98,6 @@ class TestRotation(unittest.TestCase):
         
         # Should be rotated around origin
         self.assertIsNotNone(rotated)
-
 
 class TestSubstitution(unittest.TestCase):
     """Tests for substitution transformations."""
@@ -145,7 +138,6 @@ class TestSubstitution(unittest.TestCase):
         self.assertEqual(self.crystal.species[0], 'Ge')
         self.assertEqual(self.crystal.species[1], original_species[1])
 
-
 class TestSupercell(unittest.TestCase):
     """Tests for supercell generation."""
     
@@ -178,7 +170,6 @@ class TestSupercell(unittest.TestCase):
         """Test supercell with invalid matrix."""
         with self.assertRaises(ValueError):
             make_supercell(self.unit_cell, [2, 2])  # Invalid shape
-
 
 class TestComposite(unittest.TestCase):
     """Tests for composite transformations."""
@@ -213,7 +204,6 @@ class TestComposite(unittest.TestCase):
         transformed = apply_transformations(self.molecule, translate_func)
         
         self.assertIsNot(self.molecule, transformed)
-
 
 if __name__ == '__main__':
     unittest.main()

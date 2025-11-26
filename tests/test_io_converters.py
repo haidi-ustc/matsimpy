@@ -1,15 +1,10 @@
 """Tests for IO converters module."""
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.io import to_pymatgen, from_pymatgen, to_ase, from_ase
-
 
 class TestIOConverters(unittest.TestCase):
     """Tests for IO converter functions."""
@@ -206,7 +201,6 @@ class TestIOConverters(unittest.TestCase):
                 from_ase("not an ASE Atoms object")
         except ImportError:
             self.skipTest("ASE not installed")
-
 
 if __name__ == '__main__':
     unittest.main()

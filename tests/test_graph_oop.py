@@ -1,10 +1,6 @@
 """Tests for OOP graph API (MoleculeGraph and CrystalGraph)."""
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Molecule, Crystal, Lattice
 from matsimpy.core.graph import (
@@ -13,7 +9,6 @@ from matsimpy.core.graph import (
     create_structure_graph,
     StructureGraph,
 )
-
 
 class TestMoleculeGraph(unittest.TestCase):
     """Test MoleculeGraph class."""
@@ -147,7 +142,6 @@ class TestMoleculeGraph(unittest.TestCase):
         self.assertIn('nodes=2', repr_str)
         self.assertIn('edges=1', repr_str)
 
-
 class TestCrystalGraph(unittest.TestCase):
     """Test CrystalGraph class."""
     
@@ -204,7 +198,6 @@ class TestCrystalGraph(unittest.TestCase):
         adj = graph_no_pbc.adjacency_matrix
         self.assertEqual(adj.shape, (2, 2))
 
-
 class TestFactoryFunction(unittest.TestCase):
     """Test create_structure_graph factory function."""
     
@@ -237,7 +230,6 @@ class TestFactoryFunction(unittest.TestCase):
         """Test that invalid structure raises error."""
         with self.assertRaises(TypeError):
             create_structure_graph("invalid", cutoff=3.0)
-
 
 class TestBackwardCompatibility(unittest.TestCase):
     """Test that functional API still works (backward compatibility)."""
@@ -278,7 +270,6 @@ class TestBackwardCompatibility(unittest.TestCase):
         
         self.assertEqual(stats['num_nodes'], 2)
         self.assertEqual(stats['num_edges'], 1)
-
 
 class TestOOPvsFunctionalEquivalence(unittest.TestCase):
     """Test that OOP and functional APIs give same results."""
@@ -321,7 +312,6 @@ class TestOOPvsFunctionalEquivalence(unittest.TestCase):
         
         self.assertEqual(stats_oop, stats_func)
 
-
 class TestGraphComplexMolecule(unittest.TestCase):
     """Test with complex molecules."""
     
@@ -357,7 +347,6 @@ class TestGraphComplexMolecule(unittest.TestCase):
         
         self.assertEqual(graph.diameter, 2)  # H to opposite H
 
-
 class TestGraphCrystal(unittest.TestCase):
     """Test with crystal structures."""
     
@@ -378,7 +367,6 @@ class TestGraphCrystal(unittest.TestCase):
         
         self.assertEqual(graph.num_nodes, 1)
         self.assertEqual(graph.num_edges, 0)
-
 
 class TestGraphMethods(unittest.TestCase):
     """Test specific graph methods."""
@@ -415,7 +403,6 @@ class TestGraphMethods(unittest.TestCase):
         with self.assertRaises(IndexError):
             graph.get_shortest_path(0, 10)
 
-
 class TestGraphEdgeCases(unittest.TestCase):
     """Test edge cases."""
     
@@ -443,7 +430,6 @@ class TestGraphEdgeCases(unittest.TestCase):
         
         with self.assertRaises(TypeError):
             CrystalGraph(mol, cutoff=3.0)
-
 
 if __name__ == '__main__':
     unittest.main()

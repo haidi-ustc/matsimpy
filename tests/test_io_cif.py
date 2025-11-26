@@ -1,17 +1,12 @@
 """Tests for CIF IO module."""
-import os
-import sys
 import unittest
 import tempfile
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.io import read_CIF, write_CIF
-
 
 class TestCIFIo(unittest.TestCase):
     """Tests for CIF format IO."""
@@ -134,7 +129,6 @@ Si2 Si 0.25 0.25 0.25
             self.assertEqual(len(crystal2), len(self.crystal))
         finally:
             Path(temp_file).unlink()
-
 
 if __name__ == '__main__':
     unittest.main()

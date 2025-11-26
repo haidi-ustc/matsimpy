@@ -1,13 +1,8 @@
 """Tests for AtomSelection class."""
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.utils.selection import AtomSelection
-
 
 class TestAtomSelectionBasic(unittest.TestCase):
     """Tests for basic AtomSelection functionality."""
@@ -51,7 +46,6 @@ class TestAtomSelectionBasic(unittest.TestCase):
         indices = list(sel)
         self.assertEqual(indices, [0, 2])
 
-
 class TestAtomSelectionOperations(unittest.TestCase):
     """Tests for AtomSelection operations."""
     
@@ -84,7 +78,6 @@ class TestAtomSelectionOperations(unittest.TestCase):
         sel2 = AtomSelection(self.crystal).near([0, 0, 0], 5.0)
         combined = sel1 - sel2
         self.assertEqual(combined.indices, [2])
-
 
 class TestAtomSelectionWithSubstitution(unittest.TestCase):
     """Tests for AtomSelection used with substitution."""
@@ -135,7 +128,6 @@ class TestAtomSelectionWithSubstitution(unittest.TestCase):
         with self.assertRaises(ValueError):
             crystal2.substitute(sel, 'Ge')
 
-
 class TestAtomSelectionMethods(unittest.TestCase):
     """Tests for AtomSelection methods."""
     
@@ -171,7 +163,6 @@ class TestAtomSelectionMethods(unittest.TestCase):
         """Test by_custom method."""
         sel = AtomSelection(self.crystal).by_custom(lambda i: i % 2 == 0)
         self.assertEqual(sel.indices, [0, 2])
-
 
 if __name__ == '__main__':
     unittest.main()

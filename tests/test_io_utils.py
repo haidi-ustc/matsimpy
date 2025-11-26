@@ -1,10 +1,6 @@
 """Tests for IO utils module."""
-import os
-import sys
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.io.utils import (
     detect_format,
@@ -13,7 +9,6 @@ from matsimpy.io.utils import (
     is_molecule_format,
     FORMAT_REGISTRY
 )
-
 
 class TestIOUtils(unittest.TestCase):
     """Tests for IO utility functions."""
@@ -124,7 +119,6 @@ class TestIOUtils(unittest.TestCase):
                 writer.startswith('write_') or writer.startswith('to_'),
                 f"Writer {writer} for {fmt} has invalid name"
             )
-
 
 if __name__ == '__main__':
     unittest.main()

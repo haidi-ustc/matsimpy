@@ -9,7 +9,6 @@ from pathlib import Path
 from matsimpy import Crystal, Lattice
 from matsimpy.storage import DataStorage
 
-
 class TestDataStorage(unittest.TestCase):
     """Tests for DataStorage class."""
     
@@ -243,7 +242,6 @@ class TestDataStorage(unittest.TestCase):
         self.assertEqual(crystal.formula, crystal_restored.formula)
         self.assertEqual(len(crystal), len(crystal_restored))
         storage.close()
-
 
 if __name__ == '__main__':
     unittest.main()

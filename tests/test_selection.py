@@ -1,10 +1,6 @@
 """Tests for atom selection utilities."""
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.utils.selection import (
@@ -18,7 +14,6 @@ from matsimpy.utils.selection import (
     select_all,
     select_none,
 )
-
 
 class TestSelectionBySpecies(unittest.TestCase):
     """Tests for species-based selection."""
@@ -47,7 +42,6 @@ class TestSelectionBySpecies(unittest.TestCase):
         indices = select_by_species(self.crystal, 'Ge')
         self.assertEqual(indices, [])
 
-
 class TestSelectionByIndices(unittest.TestCase):
     """Tests for index-based selection."""
     
@@ -69,7 +63,6 @@ class TestSelectionByIndices(unittest.TestCase):
         """Test selecting invalid index."""
         with self.assertRaises(IndexError):
             select_by_indices(self.crystal, 10)
-
 
 class TestSelectionByPosition(unittest.TestCase):
     """Tests for position-based selection."""
@@ -110,7 +103,6 @@ class TestSelectionByPosition(unittest.TestCase):
         indices = select_by_position(crystal, [0, 0, 0], 0.3, use_cartesian=False)
         self.assertIn(0, indices)
 
-
 class TestSelectionByBox(unittest.TestCase):
     """Tests for box-based selection."""
     
@@ -129,7 +121,6 @@ class TestSelectionByBox(unittest.TestCase):
         self.assertIn(0, indices)
         self.assertIn(1, indices)
         self.assertNotIn(2, indices)
-
 
 class TestSelectionByProperty(unittest.TestCase):
     """Tests for property-based selection."""
@@ -161,7 +152,6 @@ class TestSelectionByProperty(unittest.TestCase):
         indices = select_by_property(self.crystal, 'charge', condition=lambda x: x < 0)
         self.assertEqual(indices, [1])
 
-
 class TestSelectionByCustom(unittest.TestCase):
     """Tests for custom selection."""
     
@@ -175,7 +165,6 @@ class TestSelectionByCustom(unittest.TestCase):
         """Test custom selection function."""
         indices = select_by_custom(self.crystal, lambda i: i % 2 == 0)
         self.assertEqual(indices, [0, 2])
-
 
 class TestCombineSelections(unittest.TestCase):
     """Tests for combining selections."""
@@ -195,7 +184,6 @@ class TestCombineSelections(unittest.TestCase):
         result = combine_selections([[0, 1, 2], [1]], 'difference')
         self.assertEqual(sorted(result), [0, 2])
 
-
 class TestSelectionUtilities(unittest.TestCase):
     """Tests for utility selection functions."""
     
@@ -212,7 +200,6 @@ class TestSelectionUtilities(unittest.TestCase):
         """Test selecting no atoms."""
         indices = select_none(self.crystal)
         self.assertEqual(indices, [])
-
 
 class TestSelectionIntegration(unittest.TestCase):
     """Integration tests for selection with substitution."""
@@ -257,7 +244,6 @@ class TestSelectionIntegration(unittest.TestCase):
         
         self.assertIsInstance(combined, list)
         self.assertGreaterEqual(len(combined), 0)
-
 
 if __name__ == '__main__':
     unittest.main()

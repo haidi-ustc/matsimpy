@@ -1,15 +1,10 @@
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal
 from matsimpy.core import Lattice
 from matsimpy.core import Composition
 from monty.serialization import dumpfn, loadfn
-
 
 class TestCrystal(unittest.TestCase):
 
@@ -18,7 +13,6 @@ class TestCrystal(unittest.TestCase):
         self.cart_positions = [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
         self.lattice = Lattice.from_parameters(a=5.0, b=5.0, c=5.0, alpha=90, beta=90, gamma=90)
         self.crystal = Crystal(self.species, self.cart_positions, self.lattice)
-
 
     def test_volume(self):
         volume = self.crystal.volume

@@ -1,16 +1,11 @@
 """Tests for VASP IO module."""
-import os
-import sys
 import unittest
 import tempfile
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice
 from matsimpy.io import read_POSCAR, write_POSCAR, read_CONTCAR, write_CONTCAR
-
 
 class TestVASPIo(unittest.TestCase):
     """Tests for VASP POSCAR/CONTCAR IO."""
@@ -147,7 +142,6 @@ Cartesian
             crystal = read_POSCAR(str(poscar_file))
             self.assertIsInstance(crystal, Crystal)
             self.assertGreater(len(crystal), 0)
-
 
 if __name__ == '__main__':
     unittest.main()

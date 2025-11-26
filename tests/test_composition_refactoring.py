@@ -1,12 +1,7 @@
 """Tests for Composition refactoring: caching, error handling, type hints."""
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core.composition import Composition
-
 
 class TestCompositionErrorHandling(unittest.TestCase):
     """Test enhanced error handling in Composition."""
@@ -50,7 +45,6 @@ class TestCompositionErrorHandling(unittest.TestCase):
         for formula in valid_formulas:
             comp = Composition(formula)
             self.assertIsInstance(comp, Composition)
-
 
 class TestCompositionCaching(unittest.TestCase):
     """Test caching optimizations."""
@@ -112,7 +106,6 @@ class TestCompositionCaching(unittest.TestCase):
         # Should be fast due to caching
         self.assertLess(cached_time, 0.1)
 
-
 class TestCompositionHelperMethod(unittest.TestCase):
     """Test _get_sorted_element_counts helper method."""
     
@@ -143,7 +136,6 @@ class TestCompositionHelperMethod(unittest.TestCase):
         
         self.assertIn("None, 'alphabet', or 'element'", str(context.exception))
 
-
 class TestCompositionCodeDeduplication(unittest.TestCase):
     """Test that helper method eliminates duplication."""
     
@@ -166,7 +158,6 @@ class TestCompositionCodeDeduplication(unittest.TestCase):
         
         self.assertIn('Fe', latex)
         self.assertIn('O', latex)
-
 
 class TestCompositionTypeHints(unittest.TestCase):
     """Test that methods have proper type hints."""
@@ -196,7 +187,6 @@ class TestCompositionTypeHints(unittest.TestCase):
             method = getattr(comp, method_name)
             self.assertIsNotNone(method.__annotations__, 
                                f"{method_name} should have annotations")
-
 
 class TestCompositionBackwardCompatibility(unittest.TestCase):
     """Test that refactoring maintains backward compatibility."""
@@ -234,7 +224,6 @@ class TestCompositionBackwardCompatibility(unittest.TestCase):
         self.assertEqual(comp.formula, comp2.formula)
         self.assertEqual(comp.composition, comp2.composition)
 
-
 class TestCompositionIntegration(unittest.TestCase):
     """Integration tests for refactored Composition."""
     
@@ -269,7 +258,6 @@ class TestCompositionIntegration(unittest.TestCase):
             latex = comp.to_latex()
             self.assertIn('Fe', html)
             self.assertIn('Fe', latex)
-
 
 if __name__ == '__main__':
     unittest.main()

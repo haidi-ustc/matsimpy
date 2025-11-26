@@ -1,14 +1,9 @@
 """Tests for pymatgen and ASE converters."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.io.converters import to_pymatgen, from_pymatgen, to_ase, from_ase
-
 
 class TestPymatgenConverters(unittest.TestCase):
     """Tests for pymatgen converters."""
@@ -153,7 +148,6 @@ class TestPymatgenConverters(unittest.TestCase):
         except ImportError:
             self.skipTest("pymatgen not installed")
 
-
 class TestASEConverters(unittest.TestCase):
     """Tests for ASE converters."""
     
@@ -294,7 +288,6 @@ class TestASEConverters(unittest.TestCase):
             self.assertIsInstance(molecule2, Molecule)
         except ImportError:
             self.skipTest("ASE not installed")
-
 
 if __name__ == '__main__':
     unittest.main()

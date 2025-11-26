@@ -8,7 +8,6 @@ from pathlib import Path
 from matsimpy import Crystal, Molecule, Lattice
 from matsimpy.calculator import Mattersim
 
-
 class TestMattersim(unittest.TestCase):
     """Tests for Mattersim ML calculator."""
     
@@ -194,7 +193,6 @@ class TestMattersim(unittest.TestCase):
         )
         
         self.assertIsNotNone(graph_batch)
-
 
 if __name__ == '__main__':
     unittest.main()

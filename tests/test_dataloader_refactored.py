@@ -1,11 +1,8 @@
 """Tests for refactored dataloader (pure MatSimPy, no ASE)."""
 import os
-import sys
 import unittest
 import warnings
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.calculator.ml.dataloader import (
@@ -13,7 +10,6 @@ from matsimpy.calculator.ml.dataloader import (
     build_dataloader,
     structure_to_graph,
 )
-
 
 class TestMatSimPyGraphConvertor(unittest.TestCase):
     """Test MatSimPyGraphConvertor class."""
@@ -70,7 +66,6 @@ class TestMatSimPyGraphConvertor(unittest.TestCase):
         
         self.assertIsNotNone(graph.stress)
         self.assertEqual(graph.stress.shape, (1, 3, 3))
-
 
 class TestBuildDataloader(unittest.TestCase):
     """Test build_dataloader function."""
@@ -157,7 +152,6 @@ class TestBuildDataloader(unittest.TestCase):
         # Check dataloader was created
         self.assertIsNotNone(dataloader)
 
-
 class TestStructureToGraph(unittest.TestCase):
     """Test structure_to_graph convenience function."""
     
@@ -176,7 +170,6 @@ class TestStructureToGraph(unittest.TestCase):
         
         self.assertIsNotNone(graph)
         self.assertEqual(graph.num_atoms, 2)
-
 
 class TestGraphProperties(unittest.TestCase):
     """Test graph properties match expectations."""
@@ -212,7 +205,6 @@ class TestGraphProperties(unittest.TestCase):
         # Check positions shape
         self.assertEqual(graph.atom_pos.shape[0], 1)
         self.assertEqual(graph.atom_pos.shape[1], 3)
-
 
 class TestEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""
@@ -252,7 +244,6 @@ class TestEdgeCases(unittest.TestCase):
                 energies=[-10.0]
             )
 
-
 class TestBackwardCompatibility(unittest.TestCase):
     """Test that refactored version maintains compatibility."""
     
@@ -265,7 +256,6 @@ class TestBackwardCompatibility(unittest.TestCase):
         dataloader = build_dataloader([crystal], cutoff=5.0, only_inference=True)
         
         self.assertIsNotNone(dataloader)
-
 
 if __name__ == '__main__':
     unittest.main()

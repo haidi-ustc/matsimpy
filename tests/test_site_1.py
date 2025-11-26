@@ -1,13 +1,8 @@
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import CrystalSite,Lattice
 from matsimpy.core.periodic_table import Element
-
 
 class TestCrystalSite(unittest.TestCase):
     def setUp(self):
@@ -16,7 +11,6 @@ class TestCrystalSite(unittest.TestCase):
         self.position = [0.5, 0.5, 0.5]
         self.specie = Element('C')
         self.site = CrystalSite(position=self.position, specie=self.specie, lattice=self.lattice_vectors)
-
 
     def test_cart_position(self):
         cart_position = self.site.cart_position

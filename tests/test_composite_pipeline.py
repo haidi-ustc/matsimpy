@@ -11,7 +11,6 @@ from matsimpy.transformation import translate, rotate, make_supercell
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
 
-
 class TestTransformationPipeline(unittest.TestCase):
     """Test cases for TransformationPipeline."""
     
@@ -165,7 +164,6 @@ class TestTransformationPipeline(unittest.TestCase):
         pipeline = TransformationPipeline()
         with self.assertRaises(TypeError):
             pipeline.add_step("not_a_function", arg1=1)
-
 
 if __name__ == '__main__':
     unittest.main()

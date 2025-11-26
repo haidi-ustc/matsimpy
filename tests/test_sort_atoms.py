@@ -1,13 +1,8 @@
 """Tests for sort_atoms method."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
-
 
 class TestSortAtoms(unittest.TestCase):
     """Tests for sort_atoms method."""
@@ -134,7 +129,6 @@ class TestSortAtoms(unittest.TestCase):
         second_sort = crystal.species
         
         self.assertEqual(first_sort, second_sort)
-
 
 if __name__ == '__main__':
     unittest.main()

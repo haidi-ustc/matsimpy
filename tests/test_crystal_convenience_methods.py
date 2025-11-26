@@ -9,7 +9,6 @@ import unittest
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype
 
-
 class TestCrystalConvenienceMethods(unittest.TestCase):
     """Test convenience methods in Crystal class."""
     
@@ -144,7 +143,6 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         
         with self.assertRaises(ValueError):
             crystal2.perturb(0.1, indices=sel)
-
 
 if __name__ == '__main__':
     unittest.main()

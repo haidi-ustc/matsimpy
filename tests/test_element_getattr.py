@@ -1,12 +1,7 @@
 """Tests for Element __getattr__ enhanced error handling."""
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core.periodic_table import Element
-
 
 class TestElementGetAttr(unittest.TestCase):
     """Test __getattr__ method for better error messages."""
@@ -77,7 +72,6 @@ class TestElementGetAttr(unittest.TestCase):
         self.assertIn("Available", str(context_h.exception))
         self.assertIn("Available", str(context_c.exception))
 
-
 class TestElementDataAccess(unittest.TestCase):
     """Test accessing element data through __getattr__."""
     
@@ -110,7 +104,6 @@ class TestElementDataAccess(unittest.TestCase):
             # Each should have a helpful error message
             self.assertIn(attr, str(context.exception))
             self.assertIn("Available", str(context.exception))
-
 
 class TestElementGetAttrEdgeCases(unittest.TestCase):
     """Test edge cases for __getattr__."""
@@ -158,7 +151,6 @@ class TestElementGetAttrEdgeCases(unittest.TestCase):
         
         self.assertIn("ATOMIC_NO", str(context.exception))
 
-
 class TestElementGetAttrMultipleElements(unittest.TestCase):
     """Test __getattr__ with multiple different elements."""
     
@@ -202,7 +194,6 @@ class TestElementGetAttrMultipleElements(unittest.TestCase):
         self.assertIn("test_attr", msg_fe)
         self.assertIn("Available", msg_h)
         self.assertIn("Available", msg_fe)
-
 
 class TestElementGetAttrIntegration(unittest.TestCase):
     """Integration tests for __getattr__ with other Element features."""
@@ -262,7 +253,6 @@ class TestElementGetAttrIntegration(unittest.TestCase):
             getattr(element, 'invalid_attr')
         
         self.assertIn("invalid_attr", str(context.exception))
-
 
 if __name__ == '__main__':
     unittest.main()

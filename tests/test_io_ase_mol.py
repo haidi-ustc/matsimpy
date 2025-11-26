@@ -1,16 +1,11 @@
 """Tests for ASE and MOL IO modules."""
-import os
-import sys
 import unittest
 import tempfile
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.io import read_ASE, write_ASE, read_MOL, write_MOL
-
 
 class TestASEIo(unittest.TestCase):
     """Tests for ASE format IO."""
@@ -76,7 +71,6 @@ O 5.0 5.0 5.0
                 write_ASE("not a structure", temp_file)
         finally:
             Path(temp_file).unlink()
-
 
 class TestMOLIo(unittest.TestCase):
     """Tests for MOL format IO."""
@@ -157,7 +151,6 @@ M  END
             self.assertIn('C', molecule.species)
         finally:
             Path(temp_file).unlink()
-
 
 if __name__ == '__main__':
     unittest.main()

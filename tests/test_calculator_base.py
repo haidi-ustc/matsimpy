@@ -7,7 +7,6 @@ import numpy as np
 from matsimpy import Crystal, Molecule, Lattice
 from matsimpy.calculator.base import Calculator
 
-
 class MockCalculator(Calculator):
     """Mock calculator for testing base class."""
     
@@ -16,7 +15,6 @@ class MockCalculator(Calculator):
         self.results['energy'] = 1.0
         self.results['forces'] = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
         self.results['stress'] = np.eye(3)
-
 
 class TestCalculatorBase(unittest.TestCase):
     """Tests for base Calculator class."""
@@ -137,7 +135,6 @@ class TestCalculatorBase(unittest.TestCase):
         self.assertIn('MockCalculator', repr_str)
         self.assertIn('sigma=3.4', repr_str)
         self.assertIn('epsilon=0.01', repr_str)
-
 
 if __name__ == '__main__':
     unittest.main()

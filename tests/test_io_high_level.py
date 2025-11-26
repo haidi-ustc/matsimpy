@@ -1,15 +1,11 @@
 """Tests for high-level I/O interface (read/write functions)."""
 import os
-import sys
 import unittest
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.io import read, write
 from matsimpy.core import Crystal, Molecule, Lattice
-
 
 class TestHighLevelIO(unittest.TestCase):
     """Tests for high-level read/write functions."""
@@ -146,7 +142,6 @@ class TestHighLevelIO(unittest.TestCase):
         write(self.crystal, filename, title='Custom Title')
         # Should not raise error
         self.assertTrue(os.path.exists(filename))
-
 
 if __name__ == '__main__':
     unittest.main()

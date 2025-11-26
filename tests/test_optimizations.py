@@ -1,14 +1,9 @@
 """Comprehensive tests for optimization updates."""
-import os
-import sys
 import unittest
 import time
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice, Molecule, Structure
-
 
 class TestBugFixes(unittest.TestCase):
     """Test bug fixes from optimizations."""
@@ -49,7 +44,6 @@ class TestBugFixes(unittest.TestCase):
         molecule = Molecule.from_dict(d)
         self.assertIsInstance(molecule, Molecule)
         self.assertEqual(len(molecule), 2)
-
 
 class TestPropertyCaching(unittest.TestCase):
     """Test property caching optimizations."""
@@ -123,7 +117,6 @@ class TestPropertyCaching(unittest.TestCase):
         
         self.assertNotEqual(formula1, formula2)
 
-
 class TestSpeciesImmutability(unittest.TestCase):
     """Test species type consistency."""
     
@@ -160,7 +153,6 @@ class TestSpeciesImmutability(unittest.TestCase):
         crystal.remove_atom(0)
         self.assertIsInstance(crystal.species, tuple)
         self.assertEqual(crystal.species, ('O',))
-
 
 class TestLatticeOptimizations(unittest.TestCase):
     """Test lattice optimizations."""
@@ -206,7 +198,6 @@ class TestLatticeOptimizations(unittest.TestCase):
         frac = crystal._convert_to_fractional()
         
         np.testing.assert_array_almost_equal(positions, frac, decimal=6)
-
 
 class TestNeighborFinding(unittest.TestCase):
     """Test optimized neighbor finding."""
@@ -295,7 +286,6 @@ class TestNeighborFinding(unittest.TestCase):
         
         self.assertIsInstance(neighbors, dict)
 
-
 class TestIntegration(unittest.TestCase):
     """Integration tests for all optimizations."""
     
@@ -346,7 +336,6 @@ class TestIntegration(unittest.TestCase):
         
         neighbors = crystal.get_neighbor_list(5.0)
         self.assertIsInstance(neighbors, dict)
-
 
 if __name__ == '__main__':
     unittest.main()

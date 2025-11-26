@@ -1,17 +1,12 @@
 """Tests for XSF IO module."""
-import os
-import sys
 import unittest
 import tempfile
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.io import read_XSF, write_XSF
-
 
 class TestXSFIo(unittest.TestCase):
     """Tests for XSF format IO."""
@@ -136,7 +131,6 @@ PRIMCOORD
                 self.assertIn('PRIMCOORD', content)
         finally:
             Path(temp_file).unlink()
-
 
 if __name__ == '__main__':
     unittest.main()

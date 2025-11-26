@@ -13,7 +13,6 @@ from matsimpy.transformation.lattice import (
     standardize_cell
 )
 
-
 class TestLatticeStrain(unittest.TestCase):
     """Tests for strain and deformation operations."""
     
@@ -84,7 +83,6 @@ class TestLatticeStrain(unittest.TestCase):
         
         # Fractional coordinates should be the same
         np.testing.assert_array_almost_equal(deformed.positions, self.crystal.positions)
-
 
 class TestLatticeScaling(unittest.TestCase):
     """Tests for scaling and volume operations."""
@@ -163,7 +161,6 @@ class TestLatticeScaling(unittest.TestCase):
         with self.assertRaises(ValueError):
             optimize_lattice(self.crystal)
 
-
 class TestLatticeTransform(unittest.TestCase):
     """Tests for lattice transformation operations."""
     
@@ -241,7 +238,6 @@ class TestLatticeTransform(unittest.TestCase):
         self.assertIsNotNone(primitive)
         self.assertLessEqual(len(primitive.species), len(self.crystal.species))
 
-
 class TestLatticeInplace(unittest.TestCase):
     """Tests for in-place lattice operations."""
     
@@ -280,7 +276,6 @@ class TestLatticeInplace(unittest.TestCase):
         result = apply_deformation(self.crystal, deformation, inplace=True)
         
         self.assertEqual(id(result), original_id)
-
 
 if __name__ == '__main__':
     unittest.main()

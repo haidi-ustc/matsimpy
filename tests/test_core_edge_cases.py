@@ -1,16 +1,11 @@
 """Edge case tests for core modules to improve coverage."""
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import (
     Composition, Lattice, Structure, Crystal, Molecule,
     Site, CrystalSite, Element
 )
-
 
 class TestCompositionEdgeCases(unittest.TestCase):
     """Edge cases for Composition."""
@@ -29,7 +24,6 @@ class TestCompositionEdgeCases(unittest.TestCase):
         self.assertEqual(comp['O'], 2)
         self.assertEqual(comp['H'], 2)
 
-
 class TestLatticeEdgeCases(unittest.TestCase):
     """Edge cases for Lattice."""
     
@@ -47,7 +41,6 @@ class TestLatticeEdgeCases(unittest.TestCase):
         # Gamma=180 should also raise ValueError
         with self.assertRaises(ValueError):
             Lattice.from_parameters(a=5, b=5, c=5, alpha=90, beta=90, gamma=180)
-
 
 class TestCrystalEdgeCases(unittest.TestCase):
     """Edge cases for Crystal."""
@@ -73,7 +66,6 @@ class TestCrystalEdgeCases(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             Crystal.from_file('nonexistent.vasp')
 
-
 class TestElementEdgeCases(unittest.TestCase):
     """Edge cases for Element."""
     
@@ -88,7 +80,6 @@ class TestElementEdgeCases(unittest.TestCase):
         h3 = Element.get_element('H')
         self.assertIs(h2, h3)  # Should be same cached object
 
-
 class TestStructureEdgeCases(unittest.TestCase):
     """Edge cases for Structure."""
     
@@ -101,7 +92,6 @@ class TestStructureEdgeCases(unittest.TestCase):
         except (IndexError, ValueError):
             # Or it might raise an error, both are acceptable
             pass
-
 
 class TestMoleculeEdgeCases(unittest.TestCase):
     """Edge cases for Molecule."""
@@ -135,7 +125,6 @@ class TestMoleculeEdgeCases(unittest.TestCase):
         self.assertIsInstance(crystal, Crystal)
         # Single atom should still create a box with minimum size
         self.assertGreaterEqual(crystal.lattice.a, 30.0)  # 2 * vacuum (15.0)
-
 
 if __name__ == '__main__':
     unittest.main()

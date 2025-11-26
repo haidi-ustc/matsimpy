@@ -14,7 +14,6 @@ from matsimpy.config import (
     get_default_config,
 )
 
-
 class TestConfigManager(unittest.TestCase):
     """Tests for ConfigManager class."""
     
@@ -118,7 +117,6 @@ class TestConfigManager(unittest.TestCase):
         config_dir = config.get_config_dir()
         self.assertEqual(config_dir, self.config_dir)
 
-
 class TestGetConfig(unittest.TestCase):
     """Tests for get_config convenience function."""
     
@@ -143,7 +141,6 @@ class TestGetConfig(unittest.TestCase):
         """Test get_config with custom default."""
         value = get_config('nonexistent.key', default='test_default')
         self.assertEqual(value, 'test_default')
-
 
 class TestEnvOverrides(unittest.TestCase):
     """Tests for environment variable overrides."""
@@ -199,7 +196,6 @@ class TestEnvOverrides(unittest.TestCase):
         # Clean up
         del os.environ['MATSIMPY_PERFORMANCE__CACHE_SIZE_MB']
 
-
 class TestDefaultConfig(unittest.TestCase):
     """Tests for default configuration."""
     
@@ -224,7 +220,6 @@ class TestDefaultConfig(unittest.TestCase):
             defaults['calculator']['ml']['mattersim']['default_model_type'],
             'mace'
         )
-
 
 if __name__ == '__main__':
     unittest.main()

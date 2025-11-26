@@ -1,14 +1,10 @@
 import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal
 from matsimpy.core import Lattice
 from matsimpy.core import Composition
 from monty.serialization import dumpfn, loadfn
-
 
 class TestComposition(unittest.TestCase):
     def setUp(self):
@@ -39,7 +35,6 @@ class TestComposition(unittest.TestCase):
     def tearDown(self):
         # Remove composition.json file
         os.remove("composition.json")
-
 
 if __name__ == '__main__':
     unittest.main()

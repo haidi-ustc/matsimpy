@@ -9,7 +9,6 @@ from matsimpy.builders.molecule import (
     build_tetrahedral
 )
 
-
 class TestLinearMolecule(unittest.TestCase):
     """Tests for linear molecule generation."""
     
@@ -44,7 +43,6 @@ class TestLinearMolecule(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_linear(['H', 'H'], [0.74, 0.74])  # Too many bonds
 
-
 class TestBentMolecule(unittest.TestCase):
     """Tests for bent molecule generation."""
     
@@ -69,7 +67,6 @@ class TestBentMolecule(unittest.TestCase):
         v2 = mol.positions[2] - mol.positions[0]
         angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
         self.assertAlmostEqual(angle, 90.0, places=1)
-
 
 class TestTrigonalPlanar(unittest.TestCase):
     """Tests for trigonal planar molecule generation."""
@@ -98,7 +95,6 @@ class TestTrigonalPlanar(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_trigonal_planar('B', ['F', 'F'], 1.31)  # Only 2 atoms
 
-
 class TestTetrahedral(unittest.TestCase):
     """Tests for tetrahedral molecule generation."""
     
@@ -123,7 +119,6 @@ class TestTetrahedral(unittest.TestCase):
         """Test with wrong number of peripheral atoms."""
         with self.assertRaises(ValueError):
             build_tetrahedral('C', ['H', 'H', 'H'], 1.09)  # Only 3 H
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,7 +7,6 @@ import numpy as np
 from matsimpy import Crystal, Molecule, Lattice
 from matsimpy.calculator import LennardJones
 
-
 class TestLennardJones(unittest.TestCase):
     """Tests for Lennard-Jones calculator."""
     
@@ -184,7 +183,6 @@ class TestLennardJones(unittest.TestCase):
         
         self.assertIsInstance(energy, float)
         self.assertEqual(forces.shape, (2, 3))
-
 
 if __name__ == '__main__':
     unittest.main()

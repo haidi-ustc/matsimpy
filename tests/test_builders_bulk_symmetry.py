@@ -1,9 +1,7 @@
 """Tests for symmetry-based bulk crystal generation."""
-import os
 import unittest
 import numpy as np
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk.symmetry import (
@@ -11,7 +9,6 @@ from matsimpy.builders.bulk.symmetry import (
     from_crystal_system,
     list_space_groups_by_system
 )
-
 
 class TestFromSpaceGroup(unittest.TestCase):
     """Tests for from_space_group function."""
@@ -115,7 +112,6 @@ class TestFromSpaceGroup(unittest.TestCase):
         )
         self.assertIsInstance(crystal2, Crystal)
 
-
 class TestFromCrystalSystem(unittest.TestCase):
     """Tests for from_crystal_system function."""
     
@@ -199,7 +195,6 @@ class TestFromCrystalSystem(unittest.TestCase):
         self.assertAlmostEqual(crystal.lattice.b, 6.0, places=2)
         self.assertAlmostEqual(crystal.lattice.c, 7.0, places=2)
 
-
 class TestListSpaceGroupsBySystem(unittest.TestCase):
     """Tests for list_space_groups_by_system function."""
     
@@ -240,7 +235,6 @@ class TestListSpaceGroupsBySystem(unittest.TestCase):
         """Test listing with invalid crystal system."""
         result = list_space_groups_by_system('Invalid')
         self.assertEqual(result, [])
-
 
 class TestHelperFunctions(unittest.TestCase):
     """Tests for helper functions."""
@@ -315,7 +309,6 @@ class TestHelperFunctions(unittest.TestCase):
         # Test with different space group
         result2 = _validate_space_group(crystal, 1, 1e-5, -1.0)
         self.assertIsInstance(result2, bool)
-
 
 if __name__ == '__main__':
     unittest.main()

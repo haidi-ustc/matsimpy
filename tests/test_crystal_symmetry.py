@@ -4,7 +4,6 @@ import numpy as np
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype
 
-
 class TestCrystalSymmetry(unittest.TestCase):
     """Tests for Crystal symmetry methods."""
     
@@ -105,7 +104,6 @@ class TestCrystalSymmetry(unittest.TestCase):
         
         self.assertEqual(prim_sym['space_group_number'], conv_sym['space_group_number'])
         self.assertEqual(prim_sym['space_group_symbol'], conv_sym['space_group_symbol'])
-
 
 if __name__ == '__main__':
     unittest.main()

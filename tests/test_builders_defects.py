@@ -12,7 +12,6 @@ from matsimpy.builders.defects import (
 )
 from matsimpy.builders.bulk import from_prototype
 
-
 class TestVacancy(unittest.TestCase):
     """Tests for create_vacancy function."""
     
@@ -55,7 +54,6 @@ class TestVacancy(unittest.TestCase):
         # Should only remove 2 unique atoms
         self.assertEqual(len(with_vacancy.species), len(self.fcc.species) - 2)
 
-
 class TestInterstitial(unittest.TestCase):
     """Tests for create_interstitial function."""
     
@@ -96,7 +94,6 @@ class TestInterstitial(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_interstitial(self.fcc, ['H', 'H'], [[0.5, 0.5, 0.5]])
 
-
 class TestSubstitution(unittest.TestCase):
     """Tests for create_substitution function."""
     
@@ -135,7 +132,6 @@ class TestSubstitution(unittest.TestCase):
         with self.assertRaises(IndexError):
             create_substitution(self.fcc, 1000, 'Ni')
 
-
 class TestFrenkel(unittest.TestCase):
     """Tests for create_frenkel function."""
     
@@ -169,7 +165,6 @@ class TestFrenkel(unittest.TestCase):
         with self.assertRaises(IndexError):
             create_frenkel(self.nacl, 1000)
 
-
 class TestSchottky(unittest.TestCase):
     """Tests for create_schottky function."""
     
@@ -201,7 +196,6 @@ class TestSchottky(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_schottky(self.nacl, num_vacancies=10000)
 
-
 class TestAntisite(unittest.TestCase):
     """Tests for create_antisite function."""
     
@@ -229,7 +223,6 @@ class TestAntisite(unittest.TestCase):
         """Test creating antisite defect with invalid index."""
         with self.assertRaises(IndexError):
             create_antisite(self.gan, 0, 1000)
-
 
 if __name__ == '__main__':
     unittest.main()

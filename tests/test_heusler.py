@@ -1,9 +1,5 @@
 """Tests for Heusler alloy builders."""
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.builders.alloy.heusler import (
     build_heusler,
@@ -11,7 +7,6 @@ from matsimpy.builders.alloy.heusler import (
     build_half_heusler,
     build_inverse_heusler,
 )
-
 
 class TestHeuslerAlloys(unittest.TestCase):
     """Tests for Heusler alloy builders."""
@@ -126,7 +121,6 @@ class TestHeuslerAlloys(unittest.TestCase):
         self.assertEqual(x_count, 8)
         self.assertEqual(y_count, 4)
         self.assertEqual(z_count, 4)
-
 
 if __name__ == '__main__':
     unittest.main()

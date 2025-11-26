@@ -8,7 +8,6 @@ import numpy as np
 import unittest
 from matsimpy.core import Molecule
 
-
 class TestMoleculeConvenienceMethods(unittest.TestCase):
     """Test convenience methods in Molecule class."""
     
@@ -105,7 +104,6 @@ class TestMoleculeConvenienceMethods(unittest.TestCase):
         
         with self.assertRaises(ValueError):
             molecule2.perturb(0.1, indices=sel)
-
 
 if __name__ == '__main__':
     unittest.main()

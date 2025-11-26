@@ -1,15 +1,10 @@
 """Tests for XYZ IO module."""
-import os
-import sys
 import unittest
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Molecule
 from matsimpy.io import read_XYZ, write_XYZ, read_XYZ_multiframe
-
 
 class TestXYZIo(unittest.TestCase):
     """Tests for XYZ format IO."""
@@ -107,7 +102,6 @@ H 0.75 0.0 0.0
                 self.assertIn('C', lines[2])  # First atom line
         finally:
             Path(temp_file).unlink()
-
 
 if __name__ == '__main__':
     unittest.main()

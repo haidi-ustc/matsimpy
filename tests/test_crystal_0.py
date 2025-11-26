@@ -1,16 +1,10 @@
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal
 from matsimpy.core import Lattice
 from matsimpy.core import Composition
 from monty.serialization import dumpfn, loadfn
-
-
 
 class TestCrystal(unittest.TestCase):
 
@@ -54,7 +48,6 @@ class TestCrystal(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
 
         self.assertAlmostEqual(crystal.volume, 24.0, places=6)
-
 
 if __name__ == '__main__':
     unittest.main()

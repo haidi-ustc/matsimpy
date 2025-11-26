@@ -1,12 +1,7 @@
 """Tests for common substitution methods in Crystal and Molecule classes."""
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
-
 
 class TestMoleculeSubstitution(unittest.TestCase):
     """Tests for substitution methods in Molecule class."""
@@ -71,7 +66,6 @@ class TestMoleculeSubstitution(unittest.TestCase):
         # Formula should contain both C and N (order may vary)
         self.assertIn('C', new_formula)
         self.assertIn('N', new_formula)
-
 
 class TestCrystalSubstitution(unittest.TestCase):
     """Tests for substitution methods in Crystal class."""
@@ -143,7 +137,6 @@ class TestCrystalSubstitution(unittest.TestCase):
         self.assertIn('Si', new_formula)
         self.assertIn('Ge', new_formula)
 
-
 class TestSubstitutionConsistency(unittest.TestCase):
     """Tests for consistency between class methods and transformation module."""
     
@@ -177,7 +170,6 @@ class TestSubstitutionConsistency(unittest.TestCase):
         
         # Results should be the same
         self.assertEqual(mol1.species, mol2.species)
-
 
 if __name__ == '__main__':
     unittest.main()

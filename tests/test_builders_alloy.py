@@ -10,7 +10,6 @@ from matsimpy.builders.alloy import (
 )
 from matsimpy.transformation.structural import make_supercell
 
-
 class TestRandomAlloy(unittest.TestCase):
     """Tests for random alloy generation."""
     
@@ -74,7 +73,6 @@ class TestRandomAlloy(unittest.TestCase):
         with self.assertRaises(ValueError):
             generate_random_alloy(self.base, ['Cu'], 'Fe', [0.5])
 
-
 class TestOrderedAlloy(unittest.TestCase):
     """Tests for ordered alloy generation."""
     
@@ -112,7 +110,6 @@ class TestOrderedAlloy(unittest.TestCase):
         with self.assertRaises(ValueError):
             generate_ordered_alloy(self.base, pattern)
 
-
 class TestIntermetallic(unittest.TestCase):
     """Tests for intermetallic generation."""
     
@@ -141,7 +138,6 @@ class TestIntermetallic(unittest.TestCase):
         ni3al = generate_intermetallic(['Ni', 'Al'], 'A3B', 'L1_2', 3.56)
         
         self.assertAlmostEqual(ni3al.lattice.a, 3.56, places=5)
-
 
 if __name__ == '__main__':
     unittest.main()

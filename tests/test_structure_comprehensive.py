@@ -1,13 +1,8 @@
 """Comprehensive tests for Structure class."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Structure, Crystal, Molecule, Lattice, Element
-
 
 class TestStructureComprehensive(unittest.TestCase):
     """Comprehensive tests for Structure class."""
@@ -234,7 +229,6 @@ class TestStructureComprehensive(unittest.TestCase):
         formula = struct.formula
         self.assertIn('Si', formula)
         self.assertIn('10', formula)
-
 
 if __name__ == '__main__':
     unittest.main()

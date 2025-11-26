@@ -4,7 +4,6 @@ import numpy as np
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype, list_prototypes, CRYSTAL_PROTOTYPES
 
-
 class TestPrototypeBuilder(unittest.TestCase):
     """Tests for prototype-based bulk crystal generation."""
     
@@ -114,7 +113,6 @@ class TestPrototypeBuilder(unittest.TestCase):
         self.assertIn('description', CRYSTAL_PROTOTYPES['fcc'])
         self.assertIn('positions', CRYSTAL_PROTOTYPES['fcc'])
 
-
 class TestPrototypeProperties(unittest.TestCase):
     """Test properties of generated prototypes."""
     
@@ -167,7 +165,6 @@ class TestPrototypeProperties(unittest.TestCase):
         self.assertEqual(len(nacl.species), 2)
         self.assertIn('Na', nacl.species)
         self.assertIn('Cl', nacl.species)
-
 
 if __name__ == '__main__':
     unittest.main()

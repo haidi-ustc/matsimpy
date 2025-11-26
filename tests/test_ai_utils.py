@@ -5,7 +5,6 @@ from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.ai.utils import prompts, formatting
 from matsimpy.ai.models.cache import ResponseCache, cached
 
-
 class TestPromptTemplates(unittest.TestCase):
     """Tests for prompt template utilities."""
     
@@ -75,7 +74,6 @@ class TestPromptTemplates(unittest.TestCase):
         
         self.assertIsInstance(prompt, str)
         self.assertIn("validate", prompt.lower())
-
 
 class TestFormatting(unittest.TestCase):
     """Tests for formatting utilities."""
@@ -178,7 +176,6 @@ class TestFormatting(unittest.TestCase):
         self.assertIsInstance(formatted, str)
         self.assertIn("space_group", formatted)
 
-
 class TestResponseCache(unittest.TestCase):
     """Tests for response caching."""
     
@@ -250,7 +247,6 @@ class TestResponseCache(unittest.TestCase):
         result = cache.get("operation1", {"input": "data"})
         
         self.assertIsNotNone(result)
-
 
 if __name__ == '__main__':
     unittest.main()

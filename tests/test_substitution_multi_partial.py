@@ -1,13 +1,8 @@
 """Tests for multiple partial substitutions."""
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Lattice
 from matsimpy.utils.selection import AtomSelection
-
 
 class TestMultiplePartialSubstitutions(unittest.TestCase):
     """Tests for multiple partial substitutions on different species."""
@@ -100,7 +95,6 @@ class TestMultiplePartialSubstitutions(unittest.TestCase):
         self.assertEqual(crystal.species[0], 'Ba')
         self.assertEqual(crystal.species[1], 'Ba')
         self.assertEqual(crystal.species[2], 'Ca')  # Not substituted
-
 
 if __name__ == '__main__':
     unittest.main()

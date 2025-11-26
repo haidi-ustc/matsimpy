@@ -1,14 +1,9 @@
 """Tests for add_atom method with support for adding multiple atoms."""
-import os
-import sys
 import unittest
 import warnings
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
-
 
 class TestStructureAddMultipleAtoms(unittest.TestCase):
     """Test adding multiple atoms to base Structure class."""
@@ -100,7 +95,6 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
         self.assertIn('N', composition.composition)
         self.assertEqual(composition.composition['N'], 2)
 
-
 class TestCrystalAddMultipleAtoms(unittest.TestCase):
     """Test adding multiple atoms to Crystal."""
     
@@ -146,7 +140,6 @@ class TestCrystalAddMultipleAtoms(unittest.TestCase):
         self.assertEqual(len(self.crystal.sites), original_sites + 2)
         self.assertEqual(self.crystal.sites[-2].specie, 'H')
         self.assertEqual(self.crystal.sites[-1].specie, 'H')
-
 
 class TestCrystalAddAtomsWithSiteProperties(unittest.TestCase):
     """Test adding atoms with site properties."""
@@ -204,7 +197,6 @@ class TestCrystalAddAtomsWithSiteProperties(unittest.TestCase):
         self.assertEqual(crystal.site_properties[2], {'charge': 1})
         self.assertEqual(crystal.site_properties[3], {'charge': 1})
 
-
 class TestMoleculeAddMultipleAtoms(unittest.TestCase):
     """Test adding multiple atoms to Molecule."""
     
@@ -244,7 +236,6 @@ class TestMoleculeAddMultipleAtoms(unittest.TestCase):
         self.assertEqual(self.molecule.sites[-2].specie, 'H')
         self.assertEqual(self.molecule.sites[-1].specie, 'O')
 
-
 class TestMoleculeAddAtomsWithSiteProperties(unittest.TestCase):
     """Test adding atoms to Molecule with site properties."""
     
@@ -260,7 +251,6 @@ class TestMoleculeAddAtomsWithSiteProperties(unittest.TestCase):
         self.assertEqual(len(self.molecule.site_properties), 3)
         self.assertEqual(self.molecule.site_properties[-2], {'bond_order': 1})
         self.assertEqual(self.molecule.site_properties[-1], {'bond_order': 2})
-
 
 class TestEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""
@@ -336,7 +326,6 @@ class TestEdgeCases(unittest.TestCase):
         
         self.assertIn("duplicate", str(context.exception).lower())
 
-
 class TestIntegrationWithOtherMethods(unittest.TestCase):
     """Test that add_atom works well with other methods."""
     
@@ -381,7 +370,6 @@ class TestIntegrationWithOtherMethods(unittest.TestCase):
         # Should work without errors
         self.assertIsInstance(neighbors, dict)
         self.assertEqual(len(neighbors), 3)
-
 
 if __name__ == '__main__':
     unittest.main()

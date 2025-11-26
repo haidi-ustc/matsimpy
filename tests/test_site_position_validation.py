@@ -1,15 +1,11 @@
 """Tests for Site position validation."""
 import os
-import sys
 import unittest
 import numpy as np
 import warnings
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core.site import Site, CrystalSite
 from matsimpy.core import Lattice
-
 
 class TestSitePositionValidation(unittest.TestCase):
     """Test position validation in Site class."""
@@ -137,7 +133,6 @@ class TestSitePositionValidation(unittest.TestCase):
         # Position should not have changed
         self.assertTrue(np.allclose(site.position, [1, 2, 3]))
 
-
 class TestCrystalSitePositionValidation(unittest.TestCase):
     """Test position validation in CrystalSite class."""
     
@@ -180,7 +175,6 @@ class TestCrystalSitePositionValidation(unittest.TestCase):
         # Cartesian should be valid (no NaN/inf)
         self.assertTrue(np.all(np.isfinite(site.cart_position)))
 
-
 class TestPositionValidationEdgeCases(unittest.TestCase):
     """Test edge cases for position validation."""
     
@@ -220,7 +214,6 @@ class TestPositionValidationEdgeCases(unittest.TestCase):
         """Test that mixed NaN and inf raise error."""
         with self.assertRaises(ValueError):
             Site([np.nan, np.inf, 0], 'C')
-
 
 class TestPositionValidationIntegration(unittest.TestCase):
     """Test position validation in real-world scenarios."""
@@ -273,7 +266,6 @@ class TestPositionValidationIntegration(unittest.TestCase):
         
         # Previously created sites should be fine
         self.assertEqual(len(sites), 3)
-
 
 if __name__ == '__main__':
     unittest.main()

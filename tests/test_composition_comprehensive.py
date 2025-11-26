@@ -1,12 +1,7 @@
 """Comprehensive tests for Composition class."""
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Composition
-
 
 class TestCompositionComprehensive(unittest.TestCase):
     """Comprehensive tests for Composition class."""
@@ -164,7 +159,6 @@ class TestCompositionComprehensive(unittest.TestCase):
         # This should handle gracefully
         comp = Composition('H2O')
         self.assertIsNotNone(comp)
-
 
 if __name__ == '__main__':
     unittest.main()

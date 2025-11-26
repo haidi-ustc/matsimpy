@@ -12,7 +12,6 @@ from matsimpy.transformation.atomic import (
     perturb_positions
 )
 
-
 class TestAtomicManipulation(unittest.TestCase):
     """Tests for atomic manipulation operations."""
     
@@ -92,7 +91,6 @@ class TestAtomicManipulation(unittest.TestCase):
         # Should have one more atom
         self.assertEqual(len(split.species), 3)
         self.assertIn('H', split.species)
-
 
 class TestAtomicOrganization(unittest.TestCase):
     """Tests for atomic organization operations."""
@@ -207,7 +205,6 @@ class TestAtomicOrganization(unittest.TestCase):
         
         np.testing.assert_array_almost_equal(p1.positions, p2.positions)
 
-
 class TestAtomicInplace(unittest.TestCase):
     """Tests for in-place atomic operations."""
     
@@ -252,7 +249,6 @@ class TestAtomicInplace(unittest.TestCase):
         
         self.assertIs(result, self.crystal)
         self.assertFalse(np.allclose(self.crystal.positions, original_pos))
-
 
 if __name__ == '__main__':
     unittest.main()

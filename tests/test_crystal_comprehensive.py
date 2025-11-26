@@ -1,14 +1,9 @@
 """Comprehensive tests for Crystal class."""
-import os
-import sys
 import unittest
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice, Element
-
 
 class TestCrystalComprehensive(unittest.TestCase):
     """Comprehensive tests for Crystal class."""
@@ -289,7 +284,6 @@ class TestCrystalComprehensive(unittest.TestCase):
         
         images = crystal._get_periodic_images(5.0)
         self.assertGreater(len(images), len(crystal.cart_positions))
-
 
 if __name__ == '__main__':
     unittest.main()

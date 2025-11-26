@@ -9,7 +9,6 @@ from matsimpy.transformation import make_supercell, translate
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
 
-
 class TestBatchProcessor(unittest.TestCase):
     """Test cases for BatchProcessor."""
     
@@ -249,7 +248,6 @@ class TestBatchProcessor(unittest.TestCase):
         self.assertFalse(failed_result.success)
         self.assertIsNone(failed_result.structure)
         self.assertEqual(failed_result.error, "Test error")
-
 
 if __name__ == '__main__':
     unittest.main()

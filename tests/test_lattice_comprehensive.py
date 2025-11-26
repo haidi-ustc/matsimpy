@@ -1,13 +1,8 @@
 """Comprehensive tests for Lattice class."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Lattice
-
 
 class TestLatticeComprehensive(unittest.TestCase):
     """Comprehensive tests for Lattice class."""
@@ -194,7 +189,6 @@ class TestLatticeComprehensive(unittest.TestCase):
         # Should be same object (cached)
         self.assertIs(lattice._inv_matrix, inv1)
         np.testing.assert_array_equal(inv1, inv2)
-
 
 if __name__ == '__main__':
     unittest.main()

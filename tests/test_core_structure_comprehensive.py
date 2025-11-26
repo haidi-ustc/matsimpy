@@ -11,7 +11,6 @@ import unittest
 import numpy as np
 from matsimpy.core import Structure, Crystal, Molecule, Lattice, Composition, Element
 
-
 class TestStructureInitialization(unittest.TestCase):
     """Test Structure initialization with various input types."""
     
@@ -74,7 +73,6 @@ class TestStructureInitialization(unittest.TestCase):
         with self.assertRaises(ValueError):
             Molecule([], [])
 
-
 class TestStructureProperties(unittest.TestCase):
     """Test Structure properties and caching."""
     
@@ -108,7 +106,6 @@ class TestStructureProperties(unittest.TestCase):
     def test_len_method(self):
         """Test __len__ method."""
         self.assertEqual(len(self.struct), 3)
-
 
 class TestStructureMethods(unittest.TestCase):
     """Test Structure methods."""
@@ -175,7 +172,6 @@ class TestStructureMethods(unittest.TestCase):
         self.assertEqual(comp['H'], 2)
         self.assertEqual(comp['O'], 1)
 
-
 class TestStructureSubstitution(unittest.TestCase):
     """Test Structure substitution methods."""
     
@@ -238,7 +234,6 @@ class TestStructureSubstitution(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.struct.substitute([0], {'C': 'N'})  # Si not in dict
 
-
 class TestStructureSorting(unittest.TestCase):
     """Test Structure sorting methods."""
     
@@ -282,7 +277,6 @@ class TestStructureSorting(unittest.TestCase):
             self.assertTrue(
                 any(np.allclose(pos, p) for p in self.struct.positions)
             )
-
 
 class TestStructureSerialization(unittest.TestCase):
     """Test Structure serialization (as_dict, from_dict)."""
@@ -334,7 +328,6 @@ class TestStructureSerialization(unittest.TestCase):
         struct2 = Molecule(['H', 'H'], [[0, 0, 0], [1, 1, 1]])
         self.assertNotEqual(hash(self.struct), hash(struct2))
 
-
 class TestStructureEdgeCases(unittest.TestCase):
     """Test Structure edge cases and error handling."""
     
@@ -381,7 +374,6 @@ class TestStructureEdgeCases(unittest.TestCase):
         self.assertNotEqual(comp1.formula, comp2.formula)
         self.assertIn('C', comp2.composition)
 
-
 class TestStructureNeighborList(unittest.TestCase):
     """Test Structure neighbor list method."""
     
@@ -398,7 +390,6 @@ class TestStructureNeighborList(unittest.TestCase):
         self.assertIn(0, neighbors)
         # Check that values are lists of tuples
         self.assertIsInstance(neighbors[0], list)
-
 
 if __name__ == '__main__':
     unittest.main()

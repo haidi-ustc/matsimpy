@@ -8,7 +8,6 @@ from matsimpy.transformation import apply_strain, make_supercell, translate
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
 
-
 class TestParameterSweep(unittest.TestCase):
     """Test cases for ParameterSweep."""
     
@@ -244,7 +243,6 @@ class TestParameterSweep(unittest.TestCase):
                 },
                 mode='custom'
             )
-
 
 if __name__ == '__main__':
     unittest.main()

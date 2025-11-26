@@ -1,13 +1,8 @@
 """Final coverage tests for remaining gaps."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice, Element, Site, CrystalSite
-
 
 class TestFinalCoverage(unittest.TestCase):
     """Tests to cover remaining uncovered lines."""
@@ -79,7 +74,6 @@ class TestFinalCoverage(unittest.TestCase):
             text=True
         )
         self.assertEqual(result.returncode, 0)
-
 
 if __name__ == '__main__':
     unittest.main()

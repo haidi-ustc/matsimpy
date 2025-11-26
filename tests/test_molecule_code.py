@@ -1,14 +1,9 @@
 """Tests for Molecule to_code/from_code methods."""
-import os
-import sys
 import unittest
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Molecule
-
 
 class TestMoleculeCode(unittest.TestCase):
     """Tests for Molecule DFT code interface."""
@@ -65,7 +60,6 @@ class TestMoleculeCode(unittest.TestCase):
         """Test to_code with VASP (not yet implemented)."""
         with self.assertRaises(NotImplementedError):
             self.molecule.to_code('vasp', 'test.in')
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,11 +1,7 @@
 """Quick test to verify all fixes work."""
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import numpy as np
 from matsimpy.core import Crystal, Lattice, Molecule
-
 
 def test_crystal_operations():
     """Test basic crystal operations."""
@@ -24,7 +20,6 @@ def test_crystal_operations():
     
     print("✓ Crystal operations work!")
 
-
 def test_molecule_to_crystal():
     """Test molecule to crystal conversion."""
     species = ['C', 'O']
@@ -38,7 +33,6 @@ def test_molecule_to_crystal():
     assert crystal.lattice is not None
     
     print("✓ Molecule to crystal conversion works!")
-
 
 def test_property_caching():
     """Test that caching works."""
@@ -61,7 +55,6 @@ def test_property_caching():
     
     print("✓ Property caching works!")
 
-
 def test_species_immutability():
     """Test that species is immutable tuple."""
     species = ['Si', 'O']
@@ -71,7 +64,6 @@ def test_species_immutability():
     
     assert isinstance(crystal.species, tuple)
     print("✓ Species immutability works!")
-
 
 def test_lattice_inverse_caching():
     """Test that lattice inverse matrix is cached."""
@@ -90,7 +82,6 @@ def test_lattice_inverse_caching():
     assert elapsed < 0.0001  # Should be very fast
     
     print("✓ Lattice inverse caching works!")
-
 
 if __name__ == '__main__':
     print("Running quick fix tests...\n")

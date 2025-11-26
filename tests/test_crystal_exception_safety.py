@@ -5,7 +5,6 @@ import warnings
 
 from matsimpy.core import Crystal, Lattice
 
-
 class TestCrystalExceptionSafety(unittest.TestCase):
     """Test exception safety and complete rollback in Crystal operations."""
 
@@ -103,7 +102,6 @@ class TestCrystalExceptionSafety(unittest.TestCase):
             self.assertEqual(len(neighbor), 2)
             self.assertIsInstance(neighbor[0], int)
             self.assertIsInstance(neighbor[1], float)
-
 
 if __name__ == '__main__':
     unittest.main()

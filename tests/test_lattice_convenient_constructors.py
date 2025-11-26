@@ -1,13 +1,8 @@
 """Tests for Lattice convenient constructor syntax."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Lattice
-
 
 class TestLatticeCubicConstructor(unittest.TestCase):
     """Test Lattice(scalar) -> cubic lattice."""
@@ -61,7 +56,6 @@ class TestLatticeCubicConstructor(unittest.TestCase):
         lat = Lattice(1000.0)
         self.assertAlmostEqual(lat.a, 1000.0)
 
-
 class TestLatticeOrthorhombicConstructor(unittest.TestCase):
     """Test Lattice([a,b,c]) -> orthorhombic lattice."""
     
@@ -112,7 +106,6 @@ class TestLatticeOrthorhombicConstructor(unittest.TestCase):
         self.assertAlmostEqual(lat.b, 5.0)
         self.assertAlmostEqual(lat.c, 5.0)
 
-
 class TestLatticeTraditionalConstructor(unittest.TestCase):
     """Test that traditional Lattice([[...], [...], [...]]) still works."""
     
@@ -138,7 +131,6 @@ class TestLatticeTraditionalConstructor(unittest.TestCase):
         lat = Lattice([[10, 0, 0], [0, 10, 0], [0, 0, 10]])
         
         self.assertAlmostEqual(lat.a, 10.0)
-
 
 class TestLatticeValidation(unittest.TestCase):
     """Test input validation for convenient constructors."""
@@ -183,7 +175,6 @@ class TestLatticeValidation(unittest.TestCase):
         with self.assertRaises(TypeError):
             Lattice({'a': 5})
 
-
 class TestLatticeConvenienceEdgeCases(unittest.TestCase):
     """Test edge cases for convenient constructors."""
     
@@ -209,7 +200,6 @@ class TestLatticeConvenienceEdgeCases(unittest.TestCase):
         self.assertAlmostEqual(lat.a, 3.0)
         self.assertAlmostEqual(lat.b, 4.0)
         self.assertAlmostEqual(lat.c, 5.0)
-
 
 class TestLatticeIntegration(unittest.TestCase):
     """Integration tests with other Lattice functionality."""
@@ -268,7 +258,6 @@ class TestLatticeIntegration(unittest.TestCase):
         self.assertAlmostEqual(crystal.lattice.b, 6.0)
         self.assertAlmostEqual(crystal.lattice.c, 7.0)
 
-
 class TestLatticeDocumentation(unittest.TestCase):
     """Test that documentation is clear and examples work."""
     
@@ -291,7 +280,6 @@ class TestLatticeDocumentation(unittest.TestCase):
         # From docstring: lat = Lattice([[5, 0, 0], [0, 5, 0], [0, 0, 5]])
         lat = Lattice([[5, 0, 0], [0, 5, 0], [0, 0, 5]])
         self.assertAlmostEqual(lat.a, 5.0)
-
 
 if __name__ == '__main__':
     unittest.main()

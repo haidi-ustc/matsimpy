@@ -1,15 +1,10 @@
 """Tests for from_file and to_file methods."""
-import os
-import sys
 import unittest
 import tempfile
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Molecule, Lattice
-
 
 class TestFromToFile(unittest.TestCase):
     """Tests for from_file and to_file methods."""
@@ -191,7 +186,6 @@ class TestFromToFile(unittest.TestCase):
             )
         finally:
             Path(temp_file).unlink()
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -4,7 +4,6 @@ import numpy as np
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.symmetry import SymmetryAnalyzer, analyze_symmetry
 
-
 class TestSymmetryAnalyzer(unittest.TestCase):
     """Tests for SymmetryAnalyzer class."""
     
@@ -96,7 +95,6 @@ class TestSymmetryAnalyzer(unittest.TestCase):
         self.assertEqual(self.analyzer._get_crystal_system(230), "Cubic")
         self.assertEqual(self.analyzer._get_crystal_system(999), "Unknown")
 
-
 class TestCrystalSymmetryAnalysis(unittest.TestCase):
     """Tests for crystal symmetry analysis."""
     
@@ -163,7 +161,6 @@ class TestCrystalSymmetryAnalysis(unittest.TestCase):
         self.assertEqual(len(ops), 2)
         self.assertIn('rotation', ops[0])
         self.assertIn('translation', ops[0])
-
 
 class TestMoleculeSymmetryAnalysis(unittest.TestCase):
     """Tests for molecule symmetry analysis."""
@@ -275,7 +272,6 @@ class TestMoleculeSymmetryAnalysis(unittest.TestCase):
         pg = self.analyzer._detect_point_group(positions, ['He'], tolerance=0.1)
         self.assertEqual(pg, 'Kh')
 
-
 class TestConvenienceFunction(unittest.TestCase):
     """Tests for analyze_symmetry convenience function."""
     
@@ -308,7 +304,6 @@ class TestConvenienceFunction(unittest.TestCase):
         """Test analyze_symmetry with invalid type."""
         with self.assertRaises(TypeError):
             analyze_symmetry("invalid")
-
 
 if __name__ == '__main__':
     unittest.main()

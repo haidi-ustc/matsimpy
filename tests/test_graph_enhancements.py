@@ -1,10 +1,6 @@
 """Tests for enhanced graph.py module with molecule and crystal support."""
-import os
-import sys
 import unittest
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Molecule, Crystal, Lattice
 from matsimpy.core.graph import (
@@ -21,7 +17,6 @@ from matsimpy.core.graph import (
     get_graph_statistics,
     get_graph_laplacian,
 )
-
 
 class TestAdjacencyMatrix(unittest.TestCase):
     """Test adjacency matrix computation."""
@@ -53,7 +48,6 @@ class TestAdjacencyMatrix(unittest.TestCase):
         self.assertEqual(adj.shape, (2, 2))
         self.assertEqual(adj[0, 0], 0)  # No self-loops
 
-
 class TestDistanceMatrix(unittest.TestCase):
     """Test distance matrix computation."""
     
@@ -73,7 +67,6 @@ class TestDistanceMatrix(unittest.TestCase):
         dist = get_distance_matrix(mol)
         
         self.assertTrue(np.allclose(dist, dist.T))
-
 
 class TestEdgeList(unittest.TestCase):
     """Test edge list generation."""
@@ -104,7 +97,6 @@ class TestEdgeList(unittest.TestCase):
         
         self.assertEqual(len(edges), 2)  # (0,1) and (1,2)
 
-
 class TestCoordinationNumbers(unittest.TestCase):
     """Test coordination number computation."""
     
@@ -125,7 +117,6 @@ class TestCoordinationNumbers(unittest.TestCase):
         self.assertEqual(coord[0], 4)  # C has 4 neighbors
         self.assertEqual(coord[1], 1)  # Each H has 1 neighbor (only C)
 
-
 class TestDegreeDistribution(unittest.TestCase):
     """Test degree distribution."""
     
@@ -137,7 +128,6 @@ class TestDegreeDistribution(unittest.TestCase):
         # One atom with degree 2, two atoms with degree 1
         self.assertEqual(dist[2], 1)
         self.assertEqual(dist[1], 2)
-
 
 class TestConnectivity(unittest.TestCase):
     """Test graph connectivity functions."""
@@ -172,7 +162,6 @@ class TestConnectivity(unittest.TestCase):
         components = get_connected_components(mol, cutoff=2.0)
         
         self.assertEqual(len(components), 2)
-
 
 class TestShortestPath(unittest.TestCase):
     """Test shortest path finding."""
@@ -212,7 +201,6 @@ class TestShortestPath(unittest.TestCase):
         with self.assertRaises(IndexError):
             get_shortest_path(mol, 0, 10, cutoff=2.0)
 
-
 class TestGraphDiameter(unittest.TestCase):
     """Test graph diameter computation."""
     
@@ -237,7 +225,6 @@ class TestGraphDiameter(unittest.TestCase):
         
         self.assertIsNone(diameter)
 
-
 class TestNodeFeatures(unittest.TestCase):
     """Test node feature extraction."""
     
@@ -249,7 +236,6 @@ class TestNodeFeatures(unittest.TestCase):
         self.assertEqual(features.shape, (2, 1))
         self.assertEqual(features[0, 0], 6)  # Carbon atomic number
         self.assertEqual(features[1, 0], 8)  # Oxygen atomic number
-
 
 class TestGraphStatistics(unittest.TestCase):
     """Test comprehensive graph statistics."""
@@ -278,7 +264,6 @@ class TestGraphStatistics(unittest.TestCase):
         self.assertEqual(stats['num_edges'], 3)  # 3 C-H bonds
         self.assertTrue(stats['is_connected'])
 
-
 class TestGraphLaplacian(unittest.TestCase):
     """Test graph Laplacian computation."""
     
@@ -299,7 +284,6 @@ class TestGraphLaplacian(unittest.TestCase):
         self.assertEqual(L.shape, (2, 2))
         # Diagonal should be 1 for normalized Laplacian
         self.assertTrue(np.allclose(np.diag(L), 1.0))
-
 
 class TestCrystalGraphMethods(unittest.TestCase):
     """Test graph methods with Crystal structures."""
@@ -327,7 +311,6 @@ class TestCrystalGraphMethods(unittest.TestCase):
         self.assertEqual(stats['num_nodes'], 2)
         self.assertGreaterEqual(stats['num_edges'], 0)
 
-
 class TestEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""
     
@@ -352,7 +335,6 @@ class TestEdgeCases(unittest.TestCase):
         
         path = get_shortest_path(mol, 0, 4, cutoff=1.5)
         self.assertEqual(len(path), 5)  # All atoms in chain
-
 
 class TestGraphIntegration(unittest.TestCase):
     """Integration tests combining multiple methods."""
@@ -389,7 +371,6 @@ class TestGraphIntegration(unittest.TestCase):
         
         self.assertIsInstance(stats, dict)
         self.assertEqual(stats['num_nodes'], 2)
-
 
 if __name__ == '__main__':
     unittest.main()

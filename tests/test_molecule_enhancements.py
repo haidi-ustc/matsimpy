@@ -1,14 +1,9 @@
 """Tests for Molecule enhancements: neighbor list optimization and chemical checks."""
-import os
-import sys
 import unittest
 import numpy as np
 import warnings
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Molecule
-
 
 class TestMoleculeAddAtomChemicalChecks(unittest.TestCase):
     """Test chemical reasonableness checks in add_atom."""
@@ -99,7 +94,6 @@ class TestMoleculeAddAtomChemicalChecks(unittest.TestCase):
         self.assertIn("too close", msg.lower())
         # Should mention the threshold
         self.assertIn("0.5", msg)
-
 
 class TestMoleculeNeighborListOptimization(unittest.TestCase):
     """Test optimized get_all_neighbor_lists method."""
@@ -192,7 +186,6 @@ class TestMoleculeNeighborListOptimization(unittest.TestCase):
         self.assertLess(elapsed, 1.0)
         self.assertEqual(len(neighbors), n)
 
-
 class TestMoleculeNeighborListSingle(unittest.TestCase):
     """Test get_neighbor_list improvements."""
     
@@ -216,7 +209,6 @@ class TestMoleculeNeighborListSingle(unittest.TestCase):
         msg = str(context.exception)
         self.assertIn("10", msg)
         self.assertIn("out of range", msg.lower())
-
 
 class TestMoleculeIntegration(unittest.TestCase):
     """Integration tests combining multiple enhancements."""
@@ -268,7 +260,6 @@ class TestMoleculeIntegration(unittest.TestCase):
         # Should have one more list
         self.assertEqual(len(neighbors2), len(neighbors1) + 1)
 
-
 class TestMoleculeDocstringsAndTypes(unittest.TestCase):
     """Test that methods have proper type hints and documentation."""
     
@@ -299,7 +290,6 @@ class TestMoleculeDocstringsAndTypes(unittest.TestCase):
                                f"{method_name} should have docstring")
             self.assertGreater(len(method.__doc__), 20,
                              f"{method_name} docstring should be substantial")
-
 
 if __name__ == '__main__':
     unittest.main()

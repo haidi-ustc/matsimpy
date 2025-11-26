@@ -1,13 +1,8 @@
 """Tests for Composition HTML and LaTeX output."""
-import os
-import sys
 import unittest
 import re
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Composition
-
 
 class TestCompositionHTML(unittest.TestCase):
     """Tests for HTML output of Composition."""
@@ -47,7 +42,6 @@ class TestCompositionHTML(unittest.TestCase):
         self.assertIn('Fe', html)
         self.assertIn('O', html)
 
-
 class TestCompositionLaTeX(unittest.TestCase):
     """Tests for LaTeX output of Composition."""
     
@@ -86,7 +80,6 @@ class TestCompositionLaTeX(unittest.TestCase):
         self.assertIn('Fe', latex)
         self.assertIn('O', latex)
 
-
 class TestCompositionOutputConsistency(unittest.TestCase):
     """Tests for consistency between HTML and LaTeX output."""
     
@@ -115,7 +108,6 @@ class TestCompositionOutputConsistency(unittest.TestCase):
         # Neither should have subscripts for count 1
         self.assertNotIn('<sub>1</sub>', html)
         self.assertNotIn('$_{1}$', latex)
-
 
 if __name__ == '__main__':
     unittest.main()

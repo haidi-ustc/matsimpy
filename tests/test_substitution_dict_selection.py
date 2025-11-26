@@ -1,13 +1,8 @@
 """Tests for substitution with dict mapping and AtomSelection."""
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.utils.selection import AtomSelection
-
 
 class TestSubstitutionWithDict(unittest.TestCase):
     """Tests for dict-based substitution mapping."""
@@ -61,7 +56,6 @@ class TestSubstitutionWithDict(unittest.TestCase):
         self.assertEqual(self.molecule.species[2], 'N')
         self.assertEqual(self.molecule.species[3], 'P')
 
-
 class TestSubstitutionWithAtomSelectionAndDict(unittest.TestCase):
     """Tests for combining AtomSelection with dict mapping."""
     
@@ -112,7 +106,6 @@ class TestSubstitutionWithAtomSelectionAndDict(unittest.TestCase):
         self.assertEqual(self.crystal.species[0], 'Ge')
         self.assertEqual(self.crystal.species[2], 'Si')  # Not substituted
 
-
 class TestSubstitutionTransformationModule(unittest.TestCase):
     """Tests for dict mapping in transformation module."""
     
@@ -144,7 +137,6 @@ class TestSubstitutionTransformationModule(unittest.TestCase):
         self.assertEqual(new_crystal.species[0], 'Ge')
         self.assertEqual(new_crystal.species[2], 'Ge')
         self.assertEqual(new_crystal.species[1], 'O')
-
 
 if __name__ == '__main__':
     unittest.main()

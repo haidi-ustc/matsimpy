@@ -1,13 +1,8 @@
 """Comprehensive tests for Site and CrystalSite classes."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Site, CrystalSite, Lattice, Element
-
 
 class TestSiteComprehensive(unittest.TestCase):
     """Comprehensive tests for Site class."""
@@ -106,7 +101,6 @@ class TestSiteComprehensive(unittest.TestCase):
         str_repr = str(site)
         self.assertIn('Fe', str_repr)
 
-
 class TestCrystalSiteComprehensive(unittest.TestCase):
     """Comprehensive tests for CrystalSite class."""
     
@@ -202,7 +196,6 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         
         str_repr = str(site)
         self.assertIn('Fe', str_repr)
-
 
 if __name__ == '__main__':
     unittest.main()

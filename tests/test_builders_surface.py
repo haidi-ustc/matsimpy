@@ -5,7 +5,6 @@ from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.builders.surface import generate_slab, generate_symmetric_slab, add_adsorbate
 
-
 class TestSlabGeneration(unittest.TestCase):
     """Tests for slab generation."""
     
@@ -77,7 +76,6 @@ class TestSlabGeneration(unittest.TestCase):
         
         self.assertGreater(slab.volume, self.si_bulk.volume)
 
-
 class TestAdsorbate(unittest.TestCase):
     """Tests for adsorbate placement."""
     
@@ -124,7 +122,6 @@ class TestAdsorbate(unittest.TestCase):
         self.assertEqual(len(self.slab.species), original_count)
         # New slab has more atoms
         self.assertEqual(len(with_ads.species), original_count + 1)
-
 
 if __name__ == '__main__':
     unittest.main()

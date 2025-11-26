@@ -1,10 +1,7 @@
 """Tests for LaTeX table export functionality."""
 import os
-import sys
 import unittest
 import tempfile
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.io.latex import (
@@ -13,7 +10,6 @@ from matsimpy.io.latex import (
     structures_to_latex_table,
     save_latex_table,
 )
-
 
 class TestCrystalsToLatexTable(unittest.TestCase):
     """Test crystals_to_latex_table function."""
@@ -101,7 +97,6 @@ class TestCrystalsToLatexTable(unittest.TestCase):
         
         self.assertIn('Volume', latex)
 
-
 class TestMoleculesToLatexTable(unittest.TestCase):
     """Test molecules_to_latex_table function."""
     
@@ -145,7 +140,6 @@ class TestMoleculesToLatexTable(unittest.TestCase):
         """Test that empty list raises ValueError."""
         with self.assertRaises(ValueError):
             molecules_to_latex_table([])
-
 
 class TestStructuresToLatexTable(unittest.TestCase):
     """Test structures_to_latex_table for mixed structures."""
@@ -202,7 +196,6 @@ class TestStructuresToLatexTable(unittest.TestCase):
         self.assertEqual(latex.count(r'\begin{table}'), 1)
         self.assertIn('Molecules', latex)
 
-
 class TestSaveLatexTable(unittest.TestCase):
     """Test save_latex_table function."""
     
@@ -227,7 +220,6 @@ class TestSaveLatexTable(unittest.TestCase):
             
             self.assertIn(r'\begin{table}', content)
             self.assertIn('Test Table', content)
-
 
 class TestCustomFormatters(unittest.TestCase):
     """Test custom formatters."""
@@ -262,7 +254,6 @@ class TestCustomFormatters(unittest.TestCase):
         
         self.assertIn(r'\textbf', latex)
 
-
 class TestLatexFormatting(unittest.TestCase):
     """Test LaTeX formatting details."""
     
@@ -285,7 +276,6 @@ class TestLatexFormatting(unittest.TestCase):
         
         self.assertIn(r'\AA', latex)  # LaTeX Angstrom symbol
 
-
 class TestEdgeCases(unittest.TestCase):
     """Test edge cases."""
     
@@ -303,7 +293,6 @@ class TestEdgeCases(unittest.TestCase):
         latex = molecules_to_latex_table(molecule)
         
         self.assertIn(r'\begin{table}', latex)
-
 
 class TestMhchemSupport(unittest.TestCase):
     """Test mhchem package support."""
@@ -379,7 +368,6 @@ class TestMhchemSupport(unittest.TestCase):
         latex = structures_to_latex_table(structures, separate_by_type=False, use_mhchem=True)
         
         self.assertIn(r'\ce{', latex)
-
 
 if __name__ == '__main__':
     unittest.main()

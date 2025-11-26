@@ -1,13 +1,8 @@
 """Tests for Crystal refactoring: helper methods and code deduplication."""
-import os
-import sys
 import unittest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from matsimpy.core import Crystal, Lattice
-
 
 class TestCrystalHelperMethods(unittest.TestCase):
     """Test helper methods in Crystal class."""
@@ -125,7 +120,6 @@ class TestCrystalHelperMethods(unittest.TestCase):
         self.assertTrue(first_row.startswith('Si'), msg=f"Expected first row to describe 'Si', got: {first_row}")
         self.assertTrue(second_row.startswith('O'), msg=f"Expected second row to describe 'O', got: {second_row}")
 
-
 class TestCrystalCodeDeduplication(unittest.TestCase):
     """Test that helper methods reduce code duplication."""
     
@@ -179,7 +173,6 @@ class TestCrystalCodeDeduplication(unittest.TestCase):
         self.assertEqual(len(crystal.frac_positions), 2)
         self.assertEqual(len(crystal.cart_positions), 2)
 
-
 class TestCrystalTypeHints(unittest.TestCase):
     """Test that methods have proper type hints."""
     
@@ -191,7 +184,6 @@ class TestCrystalTypeHints(unittest.TestCase):
         # Check that methods exist and have annotations
         self.assertTrue(hasattr(crystal._convert_to_cartesian, '__annotations__'))
         self.assertTrue(hasattr(crystal._convert_to_fractional, '__annotations__'))
-
 
 class TestCrystalIntegration(unittest.TestCase):
     """Integration tests for refactored Crystal."""
@@ -218,7 +210,6 @@ class TestCrystalIntegration(unittest.TestCase):
         
         # All should work without errors
         self.assertIsInstance(crystal.formula, str)
-
 
 if __name__ == '__main__':
     unittest.main()
