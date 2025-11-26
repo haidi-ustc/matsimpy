@@ -21,23 +21,34 @@ def main():
     
     # If not provided, try to find it in common locations
     if json_file is None:
-        # Check current directory
-        current_dir_json = Path("matsimpy_menu.json")
-        if current_dir_json.exists():
-            json_file = str(current_dir_json)
-        else:
-            # Check in the package directory
-            package_dir = Path(__file__).parent
-            package_json = package_dir / "matsimpy_menu.json"
-            if package_json.exists():
-                json_file = str(package_json)
+        # First, try to find it as package data (if installed)
+        try:
+            import pkg_resources
+            json_file = pkg_resources.resource_filename("matsimpy.ui.cli", "matsimpy_menu.json")
+            if not os.path.exists(json_file):
+                json_file = None
+        except (ImportError, pkg_resources.DistributionNotFound, pkg_resources.ResourceNotFound):
+            json_file = None
+        
+        # If not found as package data, check other locations
+        if json_file is None:
+            # Check current directory
+            current_dir_json = Path("matsimpy_menu.json")
+            if current_dir_json.exists():
+                json_file = str(current_dir_json)
             else:
-                # Check in parent directories
-                for parent in Path(__file__).parents:
-                    parent_json = parent / "matsimpy_menu.json"
-                    if parent_json.exists():
-                        json_file = str(parent_json)
-                        break
+                # Check in the package directory
+                package_dir = Path(__file__).parent
+                package_json = package_dir / "matsimpy_menu.json"
+                if package_json.exists():
+                    json_file = str(package_json)
+                else:
+                    # Check in parent directories
+                    for parent in Path(__file__).parents:
+                        parent_json = parent / "matsimpy_menu.json"
+                        if parent_json.exists():
+                            json_file = str(parent_json)
+                            break
     
     if json_file is None:
         print("Error: Could not find matsimpy_menu.json file.")
