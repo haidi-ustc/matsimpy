@@ -426,13 +426,17 @@ class Structure(ABC, MSONable):
                 self._sites = self._initialize_sites()
 
     @abstractmethod
-    def get_neighbor_list(self, *args, **kwargs):
+    def get_neighbor_list(self, *args, **kwargs) -> Dict[int, List[Tuple[int, float]]]:
         """
         Get neighbor list. Must be implemented by subclasses.
 
-        Note: Subclasses (Crystal and Molecule) have different signatures:
+        Returns:
+            Dict mapping atom index to list of (neighbor_index, distance) tuples.
+            All subclasses return the same consistent type.
+
+        Note: Subclasses have different signatures but same return type:
         - Crystal: get_neighbor_list(cutoff, use_pbc=True) -> Dict[int, List[Tuple[int, float]]]
-        - Molecule: get_neighbor_list(atom_index, cutoff) -> List[int]
+        - Molecule: get_neighbor_list(atom_index, cutoff) -> Dict[int, List[Tuple[int, float]]]
 
         Raises:
             NotImplementedError: If not implemented by subclass

@@ -480,16 +480,19 @@ class Molecule(Structure):
         # eigenvalues, eigenvectors = np.linalg.eigh(moment_tensor)
         return moment_tensor
 
-    def get_neighbor_list(self, atom_index: int, cutoff: float) -> List[int]:
+    def get_neighbor_list(
+        self, atom_index: int, cutoff: float
+    ) -> Dict[int, List[Tuple[int, float]]]:
         """
-        Get list of atoms within cutoff radius of specified atom.
+        Get neighbor list for specified atom with distances.
 
         Args:
             atom_index: Index of the target atom.
             cutoff: Cutoff radius in Angstroms.
 
         Returns:
-            List of indices of neighboring atoms within cutoff distance.
+            Dict mapping atom index to list of (neighbor_index, distance) tuples.
+            Only contains the entry for the requested atom_index.
 
         Raises:
             IndexError: If atom_index is out of range.
@@ -497,7 +500,8 @@ class Molecule(Structure):
         Examples:
             >>> molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
             >>> neighbors = molecule.get_neighbor_list(0, 2.0)
-            >>> print(neighbors)  # [1] - atom 1 is within 2.0 Å
+            >>> print(neighbors)  # {0: [(1, 1.2)]} - atom 1 is within 2.0 Å
+            >>> print(neighbors[0])  # [(1, 1.2)] - list of (neighbor_index, distance) tuples
         """
         if not (0 <= atom_index < len(self)):
             raise IndexError(
@@ -506,9 +510,11 @@ class Molecule(Structure):
 
         distances = cdist([self.positions[atom_index]], self.positions)[0]
         neighbors = [
-            i for i, d in enumerate(distances) if d < cutoff and i != atom_index
+            (i, float(d))
+            for i, d in enumerate(distances)
+            if d < cutoff and i != atom_index
         ]
-        return neighbors
+        return {atom_index: neighbors}
 
     def get_all_neighbor_lists(self, cutoff: float) -> List[List[int]]:
         """

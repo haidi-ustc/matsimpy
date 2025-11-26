@@ -392,7 +392,11 @@ class TestStructureNeighborList(unittest.TestCase):
         """Test that get_neighbor_list is implemented in Molecule."""
         # Molecule implements get_neighbor_list with different signature
         neighbors = self.struct.get_neighbor_list(0, 5.0)
-        self.assertIsInstance(neighbors, list)
+        self.assertIsInstance(neighbors, dict)
+        # Check that it contains the requested atom index
+        self.assertIn(0, neighbors)
+        # Check that values are lists of tuples
+        self.assertIsInstance(neighbors[0], list)
 
 
 if __name__ == '__main__':

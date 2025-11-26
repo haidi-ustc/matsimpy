@@ -155,8 +155,11 @@ class TestMoleculeComprehensive(unittest.TestCase):
         molecule = Molecule(species, positions)
         
         neighbors = molecule.get_neighbor_list(0, cutoff=2.0)
-        self.assertIsInstance(neighbors, list)
-        self.assertIn(1, neighbors)  # O should be neighbor of C
+        self.assertIsInstance(neighbors, dict)
+        self.assertIn(0, neighbors)
+        # Extract neighbor indices from tuples
+        neighbor_indices = [idx for idx, _ in neighbors[0]]
+        self.assertIn(1, neighbor_indices)  # O should be neighbor of C
     
     def test_molecule_neighbor_list_no_neighbors(self):
         """Test neighbor list with cutoff too small."""
@@ -165,7 +168,9 @@ class TestMoleculeComprehensive(unittest.TestCase):
         molecule = Molecule(species, positions)
         
         neighbors = molecule.get_neighbor_list(0, cutoff=1.0)
-        self.assertEqual(len(neighbors), 0)
+        self.assertIsInstance(neighbors, dict)
+        self.assertIn(0, neighbors)
+        self.assertEqual(len(neighbors[0]), 0)
     
     def test_molecule_all_neighbor_lists(self):
         """Test all neighbor lists."""

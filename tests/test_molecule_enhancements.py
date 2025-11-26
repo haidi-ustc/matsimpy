@@ -153,7 +153,9 @@ class TestMoleculeNeighborListOptimization(unittest.TestCase):
         all_neighbors = mol.get_all_neighbor_lists(cutoff)
         
         for i in range(len(mol)):
-            single_neighbors = mol.get_neighbor_list(i, cutoff)
+            single_neighbors_dict = mol.get_neighbor_list(i, cutoff)
+            # Extract neighbor indices from tuples
+            single_neighbors = [idx for idx, _ in single_neighbors_dict[i]]
             self.assertEqual(sorted(all_neighbors[i]), sorted(single_neighbors))
     
     def test_get_all_neighbor_lists_large_cutoff(self):
