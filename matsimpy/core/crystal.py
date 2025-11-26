@@ -163,8 +163,8 @@ class Crystal(Structure):
 
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
-            ValueError: If duplicate positions are detected (distance < 1e-6 Å).
-            ValueError: If atoms are too close (distance < 0.5 Å).
+            ValueError: If duplicate positions are detected (distance < 1e-6 Angstrom).
+            ValueError: If atoms are too close (distance < 0.5 Angstrom).
 
         Examples:
             >>> from matsimpy.core import Crystal, Lattice
@@ -239,8 +239,8 @@ class Crystal(Structure):
                 i, j = np.where(np.abs(distances_square - min_dist) < 1e-10)
                 raise ValueError(
                     f"Atoms being added are too close: distance between "
-                    f"positions {i[0]} and {j[0]} is {min_dist:.6f} Å. "
-                    f"Minimum allowed distance is 0.5 Å."
+                    f"positions {i[0]} and {j[0]} is {min_dist:.6f} Angstrom. "
+                    f"Minimum allowed distance is 0.5 Angstrom."
                 )
 
         # Check each new position against existing atoms (with PBC)
@@ -261,13 +261,13 @@ class Crystal(Structure):
                     if min_dist < 1e-6:
                         raise ValueError(
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
-                            f"atom already exists at this location (distance: {min_dist:.6f} Å)."
+                            f"atom already exists at this location (distance: {min_dist:.6f} Angstrom)."
                         )
                     elif min_dist < 0.5:
                         raise ValueError(
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
-                            f"too close to existing atom (distance: {min_dist:.6f} Å). "
-                            f"Minimum allowed distance is 0.5 Å."
+                            f"too close to existing atom (distance: {min_dist:.6f} Angstrom). "
+                            f"Minimum allowed distance is 0.5 Angstrom."
                         )
             else:
                 # PBC case: need minimum image convention
@@ -301,13 +301,13 @@ class Crystal(Structure):
                     if min_dist < 1e-6:
                         raise ValueError(
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
-                            f"atom already exists at this location (distance: {min_dist:.6f} Å)."
+                            f"atom already exists at this location (distance: {min_dist:.6f} Angstrom)."
                         )
                     elif min_dist < 0.5:
                         raise ValueError(
                             f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
-                            f"too close to existing atom (distance: {min_dist:.6f} Å). "
-                            f"Minimum allowed distance is 0.5 Å."
+                            f"too close to existing atom (distance: {min_dist:.6f} Angstrom). "
+                            f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
         # Store complete state for rollback in case of exception
@@ -740,7 +740,19 @@ class Crystal(Structure):
                     f"Atom index {atom_index} is out of range [0, {n_atoms-1}]"
                 )
 
-        # Query neighbors
+        # Optimization: For single-atom queries without PBC on small structures,
+        # direct calculation is faster than building KDTree
+        if atom_index is not None and not use_pbc and n_atoms < 1000:
+            pos = self.cart_positions[atom_index]
+            distances = np.linalg.norm(self.cart_positions - pos, axis=1)
+            neighbors = [
+                (i, float(distances[i]))
+                for i in range(n_atoms)
+                if i != atom_index and distances[i] < cutoff
+            ]
+            return {atom_index: neighbors}
+
+        # Query neighbors using KDTree
         neighbors_dict = {}
         # Determine which atoms to query
         atoms_to_query = [atom_index] if atom_index is not None else range(n_atoms)

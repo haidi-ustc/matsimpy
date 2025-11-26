@@ -101,7 +101,7 @@ class Molecule(Structure):
         self.positions += np.array(vector)
         # Invalidate center of mass cache
         if hasattr(self, "_cached_com"):
-            del self._cached_com
+            self._cached_com = None
         # Update sites
         self._sites = self._initialize_sites()
 
@@ -122,7 +122,7 @@ class Molecule(Structure):
         self.positions = rotation.apply(self.positions)
         # Invalidate center of mass cache
         if hasattr(self, "_cached_com"):
-            del self._cached_com
+            self._cached_com = None
         # Update sites
         self._sites = self._initialize_sites()
 
@@ -189,7 +189,7 @@ class Molecule(Structure):
                         raise ValueError(
                             f"Atoms being added are too close: distance between "
                             f"positions {i} and {j} is {dist:.6f} Å. "
-                            f"Minimum allowed distance is 0.5 Å."
+                            f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
         # Check each new position against existing atoms
@@ -209,7 +209,7 @@ class Molecule(Structure):
                         raise ValueError(
                             f"Cannot add atom at position {new_pos}: too close to existing "
                             f"atom (distance: {min_distance:.6f} Å). "
-                            f"Minimum allowed distance is 0.5 Å."
+                            f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
         # Determine number of atoms being added
@@ -222,7 +222,7 @@ class Molecule(Structure):
 
         # Invalidate center of mass cache
         if hasattr(self, "_cached_com"):
-            del self._cached_com
+            self._cached_com = None
 
         # Update site properties
         if site_properties is not None:

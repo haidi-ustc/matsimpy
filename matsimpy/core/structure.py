@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Union, Optional, Dict, Tuple
+from typing import List, Union, Optional, Dict, Tuple, Any
 import hashlib
 from collections import Counter
 from abc import ABC, abstractmethod
@@ -98,15 +98,15 @@ class Structure(ABC, MSONable):
         return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[str, Any]) -> "Structure":
         """
         Constructs the structure from a dictionary.
 
         Args:
-            d (dict): Dictionary representation of the structure.
+            d: Dictionary representation of the structure.
 
         Returns:
-            (Structure): Structure object.
+            Structure object.
         """
         species = d["species"]
         positions = d["positions"]
@@ -173,7 +173,9 @@ class Structure(ABC, MSONable):
 
         # Use hashlib to generate a SHA256 hash
         hash_str = str(hash_dict).encode("utf-8")
-        return int(hashlib.sha256(hash_str).hexdigest(), 16)
+        hash_bytes = hashlib.sha256(hash_str).digest()
+        # Use first 8 bytes for standard Python hash size (64-bit)
+        return int.from_bytes(hash_bytes[:8], byteorder='big', signed=True)
 
     def __eq__(self, other):
         """

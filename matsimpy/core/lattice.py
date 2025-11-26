@@ -404,7 +404,9 @@ class Lattice(MSONable):
 
         hash_dict = self.as_dict()
         hash_str = str(hash_dict).encode("utf-8")
-        return int(hashlib.sha256(hash_str).hexdigest(), 16)
+        hash_bytes = hashlib.sha256(hash_str).digest()
+        # Use first 8 bytes for standard Python hash size (64-bit)
+        return int.from_bytes(hash_bytes[:8], byteorder='big', signed=True)
 
     def __eq__(self, other):
         """
