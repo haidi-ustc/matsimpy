@@ -107,8 +107,8 @@ class TestMoleculeComprehensive(unittest.TestCase):
         # Verify cache exists
         self.assertTrue(hasattr(molecule, '_cached_com'))
         molecule.rotate(90, [0, 0, 1])
-        # Cache should be invalidated
-        self.assertFalse(hasattr(molecule, '_cached_com'))
+        # Cache should be invalidated (set to None instead of deleted)
+        self.assertIsNone(getattr(molecule, '_cached_com', None))
         com2 = molecule.get_center_of_mass()
         # Should recalculate (may be same or different depending on rotation)
         self.assertIsNotNone(com2)

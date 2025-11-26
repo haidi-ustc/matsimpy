@@ -232,8 +232,8 @@ class TestMoleculeAddMultipleAtoms(unittest.TestCase):
         # Add atoms
         self.molecule.add_atom(['O', 'O'], [[1, 0, 0], [2, 0, 0]])
         
-        # Cache should be invalidated
-        self.assertFalse(hasattr(self.molecule, '_cached_com'))
+        # Cache should be invalidated (set to None instead of deleted)
+        self.assertIsNone(getattr(self.molecule, '_cached_com', None))
     
     def test_sites_updated(self):
         """Test that sites list is updated."""

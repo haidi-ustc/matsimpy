@@ -79,7 +79,7 @@ class Molecule(Structure):
             >>> com = molecule.get_center_of_mass()
             >>> print(com)  # Weighted average based on C and O masses
         """
-        if not hasattr(self, "_cached_com"):
+        if not hasattr(self, "_cached_com") or self._cached_com is None:
             # Use cached Element instances for better performance
             masses = np.array(
                 [Element.get_element(specie).atomic_mass for specie in self.species]
