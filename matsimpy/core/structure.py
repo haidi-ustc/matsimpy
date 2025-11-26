@@ -119,15 +119,24 @@ class Structure(ABC, MSONable):
     def formula(self) -> str:
         """
         Calculates the chemical formula of the structure with caching.
+        
+        Preserves the original order of elements as they appear in the structure,
+        rather than sorting alphabetically or by atomic number.
 
         Returns:
             (str): Chemical formula of the structure.
         """
         if self._cached_formula is None or self._formula_dirty:
             element_counter = Counter(self.species)
+            # Preserve original order by iterating through species in order
+            # and tracking which elements we've already added
+            seen = set()
             formula = ""
-            for element, count in sorted(element_counter.items()):
-                formula += element + (str(count) if count > 1 else "")
+            for element in self.species:
+                if element not in seen:
+                    count = element_counter[element]
+                    formula += element + (str(count) if count > 1 else "")
+                    seen.add(element)
             self._cached_formula = formula
             self._formula_dirty = False
         return self._cached_formula
