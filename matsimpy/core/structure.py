@@ -67,11 +67,14 @@ class Structure(ABC, MSONable):
             )
 
         self.species = tuple(species_list)  # Make immutable
-        self.positions = np.array(positions, dtype=np.float64)
+        self._positions = self._validate_positions(positions)
 
-        # Validate positions are 3D
-        if self.positions.ndim != 2 or self.positions.shape[1] != 3:
-            raise ValueError("Positions must be a list of 3D coordinates")
+        # Validate positions match species count
+        if len(self._positions) != len(self.species):
+            raise ValueError(
+                f"Number of positions ({len(self._positions)}) must match "
+                f"number of species ({len(self.species)})"
+            )
 
         self.lattice = lattice
 
@@ -79,6 +82,103 @@ class Structure(ABC, MSONable):
         self._cached_composition: Optional[Composition] = None
         self._cached_formula: Optional[str] = None
         self._formula_dirty = True
+
+    def _validate_positions(self, positions: Union[List, np.ndarray]) -> np.ndarray:
+        """
+        Validate and convert positions to proper numpy array format.
+
+        Args:
+            positions: Input positions (list of lists, numpy array, etc.)
+
+        Returns:
+            np.ndarray: Validated positions array of shape (n_atoms, 3)
+
+        Raises:
+            ValueError: If positions are not 2D with 3 columns.
+            TypeError: If positions cannot be converted to numeric array.
+        """
+        # Convert to numpy array
+        try:
+            positions_array = np.array(positions, dtype=np.float64)
+        except (ValueError, TypeError) as e:
+            raise TypeError(
+                f"Positions must be convertible to numeric array: {e}"
+            ) from e
+
+        # Handle 1D input (single position) - this should be an error for Structure
+        if positions_array.ndim == 1:
+            if len(positions_array) == 3:
+                raise ValueError(
+                    "Positions must be a 2D array (list of 3D coordinates). "
+                    f"Got 1D array with shape {positions_array.shape}. "
+                    "For a single atom, use [[x, y, z]] instead of [x, y, z]."
+                )
+            else:
+                raise ValueError(
+                    f"Positions must be a list of 3D coordinates. "
+                    f"Got 1D array with {len(positions_array)} elements (expected 3)."
+                )
+
+        # Validate 2D shape
+        if positions_array.ndim != 2:
+            raise ValueError(
+                f"Positions must be a 2D array (list of 3D coordinates). "
+                f"Got {positions_array.ndim}D array with shape {positions_array.shape}."
+            )
+
+        if positions_array.shape[1] != 3:
+            raise ValueError(
+                f"Each position must have 3 coordinates (x, y, z). "
+                f"Got positions with {positions_array.shape[1]} coordinates."
+            )
+
+        # Check for NaN or Inf values
+        if np.any(np.isnan(positions_array)):
+            raise ValueError("Positions cannot contain NaN values.")
+        if np.any(np.isinf(positions_array)):
+            raise ValueError("Positions cannot contain infinite values.")
+
+        return positions_array
+
+    @property
+    def positions(self) -> np.ndarray:
+        """
+        Get positions as numpy array.
+
+        Returns:
+            np.ndarray: Array of positions with shape (n_atoms, 3)
+        """
+        return self._positions
+
+    @positions.setter
+    def positions(self, positions: Union[List, np.ndarray]) -> None:
+        """
+        Set positions with validation.
+
+        Args:
+            positions: New positions (list of lists or numpy array)
+
+        Raises:
+            ValueError: If positions are invalid or don't match species count.
+        """
+        validated_positions = self._validate_positions(positions)
+
+        # Check that number of positions matches number of species
+        if len(validated_positions) != len(self.species):
+            raise ValueError(
+                f"Cannot set positions: number of positions ({len(validated_positions)}) "
+                f"must match number of species ({len(self.species)})."
+            )
+
+        self._positions = validated_positions
+
+        # Invalidate caches that depend on positions
+        if hasattr(self, "_sites"):
+            if hasattr(self, "_initialize_sites"):
+                self._sites = self._initialize_sites()
+        if hasattr(self, "_neighbor_tree"):
+            self._neighbor_tree = None
+            self._neighbor_tree_positions = None
 
     def as_dict(self):
         """
