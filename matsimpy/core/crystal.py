@@ -2,6 +2,7 @@ import numpy as np
 from tabulate import tabulate
 from typing import List, Optional, Union, Dict, Tuple, Any, Callable
 from scipy.spatial import cKDTree
+from scipy.spatial.distance import pdist, cdist, squareform
 from collections import Counter
 from .structure import Structure
 from .lattice import Lattice
@@ -191,99 +192,156 @@ class Crystal(Structure):
         else:
             new_cart_positions = np.array([]).reshape(0, 3)
 
-        # Check for duplicates within new positions
+        # Check for duplicates within new positions using vectorized operations
         if len(new_cart_positions) > 1:
-            # Check pairwise distances within new positions
-            for i in range(len(new_cart_positions)):
-                for j in range(i + 1, len(new_cart_positions)):
-                    dist = np.linalg.norm(new_cart_positions[i] - new_cart_positions[j])
-                    if dist < 1e-6:  # Essentially zero distance (duplicate)
+            # Use pdist for efficient pairwise distance calculation
+            distances_condensed = pdist(new_cart_positions)
+            if np.any(distances_condensed < 1e-6):  # Essentially zero distance (duplicate)
+                # Convert to square form to easily find indices
+                distances_square = squareform(distances_condensed)
+                # Find the pair with minimum distance (excluding diagonal)
+                np.fill_diagonal(distances_square, np.inf)
+                i, j = np.unravel_index(np.argmin(distances_square), distances_square.shape)
+                raise ValueError(
+                    f"Duplicate positions detected in new atoms: "
+                    f"positions {i} and {j} are at the same location "
+                    f"({new_frac_positions[i]})."
+                )
+            elif np.any(distances_condensed < 0.1):  # Very small distance
+                # Convert to square form to easily find indices
+                distances_square = squareform(distances_condensed)
+                # Find the pair with minimum distance (excluding diagonal)
+                np.fill_diagonal(distances_square, np.inf)
+                min_dist = np.min(distances_square)
+                i, j = np.unravel_index(np.argmin(distances_square), distances_square.shape)
+                raise ValueError(
+                    f"Atoms being added are too close: distance between "
+                    f"positions {i} and {j} is {min_dist:.6f} Å. "
+                    f"Minimum allowed distance is 0.1 Å."
+                )
+
+        # Check each new position against existing atoms (with PBC)
+        # For PBC, we need to use minimum image convention, which requires
+        # checking periodic images. This is more complex but we can still optimize.
+        if len(self.frac_positions) > 0:
+            existing_cart = self.cart_positions
+            existing_frac = self.frac_positions
+
+            # For non-PBC or when all PBC are False, use simple cdist
+            if not any(self.pbc):
+                # Simple case: no PBC, use vectorized cdist
+                distances = cdist(new_cart_positions, existing_cart)
+                min_distances = np.min(distances, axis=1)
+
+                # Check for duplicates or too close
+                for idx, min_dist in enumerate(min_distances):
+                    if min_dist < 1e-6:
                         raise ValueError(
-                            f"Duplicate positions detected in new atoms: "
-                            f"positions {i} and {j} are at the same location "
-                            f"({new_frac_positions[i]})."
+                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"atom already exists at this location (distance: {min_dist:.6f} Å)."
                         )
-                    elif dist < 0.1:  # Very small distance
+                    elif min_dist < 0.1:
                         raise ValueError(
-                            f"Atoms being added are too close: distance between "
-                            f"positions {i} and {j} is {dist:.6f} Å. "
+                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"too close to existing atom (distance: {min_dist:.6f} Å). "
+                            f"Minimum allowed distance is 0.1 Å."
+                        )
+            else:
+                # PBC case: need minimum image convention
+                # Convert to arrays for vectorized operations
+                new_frac_array = np.array(new_frac_positions)
+                existing_frac_array = np.array(existing_frac)
+
+                # Calculate fractional differences for all pairs at once
+                # Shape: (n_new, n_existing, 3)
+                frac_diffs = new_frac_array[:, np.newaxis, :] - existing_frac_array[np.newaxis, :, :]
+
+                # Apply minimum image convention for each PBC direction
+                for dim in range(3):
+                    if self.pbc[dim]:
+                        frac_diffs[:, :, dim] = frac_diffs[:, :, dim] - np.round(
+                            frac_diffs[:, :, dim]
+                        )
+
+                # Convert to Cartesian differences
+                # Shape: (n_new, n_existing, 3)
+                cart_diffs = np.dot(frac_diffs, self.lattice.matrix)
+
+                # Calculate distances
+                distances = np.linalg.norm(cart_diffs, axis=2)  # Shape: (n_new, n_existing)
+
+                # Find minimum distance for each new atom
+                min_distances = np.min(distances, axis=1)
+
+                # Check for duplicates or too close
+                for idx, min_dist in enumerate(min_distances):
+                    if min_dist < 1e-6:
+                        raise ValueError(
+                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"atom already exists at this location (distance: {min_dist:.6f} Å)."
+                        )
+                    elif min_dist < 0.1:
+                        raise ValueError(
+                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"too close to existing atom (distance: {min_dist:.6f} Å). "
                             f"Minimum allowed distance is 0.1 Å."
                         )
 
-        # Check each new position against existing atoms (with PBC)
-        if len(self.frac_positions) > 0:
-            existing_frac = self.frac_positions
-
-            for idx, new_frac_pos in enumerate(new_frac_positions):
-                # Calculate minimum distance considering PBC using minimum image convention
-                # For each existing atom, find the minimum distance across periodic images
-                min_distance = np.inf
-
-                for existing_frac_pos in existing_frac:
-                    # Calculate fractional difference
-                    frac_diff = np.array(new_frac_pos) - np.array(existing_frac_pos)
-
-                    # Apply minimum image convention for each PBC direction
-                    for dim in range(3):
-                        if self.pbc[dim]:
-                            frac_diff[dim] = frac_diff[dim] - np.round(frac_diff[dim])
-
-                    # Convert to Cartesian and calculate distance
-                    cart_diff = np.dot(frac_diff, self.lattice.matrix)
-                    dist = np.linalg.norm(cart_diff)
-                    min_distance = min(min_distance, dist)
-
-                # Raise error for duplicates or very small distances
-                if min_distance < 1e-6:  # Essentially zero distance (duplicate)
-                    raise ValueError(
-                        f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
-                        f"atom already exists at this location (distance: {min_distance:.6f} Å)."
-                    )
-                elif min_distance < 0.1:  # Very small distance
-                    raise ValueError(
-                        f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
-                        f"too close to existing atom (distance: {min_distance:.6f} Å). "
-                        f"Minimum allowed distance is 0.1 Å."
-                    )
-
-        # Determine number of atoms being added
+        # Store old state for rollback in case of exception
         n_atoms_before = len(self.species)
+        old_species = self.species
+        old_positions = self.positions.copy()
+        old_site_properties = (
+            self.site_properties.copy() if self.site_properties else None
+        )
 
-        # Call parent to add atoms
-        super().add_atom(species, position)
+        try:
+            # Call parent to add atoms
+            super().add_atom(species, position)
 
-        n_atoms_added = len(self.species) - n_atoms_before
+            n_atoms_added = len(self.species) - n_atoms_before
 
-        # Update coordinates and invalidate caches
-        self._update_coordinates_after_modification()
-        self._invalidate_neighbor_tree()
+            # Update coordinates and invalidate caches
+            self._update_coordinates_after_modification()
+            self._invalidate_neighbor_tree()
 
-        # Update site properties
-        if site_properties is not None:
-            # Normalize to list
-            if isinstance(site_properties, dict):
-                site_properties_list = [site_properties] * n_atoms_added
-            else:
-                site_properties_list = site_properties
+            # Update site properties
+            if site_properties is not None:
+                # Normalize to list
+                if isinstance(site_properties, dict):
+                    site_properties_list = [site_properties] * n_atoms_added
+                else:
+                    site_properties_list = site_properties
 
-            # Validate length
-            if len(site_properties_list) != n_atoms_added:
-                raise ValueError(
-                    f"Number of site_properties ({len(site_properties_list)}) "
-                    f"must match number of atoms added ({n_atoms_added})"
-                )
+                # Validate length
+                if len(site_properties_list) != n_atoms_added:
+                    raise ValueError(
+                        f"Number of site_properties ({len(site_properties_list)}) "
+                        f"must match number of atoms added ({n_atoms_added})"
+                    )
 
-            # Initialize site_properties if needed
-            if not self.site_properties:
-                self.site_properties = [{}] * n_atoms_before
+                # Initialize site_properties if needed
+                if not self.site_properties:
+                    self.site_properties = [{}] * n_atoms_before
 
-            self.site_properties.extend(site_properties_list)
-        elif self.site_properties:
-            # Maintain existing site_properties with empty dicts
-            self.site_properties.extend([{}] * n_atoms_added)
+                self.site_properties.extend(site_properties_list)
+            elif self.site_properties:
+                # Maintain existing site_properties with empty dicts
+                self.site_properties.extend([{}] * n_atoms_added)
 
-        # Reinitialize sites
-        self._sites = self._initialize_sites()
+            # Reinitialize sites
+            self._sites = self._initialize_sites()
+
+        except Exception as e:
+            # Rollback on failure to maintain consistency
+            self.species = old_species
+            self.positions = old_positions
+            if old_site_properties is not None:
+                self.site_properties = old_site_properties
+            # Revert coordinate updates
+            self._update_coordinates_after_modification()
+            # Re-raise the original exception
+            raise
 
     def remove_atom(self, index: int) -> None:
         """
