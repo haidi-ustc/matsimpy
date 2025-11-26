@@ -302,8 +302,11 @@ class Molecule(Structure):
             >>> # Using dict mapping (maps old species to new species)
             >>> molecule.substitute([0, 1, 2], {'C': 'N', 'O': 'S'})
         """
+        # Call parent implementation to handle the actual substitution
+        # and cache invalidation (formula, composition)
         super().substitute(indices, new_species)
-        # Update sites after substitution
+
+        # Molecule-specific updates: reinitialize sites with updated species
         self._sites = self._initialize_sites()
 
     def as_dict(self):

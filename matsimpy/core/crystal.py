@@ -36,7 +36,7 @@ class Crystal(Structure):
         self._sites = (
             self._initialize_sites()
         )  # Add this line to initialize the _sites attribute
-        self.pbc = pbc or [True, True, True]
+        self.pbc = pbc if pbc is not None else [True, True, True]
 
         # Add neighbor tree cache for optimized neighbor finding
         self._neighbor_tree: Optional[cKDTree] = None
@@ -338,9 +338,12 @@ class Crystal(Structure):
             >>> # Using dict mapping (maps old species to new species)
             >>> crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
+        # Call parent implementation to handle the actual substitution
+        # and cache invalidation (formula, composition)
         super().substitute(indices, new_species)
 
-        # Invalidate caches and reinitialize
+        # Crystal-specific updates: invalidate neighbor tree cache
+        # and reinitialize sites with updated species
         self._invalidate_neighbor_tree()
         self._sites = self._initialize_sites()
 
