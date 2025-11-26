@@ -146,6 +146,7 @@ class Crystal(Structure):
         species: Union[str, List[str]],
         position: Union[List[float], List[List[float]]],
         site_properties: Optional[Union[dict, List[dict]]] = None,
+        coords_are_cartesian: bool = False,
     ) -> None:
         """
         Add one or more atoms to the crystal structure and update coordinates.
@@ -156,10 +157,12 @@ class Crystal(Structure):
 
         Args:
             species: Atomic species (single string or list of strings).
-            position: Atomic position(s) in fractional coordinates.
-                     Either a single 3D coordinate or list of coordinates.
+            position: Atomic position(s). Either a single 3D coordinate or list of coordinates.
+                     Format depends on coords_are_cartesian parameter.
             site_properties: Optional site properties (single dict or list of dicts).
                            If list, must match length of species.
+            coords_are_cartesian: If True, positions are in Cartesian coordinates (Angstrom).
+                                If False, positions are in fractional coordinates (default).
 
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
@@ -171,15 +174,22 @@ class Crystal(Structure):
             >>> lattice = Lattice.cubic(5.0)
             >>> crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
             >>> 
-            >>> # Add single atom at fractional coordinates
+            >>> # Add single atom at fractional coordinates (default)
             >>> crystal.add_atom('H', [0.5, 0.5, 0.5])
             >>> print(len(crystal))  # 2 atoms
             2
             >>> 
-            >>> # Add multiple atoms at once
+            >>> # Add atom at Cartesian coordinates
+            >>> crystal.add_atom('O', [2.5, 2.5, 2.5], coords_are_cartesian=True)
+            >>> 
+            >>> # Add multiple atoms at once (fractional)
             >>> crystal.add_atom(['O', 'C'], [[0.25, 0.25, 0.25], [0.75, 0.75, 0.75]])
             >>> print(len(crystal))  # 4 atoms
             4
+            >>> 
+            >>> # Add multiple atoms at Cartesian coordinates
+            >>> crystal.add_atom(['H', 'O'], [[1.0, 1.0, 1.0], [3.0, 3.0, 3.0]], 
+            ...                  coords_are_cartesian=True)
             >>> 
             >>> # Add atoms with site properties
             >>> crystal.add_atom(['H', 'O'], [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]],
@@ -191,26 +201,33 @@ class Crystal(Structure):
             >>> # This will raise ValueError if atom is too close to existing atoms
             >>> # crystal.add_atom('Si', [1.0, 0.0, 0.0])  # Would be duplicate with [0,0,0] due to PBC
         """
-        # Chemical reasonableness check - validate interatomic distances with PBC
-        # Convert to array for processing
+        # Parse and normalize position input
         if isinstance(position, list):
             if len(position) == 0:
                 # Empty list - nothing to check
-                new_frac_positions = []
+                new_positions = []
             elif isinstance(position[0], (int, float)):
                 # Single position [x, y, z]
-                new_frac_positions = [position]
+                new_positions = [position]
             else:
                 # Multiple positions [[x1,y1,z1], [x2,y2,z2], ...]
-                new_frac_positions = position
+                new_positions = position
         else:
-            new_frac_positions = [position]
+            new_positions = [position]
 
-        # Convert fractional positions to Cartesian for distance calculation
-        if new_frac_positions:
-            new_frac_array = np.array(new_frac_positions, dtype=np.float64)
-            new_cart_positions = np.dot(new_frac_array, self.lattice.matrix)
+        # Convert to fractional coordinates if needed
+        if new_positions:
+            new_pos_array = np.array(new_positions, dtype=np.float64)
+            if coords_are_cartesian:
+                # Convert Cartesian to fractional
+                new_frac_positions = np.dot(new_pos_array, self.lattice.inv_matrix)
+                new_cart_positions = new_pos_array
+            else:
+                # Already fractional
+                new_frac_positions = new_pos_array
+                new_cart_positions = np.dot(new_frac_positions, self.lattice.matrix)
         else:
+            new_frac_positions = np.array([]).reshape(0, 3)
             new_cart_positions = np.array([]).reshape(0, 3)
 
         # Check for duplicates within new positions using vectorized operations
@@ -224,10 +241,12 @@ class Crystal(Structure):
                 # Find pairs with distance < 1e-6 (excluding diagonal)
                 np.fill_diagonal(distances_square, np.inf)
                 i, j = np.where(distances_square < 1e-6)
+                # Convert to list for error message
+                pos_list = new_frac_positions.tolist() if isinstance(new_frac_positions, np.ndarray) else new_frac_positions
                 raise ValueError(
                     f"Duplicate positions detected in new atoms: "
                     f"positions {i[0]} and {j[0]} are at the same location "
-                    f"({new_frac_positions[i[0]]})."
+                    f"({pos_list[i[0]]})."
                 )
             
             if np.any(distances_condensed < 0.5):  # Too close
@@ -237,6 +256,8 @@ class Crystal(Structure):
                 # Find pairs with minimum distance (excluding diagonal)
                 np.fill_diagonal(distances_square, np.inf)
                 i, j = np.where(np.abs(distances_square - min_dist) < 1e-10)
+                # Convert to list for error message
+                pos_list = new_frac_positions.tolist() if isinstance(new_frac_positions, np.ndarray) else new_frac_positions
                 raise ValueError(
                     f"Atoms being added are too close: distance between "
                     f"positions {i[0]} and {j[0]} is {min_dist:.6f} Angstrom. "
@@ -258,14 +279,15 @@ class Crystal(Structure):
 
                 # Check for duplicates or too close
                 for idx, min_dist in enumerate(min_distances):
+                    pos_repr = new_frac_positions[idx].tolist() if isinstance(new_frac_positions[idx], np.ndarray) else new_frac_positions[idx]
                     if min_dist < 1e-6:
                         raise ValueError(
-                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"Cannot add atom at position {pos_repr}: "
                             f"atom already exists at this location (distance: {min_dist:.6f} Angstrom)."
                         )
                     elif min_dist < 0.5:
                         raise ValueError(
-                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"Cannot add atom at position {pos_repr}: "
                             f"too close to existing atom (distance: {min_dist:.6f} Angstrom). "
                             f"Minimum allowed distance is 0.5 Angstrom."
                         )
@@ -298,14 +320,15 @@ class Crystal(Structure):
 
                 # Check for duplicates or too close
                 for idx, min_dist in enumerate(min_distances):
+                    pos_repr = new_frac_positions[idx].tolist() if isinstance(new_frac_positions[idx], np.ndarray) else new_frac_positions[idx]
                     if min_dist < 1e-6:
                         raise ValueError(
-                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"Cannot add atom at position {pos_repr}: "
                             f"atom already exists at this location (distance: {min_dist:.6f} Angstrom)."
                         )
                     elif min_dist < 0.5:
                         raise ValueError(
-                            f"Cannot add atom at fractional position {new_frac_positions[idx]}: "
+                            f"Cannot add atom at position {pos_repr}: "
                             f"too close to existing atom (distance: {min_dist:.6f} Angstrom). "
                             f"Minimum allowed distance is 0.5 Angstrom."
                         )
@@ -325,8 +348,27 @@ class Crystal(Structure):
         old_cached_formula = self._cached_formula
 
         try:
-            # Call parent to add atoms
-            super().add_atom(species, position)
+            # Convert fractional positions to list for parent method
+            # Parent method expects:
+            # - Single atom: position = [x, y, z] (single list)
+            # - Multiple atoms: position = [[x1, y1, z1], [x2, y2, z2], ...] (list of lists)
+            if isinstance(new_frac_positions, np.ndarray):
+                if new_frac_positions.shape[0] == 1:
+                    # Single position: extract first row as a list
+                    new_frac_list = new_frac_positions[0].tolist()
+                else:
+                    # Multiple positions: convert 2D array to list of lists
+                    new_frac_list = new_frac_positions.tolist()
+            else:
+                # Already a list
+                if len(new_frac_positions) == 1:
+                    # Single position: ensure it's a flat list
+                    new_frac_list = new_frac_positions[0] if isinstance(new_frac_positions[0], list) else list(new_frac_positions[0])
+                else:
+                    new_frac_list = new_frac_positions
+            
+            # Call parent to add atoms (parent expects fractional coordinates)
+            super().add_atom(species, new_frac_list)
 
             n_atoms_added = len(self.species) - n_atoms_before
 
