@@ -236,17 +236,17 @@ class Site(MSONable):
         self._position = self._validate_position(position)
 
     def __repr__(self) -> str:
-        """String representation of Site."""
-        props_str = f", properties={self.properties}" if self.properties else ""
-        coords_type_str = f", coords_are_cartesian={self.coords_are_cartesian}"
-        return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str}{coords_type_str})"
-
-    def __str__(self) -> str:
-        """Human-readable string representation."""
+        """Unambiguous string representation (concise, developer-friendly)."""
         props_str = f", {self.properties}" if self.properties else ""
         return (
             f"{self.specie} @ {self.position.tolist()} ({self.coords_type}){props_str}"
         )
+
+    def __str__(self) -> str:
+        """Human-readable string representation (verbose, user-friendly)."""
+        props_str = f", properties={self.properties}" if self.properties else ""
+        coords_type_str = f", coords_are_cartesian={self.coords_are_cartesian}"
+        return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str}{coords_type_str})"
 
     def __eq__(self, other) -> bool:
         """Check equality with another Site."""
@@ -432,16 +432,16 @@ class CrystalSite(Site):
         return np.dot(self._frac_position, self.lattice.matrix)
 
     def __repr__(self) -> str:
-        """String representation of CrystalSite."""
-        props_str = f", properties={self.properties}" if self.properties else ""
-        coord_type = "cartesian" if self._coords_are_cartesian else "fractional"
-        return f"CrystalSite(position={self.position.tolist()}, specie='{self.specie}'{props_str}, lattice={self.lattice}, coords_type='{coord_type}')"
-
-    def __str__(self) -> str:
-        """Human-readable string representation."""
+        """Unambiguous string representation (concise, developer-friendly)."""
         props_str = f", {self.properties}" if self.properties else ""
         coord_type = "cart" if self._coords_are_cartesian else "frac"
         return f"{self.specie} @ {self.position.tolist()} ({coord_type}){props_str}"
+
+    def __str__(self) -> str:
+        """Human-readable string representation (verbose, user-friendly)."""
+        props_str = f", properties={self.properties}" if self.properties else ""
+        coord_type = "cartesian" if self._coords_are_cartesian else "fractional"
+        return f"CrystalSite(position={self.position.tolist()}, specie='{self.specie}'{props_str}, lattice={self.lattice}, coords_type='{coord_type}')"
 
     def __eq__(self, other) -> bool:
         """Check equality with another CrystalSite."""
