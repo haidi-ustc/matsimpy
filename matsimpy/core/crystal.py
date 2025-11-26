@@ -1106,20 +1106,14 @@ class Crystal(Structure):
         """
         from ..transformation.structural import make_supercell
 
+        # The transformation function handles inplace updates directly
+        # When inplace=True, it modifies self and returns self
+        # When inplace=False, it returns a new Crystal object
         result = make_supercell(self, scaling_matrix, inplace=inplace)
-        if inplace:
-            # Update self with result's attributes
-            self.species = result.species
-            self.positions = result.positions
-            self.frac_positions = result.frac_positions
-            self.cart_positions = result.cart_positions
-            self.lattice = result.lattice
-            self.site_properties = result.site_properties
-            self._sites = result._sites
-            self._neighbor_tree = None  # Invalidate neighbor tree
-            self._neighbor_tree_positions = None
-            return self
-        return result
+        
+        # Return self if inplace (transformation already modified self),
+        # otherwise return the new object
+        return self if inplace else result
 
     def perturb(
         self,
