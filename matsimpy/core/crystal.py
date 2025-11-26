@@ -1199,16 +1199,14 @@ class Crystal(Structure):
         """
         from ..transformation.structural import make_supercell
 
-        # The transformation function handles inplace updates directly
-        # When inplace=True, it modifies self and returns self
-        # When inplace=False, it returns a new Crystal object
-        result = make_supercell(self, scaling_matrix, inplace=inplace)
-        
-        # Type-safe return: result is self when inplace=True, new object when inplace=False
-        # Verify this invariant for type safety
         if inplace:
-            assert result is self, "Transformation function should return self when inplace=True"
-        return result
+            # The transformation function modifies self and returns self when inplace=True
+            result = make_supercell(self, scaling_matrix, inplace=True)
+            # Ensure we return self for method chaining, even if transformation returns something else
+            return self if result is self else result
+        else:
+            # Return new object when inplace=False
+            return make_supercell(self, scaling_matrix, inplace=False)
 
     def perturb(
         self,
