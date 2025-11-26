@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 from tabulate import tabulate
 from typing import List, Optional, Union, Dict, Tuple, Any, Callable
 from scipy.spatial import cKDTree
@@ -584,34 +585,70 @@ class Crystal(Structure):
 
     def _get_periodic_images(self, cutoff: float) -> np.ndarray:
         """
-        Get all periodic images within cutoff.
+        Get all periodic images within cutoff using vectorized operations.
 
         Args:
             cutoff: Cutoff radius for neighbor finding
 
         Returns:
             np.ndarray: All positions including periodic images
+
+        Note:
+            For large structures with large cutoffs, this can create very large
+            arrays. Consider using a smaller cutoff or disabling PBC if memory
+            is a concern.
         """
         # Calculate number of images needed
         max_dist = np.max(np.linalg.norm(self.lattice.lattice_vectors, axis=1))
         n_images = int(np.ceil(cutoff / max_dist)) + 1
 
-        images = []
-        for i in range(-n_images, n_images + 1):
-            for j in range(-n_images, n_images + 1):
-                for k in range(-n_images, n_images + 1):
-                    if i == 0 and j == 0 and k == 0:
-                        continue
-                    shift = (
-                        i * self.lattice.lattice_vectors[0]
-                        + j * self.lattice.lattice_vectors[1]
-                        + k * self.lattice.lattice_vectors[2]
-                    )
-                    images.append(self.cart_positions + shift)
+        n_atoms = len(self.cart_positions)
+        n_total_images = (2 * n_images + 1) ** 3 - 1  # Exclude (0,0,0)
 
-        if images:
-            return np.vstack([self.cart_positions] + images)
-        return self.cart_positions
+        # Check for excessive memory usage
+        max_cache_atoms = 1_000_000  # Limit to ~1M atoms in cache
+        estimated_atoms = n_atoms * n_total_images
+        if estimated_atoms > max_cache_atoms:
+            warnings.warn(
+                f"Large periodic image cache: {estimated_atoms:,} atoms. "
+                f"This may use significant memory. Consider using a smaller cutoff "
+                f"or disabling PBC if memory is limited.",
+                UserWarning,
+            )
+
+        # Generate all translation vectors at once using meshgrid
+        i_range = np.arange(-n_images, n_images + 1)
+        j_range = np.arange(-n_images, n_images + 1)
+        k_range = np.arange(-n_images, n_images + 1)
+        i_grid, j_grid, k_grid = np.meshgrid(i_range, j_range, k_range, indexing="ij")
+
+        # Flatten and remove (0,0,0)
+        i_flat = i_grid.flatten()
+        j_flat = j_grid.flatten()
+        k_flat = k_grid.flatten()
+        mask = ~((i_flat == 0) & (j_flat == 0) & (k_flat == 0))
+        i_flat = i_flat[mask]
+        j_flat = j_flat[mask]
+        k_flat = k_flat[mask]
+
+        # Calculate all shifts at once using vectorized operations
+        # Shape: (n_images, 3)
+        shifts = (
+            i_flat[:, np.newaxis] * self.lattice.lattice_vectors[0]
+            + j_flat[:, np.newaxis] * self.lattice.lattice_vectors[1]
+            + k_flat[:, np.newaxis] * self.lattice.lattice_vectors[2]
+        )
+
+        # Add shifts to all positions using broadcasting
+        # self.cart_positions: (n_atoms, 3)
+        # shifts: (n_images, 3)
+        # Result: (n_images, n_atoms, 3) -> reshape to (n_images * n_atoms, 3)
+        image_positions = (
+            self.cart_positions[np.newaxis, :, :] + shifts[:, np.newaxis, :]
+        ).reshape(-1, 3)
+
+        # Stack original positions with image positions
+        return np.vstack([self.cart_positions, image_positions])
 
     def get_neighbor_list(
         self, cutoff: float, use_pbc: bool = True
