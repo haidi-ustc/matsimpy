@@ -24,75 +24,81 @@ class TestMoleculeAddAtomChemicalChecks(unittest.TestCase):
             # Should not warn
             self.assertEqual(len(w), 0)
     
-    def test_add_atom_small_distance_warns(self):
-        """Test that very small distances trigger warning."""
+    def test_add_atom_small_distance_raises_error(self):
+        """Test that very small distances raise ValueError."""
         mol = Molecule(['C'], [[0, 0, 0]])
         
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            mol.add_atom('O', [0.3, 0, 0])  # 0.3 Å is too close
-            
-            # Should warn
-            self.assertEqual(len(w), 1)
-            self.assertTrue(issubclass(w[0].category, UserWarning))
-            self.assertIn("small interatomic distance", str(w[0].message).lower())
-            self.assertIn("0.3", str(w[0].message))
+        # 0.3 Å is too close - should raise ValueError
+        with self.assertRaises(ValueError) as context:
+            mol.add_atom('O', [0.3, 0, 0])
+        
+        # Should mention distance and threshold
+        msg = str(context.exception)
+        self.assertIn("too close", msg.lower())
+        self.assertIn("0.3", msg)
+        self.assertIn("0.5", msg)
     
-    def test_add_atom_at_boundary_warns(self):
-        """Test warning at 0.5 Å boundary."""
+    def test_add_atom_at_boundary_raises_error(self):
+        """Test ValueError at 0.5 Å boundary."""
         mol = Molecule(['C'], [[0, 0, 0]])
         
-        # Just below threshold - should warn
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        # Just below threshold - should raise ValueError
+        with self.assertRaises(ValueError) as context:
             mol.add_atom('O', [0.4, 0, 0])
-            self.assertEqual(len(w), 1)
+        msg = str(context.exception)
+        self.assertIn("too close", msg.lower())
+        self.assertIn("0.5", msg)
         
-        # Just above threshold - should not warn
+        # Just above threshold - should succeed
         mol2 = Molecule(['C'], [[0, 0, 0]])
         with warnings.catch_warnings(record=True) as w2:
             warnings.simplefilter("always")
             mol2.add_atom('O', [0.6, 0, 0])
-            self.assertEqual(len(w2), 0)
+            self.assertEqual(len(w2), 0)  # No warnings
+            self.assertEqual(len(mol2), 2)  # Atom added successfully
     
     def test_add_multiple_atoms_checks_all(self):
         """Test that all new atoms are checked for distances."""
         mol = Molecule(['C'], [[0, 0, 0]])
         
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            # Add two atoms, one too close
+        # Add two atoms, one too close - should raise ValueError
+        with self.assertRaises(ValueError) as context:
             mol.add_atom(['O', 'H'], [[0.3, 0, 0], [2.0, 0, 0]])
-            
-            # Should warn about the close one
-            self.assertGreater(len(w), 0)
-            self.assertIn("0.3", str(w[0].message))
+        
+        # Should mention the close atom
+        msg = str(context.exception)
+        self.assertIn("too close", msg.lower())
+        self.assertIn("0.3", msg)
     
-    def test_add_atom_to_empty_molecule_no_warning(self):
-        """Test that first atom doesn't trigger warning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            mol = Molecule(['C'], [[0, 0, 0]])
-            mol.add_atom('O', [0.3, 0, 0])  # Second atom can be close
-            
-            # Only one warning (for second atom being close to first)
-            self.assertEqual(len(w), 1)
+    def test_add_atom_to_empty_molecule_no_error(self):
+        """Test that first atom doesn't trigger error."""
+        # Start with one atom
+        mol = Molecule(['C'], [[0, 0, 0]])
+        self.assertEqual(len(mol), 1)
+        
+        # Second atom too close - should raise ValueError
+        with self.assertRaises(ValueError):
+            mol.add_atom('O', [0.3, 0, 0])  # 0.3 Å is too close
+        
+        # Second atom at acceptable distance - should succeed
+        mol2 = Molecule(['C'], [[0, 0, 0]])
+        mol2.add_atom('O', [0.6, 0, 0])  # 0.6 Å >= 0.5 Å threshold
+        self.assertEqual(len(mol2), 2)
     
-    def test_warning_message_content(self):
-        """Test that warning message is helpful."""
+    def test_error_message_content(self):
+        """Test that error message is helpful."""
         mol = Molecule(['C'], [[0, 0, 0]])
         
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        with self.assertRaises(ValueError) as context:
             mol.add_atom('O', [0.2, 0, 0])
-            
-            msg = str(w[0].message)
-            # Should mention distance
-            self.assertIn("0.2", msg)
-            # Should mention it's small
-            self.assertIn("small", msg.lower())
-            # Should suggest possible causes
-            self.assertTrue("units" in msg.lower() or "overlapping" in msg.lower())
+        
+        msg = str(context.exception)
+        # Should mention distance
+        self.assertIn("0.2", msg)
+        # Should mention it's too close
+        self.assertIn("too close", msg.lower())
+        # Should mention the threshold
+        self.assertIn("0.5", msg)
 
 
 class TestMoleculeNeighborListOptimization(unittest.TestCase):
@@ -231,19 +237,20 @@ class TestMoleculeIntegration(unittest.TestCase):
         self.assertIn(1, neighbors[0])
         self.assertIn(0, neighbors[1])
     
-    def test_add_close_atom_and_verify(self):
-        """Test adding close atom with warning, then verify distance."""
+    def test_add_close_atom_raises_error(self):
+        """Test that adding close atom raises ValueError."""
         mol = Molecule(['C'], [[0, 0, 0]])
         
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        # 0.3 Å is too close - should raise ValueError
+        with self.assertRaises(ValueError) as context:
             mol.add_atom('O', [0.3, 0, 0])
-            self.assertEqual(len(w), 1)
         
-        # Verify actual distance
-        from scipy.spatial.distance import cdist
-        dist = cdist([mol.positions[0]], [mol.positions[1]])[0][0]
-        self.assertAlmostEqual(dist, 0.3, places=5)
+        msg = str(context.exception)
+        self.assertIn("too close", msg.lower())
+        self.assertIn("0.3", msg)
+        
+        # Verify atom was not added
+        self.assertEqual(len(mol), 1)
     
     def test_multiple_operations_consistency(self):
         """Test consistency across multiple operations."""
