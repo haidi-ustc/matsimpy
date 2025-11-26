@@ -419,25 +419,64 @@ class Crystal(Structure):
             # Re-raise the original exception
             raise
 
-    def remove_atom(self, index: int) -> None:
+    def remove_atom(
+        self, indices: Union[int, List[int], "AtomSelection"]
+    ) -> None:
         """
-        Remove an atom from the crystal structure and update coordinates.
+        Remove one or more atoms from the crystal structure and update coordinates.
 
         Args:
-            index: Index of atom to be removed.
+            indices: Atom index, list of indices, or AtomSelection object to remove.
+                    If list, atoms are removed in reverse order to avoid index shifting.
 
         Raises:
-            IndexError: If index is out of range.
-        """
-        super().remove_atom(index)
+            IndexError: If any index is out of range.
+            ValueError: If AtomSelection is from a different structure.
 
-        # Update coordinates and caches
+        Examples:
+            >>> crystal.remove_atom(0)  # Remove atom at index 0
+            >>> crystal.remove_atom([0, 1, 2])  # Remove multiple atoms
+            >>> # Using AtomSelection
+            >>> from matsimpy.utils.selection import AtomSelection
+            >>> sel = AtomSelection(crystal).by_species('H')
+            >>> crystal.remove_atom(sel)  # Remove selected atoms
+        """
+        # Handle AtomSelection object
+        from ..utils.selection import AtomSelection
+
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
+
+        # Normalize to list
+        if isinstance(indices, int):
+            indices = [indices]
+        elif not isinstance(indices, list):
+            raise TypeError(
+                f"indices must be int, list of int, or AtomSelection, got {type(indices)}"
+            )
+
+        # Validate all indices
+        n_atoms = len(self.species)
+        for idx in indices:
+            if not (0 <= idx < n_atoms):
+                raise IndexError(f"Atom index {idx} is out of range [0, {n_atoms-1}]")
+
+        # Remove duplicates and sort in reverse order to avoid index shifting
+        indices_to_remove = sorted(set(indices), reverse=True)
+
+        # Remove atoms one by one in reverse order
+        for idx in indices_to_remove:
+            super().remove_atom(idx)
+
+            # Update site properties
+            if self.site_properties and len(self.site_properties) > idx:
+                self.site_properties.pop(idx)
+
+        # Update coordinates and caches (only once after all removals)
         self._update_coordinates_after_modification()
         self._invalidate_neighbor_tree()
-
-        # Update site properties
-        if self.site_properties and len(self.site_properties) > index:
-            self.site_properties.pop(index)
 
         # Reinitialize sites
         self._sites = self._initialize_sites()
