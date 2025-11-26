@@ -148,10 +148,11 @@ class Crystal(Structure):
         site_properties: Optional[Union[dict, List[dict]]] = None,
     ) -> None:
         """
-        Adds one or more atoms to the crystal structure and updates coordinates.
+        Add one or more atoms to the crystal structure and update coordinates.
 
         Performs chemical reasonableness checks on interatomic distances with PBC support.
         Prevents adding duplicate atoms at the same position or atoms that are too close.
+        Uses periodic boundary conditions to check distances across unit cell boundaries.
 
         Args:
             species: Atomic species (single string or list of strings).
@@ -166,10 +167,29 @@ class Crystal(Structure):
             ValueError: If atoms are too close (distance < 0.1 Å).
 
         Examples:
-            >>> crystal.add_atom('H', [0, 0, 0])  # Add single atom
-            >>> crystal.add_atom(['H', 'O'], [[0, 0, 0], [0.5, 0, 0]])  # Add multiple
-            >>> crystal.add_atom(['H', 'O'], [[0, 0, 0], [0.5, 0, 0]],
-            ...                  [{'charge': 1}, {'charge': -2}])  # With properties
+            >>> from matsimpy.core import Crystal, Lattice
+            >>> lattice = Lattice.cubic(5.0)
+            >>> crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
+            >>> 
+            >>> # Add single atom at fractional coordinates
+            >>> crystal.add_atom('H', [0.5, 0.5, 0.5])
+            >>> print(len(crystal))  # 2 atoms
+            2
+            >>> 
+            >>> # Add multiple atoms at once
+            >>> crystal.add_atom(['O', 'C'], [[0.25, 0.25, 0.25], [0.75, 0.75, 0.75]])
+            >>> print(len(crystal))  # 4 atoms
+            4
+            >>> 
+            >>> # Add atoms with site properties
+            >>> crystal.add_atom(['H', 'O'], [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]],
+            ...                  [{'charge': 1.0, 'magmom': 0.5}, {'charge': -2.0}])
+            >>> print(crystal.site_properties[4])  # {'charge': 1.0, 'magmom': 0.5}
+            {'charge': 1.0, 'magmom': 0.5}
+            >>> 
+            >>> # PBC-aware distance checking prevents duplicates across boundaries
+            >>> # This will raise ValueError if atom is too close to existing atoms
+            >>> # crystal.add_atom('Si', [1.0, 0.0, 0.0])  # Would be duplicate with [0,0,0] due to PBC
         """
         # Chemical reasonableness check - validate interatomic distances with PBC
         # Convert to array for processing
@@ -1173,9 +1193,11 @@ class Crystal(Structure):
         # When inplace=False, it returns a new Crystal object
         result = make_supercell(self, scaling_matrix, inplace=inplace)
         
-        # Return self if inplace (transformation already modified self),
-        # otherwise return the new object
-        return self if inplace else result
+        # Type-safe return: result is self when inplace=True, new object when inplace=False
+        # Verify this invariant for type safety
+        if inplace:
+            assert result is self, "Transformation function should return self when inplace=True"
+        return result
 
     def perturb(
         self,
