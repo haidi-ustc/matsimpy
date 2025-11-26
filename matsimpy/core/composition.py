@@ -37,13 +37,14 @@ class Composition(MSONable):
         18.01528
     """
 
-    def __init__(self, formula: str, sort_by: str = "element"):
+    def __init__(self, formula: str, sort_by: Optional[str] = None):
         """
         Initialize Composition from chemical formula.
 
         Args:
             formula: Chemical formula string.
-            sort_by: Sorting method - 'alphabet' or 'element'.
+            sort_by: Sorting method - None (preserve original order), 'alphabet', or 'element'.
+                    Default is None to preserve input formula order.
 
         Raises:
             ValueError: If formula is empty or invalid.
@@ -51,8 +52,8 @@ class Composition(MSONable):
         # Initialize element cache for performance
         self._element_cache: Dict[str, Element] = {}
 
-        # Parse and validate formula
-        self.composition = self._parse_formula(formula)
+        # Parse and validate formula, tracking element order
+        self.composition, self._element_order = self._parse_formula(formula)
         self.formula = self._chemical_formula(sort_by=sort_by)
 
         # Cache for mass calculation
@@ -63,7 +64,7 @@ class Composition(MSONable):
         Generate chemical formula string from composition.
 
         Args:
-            sort_by: Sorting method - None (original order), 'alphabet', or 'element'.
+            sort_by: Sorting method - None (preserve original order), 'alphabet', or 'element'.
 
         Returns:
             Formatted chemical formula string.
@@ -73,7 +74,22 @@ class Composition(MSONable):
         """
         element_counts = self.composition
         if sort_by is None:
-            elements = list(element_counts.items())
+            # Preserve original order from input formula
+            if hasattr(self, '_element_order'):
+                # Use tracked order, then add any elements not in order (from parentheses)
+                seen = set()
+                elements = []
+                for element in self._element_order:
+                    if element in element_counts:
+                        elements.append((element, element_counts[element]))
+                        seen.add(element)
+                # Add any remaining elements (from parentheses) in Counter order
+                for element, count in element_counts.items():
+                    if element not in seen:
+                        elements.append((element, count))
+            else:
+                # Fallback: use Counter order
+                elements = list(element_counts.items())
         else:
             elements = self._get_sorted_element_counts(element_counts, sort_by)
 
@@ -115,9 +131,9 @@ class Composition(MSONable):
                 f"sort_by must be None, 'alphabet', or 'element', got '{sort_by}'"
             )
 
-    def _parse_formula(self, formula: str) -> Counter:
+    def _parse_formula(self, formula: str) -> Tuple[Counter, List[str]]:
         """
-        Parse chemical formula into element counts.
+        Parse chemical formula into element counts, preserving element order.
 
         Supports formulas with parentheses, e.g., Ca(OH)2.
 
@@ -125,17 +141,18 @@ class Composition(MSONable):
             formula: Chemical formula string.
 
         Returns:
-            Counter mapping element symbols to counts.
+            Tuple of (Counter mapping element symbols to counts, list of elements in order).
 
         Raises:
             ValueError: If formula is empty or has invalid format.
 
         Examples:
             >>> c = Composition('H2O')
-            >>> c._parse_formula('H2O')
+            >>> comp, order = c._parse_formula('H2O')
+            >>> comp
             Counter({'H': 2, 'O': 1})
-            >>> c._parse_formula('Ca(OH)2')
-            Counter({'Ca': 1, 'O': 2, 'H': 2})
+            >>> order
+            ['H', 'O']
         """
         # Validate formula
         if not formula or not formula.strip():
@@ -148,31 +165,37 @@ class Composition(MSONable):
                 f"Formula must contain only letters, numbers, and parentheses."
             )
 
-        def parse_subformula(sub_formula, count):
+        def parse_subformula(sub_formula, count, track_order=True):
             """Parse a subformula and add to composition."""
             sub_counts = re.findall(element_pattern, sub_formula)
             for element, sub_count in sub_counts:
                 composition[element] += (int(sub_count) if sub_count else 1) * count
+                if track_order and element not in element_order:
+                    element_order.append(element)
 
         element_pattern = r"([A-Z][a-z]*)(\d*)"
         group_pattern = r"\(([^\)]+)\)(\d*)"
 
         composition = Counter()
+        element_order = []  # Track order of elements as they appear
 
-        # Parse groups (parentheses)
+        # Store original formula for order tracking
+        original_formula = formula
+
+        # Parse groups (parentheses) - elements in groups don't affect main order
         groups = re.findall(group_pattern, formula)
         for group, count in groups:
-            parse_subformula(group, int(count) if count else 1)
+            parse_subformula(group, int(count) if count else 1, track_order=False)
             formula = formula.replace(f"({group}){count}", "")
 
-        # Parse remaining formula
-        parse_subformula(formula, 1)
+        # Parse remaining formula - this determines the main order
+        parse_subformula(formula, 1, track_order=True)
 
         # Validate that we got some elements
         if not composition:
             raise ValueError("No valid elements found in formula")
 
-        return composition
+        return composition, element_order
 
     def _get_cached_element(self, symbol: str) -> Element:
         """
@@ -304,7 +327,8 @@ class Composition(MSONable):
             Composition instance.
         """
         formula = d["formula"]
-        return cls(formula=formula)
+        # Preserve original order by default
+        return cls(formula=formula, sort_by=None)
 
     def to_json(self) -> str:
         """
