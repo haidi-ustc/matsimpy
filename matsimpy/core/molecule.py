@@ -398,9 +398,9 @@ class Molecule(Structure):
         """
         Human-readable string representation of Molecule.
 
-        Note: Atoms are displayed sorted by atomic number for readability,
-        but the internal structure (species, positions) maintains the original order.
-        Use sort_atoms() if you want to actually reorder the internal data.
+        Note: Atoms are displayed in their original insertion order to match
+        the internal structure (species, positions). Use sort_atoms() if you
+        want to actually reorder the internal data.
         """
         from tabulate import tabulate
 
@@ -420,20 +420,11 @@ class Molecule(Structure):
         if has_properties:
             headers.append("Properties")
 
-        # Sort sites by element for display only (by atomic number, then by Cartesian coordinates)
-        # Note: This does NOT change the internal order - just for display
-        sorted_sites = sorted(
-            self.sites,
-            key=lambda s: (
-                Element.get_element(s.specie).atomic_no,
-                s.position[0],
-                s.position[1],
-                s.position[2],
-            ),
-        )
+        # Display sites in insertion order to match internal species ordering
+        display_sites = list(self.sites)
 
         rows = []
-        for site in sorted_sites:
+        for site in display_sites:
             element = str(site.specie)
             cart_coords = f"({site.position[0]:.4f}, {site.position[1]:.4f}, {site.position[2]:.4f})"
             row = [element, cart_coords]
