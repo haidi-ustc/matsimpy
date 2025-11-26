@@ -217,27 +217,29 @@ class Crystal(Structure):
         if len(new_cart_positions) > 1:
             # Use pdist for efficient pairwise distance calculation
             distances_condensed = pdist(new_cart_positions)
+            
             if np.any(distances_condensed < 1e-6):  # Essentially zero distance (duplicate)
-                # Convert to square form to easily find indices
+                # Only convert to square form if we found a problem
                 distances_square = squareform(distances_condensed)
-                # Find the pair with minimum distance (excluding diagonal)
+                # Find pairs with distance < 1e-6 (excluding diagonal)
                 np.fill_diagonal(distances_square, np.inf)
-                i, j = np.unravel_index(np.argmin(distances_square), distances_square.shape)
+                i, j = np.where(distances_square < 1e-6)
                 raise ValueError(
                     f"Duplicate positions detected in new atoms: "
-                    f"positions {i} and {j} are at the same location "
-                    f"({new_frac_positions[i]})."
+                    f"positions {i[0]} and {j[0]} are at the same location "
+                    f"({new_frac_positions[i[0]]})."
                 )
-            elif np.any(distances_condensed < 0.5):  # Too close
-                # Convert to square form to easily find indices
+            
+            if np.any(distances_condensed < 0.5):  # Too close
+                # Only convert to square form if we found a problem
+                min_dist = np.min(distances_condensed)
                 distances_square = squareform(distances_condensed)
-                # Find the pair with minimum distance (excluding diagonal)
+                # Find pairs with minimum distance (excluding diagonal)
                 np.fill_diagonal(distances_square, np.inf)
-                min_dist = np.min(distances_square)
-                i, j = np.unravel_index(np.argmin(distances_square), distances_square.shape)
+                i, j = np.where(np.abs(distances_square - min_dist) < 1e-10)
                 raise ValueError(
                     f"Atoms being added are too close: distance between "
-                    f"positions {i} and {j} is {min_dist:.6f} Å. "
+                    f"positions {i[0]} and {j[0]} is {min_dist:.6f} Å. "
                     f"Minimum allowed distance is 0.5 Å."
                 )
 
@@ -277,12 +279,12 @@ class Crystal(Structure):
                 # Shape: (n_new, n_existing, 3)
                 frac_diffs = new_frac_array[:, np.newaxis, :] - existing_frac_array[np.newaxis, :, :]
 
-                # Apply minimum image convention for each PBC direction
-                for dim in range(3):
-                    if self.pbc[dim]:
-                        frac_diffs[:, :, dim] = frac_diffs[:, :, dim] - np.round(
-                            frac_diffs[:, :, dim]
-                        )
+                # Apply minimum image convention to all PBC dimensions at once (vectorized)
+                pbc_mask = np.array(self.pbc, dtype=bool)
+                if np.any(pbc_mask):
+                    frac_diffs[:, :, pbc_mask] = (
+                        frac_diffs[:, :, pbc_mask] - np.round(frac_diffs[:, :, pbc_mask])
+                    )
 
                 # Convert to Cartesian differences
                 # Shape: (n_new, n_existing, 3)
