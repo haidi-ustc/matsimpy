@@ -154,7 +154,7 @@ class TestMoleculeComprehensive(unittest.TestCase):
         positions = [[0, 0, 0], [1.4, 0, 0]]
         molecule = Molecule(species, positions)
         
-        neighbors = molecule.get_neighbor_list(0, cutoff=2.0)
+        neighbors = molecule.get_neighbor_list(cutoff=2.0, atom_index=0)
         self.assertIsInstance(neighbors, dict)
         self.assertIn(0, neighbors)
         # Extract neighbor indices from tuples
@@ -167,7 +167,7 @@ class TestMoleculeComprehensive(unittest.TestCase):
         positions = [[0, 0, 0], [10.0, 0, 0]]  # Far apart
         molecule = Molecule(species, positions)
         
-        neighbors = molecule.get_neighbor_list(0, cutoff=1.0)
+        neighbors = molecule.get_neighbor_list(cutoff=1.0, atom_index=0)
         self.assertIsInstance(neighbors, dict)
         self.assertIn(0, neighbors)
         self.assertEqual(len(neighbors[0]), 0)

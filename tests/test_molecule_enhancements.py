@@ -153,7 +153,7 @@ class TestMoleculeNeighborListOptimization(unittest.TestCase):
         all_neighbors = mol.get_all_neighbor_lists(cutoff)
         
         for i in range(len(mol)):
-            single_neighbors_dict = mol.get_neighbor_list(i, cutoff)
+            single_neighbors_dict = mol.get_neighbor_list(cutoff=cutoff, atom_index=i)
             # Extract neighbor indices from tuples
             single_neighbors = [idx for idx, _ in single_neighbors_dict[i]]
             self.assertEqual(sorted(all_neighbors[i]), sorted(single_neighbors))
@@ -195,17 +195,17 @@ class TestMoleculeNeighborListSingle(unittest.TestCase):
         mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
         
         with self.assertRaises(IndexError):
-            mol.get_neighbor_list(5, 2.0)
+            mol.get_neighbor_list(cutoff=2.0, atom_index=5)
         
         with self.assertRaises(IndexError):
-            mol.get_neighbor_list(-3, 2.0)
+            mol.get_neighbor_list(cutoff=2.0, atom_index=-3)
     
     def test_get_neighbor_list_error_message(self):
         """Test that error message is helpful."""
         mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
         
         with self.assertRaises(IndexError) as context:
-            mol.get_neighbor_list(10, 2.0)
+            mol.get_neighbor_list(cutoff=2.0, atom_index=10)
         
         msg = str(context.exception)
         self.assertIn("10", msg)

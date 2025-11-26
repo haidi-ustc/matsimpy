@@ -651,17 +651,31 @@ class Crystal(Structure):
         return np.vstack([self.cart_positions, image_positions])
 
     def get_neighbor_list(
-        self, cutoff: float, use_pbc: bool = True
+        self, cutoff: float, atom_index: Optional[int] = None, use_pbc: bool = True
     ) -> Dict[int, List[Tuple[int, float]]]:
         """
-        Get neighbor list with optimized KDTree.
+        Get neighbor list with optimized KDTree and consistent interface.
 
         Args:
             cutoff: Cutoff radius for neighbor finding
+            atom_index: Optional atom index. If None, returns neighbors for all atoms.
+                       If specified, returns neighbors only for that atom.
             use_pbc: Whether to use periodic boundary conditions
 
         Returns:
-            Dict mapping atom index to list of (neighbor_index, distance) tuples
+            Dict mapping atom index to list of (neighbor_index, distance) tuples.
+            If atom_index is provided, dict contains only that entry.
+            If atom_index is None, dict contains entries for all atoms.
+
+        Raises:
+            IndexError: If atom_index is out of range
+
+        Examples:
+            >>> crystal = Crystal(['Si', 'Si'], [[0, 0, 0], [0.25, 0.25, 0.25]], lattice)
+            >>> # Get neighbors for all atoms
+            >>> neighbors = crystal.get_neighbor_list(5.0)
+            >>> # Get neighbors for specific atom
+            >>> neighbors = crystal.get_neighbor_list(5.0, atom_index=0)
         """
         # Check if we need to rebuild tree
         n_atoms = len(self.cart_positions)
@@ -685,10 +699,21 @@ class Crystal(Structure):
             self._neighbor_tree_cutoff = cutoff
             self._neighbor_tree_positions = positions
 
+        # Validate atom_index if provided
+        n_atoms = len(self.cart_positions)
+        if atom_index is not None:
+            if not (0 <= atom_index < n_atoms):
+                raise IndexError(
+                    f"Atom index {atom_index} is out of range [0, {n_atoms-1}]"
+                )
+
         # Query neighbors
         neighbors_dict = {}
-        n_atoms = len(self.cart_positions)
-        for i, pos in enumerate(self.cart_positions):
+        # Determine which atoms to query
+        atoms_to_query = [atom_index] if atom_index is not None else range(n_atoms)
+
+        for i in atoms_to_query:
+            pos = self.cart_positions[i]
             indices = self._neighbor_tree.query_ball_point(pos, cutoff)
             neighbors = []
             for idx in indices:

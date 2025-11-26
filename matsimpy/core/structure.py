@@ -426,20 +426,32 @@ class Structure(ABC, MSONable):
                 self._sites = self._initialize_sites()
 
     @abstractmethod
-    def get_neighbor_list(self, *args, **kwargs) -> Dict[int, List[Tuple[int, float]]]:
+    def get_neighbor_list(
+        self, cutoff: float, atom_index: Optional[int] = None, **kwargs
+    ) -> Dict[int, List[Tuple[int, float]]]:
         """
-        Get neighbor list. Must be implemented by subclasses.
+        Get neighbor list with consistent interface across all subclasses.
+
+        Args:
+            cutoff: Cutoff radius for neighbor finding
+            atom_index: Optional atom index. If None, returns neighbors for all atoms.
+                       If specified, returns neighbors only for that atom.
+            **kwargs: Additional subclass-specific parameters (e.g., use_pbc for Crystal)
 
         Returns:
             Dict mapping atom index to list of (neighbor_index, distance) tuples.
-            All subclasses return the same consistent type.
-
-        Note: Subclasses have different signatures but same return type:
-        - Crystal: get_neighbor_list(cutoff, use_pbc=True) -> Dict[int, List[Tuple[int, float]]]
-        - Molecule: get_neighbor_list(atom_index, cutoff) -> Dict[int, List[Tuple[int, float]]]
+            If atom_index is provided, dict contains only that entry.
+            If atom_index is None, dict contains entries for all atoms.
 
         Raises:
             NotImplementedError: If not implemented by subclass
+            IndexError: If atom_index is out of range
+
+        Examples:
+            >>> # Get neighbors for all atoms
+            >>> neighbors = structure.get_neighbor_list(5.0)
+            >>> # Get neighbors for specific atom
+            >>> neighbors = structure.get_neighbor_list(5.0, atom_index=0)
         """
         raise NotImplementedError("get_neighbor_list must be implemented by subclasses")
 

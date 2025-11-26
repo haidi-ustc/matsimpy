@@ -475,40 +475,60 @@ class Molecule(Structure):
         return moment_tensor
 
     def get_neighbor_list(
-        self, atom_index: int, cutoff: float
+        self, cutoff: float, atom_index: Optional[int] = None, **kwargs
     ) -> Dict[int, List[Tuple[int, float]]]:
         """
-        Get neighbor list for specified atom with distances.
+        Get neighbor list with consistent interface.
 
         Args:
-            atom_index: Index of the target atom.
             cutoff: Cutoff radius in Angstroms.
+            atom_index: Optional atom index. If None, returns neighbors for all atoms.
+                       If specified, returns neighbors only for that atom.
+            **kwargs: Ignored (for compatibility with Crystal interface)
 
         Returns:
             Dict mapping atom index to list of (neighbor_index, distance) tuples.
-            Only contains the entry for the requested atom_index.
+            If atom_index is provided, dict contains only that entry.
+            If atom_index is None, dict contains entries for all atoms.
 
         Raises:
             IndexError: If atom_index is out of range.
 
         Examples:
             >>> molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-            >>> neighbors = molecule.get_neighbor_list(0, 2.0)
+            >>> # Get neighbors for specific atom
+            >>> neighbors = molecule.get_neighbor_list(2.0, atom_index=0)
             >>> print(neighbors)  # {0: [(1, 1.2)]} - atom 1 is within 2.0 Å
-            >>> print(neighbors[0])  # [(1, 1.2)] - list of (neighbor_index, distance) tuples
+            >>> # Get neighbors for all atoms
+            >>> all_neighbors = molecule.get_neighbor_list(2.0)
+            >>> print(all_neighbors)  # {0: [(1, 1.2)], 1: [(0, 1.2)]}
         """
-        if not (0 <= atom_index < len(self)):
-            raise IndexError(
-                f"Atom index {atom_index} is out of range [0, {len(self)-1}]"
-            )
+        if atom_index is not None:
+            # Single atom query
+            if not (0 <= atom_index < len(self)):
+                raise IndexError(
+                    f"Atom index {atom_index} is out of range [0, {len(self)-1}]"
+                )
 
-        distances = cdist([self.positions[atom_index]], self.positions)[0]
-        neighbors = [
-            (i, float(d))
-            for i, d in enumerate(distances)
-            if d < cutoff and i != atom_index
-        ]
-        return {atom_index: neighbors}
+            distances = cdist([self.positions[atom_index]], self.positions)[0]
+            neighbors = [
+                (i, float(d))
+                for i, d in enumerate(distances)
+                if d < cutoff and i != atom_index
+            ]
+            return {atom_index: neighbors}
+        else:
+            # All atoms query
+            distances = cdist(self.positions, self.positions)
+            neighbors_dict = {}
+            for i in range(len(self)):
+                neighbors = [
+                    (j, float(distances[i, j]))
+                    for j in range(len(self))
+                    if distances[i, j] < cutoff and j != i
+                ]
+                neighbors_dict[i] = neighbors
+            return neighbors_dict
 
     def get_all_neighbor_lists(self, cutoff: float) -> List[List[int]]:
         """
