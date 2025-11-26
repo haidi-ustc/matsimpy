@@ -51,5 +51,11 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
     ],
+    entry_points={
+        "console_scripts": [
+            "matsimpy=matsimpy.ui.cli.__main__:main",
+        ],
+    },
+    python_requires=">=3.6",
 )
 
