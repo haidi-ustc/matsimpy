@@ -2,10 +2,10 @@
 
 **MatSimPy** (Materials Simulation in Python) is a comprehensive Python package for molecular and materials simulation, designed to provide a modern, efficient, and user-friendly interface for materials science research.
 
-[![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.6%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Status](https://img.shields.io/badge/status-Beta-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1223%20passed-brightgreen)](tests/)
+[![Status](https://img.shields.io/badge/status-Alpha-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
+[![Tests](https://img.shields.io/badge/tests-1292%20passed-brightgreen)](tests/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](docs/SESSION_SUMMARY_2025_11.md)
 
 
@@ -22,8 +22,10 @@
 - **Data Storage**: Persistent storage for structures and calculation results (maggma)
 - **File I/O**: High-level `read()`/`write()` interface with auto-format detection, supporting VASP, CIF, XYZ, PDB, MOL, XSF, JSON, ASE formats
 - **LaTeX Export**: Professional tables for publications with mhchem support
+- **CLI Interface**: Interactive menu system for easy access to all features
+- **Composition Analysis**: Mass and mole fraction calculations with caching
 - **Performance**: Optimized with caching, KDTree, and vectorized operations
-- **Comprehensive Examples**: 14+ example files demonstrating all features
+- **Comprehensive Examples**: 19 example files demonstrating all features
 
 ## Installation
 
@@ -95,6 +97,10 @@ comp = Composition('Fe2O3')
 print(comp['Fe'])     # 2
 print(comp['O'])      # 3
 print(comp.mass)      # Fast! (cached)
+
+# 🆕 Mass and mole fractions
+mass_frac = comp.mass_fractions()   # {'Fe': 0.699, 'O': 0.301}
+mole_frac = comp.mole_fractions()  # {'Fe': 0.4, 'O': 0.6}
 ```
 
 ### 🆕 Graph Analysis (NEW!)
@@ -450,11 +456,34 @@ matsimpy/
 │
 ├── symmetry/          # Symmetry analysis
 │   └── analyzer.py    # SymmetryAnalyzer, get_conventional_cell
+├── ui/                # User interface
+│   └── cli/           # Command-line interface and interactive menu
 ├── utils/             # Utility functions
 ├── code/              # DFT code interfaces
 ├── ai/                # AI/ML integration
-└── analysis/          # Analysis tools
+├── analysis/          # Analysis tools
+└── visualization/     # Visualization tools (planned)
 ```
+
+## Command-Line Interface
+
+MatSimPy includes an interactive CLI menu system for easy access to all features:
+
+```bash
+# Launch interactive menu
+matsimpy
+
+# Or specify menu file
+matsimpy path/to/matsimpy_menu.json
+```
+
+The CLI provides access to:
+- Structure generation and editing
+- Analysis tools (symmetry, properties, etc.)
+- File format conversion
+- Database management
+- Calculator interfaces
+- And much more!
 
 ## Examples
 
@@ -462,9 +491,13 @@ Comprehensive examples are available in the `examples/` directory:
 
 - **Core Module**: `core_basic.py`, `core_advanced.py`
 - **Builders**: `builders_bulk.py`, `builders_surface.py`, `builders_alloy.py`, `builders_molecule.py`, `builders_defects.py`, `builders_nanostructure.py`
-- **Transformations**: `transformation_geometric.py`, `transformation_lattice.py`, `transformation_chemical.py`, `transformation_structural.py`
+- **Transformations**: `transformation_geometric.py`, `transformation_lattice.py`, `transformation_chemical.py`, `transformation_structural.py`, `transformation_composite.py`
 - **IO**: `io_basic.py`
 - **Workflows**: `workflow_basic.py`
+- **Calculators**: `calculator_basic.py`
+- **Storage**: `storage_basic.py`
+- **Symmetry**: `symmetry_basic.py`
+- **Config**: `config_basic.py`
 
 Run an example:
 
@@ -609,7 +642,7 @@ from matsimpy.transformation.composite import (
 
 ### Core Dependencies
 
-- Python 3.6+
+- Python >=3.6
 - NumPy
 - SciPy
 - monty (for MSONable serialization)
@@ -646,7 +679,7 @@ pytest tests/ -v --durations=10            # Show slowest tests
 ```
 
 **Test Statistics**:
-- 1,223 total tests
+- 1,292 total tests
 - 100% pass rate
 - Coverage across all core modules
 - Unit, integration, and edge case tests
