@@ -242,22 +242,33 @@ class Structure(ABC, MSONable):
         return self._cached_formula
 
     @property
-    def symbol_set(self) -> set:
+    def symbol_set(self) -> tuple:
         """
-        Get the set of unique element symbols in the structure.
+        Get the tuple of unique element symbols in the structure, preserving order.
+
+        Returns elements in the order they first appear in the structure,
+        matching VASP POSCAR format style.
 
         Returns:
-            set: Set of unique element symbols (e.g., {'H', 'O'} for H2O).
+            tuple: Tuple of unique element symbols in order of first appearance
+                   (e.g., ('Na', 'Cl') for NaCl, ('O', 'H') for H2O).
 
         Examples:
             >>> crystal = Crystal(['Na', 'Cl', 'Na'], [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25]], Lattice.cubic(5.64))
             >>> crystal.symbol_set
-            {'Na', 'Cl'}
+            ('Na', 'Cl')
             >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
             >>> molecule.symbol_set
-            {'O', 'H'}
+            ('O', 'H')
         """
-        return set(self.species)
+        # Preserve order of first appearance (VASP format style)
+        seen = set()
+        unique_symbols = []
+        for specie in self.species:
+            if specie not in seen:
+                unique_symbols.append(specie)
+                seen.add(specie)
+        return tuple(unique_symbols)
 
     def copy(self):
         """
