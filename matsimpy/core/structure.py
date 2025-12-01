@@ -241,6 +241,24 @@ class Structure(ABC, MSONable):
             self._formula_dirty = False
         return self._cached_formula
 
+    @property
+    def symbol_set(self) -> set:
+        """
+        Get the set of unique element symbols in the structure.
+
+        Returns:
+            set: Set of unique element symbols (e.g., {'H', 'O'} for H2O).
+
+        Examples:
+            >>> crystal = Crystal(['Na', 'Cl', 'Na'], [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25]], Lattice.cubic(5.64))
+            >>> crystal.symbol_set
+            {'Na', 'Cl'}
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
+            >>> molecule.symbol_set
+            {'O', 'H'}
+        """
+        return set(self.species)
+
     def copy(self):
         """
         Create a copy of the structure.
