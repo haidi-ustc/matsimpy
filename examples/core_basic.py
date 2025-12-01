@@ -179,13 +179,13 @@ print(f"\nFe2O3 composition:")
 print(f"  Formula: {comp_fe2o3.formula}")
 print(f"  Fe count: {comp_fe2o3['Fe']}, O count: {comp_fe2o3['O']}")
 
-# Get weight percent using the weight_percent method
+# Get mass fractions using the mass_fractions method
 h2o = Composition('H2O')
-weight_pct = h2o.weight_percent()  # Returns a dictionary
-print(f"\nH2O weight percentages:")
-print(f"  Hydrogen: {weight_pct['H']:.2f}%")
-print(f"  Oxygen: {weight_pct['O']:.2f}%")
-print(f"  Total: {sum(weight_pct.values()):.2f}%")
+mass_frac = h2o.mass_fractions()  # Returns a dictionary
+print(f"\nH2O mass fractions:")
+print(f"  Hydrogen: {mass_frac['H']:.4f}")
+print(f"  Oxygen: {mass_frac['O']:.4f}")
+print(f"  Total: {sum(mass_frac.values()):.4f}")
 
 # ============================================================================
 # Example 8: Basic Selection Utilities

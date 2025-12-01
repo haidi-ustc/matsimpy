@@ -411,28 +411,6 @@ class Composition(MSONable):
 
         return fractions
 
-    def weight_percent(self) -> Dict[str, float]:
-        """
-        Calculate weight percentage of each element.
-
-        Weight percent is mass fraction × 100.
-
-        Returns:
-            Dictionary mapping elements to weight percentages (0-100).
-
-        Examples:
-            >>> c = Composition('H2O')
-            >>> weight_pct = c.weight_percent()
-            >>> weight_pct['H']  # ~11.19%
-            11.1898...
-            >>> weight_pct['O']  # ~88.81%
-            88.8102...
-            >>> sum(weight_pct.values())  # Should be 100
-            100.0
-        """
-        fractions = self.mass_fractions()
-        return {element: fraction * 100.0 for element, fraction in fractions.items()}
-
     def mole_fractions(self) -> Dict[str, float]:
         """
         Calculate mole fractions of each element.

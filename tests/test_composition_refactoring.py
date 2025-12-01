@@ -175,7 +175,7 @@ class TestCompositionTypeHints(unittest.TestCase):
         # These should have return types
         methods_with_returns = [
             'mass_fractions',
-            'weight_percent',
+            'mole_fractions',
             'to_html',
             'to_latex',
             '__str__',
@@ -234,7 +234,7 @@ class TestCompositionIntegration(unittest.TestCase):
         # These should all use cached elements
         mass = comp.mass
         fractions = comp.mass_fractions()
-        percentages = comp.weight_percent()
+        mole_fractions = comp.mole_fractions()
         
         # Cache should have both elements
         self.assertIn('Fe', comp._element_cache)
