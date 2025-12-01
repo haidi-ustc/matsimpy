@@ -591,14 +591,57 @@ class Crystal(Structure):
         volume = np.dot(a, np.cross(b, c))
         return abs(volume)
 
+    @property
+    def area(self) -> float:
+        """Calculate the area for 2D materials (when one PBC is False)."""
+        a, b, c = self.lattice.lattice_vectors
+        pbc_count = sum(self.pbc)
+        if pbc_count != 2:
+            raise ValueError("Area is only defined for 2D materials (exactly 2 PBC True)")
+        
+        # Find which dimension is non-periodic
+        non_periodic_idx = [i for i, p in enumerate(self.pbc) if not p][0]
+        
+        if non_periodic_idx == 0:
+            # a is non-periodic, use b and c
+            area = np.linalg.norm(np.cross(b, c))
+        elif non_periodic_idx == 1:
+            # b is non-periodic, use a and c
+            area = np.linalg.norm(np.cross(a, c))
+        else:  # non_periodic_idx == 2
+            # c is non-periodic, use a and b
+            area = np.linalg.norm(np.cross(a, b))
+        
+        return abs(area)
+
+    @property
+    def length(self) -> float:
+        """Calculate the length for 1D materials (when two PBC are False)."""
+        a, b, c = self.lattice.lattice_vectors
+        pbc_count = sum(self.pbc)
+        if pbc_count != 1:
+            raise ValueError("Length is only defined for 1D materials (exactly 1 PBC True)")
+        
+        # Find which dimension is periodic
+        periodic_idx = [i for i, p in enumerate(self.pbc) if p][0]
+        
+        if periodic_idx == 0:
+            length = np.linalg.norm(a)
+        elif periodic_idx == 1:
+            length = np.linalg.norm(b)
+        else:  # periodic_idx == 2
+            length = np.linalg.norm(c)
+        
+        return abs(length)
+
     def __str__(self):
         """Human-readable string representation of Crystal."""
         # Basic info
         info = f"{self.__class__.__name__}: {self.formula}\n"
         info += f"  Sites: {len(self)} atoms\n"
 
-        # PBC information
-        pbc_str = "(" + ", ".join("True" if p else "False" for p in self.pbc) + ")"
+        # PBC information - compact format [T T T] or [T F T]
+        pbc_str = "[" + " ".join("T" if p else "F" for p in self.pbc) + "]"
         info += f"  PBC: {pbc_str}\n"
 
         # Lattice parameters (use helper method from Lattice to avoid duplication)
@@ -606,12 +649,39 @@ class Crystal(Structure):
             f"  Lattice: {self.lattice._format_lattice_params(include_units=True)}\n"
         )
 
-        # Volume and density
-        info += f"  Volume: {self.volume:.4f} Å³\n"
+        # Volume/Area/Length and density based on PBC dimensionality
+        pbc_count = sum(self.pbc)
         try:
-            density = self.density()
-            info += f"  Density: {density:.4f} g/cm³\n"
-        except (ValueError, AttributeError):
+            if pbc_count == 3:
+                # 3D material
+                info += f"  Volume: {self.volume:.4f} Å³\n"
+                density = self.density()
+                # Use appropriate formatting based on magnitude
+                if density < 0.01 or density > 1000:
+                    info += f"  Density: {density:.6e} g/cm³\n"
+                else:
+                    info += f"  Density: {density:.4f} g/cm³\n"
+            elif pbc_count == 2:
+                # 2D material
+                info += f"  Area: {self.area:.4f} Å²\n"
+                density = self.density()
+                # 2D densities are typically very small, use scientific notation
+                info += f"  Density: {density:.6e} g/cm²\n"
+            elif pbc_count == 1:
+                # 1D material
+                info += f"  Length: {self.length:.4f} Å\n"
+                density = self.density()
+                # 1D densities are typically very small, use scientific notation
+                info += f"  Density: {density:.6e} g/cm\n"
+            else:
+                # 0D material (no PBC) - still show volume
+                info += f"  Volume: {self.volume:.4f} Å³\n"
+                density = self.density()
+                if density < 0.01 or density > 1000:
+                    info += f"  Density: {density:.6e} g/cm³\n"
+                else:
+                    info += f"  Density: {density:.4f} g/cm³\n"
+        except (ValueError, AttributeError) as e:
             info += "\n"
 
         # Atom coordinates and properties table
@@ -645,14 +715,16 @@ class Crystal(Structure):
     def __repr__(self):
         """Unambiguous string representation of Crystal for debugging."""
         # Compact representation with key info
-        lattice_params = (
-            f"a={self.lattice.a:.4f}, b={self.lattice.b:.4f}, c={self.lattice.c:.4f}, "
-            f"α={self.lattice.alpha:.1f}°, β={self.lattice.beta:.1f}°, γ={self.lattice.gamma:.1f}°"
+        # Use shorter lattice format: a×b×c, α°β°γ°
+        lattice_str = (
+            f"{self.lattice.a:.4f}×{self.lattice.b:.4f}×{self.lattice.c:.4f}, "
+            f"{self.lattice.alpha:.1f}°/{self.lattice.beta:.1f}°/{self.lattice.gamma:.1f}°"
         )
-        pbc_str = "(" + ", ".join("True" if p else "False" for p in self.pbc) + ")"
+        # Compact PBC format: [T,T,T] or [T,F,T]
+        pbc_str = "[" + ",".join("T" if p else "F" for p in self.pbc) + "]"
         return (
             f"{self.__class__.__name__}(formula='{self.formula}', "
-            f"nsites={len(self)}, lattice={lattice_params}, pbc={pbc_str})"
+            f"nsites={len(self)}, lattice={lattice_str}, pbc={pbc_str})"
         )
 
     def __getitem__(self, item):
@@ -866,21 +938,62 @@ class Crystal(Structure):
 
     def density(self) -> float:
         """
-        Calculate the density of the crystal.
+        Calculate the density of the crystal based on PBC dimensionality.
 
         Returns:
-            float: Density in g/cm³
+            float: Density in appropriate units:
+                   - 3D (all PBC True): g/cm³
+                   - 2D (two PBC True): g/cm²
+                   - 1D (one PBC True): g/cm
 
         Raises:
-            ValueError: If crystal volume is zero or negative
+            ValueError: If crystal volume/area/length is zero or negative
         """
-        mass = self.composition.mass  # mass is a property, not a method
-        volume = self.volume
-        if volume <= 0:
-            raise ValueError(
-                "Cannot calculate density: crystal volume is zero or negative"
-            )
-        return mass / volume
+        # Mass is in atomic mass units (amu)
+        # Conversion: 1 amu = 1.66053906660e-24 g
+        AMU_TO_GRAM = 1.66053906660e-24
+        
+        mass_amu = self.composition.mass
+        pbc_count = sum(self.pbc)
+        
+        if pbc_count == 3:
+            # 3D material: use volume
+            size = self.volume
+            if size <= 0:
+                raise ValueError(
+                    "Cannot calculate density: crystal volume is zero or negative"
+                )
+            # Convert: (mass in amu * amu_to_g) / (volume in Å³ * Å³_to_cm³)
+            # 1 Å³ = 1e-24 cm³
+            return (mass_amu * AMU_TO_GRAM) / (size * 1e-24)
+        elif pbc_count == 2:
+            # 2D material: use area
+            size = self.area
+            if size <= 0:
+                raise ValueError(
+                    "Cannot calculate density: crystal area is zero or negative"
+                )
+            # Convert: (mass in amu * amu_to_g) / (area in Å² * Å²_to_cm²)
+            # 1 Å² = 1e-16 cm²
+            return (mass_amu * AMU_TO_GRAM) / (size * 1e-16)
+        elif pbc_count == 1:
+            # 1D material: use length
+            size = self.length
+            if size <= 0:
+                raise ValueError(
+                    "Cannot calculate density: crystal length is zero or negative"
+                )
+            # Convert: (mass in amu * amu_to_g) / (length in Å * Å_to_cm)
+            # 1 Å = 1e-8 cm
+            return (mass_amu * AMU_TO_GRAM) / (size * 1e-8)
+        else:
+            # 0D material (no PBC) - not periodic, use volume for display
+            size = self.volume
+            if size <= 0:
+                raise ValueError(
+                    "Cannot calculate density: crystal volume is zero or negative"
+                )
+            return (mass_amu * AMU_TO_GRAM) / (size * 1e-24)
 
     @classmethod
     def from_file(cls, filename: str, format: Optional[str] = None) -> "Crystal":
