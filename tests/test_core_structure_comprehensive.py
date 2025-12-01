@@ -178,6 +178,64 @@ class TestStructureProperties(unittest.TestCase):
                 self.assertEqual(list(crystal.symbol_set), vasp_species)
         finally:
             os.unlink(temp_file)
+    
+    def test_symbol_set_affected_by_sort_atoms(self):
+        """Test that symbol_set changes when sort_atoms is called."""
+        from matsimpy.core import Lattice
+        
+        # Create crystal with Cl, Na, Cl (original order: Cl, Na)
+        crystal = Crystal(['Cl', 'Na', 'Cl'], 
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
+                         Lattice.cubic(5.64))
+        
+        # Original symbol_set should reflect original order
+        self.assertEqual(crystal.symbol_set, ('Cl', 'Na'))
+        
+        # Sort by element (atomic number: Na=11, Cl=17, so Na comes first)
+        crystal.sort_atoms('element')
+        # After sorting, species order is Na, Cl, Cl, so symbol_set should be Na, Cl
+        self.assertEqual(crystal.species, ('Na', 'Cl', 'Cl'))
+        self.assertEqual(crystal.symbol_set, ('Na', 'Cl'))
+        
+        # Sort alphabetically (Cl comes before Na)
+        crystal.sort_atoms('alphabet')
+        # After sorting, species order is Cl, Cl, Na, so symbol_set should be Cl, Na
+        self.assertEqual(crystal.species, ('Cl', 'Cl', 'Na'))
+        self.assertEqual(crystal.symbol_set, ('Cl', 'Na'))
+    
+    def test_symbol_set_affects_vasp_output_after_sort(self):
+        """Test that sort_atoms affects VASP output via symbol_set."""
+        from matsimpy.core import Lattice
+        from matsimpy.io.vasp import write_POSCAR
+        import tempfile
+        import os
+        
+        # Create crystal with Cl, Na, Cl
+        crystal = Crystal(['Cl', 'Na', 'Cl'], 
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
+                         Lattice.cubic(5.64))
+        
+        # Write before sorting
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file1 = f.name
+        write_POSCAR(crystal, temp_file1)
+        with open(temp_file1, 'r') as f:
+            vasp_species_before = f.readlines()[5].strip().split()
+        self.assertEqual(vasp_species_before, ['Cl', 'Na'])
+        
+        # Sort and write again
+        crystal.sort_atoms('element')
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file2 = f.name
+        write_POSCAR(crystal, temp_file2)
+        with open(temp_file2, 'r') as f:
+            vasp_species_after = f.readlines()[5].strip().split()
+        self.assertEqual(vasp_species_after, ['Na', 'Cl'])
+        self.assertEqual(list(crystal.symbol_set), vasp_species_after)
+        
+        # Cleanup
+        os.unlink(temp_file1)
+        os.unlink(temp_file2)
 
 class TestStructureMethods(unittest.TestCase):
     """Test Structure methods."""

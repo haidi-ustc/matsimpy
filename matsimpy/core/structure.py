@@ -249,6 +249,11 @@ class Structure(ABC, MSONable):
         Returns elements in the order they first appear in the structure,
         matching VASP POSCAR format style.
 
+        Note:
+            This property reflects the current state of the structure. If you call
+            sort_atoms() to reorder atoms, symbol_set will change to reflect the
+            new order of first appearance. This affects VASP output format.
+
         Returns:
             tuple: Tuple of unique element symbols in order of first appearance
                    (e.g., ('Na', 'Cl') for NaCl, ('O', 'H') for H2O).
@@ -257,6 +262,9 @@ class Structure(ABC, MSONable):
             >>> crystal = Crystal(['Na', 'Cl', 'Na'], [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25]], Lattice.cubic(5.64))
             >>> crystal.symbol_set
             ('Na', 'Cl')
+            >>> crystal.sort_atoms('alphabet')  # Reorders to Cl, Na, Na
+            >>> crystal.symbol_set  # Now reflects new order
+            ('Cl', 'Na')
             >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
             >>> molecule.symbol_set
             ('O', 'H')
