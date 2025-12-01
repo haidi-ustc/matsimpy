@@ -59,6 +59,41 @@ class Crystal(Structure):
         self._neighbor_tree_positions = None
         self._neighbor_tree_cutoff = None
 
+    def set_pbc(self, pbc: Union[List[bool], Tuple[bool, bool, bool]]) -> None:
+        """
+        Set periodic boundary conditions for the crystal.
+
+        Args:
+            pbc: List or tuple of 3 booleans indicating periodicity along a, b, c axes.
+                 [True, True, True] for 3D, [True, True, False] for 2D, etc.
+
+        Raises:
+            ValueError: If pbc is not a list/tuple of 3 booleans.
+
+        Examples:
+            >>> crystal.set_pbc([True, True, True])  # 3D material
+            >>> crystal.set_pbc([True, True, False])  # 2D material (slab)
+            >>> crystal.set_pbc([True, False, False])  # 1D material (wire)
+            >>> crystal.set_pbc([False, False, False])  # 0D (cluster)
+        """
+        # Validate input
+        if not isinstance(pbc, (list, tuple)):
+            raise ValueError("PBC must be a list or tuple of 3 booleans")
+        
+        if len(pbc) != 3:
+            raise ValueError("PBC must have exactly 3 elements (for a, b, c axes)")
+        
+        if not all(isinstance(x, bool) for x in pbc):
+            raise ValueError("All PBC elements must be booleans")
+        
+        # Set PBC
+        self.pbc = list(pbc)
+        
+        # Invalidate caches that depend on PBC
+        self._invalidate_neighbor_tree()
+        # Note: area/length properties will recalculate on access
+        # density() will use correct units based on new PBC
+
     def _update_coordinates_after_modification(self) -> None:
         """
         Update fractional and Cartesian coordinates after modification.
