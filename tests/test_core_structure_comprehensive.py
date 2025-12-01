@@ -106,6 +106,78 @@ class TestStructureProperties(unittest.TestCase):
     def test_len_method(self):
         """Test __len__ method."""
         self.assertEqual(len(self.struct), 3)
+    
+    def test_symbol_set_property(self):
+        """Test symbol_set property returns tuple with unique elements."""
+        symbol_set = self.struct.symbol_set
+        self.assertIsInstance(symbol_set, tuple)
+        self.assertEqual(symbol_set, ('H', 'O'))
+        self.assertEqual(len(symbol_set), 2)  # Unique elements only
+    
+    def test_symbol_set_preserves_order(self):
+        """Test that symbol_set preserves order of first appearance."""
+        # H2O - H appears first, then O
+        struct = Molecule(['H', 'O', 'H'], [[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        self.assertEqual(struct.symbol_set, ('H', 'O'))
+        
+        # OH2 - O appears first, then H
+        struct2 = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        self.assertEqual(struct2.symbol_set, ('O', 'H'))
+    
+    def test_symbol_set_crystal(self):
+        """Test symbol_set for Crystal structures."""
+        from matsimpy.core import Lattice
+        crystal = Crystal(['Na', 'Cl', 'Na'], 
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
+                         Lattice.cubic(5.64))
+        symbol_set = crystal.symbol_set
+        self.assertIsInstance(symbol_set, tuple)
+        self.assertEqual(symbol_set, ('Na', 'Cl'))
+    
+    def test_symbol_set_complex(self):
+        """Test symbol_set with multiple elements."""
+        from matsimpy.core import Lattice
+        crystal = Crystal(['Fe', 'O', 'Fe', 'O', 'Al'], 
+                         [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25], [0.75,0.75,0.75], [0.1,0.1,0.1]], 
+                         Lattice.cubic(5.0))
+        symbol_set = crystal.symbol_set
+        self.assertEqual(symbol_set, ('Fe', 'O', 'Al'))
+        self.assertEqual(len(symbol_set), 3)
+    
+    def test_symbol_set_single_element(self):
+        """Test symbol_set with single element."""
+        from matsimpy.core import Lattice
+        crystal = Crystal(['Si', 'Si'], 
+                         [[0, 0, 0], [0.25, 0.25, 0.25]], 
+                         Lattice.cubic(5.43))
+        symbol_set = crystal.symbol_set
+        self.assertEqual(symbol_set, ('Si',))
+        self.assertEqual(len(symbol_set), 1)
+    
+    def test_symbol_set_matches_vasp_format(self):
+        """Test that symbol_set matches VASP format species order."""
+        from matsimpy.core import Lattice
+        from matsimpy.io.vasp import write_POSCAR
+        import tempfile
+        import os
+        
+        crystal = Crystal(['Na', 'Cl', 'Na'], 
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
+                         Lattice.cubic(5.64))
+        
+        # Write to VASP format
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file = f.name
+        
+        try:
+            write_POSCAR(crystal, temp_file)
+            with open(temp_file, 'r') as f:
+                lines = f.readlines()
+                # Line 6 (0-indexed: 5) is the species line
+                vasp_species = lines[5].strip().split()
+                self.assertEqual(list(crystal.symbol_set), vasp_species)
+        finally:
+            os.unlink(temp_file)
 
 class TestStructureMethods(unittest.TestCase):
     """Test Structure methods."""
