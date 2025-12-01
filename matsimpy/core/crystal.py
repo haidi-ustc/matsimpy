@@ -597,6 +597,10 @@ class Crystal(Structure):
         info = f"{self.__class__.__name__}: {self.formula}\n"
         info += f"  Sites: {len(self)} atoms\n"
 
+        # PBC information
+        pbc_str = "(" + ", ".join("True" if p else "False" for p in self.pbc) + ")"
+        info += f"  PBC: {pbc_str}\n"
+
         # Lattice parameters (use helper method from Lattice to avoid duplication)
         info += (
             f"  Lattice: {self.lattice._format_lattice_params(include_units=True)}\n"
@@ -645,9 +649,10 @@ class Crystal(Structure):
             f"a={self.lattice.a:.4f}, b={self.lattice.b:.4f}, c={self.lattice.c:.4f}, "
             f"α={self.lattice.alpha:.1f}°, β={self.lattice.beta:.1f}°, γ={self.lattice.gamma:.1f}°"
         )
+        pbc_str = "(" + ", ".join("True" if p else "False" for p in self.pbc) + ")"
         return (
             f"{self.__class__.__name__}(formula='{self.formula}', "
-            f"nsites={len(self)}, lattice={lattice_params})"
+            f"nsites={len(self)}, lattice={lattice_params}, pbc={pbc_str})"
         )
 
     def __getitem__(self, item):
