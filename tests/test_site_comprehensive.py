@@ -92,10 +92,10 @@ class TestSiteComprehensive(unittest.TestCase):
         """Test representation (concise format)."""
         site = Site([0, 0, 0], specie='Fe')
         repr_str = repr(site)
-        # __repr__ should be concise: "Fe @ [0.0, 0.0, 0.0] (fractional)"
+        # __repr__ should be concise: "Fe @ [0.0, 0.0, 0.0] (cartesian)"
         self.assertIn('Fe', repr_str)
         self.assertIn('@', repr_str)
-        self.assertIn('fractional', repr_str)
+        self.assertIn('cartesian', repr_str)
     
     def test_site_str(self):
         """Test string representation (verbose format)."""

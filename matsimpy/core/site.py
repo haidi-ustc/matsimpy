@@ -11,13 +11,13 @@ class Site(MSONable):
     A base class representing a site (atom) in a structure.
 
     A Site represents a single atom at a specific position with optional properties.
-    Used for molecules and non-periodic structures.
+    Used for molecules and non-periodic structures. Coordinates are always Cartesian
+    (no lattice, so fractional coordinates don't apply).
 
     Args:
-        position: 3D position coordinates [x, y, z]
+        position: 3D position coordinates [x, y, z] in Angstroms (always Cartesian)
         specie: Atomic species (string symbol, atomic number, or Element object)
         properties: Optional dictionary of site properties (e.g., charge, magmom)
-        coords_are_cartesian: If True, position is Cartesian; if False, fractional (default)
 
     Examples:
         >>> site = Site([0, 0, 0], 'Fe')
@@ -30,19 +30,18 @@ class Site(MSONable):
         position: Union[List[float], np.ndarray],
         specie: Union[str, int, Element] = "X",
         properties: Optional[Dict[str, Any]] = None,
-        coords_are_cartesian: bool = False,
     ):
         self._position = self._validate_position(position)
         self._specie = self._validate_specie(specie)
         self._properties = self._validate_properties(properties)
-        self._coords_are_cartesian = coords_are_cartesian
 
     def as_dict(self) -> Dict[str, Any]:
         """
         Returns a dictionary representation of the Site.
 
         Returns:
-            Dictionary containing position, specie, properties, and coords_are_cartesian
+            Dictionary containing position, specie, and properties.
+            Note: coords_are_cartesian is not included as Site always uses Cartesian coordinates.
         """
         return {
             "@module": self.__class__.__module__,
@@ -50,7 +49,6 @@ class Site(MSONable):
             "position": self.position.tolist(),
             "specie": self.specie,
             "properties": self.properties,
-            "coords_are_cartesian": self.coords_are_cartesian,
         }
 
     @classmethod
@@ -59,24 +57,19 @@ class Site(MSONable):
         Creates a Site object from a dictionary representation.
 
         Args:
-            d: Dictionary containing position, specie, properties, and coords_are_cartesian
+            d: Dictionary containing position, specie, and properties.
+               Old dicts may contain coords_are_cartesian, which is ignored
+               (Site always uses Cartesian coordinates).
 
         Returns:
             Site object
         """
-        # Handle backward compatibility: if coords_type exists, convert it
-        if "coords_are_cartesian" in d:
-            coords_are_cartesian = d["coords_are_cartesian"]
-        elif "coords_type" in d:
-            coords_are_cartesian = d["coords_type"] == "cartesian"
-        else:
-            coords_are_cartesian = False
-
+        # Ignore coords_are_cartesian from old dicts for backward compatibility
+        # Site always uses Cartesian coordinates (no lattice)
         return cls(
             position=d["position"],
             specie=d.get("specie", "X"),
             properties=d.get("properties"),
-            coords_are_cartesian=coords_are_cartesian,
         )
 
     def _validate_specie(self, specie: Optional[Union[str, int, Element]]) -> str:
@@ -187,13 +180,18 @@ class Site(MSONable):
 
     @property
     def coords_are_cartesian(self) -> bool:
-        """Get whether coordinates are Cartesian (True) or fractional (False)."""
-        return self._coords_are_cartesian
+        """
+        Get whether coordinates are Cartesian.
+        
+        Always returns True for Site (molecules/non-periodic structures always use Cartesian).
+        This property exists for backward compatibility and consistency with CrystalSite.
+        """
+        return True
 
     @property
     def coords_type(self) -> str:
-        """Get coordinate type as string ('cartesian' or 'fractional') for backward compatibility."""
-        return "cartesian" if self._coords_are_cartesian else "fractional"
+        """Get coordinate type as string. Always returns 'cartesian' for Site."""
+        return "cartesian"
 
     @property
     def properties(self) -> Dict[str, Any]:
@@ -239,14 +237,13 @@ class Site(MSONable):
         """Unambiguous string representation (concise, developer-friendly)."""
         props_str = f", {self.properties}" if self.properties else ""
         return (
-            f"{self.specie} @ {self.position.tolist()} ({self.coords_type}){props_str}"
+            f"{self.specie} @ {self.position.tolist()} (cartesian){props_str}"
         )
 
     def __str__(self) -> str:
         """Human-readable string representation (verbose, user-friendly)."""
         props_str = f", properties={self.properties}" if self.properties else ""
-        coords_type_str = f", coords_are_cartesian={self.coords_are_cartesian}"
-        return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str}{coords_type_str})"
+        return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str})"
 
     def __eq__(self, other) -> bool:
         """Check equality with another Site."""
@@ -256,7 +253,6 @@ class Site(MSONable):
             self.specie == other.specie
             and np.allclose(self.position, other.position)
             and self.properties == other.properties
-            and self.coords_are_cartesian == other.coords_are_cartesian
         )
 
 
@@ -300,16 +296,12 @@ class CrystalSite(Site):
             self._frac_position = self._validate_position(position)
             self._cart_position = self._convert_to_cartesian()
 
-        # Determine base position
-        base_position = (
-            self._cart_position if coords_are_cartesian else self._frac_position
-        )
-
+        # Pass Cartesian position to parent Site
+        # Site always uses Cartesian coordinates (no lattice, so no fractional coords)
         super().__init__(
-            position=base_position,
+            position=self._cart_position,
             specie=specie,
             properties=properties,
-            coords_are_cartesian=coords_are_cartesian,
         )
 
     def as_dict(self) -> Dict[str, Any]:
@@ -317,9 +309,16 @@ class CrystalSite(Site):
         Returns a dictionary representation of the CrystalSite.
 
         Returns:
-            Dictionary containing position, specie, properties, lattice, and coordinate type
+            Dictionary containing position, specie, properties, lattice, and coordinate type.
+            Position stored is the original input (fractional or Cartesian based on coords_are_cartesian).
         """
         d = super().as_dict()
+        # Override position with the original input position (fractional or Cartesian)
+        # not the base position from Site (which is always Cartesian)
+        if self._coords_are_cartesian:
+            d["position"] = self._cart_position.tolist()
+        else:
+            d["position"] = self._frac_position.tolist()
         d["lattice"] = self.lattice.as_dict()
         d["coords_are_cartesian"] = self._coords_are_cartesian
         return d
@@ -390,6 +389,22 @@ class CrystalSite(Site):
         if old_lattice is not None:
             # Keep fractional position consistent, recalculate Cartesian
             self._cart_position = self._convert_to_cartesian()
+
+    @property
+    def position(self) -> np.ndarray:
+        """
+        Get position as numpy array.
+        
+        Returns the original input position (fractional or Cartesian based on coords_are_cartesian).
+        This overrides the parent Site.position which always returns Cartesian.
+
+        Returns:
+            3D position array [x, y, z] - original input format
+        """
+        if self._coords_are_cartesian:
+            return np.array(self._cart_position, dtype=np.float64)
+        else:
+            return np.array(self._frac_position, dtype=np.float64)
 
     @property
     def frac_position(self) -> np.ndarray:
