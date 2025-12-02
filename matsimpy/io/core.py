@@ -215,7 +215,7 @@ def write(
             # JSON and ASE can handle both
             raise ValueError(
                 f"Format {format_ext} is not suitable for Molecule structures. "
-                f"Use crystal formats (.vasp, .cif, .xsf) for crystals."
+                f"Use molecule formats (.xyz, .pdb, .mol) for molecules."
             )
     else:
         raise TypeError(f"Unsupported structure type: {type(structure)}")

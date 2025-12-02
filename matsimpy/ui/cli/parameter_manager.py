@@ -253,12 +253,22 @@ class CLIParameterManager:
             ('', '\n\nChoice (default=1): ')
         ]), style=self.style)
         
-        choice = self.session.prompt(
-            FormattedText([
-                ('class:prompt', '> ')
-            ]),
-            style=self.style
-        ).strip() or "1"
+        # Validate choice input - only accept 1, 2, 3, or 4
+        while True:
+            choice = self.session.prompt(
+                FormattedText([
+                    ('class:prompt', '> ')
+                ]),
+                style=self.style
+            ).strip() or "1"
+            
+            # Validate choice
+            if choice in ["1", "2", "3", "4"]:
+                break
+            else:
+                print_formatted_text(FormattedText([
+                    ('class:error', f'\nInvalid choice: "{choice}". Please enter 1, 2, 3, or 4 (or press Enter for default).')
+                ]), style=self.style)
         
         if choice == "2":
             params = self._get_parameters_json()
@@ -267,6 +277,7 @@ class CLIParameterManager:
         elif choice == "4":
             params = self._use_previous_values()
         else:
+            # choice == "1" or default
             params = self._get_parameters_individual()
             
         # Save to history
@@ -513,10 +524,67 @@ class CLIParameterManager:
         
         print_formatted_text(FormattedText([
             ('class:info', '\nEnter parameter values:'),
-            ('class:info', '(Tab for completion, ↑/↓ for history)')
+            ('class:info', '(Tab for completion, ↑/↓ for history)'),
+            ('class:info', '\nTip: Press Enter to use default values for optional parameters')
         ]), style=self.style)
         
         for param in self.parameter_definitions:
+            # Handle non-required parameters with defaults - allow quick skip with Enter
+            if not param.required and param.default is not None:
+                while True:
+                    # Show the parameter with clear indication it's optional
+                    prompt_parts = [
+                        ('class:info', f'\n{param.name}'),
+                        ('', f' ({param.description})'),
+                        ('class:info', f' [{param.type.__name__}]'),
+                        ('', f' (default: {param.default})'),
+                        ('class:info', ' - Press Enter to use default'),
+                    ]
+                    prompt_parts.append(('', '\n'))
+                    print_formatted_text(FormattedText(prompt_parts), style=self.style)
+                    
+                    value = self.session.prompt(
+                        FormattedText([
+                            ('class:prompt', '> ')
+                        ]),
+                        style=self.style,
+                        validator=ParameterValidator(param) if param.validator else None
+                    ).strip()
+                    
+                    # Use default if empty
+                    if not value:
+                        params[param.name] = param.default
+                        break
+                    
+                    # Convert and validate
+                    try:
+                        if param.type == bool:
+                            if value.lower() in ['true', 'yes', 'y', '1']:
+                                converted_value = True
+                            elif value.lower() in ['false', 'no', 'n', '0']:
+                                converted_value = False
+                            else:
+                                raise ValueError("Invalid boolean value")
+                        elif param.type == dict:
+                            converted_value = json.loads(value)
+                        else:
+                            converted_value = param.type(value)
+                        
+                        # Validate
+                        if param.validator and not param.validator(converted_value):
+                            print_formatted_text(FormattedText([
+                                ('class:error', 'Value does not meet validation criteria. Please try again.')
+                            ]), style=self.style)
+                            continue  # Retry input
+                        
+                        params[param.name] = converted_value
+                        break  # Success, move to next parameter
+                    except (ValueError, json.JSONDecodeError) as e:
+                        print_formatted_text(FormattedText([
+                            ('class:error', f'Invalid value: {str(e)}. Please try again.')
+                        ]), style=self.style)
+                        continue  # Retry input
+                continue  # Move to next parameter
             while True:
                 # Build prompt
                 prompt_parts = [

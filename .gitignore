@@ -84,3 +84,4 @@ benchmarks/*.json
 benchmarks/*.csv
 benchmarks/*.txt
 benchmarks/results/
+configs

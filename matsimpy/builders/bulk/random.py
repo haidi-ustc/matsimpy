@@ -40,16 +40,82 @@ def random_crystal(
             "Install with: pip install pyxtal"
         )
 
-    pyxtal_crystal = pyxtal.crystal.random_crystal(
-        dim=dim, group=group, species=species, numIons=num_ions, **kwargs
-    )
-
-    # Extract from pyxtal_crystal
-    species_list = pyxtal_crystal.species
-    positions = pyxtal_crystal.frac_coords
-    lattice = Lattice(pyxtal_crystal.lattice.matrix)
-
-    return Crystal(species_list, positions, lattice)
+    try:
+        # Use the correct PyXtal API: pyxtal.pyxtal class with from_random method
+        from pyxtal import pyxtal
+        
+        pyxtal_crystal = pyxtal()
+        pyxtal_crystal.from_random(dim, group, species, num_ions, **kwargs)
+        
+        # Check if generation was successful
+        if not getattr(pyxtal_crystal, 'valid', False):
+            raise ValueError("PyXtal failed to generate a valid crystal structure")
+        
+        # Try to convert to pymatgen first (most reliable method)
+        try:
+            if hasattr(pyxtal_crystal, 'to_pymatgen'):
+                pymatgen_struct = pyxtal_crystal.to_pymatgen()
+                # Convert pymatgen Structure to MatSimPy Crystal
+                from ...io.converters import from_pymatgen
+                return from_pymatgen(pymatgen_struct)
+        except (AttributeError, ImportError):
+            pass  # Fall through to direct attribute access
+        
+        # Fallback: Extract directly from pyxtal object
+        # PyXtal objects typically have 'struc' attribute with the structure
+        if hasattr(pyxtal_crystal, 'struc'):
+            struc = pyxtal_crystal.struc
+            # Extract species and positions from structure
+            if hasattr(struc, 'species'):
+                species_list = [str(s.symbol) if hasattr(s, 'symbol') else str(s) 
+                               for s in struc.species]
+            else:
+                raise AttributeError("PyXtal structure does not have species attribute")
+            
+            # Get fractional coordinates
+            if hasattr(struc, 'frac_coords'):
+                positions = struc.frac_coords.tolist() if hasattr(struc.frac_coords, 'tolist') else struc.frac_coords
+            elif hasattr(struc, 'coords'):
+                positions = struc.coords.tolist() if hasattr(struc.coords, 'tolist') else struc.coords
+            else:
+                raise AttributeError("PyXtal structure does not have position attributes")
+            
+            # Get lattice
+            if hasattr(struc, 'lattice'):
+                if hasattr(struc.lattice, 'matrix'):
+                    lattice_matrix = struc.lattice.matrix
+                else:
+                    raise AttributeError("PyXtal lattice does not have matrix attribute")
+            else:
+                raise AttributeError("PyXtal structure does not have lattice attribute")
+        else:
+            # Try accessing attributes directly on pyxtal_crystal
+            # Some versions may have structure data directly accessible
+            if hasattr(pyxtal_crystal, 'species'):
+                species_list = [str(s.symbol) if hasattr(s, 'symbol') else str(s) 
+                               for s in pyxtal_crystal.species]
+            else:
+                raise AttributeError("PyXtal crystal does not have species or struc attribute")
+            
+            if hasattr(pyxtal_crystal, 'frac_coords'):
+                positions = pyxtal_crystal.frac_coords.tolist() if hasattr(pyxtal_crystal.frac_coords, 'tolist') else pyxtal_crystal.frac_coords
+            else:
+                raise AttributeError("PyXtal crystal does not have frac_coords or struc attribute")
+            
+            if hasattr(pyxtal_crystal, 'lattice') and hasattr(pyxtal_crystal.lattice, 'matrix'):
+                lattice_matrix = pyxtal_crystal.lattice.matrix
+            else:
+                raise AttributeError("PyXtal crystal does not have lattice.matrix or struc attribute")
+        
+        lattice = Lattice(lattice_matrix)
+        return Crystal(species_list, positions, lattice)
+        
+    except (AttributeError, ValueError, TypeError) as e:
+        # Re-raise with more informative message
+        raise RuntimeError(
+            f"Failed to extract structure from PyXtal crystal object: {e}. "
+            f"This may be due to a PyXtal API change. Please check your PyXtal version."
+        ) from e
 
 
 __all__ = ["random_crystal"]

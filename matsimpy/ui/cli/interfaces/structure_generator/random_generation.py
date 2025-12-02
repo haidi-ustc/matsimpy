@@ -62,12 +62,22 @@ def crystal_structure(style: Optional[str] = None) -> Dict[str, Any]:
         
         # Generate structure using matsimpy builders
         # Try random_crystal first (requires pyxtal), fall back to prototype
+        species = list(composition_dict.keys())
+        num_ions = [composition_dict[el] for el in species]
+        
         try:
-            species = list(composition_dict.keys())
-            num_ions = [composition_dict[el] for el in species]
             # Use space group 1 (P1 - no symmetry) for random generation
             structure = random_crystal(3, 1, species, num_ions)
-        except ImportError:
+        except (ImportError, RuntimeError, AttributeError, ValueError) as e:
+            # Fall back to prototype-based generation if pyxtal fails
+            # This handles: ImportError (pyxtal not installed), RuntimeError (pyxtal API issues),
+            # AttributeError (missing attributes), ValueError (generation failed)
+            if isinstance(e, ImportError):
+                error_msg = "PyXtal is not installed. Install with: pip install pyxtal"
+            else:
+                error_msg = f"PyXtal generation failed: {str(e)}. Falling back to prototype-based generation."
+                print(f"Warning: {error_msg}")
+            
             # Fall back to prototype-based generation
             if len(species) == 1:
                 # Single element - use FCC
@@ -78,7 +88,12 @@ def crystal_structure(style: Optional[str] = None) -> Dict[str, Any]:
                 lattice_constant = float(params.get("min_distance", 1.0)) * 2.0
                 structure = from_prototype('rocksalt', species, lattice_constant)
             else:
-                return {"status": False, "message": "Complex compositions require pyxtal. Install with: pip install pyxtal"}
+                return {
+                    "status": False, 
+                    "message": f"Cannot generate structure for {len(species)}-element composition. "
+                               f"PyXtal is required but failed: {str(e)}. "
+                               f"Install with: pip install pyxtal"
+                }
         
         # Save structure
         output_dir = Path("configs")
@@ -208,7 +223,7 @@ def molecular_structure(style: Optional[str] = None) -> Dict[str, Any]:
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         formula = params.get("formula", "H2O").replace(" ", "")
-        output_file = output_dir / f"{formula}_{timestamp}.cif"
+        output_file = output_dir / f"{formula}_{timestamp}.xyz"
         
         from matsimpy.io import write
         write(structure, str(output_file))
