@@ -529,6 +529,12 @@ class CLIParameterManager:
         ]), style=self.style)
         
         for param in self.parameter_definitions:
+            # Skip coordinates parameter if position_type is 'random'
+            if param.name == "coordinates" and params.get("position_type") == "random":
+                # Automatically use default and skip input
+                params[param.name] = param.default
+                continue
+            
             # Handle non-required parameters with defaults - allow quick skip with Enter
             if not param.required and param.default is not None:
                 while True:

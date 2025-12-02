@@ -1251,8 +1251,83 @@ class AdvancedInteractiveMenu:
         ])
         print_formatted_text(summary, style=self.style)
 
+    def _paginate_output(self, formatted_lines: List[Tuple], page_size: int = 20):
+        """Display output with pagination support (less/more style)"""
+        import os
+        
+        # Get terminal height, default to 24 if unavailable
+        try:
+            terminal_height = os.get_terminal_size().lines
+            # Reserve 4 lines for header/footer
+            page_size = min(page_size, terminal_height - 4)
+        except:
+            page_size = 20
+        
+        # Count approximate lines (each formatted line item counts as 1, plus newlines in text)
+        total_items = len(formatted_lines)
+        # Simple chunking: divide items into pages
+        items_per_page = max(1, page_size // 2)  # Rough estimate: 2 items per screen line
+        total_pages = (total_items + items_per_page - 1) // items_per_page if total_items > 0 else 1
+        current_page = 0
+        
+        while current_page < total_pages:
+            # Clear screen
+            clear()
+            
+            # Display current page
+            start_idx = current_page * items_per_page
+            end_idx = min(start_idx + items_per_page, total_items)
+            page_lines = formatted_lines[start_idx:end_idx]
+            
+            print_formatted_text(FormattedText(page_lines), style=self.style)
+            
+            # Show pagination info
+            print_formatted_text(FormattedText([
+                ('class:separator', '-' * 70),
+                ('', '\n'),
+                ('class:info', f'Page {current_page + 1}/{total_pages} (showing items {start_idx + 1}-{end_idx} of {total_items})'),
+                ('', '\n'),
+                ('class:info', 'Commands: [Space/Enter/n] Next | [b/p] Previous | [q] Quit | [g<num>] Go to page | [h] Help'),
+                ('', '\n')
+            ]), style=self.style)
+            
+            # Get user input
+            user_input = prompt("> ", style=self.style).strip().lower()
+            
+            if user_input in ['q', 'quit', 'exit']:
+                break
+            elif user_input in ['b', 'back', 'p', 'prev', 'previous']:
+                if current_page > 0:
+                    current_page -= 1
+            elif user_input in ['', ' ', 'n', 'next']:
+                if current_page < total_pages - 1:
+                    current_page += 1
+            elif user_input.startswith('g') or (user_input.isdigit() and len(user_input) <= 3):
+                # Go to specific page
+                try:
+                    if user_input.startswith('g'):
+                        page_num = int(user_input[1:].strip()) - 1
+                    else:
+                        page_num = int(user_input) - 1
+                    if 0 <= page_num < total_pages:
+                        current_page = page_num
+                except ValueError:
+                    pass
+            elif user_input == 'h' or user_input == 'help':
+                print_formatted_text(FormattedText([
+                    ('class:info', '\nNavigation Help:'),
+                    ('class:info', '  Space/Enter/n - Next page'),
+                    ('class:info', '  b/p - Previous page'),
+                    ('class:info', '  g<num> or <num> - Go to page number'),
+                    ('class:info', '  q - Quit'),
+                    ('', '\n')
+                ]), style=self.style)
+                input("Press Enter to continue...")
+        
+        clear()
+    
     def show_implementation_status(self):
-        """Show detailed implementation status for all interfaces"""
+        """Show detailed implementation status for all interfaces with pagination"""
         lines = []
         lines.append(('class:header', 'Detailed Implementation Status'))
         lines.append(('', '\n'))
@@ -1314,7 +1389,7 @@ class AdvancedInteractiveMenu:
                 items.sort(key=lambda x: x['name'])
                 
                 for item in items:
-                    # Show path
+                    # Show path with color based on status
                     path_parts = []
                     if item.get('parent'):
                         parent_item = self.find_menu_item(item['parent'])
@@ -1323,15 +1398,18 @@ class AdvancedInteractiveMenu:
                             if grandparent_item:
                                 path_parts = [grandparent_item['name'], parent_item['name'], item['name']]
                     
+                    # Use different colors for different statuses
+                    status_color_class = status_colors[status]
+                    
                     if path_parts:
                         path_str = " → ".join(path_parts)
-                        lines.append(('class:info', f'  {item["code"]} {path_str}'))
+                        lines.append((f'class:{status_color_class}', f'  {item["code"]} {path_str}'))
                     else:
-                        lines.append(('class:info', f'  {item["code"]} {item["name"]}'))
+                        lines.append((f'class:{status_color_class}', f'  {item["code"]} {item["name"]}'))
                     
-                    # Show interface path
+                    # Show interface path with appropriate color
                     if item.get('interface'):
-                        lines.append(('class:info', f'    Interface: {item["interface"]}'))
+                        lines.append((f'class:{status_color_class}', f'    Interface: {item["interface"]}'))
                     
                     lines.append(('', '\n'))
                 
@@ -1339,11 +1417,14 @@ class AdvancedInteractiveMenu:
         
         lines.append(('class:separator', '-' * 70))
         lines.append(('', '\n'))
-        lines.append(('class:info', 'Press Enter to continue...'))
-        lines.append(('', '\n'))
         
-        print_formatted_text(FormattedText(lines), style=self.style)
-        input()  # Pause for user to read
+        # Use pagination if output is long
+        if len(lines) > 30:
+            self._paginate_output(lines, page_size=20)
+        else:
+            # Short output, just display normally
+            print_formatted_text(FormattedText(lines), style=self.style)
+            input("Press Enter to continue...")
 
 
 def main():

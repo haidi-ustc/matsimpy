@@ -66,29 +66,55 @@ def _parse_coordinates_list(coords_str: str) -> List[List[float]]:
     return coordinates
 
 def _validate_element_list(elements_str: str) -> bool:
-    """Validate element list format."""
+    """Validate element list format. Accepts ['Fe', 'O'], 'Fe,O', or 'Fe'."""
     try:
         elements_str = elements_str.strip()
-        if not (elements_str.startswith('[') and elements_str.endswith(']')):
+        if not elements_str:
             return False
         
-        inner = elements_str[1:-1]
-        if not inner:
-            return False
-            
-        elements = [el.strip().strip('"\'') for el in inner.split(',')]
+        # Try to parse as list format ['Fe', 'O'] or ["Fe", "O"]
+        if elements_str.startswith('[') and elements_str.endswith(']'):
+            inner = elements_str[1:-1].strip()
+            if not inner:
+                return False
+            elements = [el.strip().strip('"\'') for el in inner.split(',')]
+        else:
+            # Try comma-separated format 'Fe,O' or single element 'Fe'
+            elements = [el.strip().strip('"\'') for el in elements_str.split(',')]
+        
+        # Validate each element
         for element in elements:
-            if not _validate_element(element):
+            if not element or not _validate_element(element):
                 return False
         return True
     except:
         return False
 
 def _parse_element_list(elements_str: str) -> List[str]:
-    """Parse element list from string."""
+    """Parse element list from string. Handles multiple formats:
+    - 'Fe' (single element, no quotes)
+    - 'Fe,O' (comma-separated, no quotes)
+    - 'Fe, O' (with spaces)
+    - ['Fe', 'O'] (list format with quotes)
+    - [Fe, O] (list format without quotes)
+    """
     elements_str = elements_str.strip()
-    inner = elements_str[1:-1]
-    elements = [el.strip().strip('"\'') for el in inner.split(',')]
+    
+    # Try to parse as list format ['Fe', 'O'], [Fe, O], or ["Fe", "O"]
+    if elements_str.startswith('[') and elements_str.endswith(']'):
+        inner = elements_str[1:-1].strip()
+        if inner:
+            # Split by comma and strip quotes/spaces from each element
+            elements = [el.strip().strip('"\'') for el in inner.split(',')]
+        else:
+            elements = []
+    else:
+        # Parse comma-separated format 'Fe,O' or single element 'Fe' (no quotes needed)
+        elements = [el.strip().strip('"\'') for el in elements_str.split(',')]
+    
+    # Filter out empty strings
+    elements = [el for el in elements if el]
+    
     return elements
 
 def _calculate_min_distance(structure: Union[Crystal, Molecule]) -> float:
@@ -124,7 +150,7 @@ def add_atoms(style: Optional[str] = None) -> None:
         
         param_manager.define_parameter(
             name="elements",
-            description="List of element symbols to add (e.g., ['Fe', 'O'] or 'Fe,O')",
+            description="Element symbols to add. Formats: 'Fe', 'Fe,O', or ['Fe', 'O']",
             param_type=str,
             required=True,
             default="['Fe']",
@@ -142,14 +168,14 @@ def add_atoms(style: Optional[str] = None) -> None:
         
         param_manager.define_parameter(
             name="coordinates",
-            description="List of atomic coordinates [[x1,y1,z1], [x2,y2,z2], ...] in Angstroms",
+            description="List of atomic coordinates [[x1,y1,z1], [x2,y2,z2], ...] in Angstroms (skipped for 'random' position type)",
             param_type=str,
             required=False,
             default="[[0,0,0]]",
             validator=_validate_coordinates_list
         )
         
-        # Get all parameters
+        # Get all parameters (coordinates will be automatically skipped if position_type is 'random')
         params = param_manager.get_parameters()
         if not params:
             return
@@ -274,7 +300,14 @@ def add_atoms(style: Optional[str] = None) -> None:
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         elements_str = "_".join(elements)
-        output_file = output_dir / f"structure_with_added_{elements_str}_{timestamp}.cif"
+        
+        # Use appropriate file format based on structure type
+        if isinstance(working_structure, Molecule):
+            file_ext = ".xyz"
+        else:
+            file_ext = ".cif"
+        
+        output_file = output_dir / f"structure_with_added_{elements_str}_{timestamp}{file_ext}"
         
         write(working_structure, str(output_file))
         print(f"\n=== Structure Saved ===")
