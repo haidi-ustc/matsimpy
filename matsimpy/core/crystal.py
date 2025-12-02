@@ -1464,36 +1464,62 @@ class Crystal(Structure):
         indices: Optional[Union[List[int], "AtomSelection"]] = None,
         seed: Optional[int] = None,
         inplace: bool = True,
+        perturb_positions: bool = True,
+        perturb_lattice: bool = False,
+        amplitude_lattice: Optional[float] = None,
     ) -> "Crystal":
         """
-        Add random perturbations to atomic positions.
+        Add random perturbations to atomic positions, lattice, or both.
 
-        Convenience method that calls the transformation module's perturb_positions function.
-        By default, modifies the structure in-place.
+        Supports perturbing positions, lattice vectors, or both simultaneously.
+        By default, only positions are perturbed (backward compatible).
 
         Args:
-            amplitude: Maximum perturbation amplitude (Angstroms)
+            amplitude: Maximum perturbation amplitude (Angstroms) for positions.
+                      Used as default for lattice if amplitude_lattice is None.
             indices: Atom indices to perturb (default: all atoms).
                     Can be a list of indices or an AtomSelection object.
+                    Only used when perturb_positions=True.
             seed: Random seed for reproducibility
             inplace: If True, modify this crystal in-place (default: True).
                     If False, return a new Crystal object.
+            perturb_positions: If True, perturb atomic positions (default: True).
+            perturb_lattice: If True, perturb lattice vectors (default: False).
+            amplitude_lattice: Maximum perturbation amplitude for lattice vectors (Angstroms).
+                             If None, uses the same value as amplitude.
 
         Returns:
-            Crystal: Structure with perturbed positions (self if inplace=True, new object if inplace=False)
+            Crystal: Structure with perturbations applied (self if inplace=True, new object if inplace=False)
+
+        Raises:
+            ValueError: If both perturb_positions and perturb_lattice are False.
 
         Examples:
             >>> from matsimpy.builders.bulk import from_prototype
             >>> from matsimpy.utils.selection import AtomSelection
             >>> crystal = from_prototype('diamond', 'Si', 5.43)
-            >>> # Perturb all atoms by up to 0.1 Angstrom
+            >>> 
+            >>> # Perturb positions only (default, backward compatible)
             >>> crystal.perturb(0.1)
-            >>> # Perturb specific atoms without modifying original
+            >>> 
+            >>> # Perturb lattice only
+            >>> crystal.perturb(0.05, perturb_positions=False, perturb_lattice=True)
+            >>> 
+            >>> # Perturb both positions and lattice
+            >>> crystal.perturb(0.1, perturb_lattice=True, amplitude_lattice=0.05)
+            >>> 
+            >>> # Perturb specific atoms (positions only)
             >>> perturbed = crystal.perturb(0.1, indices=[0, 1], inplace=False)
+            >>> 
             >>> # Perturb using AtomSelection
             >>> sel = AtomSelection(crystal).by_species('Si')
             >>> crystal.perturb(0.1, indices=sel)
         """
+        if not perturb_positions and not perturb_lattice:
+            raise ValueError(
+                "At least one of perturb_positions or perturb_lattice must be True"
+            )
+
         # Handle AtomSelection object
         from ..utils.selection import AtomSelection
 
@@ -1502,16 +1528,43 @@ class Crystal(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        from ..transformation.atomic import perturb_positions
+        # Determine if we need to copy the structure
+        if not inplace:
+            from ..transformation.base import _copy_structure
+            result = _copy_structure(self)
+        else:
+            result = self
 
-        result = perturb_positions(
-            self, amplitude, indices=indices, seed=seed, inplace=inplace
-        )
+        # Set up random seed if provided
+        if seed is not None:
+            import numpy as np
+            np.random.seed(seed)
+
+        # Perturb positions if requested
+        if perturb_positions:
+            from ..transformation.atomic import perturb_positions
+
+            # Use inplace=True since we're working on result
+            result = perturb_positions(
+                result, amplitude, indices=indices, seed=None, inplace=True
+            )
+
+        # Perturb lattice if requested
+        if perturb_lattice:
+            from ..transformation.lattice import perturb_lattice
+
+            lattice_amplitude = amplitude_lattice if amplitude_lattice is not None else amplitude
+            # Use inplace=True since we're working on result
+            result = perturb_lattice(
+                result, lattice_amplitude, seed=None, inplace=True
+            )
+
         if inplace:
             # Update self with result's attributes
             self.positions = result.positions
             self.frac_positions = result.frac_positions
             self.cart_positions = result.cart_positions
+            self.lattice = result.lattice
             self._sites = result._sites
             self._neighbor_tree = None  # Invalidate neighbor tree
             self._neighbor_tree_positions = None

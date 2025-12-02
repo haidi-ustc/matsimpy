@@ -4,7 +4,7 @@ Lattice operations (strain, scale, transform).
 Crystal-specific operations for lattice manipulation.
 """
 
-from .strain import apply_strain, apply_deformation
+from .strain import apply_strain, apply_deformation, perturb_lattice
 from .scale import scale_lattice, set_volume, optimize_lattice
 from .transform import (
     rotate_lattice,
@@ -17,6 +17,7 @@ __all__ = [
     # Strain
     "apply_strain",
     "apply_deformation",
+    "perturb_lattice",
     # Scale
     "scale_lattice",
     "set_volume",

@@ -2,7 +2,7 @@
 Strain and deformation operations for crystal lattices.
 """
 
-from typing import List, Union
+from typing import List, Union, Optional
 import numpy as np
 from ...core import Crystal, Lattice
 
@@ -109,4 +109,56 @@ def apply_deformation(
     return crystal
 
 
-__all__ = ["apply_strain", "apply_deformation"]
+def perturb_lattice(
+    crystal: Crystal,
+    amplitude: float,
+    seed: Optional[int] = None,
+    inplace: bool = False,
+) -> Crystal:
+    """
+    Add random perturbations to lattice vectors.
+
+    Args:
+        crystal: Crystal structure to perturb
+        amplitude: Maximum perturbation amplitude (Angstroms) for lattice vectors
+        seed: Random seed for reproducibility
+        inplace: If True, modify crystal in-place
+
+    Returns:
+        Crystal with perturbed lattice vectors
+
+    Examples:
+        >>> from matsimpy.transformation.lattice import perturb_lattice
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> crystal = from_prototype('diamond', 'Si', 5.43)
+        >>> # Perturb lattice vectors by up to 0.1 Angstrom
+        >>> perturbed = perturb_lattice(crystal, 0.1)
+        >>> # With random seed for reproducibility
+        >>> perturbed = perturb_lattice(crystal, 0.05, seed=42)
+    """
+    from ..base import _copy_structure
+
+    if not inplace:
+        crystal = _copy_structure(crystal)
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    # Generate random perturbations for each lattice vector
+    # Shape: (3, 3) - 3 vectors, each with 3 components
+    perturbations = np.random.randn(3, 3) * amplitude
+
+    # Add perturbations to lattice vectors
+    new_lattice_vectors = crystal.lattice.lattice_vectors + perturbations
+    crystal.lattice = Lattice(new_lattice_vectors)
+
+    # Update Cartesian positions (fractional positions stay the same)
+    crystal.cart_positions = crystal._convert_to_cartesian()
+    crystal._sites = crystal._initialize_sites()
+    crystal._neighbor_tree = None
+    crystal._neighbor_tree_positions = None
+
+    return crystal
+
+
+__all__ = ["apply_strain", "apply_deformation", "perturb_lattice"]
