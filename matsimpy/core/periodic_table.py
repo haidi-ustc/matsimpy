@@ -978,6 +978,462 @@ class Element:
         """
         return self._data.get("Mendeleev no")
 
+    # ========================================================================
+    # Periodic Table Information
+    # ========================================================================
+    
+    @property
+    def period(self) -> int:
+        """
+        Period number (1-7) in the periodic table.
+        
+        The period indicates the highest energy level occupied by electrons
+        in the ground state electron configuration.
+        
+        Returns:
+            int: Period number (1-7)
+        
+        Examples:
+            >>> h = Element('H')
+            >>> print(h.period)  # 1
+            >>> fe = Element('Fe')
+            >>> print(fe.period)  # 4
+            >>> u = Element('U')
+            >>> print(u.period)  # 7
+        """
+        z = self._atomic_no
+        # Period 1: H, He (1-2)
+        if z <= 2:
+            return 1
+        # Period 2: Li-Ne (3-10)
+        elif z <= 10:
+            return 2
+        # Period 3: Na-Ar (11-18)
+        elif z <= 18:
+            return 3
+        # Period 4: K-Kr (19-36)
+        elif z <= 36:
+            return 4
+        # Period 5: Rb-Xe (37-54)
+        elif z <= 54:
+            return 5
+        # Period 6: Cs-Rn (55-86)
+        elif z <= 86:
+            return 6
+        # Period 7: Fr-Og (87-118)
+        else:
+            return 7
+    
+    @property
+    def group(self) -> Optional[int]:
+        """
+        Group number (1-18) in the periodic table.
+        
+        Returns:
+            int: Group number (1-18) for main group and transition metals
+            None: For lanthanides and actinides (f-block elements)
+        
+        Examples:
+            >>> h = Element('H')
+            >>> print(h.group)  # 1
+            >>> fe = Element('Fe')
+            >>> print(fe.group)  # 8
+            >>> o = Element('O')
+            >>> print(o.group)  # 16
+            >>> la = Element('La')
+            >>> print(la.group)  # None (lanthanide)
+        """
+        z = self._atomic_no
+        
+        # Lanthanides (57-71) and Actinides (89-103) don't have standard group numbers
+        if 57 <= z <= 71 or 89 <= z <= 103:
+            return None
+        
+        # Period 1
+        if z == 1:  # H
+            return 1
+        elif z == 2:  # He
+            return 18
+        
+        # Period 2: Li-Ne (3-10)
+        elif 3 <= z <= 10:  # Li-Ne
+            if z <= 4:  # Li, Be
+                return z - 2  # 1, 2
+            else:  # B-Ne (5-10)
+                return z + 8  # 13, 14, 15, 16, 17, 18
+        
+        # Period 3: Na-Ar (11-18)
+        elif 11 <= z <= 18:  # Na-Ar
+            if z <= 12:  # Na, Mg
+                return z - 10  # 1, 2
+            else:  # Al-Ar (13-18)
+                return z  # 13, 14, 15, 16, 17, 18
+        
+        # Period 4: K-Kr (19-36)
+        elif 19 <= z <= 36:  # K-Kr
+            if z == 19:  # K
+                return 1
+            elif z == 20:  # Ca
+                return 2
+            elif 21 <= z <= 30:  # Sc-Zn (transition metals)
+                return z - 18  # 3-12
+            elif z == 31:  # Ga
+                return 13
+            elif z == 32:  # Ge
+                return 14
+            elif z == 33:  # As
+                return 15
+            elif z == 34:  # Se
+                return 16
+            elif z == 35:  # Br
+                return 17
+            elif z == 36:  # Kr
+                return 18
+        # Period 5: Rb-Xe (37-54)
+        elif 37 <= z <= 54:  # Rb-Xe
+            if z == 37:  # Rb
+                return 1
+            elif z == 38:  # Sr
+                return 2
+            elif 39 <= z <= 48:  # Y-Cd (transition metals)
+                return z - 36  # 3-12
+            elif z == 49:  # In
+                return 13
+            elif z == 50:  # Sn
+                return 14
+            elif z == 51:  # Sb
+                return 15
+            elif z == 52:  # Te
+                return 16
+            elif z == 53:  # I
+                return 17
+            elif z == 54:  # Xe
+                return 18
+        elif 55 <= z <= 56:  # Cs, Ba
+            return z - 54  # 1, 2
+        # Period 6: Cs-Rn (55-86, excluding lanthanides 57-71)
+        elif 72 <= z <= 86:  # Hf-Rn
+            if 72 <= z <= 80:  # Hf-Hg (transition metals)
+                return z - 68  # 4-12
+            elif z == 81:  # Tl
+                return 13
+            elif z == 82:  # Pb
+                return 14
+            elif z == 83:  # Bi
+                return 15
+            elif z == 84:  # Po
+                return 16
+            elif z == 85:  # At
+                return 17
+            elif z == 86:  # Rn
+                return 18
+        elif 87 <= z <= 88:  # Fr, Ra
+            return z - 86  # 1, 2
+        # Period 7: Fr-Og (87-118, excluding actinides 89-103)
+        elif 104 <= z <= 118:  # Rf-Og
+            if 104 <= z <= 112:  # Rf-Cn (transition metals)
+                return z - 100  # 4-12
+            elif z == 113:  # Nh
+                return 13
+            elif z == 114:  # Fl
+                return 14
+            elif z == 115:  # Mc
+                return 15
+            elif z == 116:  # Lv
+                return 16
+            elif z == 117:  # Ts
+                return 17
+            elif z == 118:  # Og
+                return 18
+        
+        return None
+    
+    @property
+    def block(self) -> str:
+        """
+        Electron block (s, p, d, or f) in the periodic table.
+        
+        Returns:
+            str: Block identifier ('s', 'p', 'd', or 'f')
+        
+        Examples:
+            >>> h = Element('H')
+            >>> print(h.block)  # 's'
+            >>> fe = Element('Fe')
+            >>> print(fe.block)  # 'd'
+            >>> o = Element('O')
+            >>> print(o.block)  # 'p'
+            >>> la = Element('La')
+            >>> print(la.block)  # 'f'
+        """
+        z = self._atomic_no
+        
+        # s-block: Groups 1-2 (H, He, Li, Be, Na, Mg, K, Ca, Rb, Sr, Cs, Ba, Fr, Ra)
+        if z in [1, 2, 3, 4, 11, 12, 19, 20, 37, 38, 55, 56, 87, 88]:
+            return 's'
+        
+        # f-block: Lanthanides (57-71) and Actinides (89-103)
+        if (57 <= z <= 71) or (89 <= z <= 103):
+            return 'f'
+        
+        # d-block: Transition metals (Sc-Zn, Y-Cd, Hf-Hg, Rf-Cn)
+        if ((21 <= z <= 30) or (39 <= z <= 48) or 
+            (72 <= z <= 80) or (104 <= z <= 112)):
+            return 'd'
+        
+        # p-block: Groups 13-18 (B, C, N, O, F, Ne, Al, Si, P, S, Cl, Ar, etc.)
+        return 'p'
+    
+    # ========================================================================
+    # Element Classification Properties
+    # ========================================================================
+    
+    @property
+    def is_metal(self) -> bool:
+        """
+        Check if the element is a metal.
+        
+        Metals are elements that typically have metallic properties such as
+        high electrical conductivity, luster, and malleability.
+        
+        Returns:
+            bool: True if the element is a metal, False otherwise
+        
+        Examples:
+            >>> fe = Element('Fe')
+            >>> print(fe.is_metal)  # True
+            >>> o = Element('O')
+            >>> print(o.is_metal)  # False
+            >>> al = Element('Al')
+            >>> print(al.is_metal)  # True
+        """
+        z = self._atomic_no
+        symbol = self.symbol
+        
+        # Non-metals: H, C, N, O, F, P, S, Cl, Se, Br, I, At
+        non_metals = {'H', 'C', 'N', 'O', 'F', 'P', 'S', 'Cl', 'Se', 'Br', 'I', 'At'}
+        if symbol in non_metals:
+            return False
+        
+        # Noble gases: He, Ne, Ar, Kr, Xe, Rn, Og
+        noble_gases = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og'}
+        if symbol in noble_gases:
+            return False
+        
+        # Metalloids: B, Si, Ge, As, Sb, Te, Po
+        metalloids = {'B', 'Si', 'Ge', 'As', 'Sb', 'Te', 'Po'}
+        if symbol in metalloids:
+            return False
+        
+        # All other elements are metals
+        return True
+    
+    @property
+    def is_nonmetal(self) -> bool:
+        """
+        Check if the element is a nonmetal.
+        
+        Nonmetals are elements that lack metallic properties and typically
+        have poor electrical conductivity.
+        
+        Returns:
+            bool: True if the element is a nonmetal, False otherwise
+        
+        Examples:
+            >>> o = Element('O')
+            >>> print(o.is_nonmetal)  # True
+            >>> fe = Element('Fe')
+            >>> print(fe.is_nonmetal)  # False
+            >>> h = Element('H')
+            >>> print(h.is_nonmetal)  # True
+        """
+        return not self.is_metal and not self.is_metalloid
+    
+    @property
+    def is_metalloid(self) -> bool:
+        """
+        Check if the element is a metalloid (semimetal).
+        
+        Metalloids have properties intermediate between metals and nonmetals.
+        
+        Returns:
+            bool: True if the element is a metalloid, False otherwise
+        
+        Examples:
+            >>> si = Element('Si')
+            >>> print(si.is_metalloid)  # True
+            >>> ge = Element('Ge')
+            >>> print(ge.is_metalloid)  # True
+            >>> fe = Element('Fe')
+            >>> print(fe.is_metalloid)  # False
+        """
+        metalloids = {'B', 'Si', 'Ge', 'As', 'Sb', 'Te', 'Po'}
+        return self.symbol in metalloids
+    
+    @property
+    def is_transition_metal(self) -> bool:
+        """
+        Check if the element is a transition metal.
+        
+        Transition metals are elements in groups 3-12 (d-block elements).
+        
+        Returns:
+            bool: True if the element is a transition metal, False otherwise
+        
+        Examples:
+            >>> fe = Element('Fe')
+            >>> print(fe.is_transition_metal)  # True
+            >>> cu = Element('Cu')
+            >>> print(cu.is_transition_metal)  # True
+            >>> al = Element('Al')
+            >>> print(al.is_transition_metal)  # False
+        """
+        return self.block == 'd'
+    
+    @property
+    def is_noble_gas(self) -> bool:
+        """
+        Check if the element is a noble gas.
+        
+        Noble gases are elements in group 18 with full valence electron shells.
+        
+        Returns:
+            bool: True if the element is a noble gas, False otherwise
+        
+        Examples:
+            >>> he = Element('He')
+            >>> print(he.is_noble_gas)  # True
+            >>> ar = Element('Ar')
+            >>> print(ar.is_noble_gas)  # True
+            >>> o = Element('O')
+            >>> print(o.is_noble_gas)  # False
+        """
+        noble_gases = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og'}
+        return self.symbol in noble_gases
+    
+    @property
+    def is_alkali_metal(self) -> bool:
+        """
+        Check if the element is an alkali metal.
+        
+        Alkali metals are elements in group 1 (excluding H): Li, Na, K, Rb, Cs, Fr.
+        
+        Returns:
+            bool: True if the element is an alkali metal, False otherwise
+        
+        Examples:
+            >>> na = Element('Na')
+            >>> print(na.is_alkali_metal)  # True
+            >>> k = Element('K')
+            >>> print(k.is_alkali_metal)  # True
+            >>> h = Element('H')
+            >>> print(h.is_alkali_metal)  # False (H is not considered alkali metal)
+        """
+        alkali_metals = {'Li', 'Na', 'K', 'Rb', 'Cs', 'Fr'}
+        return self.symbol in alkali_metals
+    
+    @property
+    def is_alkaline_earth_metal(self) -> bool:
+        """
+        Check if the element is an alkaline earth metal.
+        
+        Alkaline earth metals are elements in group 2: Be, Mg, Ca, Sr, Ba, Ra.
+        
+        Returns:
+            bool: True if the element is an alkaline earth metal, False otherwise
+        
+        Examples:
+            >>> mg = Element('Mg')
+            >>> print(mg.is_alkaline_earth_metal)  # True
+            >>> ca = Element('Ca')
+            >>> print(ca.is_alkaline_earth_metal)  # True
+            >>> be = Element('Be')
+            >>> print(be.is_alkaline_earth_metal)  # True
+        """
+        alkaline_earth_metals = {'Be', 'Mg', 'Ca', 'Sr', 'Ba', 'Ra'}
+        return self.symbol in alkaline_earth_metals
+    
+    @property
+    def is_halogen(self) -> bool:
+        """
+        Check if the element is a halogen.
+        
+        Halogens are elements in group 17: F, Cl, Br, I, At, Ts.
+        
+        Returns:
+            bool: True if the element is a halogen, False otherwise
+        
+        Examples:
+            >>> cl = Element('Cl')
+            >>> print(cl.is_halogen)  # True
+            >>> f = Element('F')
+            >>> print(f.is_halogen)  # True
+            >>> o = Element('O')
+            >>> print(o.is_halogen)  # False
+        """
+        halogens = {'F', 'Cl', 'Br', 'I', 'At', 'Ts'}
+        return self.symbol in halogens
+    
+    @property
+    def is_lanthanide(self) -> bool:
+        """
+        Check if the element is a lanthanide.
+        
+        Lanthanides are elements with atomic numbers 57-71 (La-Lu).
+        
+        Returns:
+            bool: True if the element is a lanthanide, False otherwise
+        
+        Examples:
+            >>> la = Element('La')
+            >>> print(la.is_lanthanide)  # True
+            >>> ce = Element('Ce')
+            >>> print(ce.is_lanthanide)  # True
+            >>> fe = Element('Fe')
+            >>> print(fe.is_lanthanide)  # False
+        """
+        return 57 <= self._atomic_no <= 71
+    
+    @property
+    def is_actinide(self) -> bool:
+        """
+        Check if the element is an actinide.
+        
+        Actinides are elements with atomic numbers 89-103 (Ac-Lr).
+        
+        Returns:
+            bool: True if the element is an actinide, False otherwise
+        
+        Examples:
+            >>> ac = Element('Ac')
+            >>> print(ac.is_actinide)  # True
+            >>> u = Element('U')
+            >>> print(u.is_actinide)  # True
+            >>> fe = Element('Fe')
+            >>> print(fe.is_actinide)  # False
+        """
+        return 89 <= self._atomic_no <= 103
+    
+    @property
+    def is_rare_earth_metal(self) -> bool:
+        """
+        Check if the element is a rare earth metal.
+        
+        Rare earth metals include lanthanides (57-71) and sometimes Sc, Y.
+        
+        Returns:
+            bool: True if the element is a rare earth metal, False otherwise
+        
+        Examples:
+            >>> la = Element('La')
+            >>> print(la.is_rare_earth_metal)  # True
+            >>> sc = Element('Sc')
+            >>> print(sc.is_rare_earth_metal)  # True
+            >>> y = Element('Y')
+            >>> print(y.is_rare_earth_metal)  # True
+        """
+        return self.is_lanthanide or self.symbol in {'Sc', 'Y'}
+    
     def __getattr__(self, name: str) -> Any:
         """
         Provide better error messages for non-existent attributes.
