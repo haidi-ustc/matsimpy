@@ -75,7 +75,7 @@ class AdvancedInteractiveMenu:
         
         # Command completions
         self.base_commands = ['b', 'back', 'h', 'help', 'q', 'quit', 'search', 'find', 
-                             'stats', 'impl', 'implementation', 'status', 'history', 'clear', 'goto']
+                             'stats', 'impl', 'implementation', 'status', 'history', 'goto']
         
         self.key_bindings = KeyBindings()
         self.setup_key_bindings()
@@ -1094,6 +1094,7 @@ class AdvancedInteractiveMenu:
             
             self.execute_system_command(sys_command)
             input("Press Enter to continue...")
+            clear()  # Clear screen after continuing
             return True
         
         # Handle regular commands
@@ -1106,10 +1107,12 @@ class AdvancedInteractiveMenu:
                     ('class:error', 'Already at main menu level')
                 ]), style=self.style)
                 input("Press Enter to continue...")
+                clear()  # Clear screen after continuing
         
         elif command in ['h', 'help']:
             self.show_help()
             input("Press Enter to continue...")
+            clear()  # Clear screen after continuing
         
         elif command in ['s', 'search', 'find']:
             if args:
@@ -1124,21 +1127,20 @@ class AdvancedInteractiveMenu:
                     self.display_search_results(query, results)
                     self.search_results = results
             input("Press Enter to continue...")
+            clear()  # Clear screen after continuing
         
         elif command == 'history':
             self.show_history()
             input("Press Enter to continue...")
+            clear()  # Clear screen after continuing
         
         elif command == 'stats':
             self.show_statistics()
             input("Press Enter to continue...")
+            clear()  # Clear screen after continuing
         
         elif command in ['impl', 'implementation', 'status']:
             self.show_implementation_status()
-            return True
-        
-        elif command == 'clear':
-            clear()
             return True
         
         elif command in ['goto', 'go']:
@@ -1421,10 +1423,12 @@ class AdvancedInteractiveMenu:
         # Use pagination if output is long
         if len(lines) > 30:
             self._paginate_output(lines, page_size=20)
+            # Pagination already handles clearing, so no need to clear again
         else:
             # Short output, just display normally
             print_formatted_text(FormattedText(lines), style=self.style)
             input("Press Enter to continue...")
+            clear()  # Clear screen after continuing
 
 
 def main():
