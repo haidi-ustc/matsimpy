@@ -257,10 +257,8 @@ class StructureGraph(ABC):
         Returns:
             Feature matrix of shape (N, F).
         """
-        from .periodic_table import Element
-
         atomic_numbers = np.array(
-            [Element.get_element(spec).atomic_no for spec in self.structure.species]
+            [elem.atomic_no for elem in self.structure.elements]
         ).reshape(-1, 1)
 
         return atomic_numbers

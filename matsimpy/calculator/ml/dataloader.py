@@ -272,7 +272,7 @@ class MatSimPyGraphConvertor:
 
         # Get atomic numbers
         atomic_numbers = np.array(
-            [Element.get_element(spec).atomic_no for spec in structure.species],
+            [elem.atomic_no for elem in structure.elements],
             dtype=np.int64,
         )
 

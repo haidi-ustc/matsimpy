@@ -866,13 +866,7 @@ def get_conventional_cell(
     lattice = crystal.lattice.lattice_vectors
     positions = crystal.frac_positions
     # Get atomic numbers for spglib
-    numbers = []
-    for spec in crystal.species:
-        if hasattr(Element, "get_element"):
-            elem = Element.get_element(spec)
-        else:
-            elem = Element(spec)
-        numbers.append(elem.atomic_no)
+    numbers = [elem.atomic_no for elem in crystal.elements]
 
     # Get standardized conventional cell
     cell = (lattice, positions, numbers)

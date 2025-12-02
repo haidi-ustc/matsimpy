@@ -118,10 +118,12 @@ class Crystal(Structure):
         """
         if sort_by == "element":
             # Sort by atomic number, then by fractional coordinates
+            # Use .elements for efficient Element access
+            species_to_element = {spec: elem for spec, elem in zip(self.species, self.elements)}
             return sorted(
                 self.sites,
                 key=lambda s: (
-                    Element.get_element(s.specie).atomic_no,
+                    species_to_element[s.specie].atomic_no,
                     s.frac_position[0],
                     s.frac_position[1],
                     s.frac_position[2],

@@ -372,6 +372,27 @@ class Structure(ABC, MSONable):
             self._cached_composition = Composition(self.formula)
         return self._cached_composition
 
+    @property
+    def elements(self) -> List[Element]:
+        """
+        Get Element objects for all species in the structure.
+
+        Returns a list of Element objects corresponding to each species
+        in the structure, in the same order as self.species.
+
+        Returns:
+            List[Element]: List of Element objects for all species.
+
+        Examples:
+            >>> crystal = Crystal(['Si', 'O', 'Si'], [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25]], lattice)
+            >>> elements = crystal.elements
+            >>> elements[0].atomic_no  # 14 (Si)
+            14
+            >>> elements[1].atomic_no  # 8 (O)
+            8
+        """
+        return [Element.get_element(specie) for specie in self.species]
+
     def add_atom(
         self,
         species: Union[str, List[str]],
@@ -539,10 +560,12 @@ class Structure(ABC, MSONable):
         # Sort by element
         if sort_by == "element":
             # Sort by atomic number, then by position for same element
+            # Use .elements for efficient Element access
+            elements = self.elements
             sorted_atoms = sorted(
                 atoms,
                 key=lambda a: (
-                    Element.get_element(a[1]).atomic_no,
+                    elements[a[0]].atomic_no,
                     a[2][0],
                     a[2][1],
                     a[2][2],

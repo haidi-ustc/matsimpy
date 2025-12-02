@@ -49,9 +49,9 @@ def sort_atoms(
     if key == "species":
         keys = [(i, structure.species[i]) for i in range(n_atoms)]
     elif key == "z":
-        keys = [(i, Element(structure.species[i]).atomic_no) for i in range(n_atoms)]
+        keys = [(i, structure.elements[i].atomic_no) for i in range(n_atoms)]
     elif key == "mass":
-        keys = [(i, Element(structure.species[i]).atomic_mass) for i in range(n_atoms)]
+        keys = [(i, structure.elements[i].atomic_mass) for i in range(n_atoms)]
     elif key == "distance":
         if isinstance(structure, Crystal):
             distances = np.linalg.norm(structure.cart_positions, axis=1)

@@ -80,10 +80,8 @@ class Molecule(Structure):
             >>> print(com)  # Weighted average based on C and O masses
         """
         if not hasattr(self, "_cached_com") or self._cached_com is None:
-            # Use cached Element instances for better performance
-            masses = np.array(
-                [Element.get_element(specie).atomic_mass for specie in self.species]
-            )
+            # Use .elements for better performance
+            masses = np.array([elem.atomic_mass for elem in self.elements])
             center_of_mass = np.average(self.positions, weights=masses, axis=0)
             self._cached_com = center_of_mass.tolist()
         return self._cached_com
@@ -493,7 +491,7 @@ class Molecule(Structure):
         Returns:
             np.ndarray: The moment of inertia tensor as a 3x3 numpy array.
         """
-        masses = np.array([Element(specie).atomic_mass for specie in self.species])
+        masses = np.array([elem.atomic_mass for elem in self.elements])
         com = self.get_center_of_mass()
         positions = self.positions - com
         moment_tensor = np.zeros((3, 3))
