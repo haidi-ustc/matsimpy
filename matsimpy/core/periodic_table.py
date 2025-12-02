@@ -1002,13 +1002,18 @@ class Element:
             >>> element.atomic_mass  # Works - defined as property
             >>> element.invalid_attr  # Raises AttributeError with helpful message
         """
-        # Avoid recursion during pickling/copying - check for special attributes
-        if name in (
+        # Handle special dunder attributes that don't exist with __slots__
+        # These should raise standard AttributeError without listing available attributes
+        special_dunder_attrs = (
             "__setstate__",
             "__getstate__",
             "__getnewargs__",
             "__getnewargs_ex__",
-        ):
+            "__dict__",  # Doesn't exist with __slots__
+            "__weakref__",  # Doesn't exist with __slots__ unless explicitly included
+        )
+        
+        if name in special_dunder_attrs:
             raise AttributeError(
                 f"'{self.__class__.__name__}' object has no attribute '{name}'"
             )

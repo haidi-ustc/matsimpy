@@ -122,7 +122,10 @@ class TestElementGetAttrEdgeCases(unittest.TestCase):
         
         # These should not trigger __getattr__
         self.assertIsNotNone(element.__class__)
-        self.assertIsNotNone(element.__dict__)
+        # Note: __dict__ doesn't exist when using __slots__ (which Element uses for optimization)
+        # This is expected behavior - __slots__ prevents __dict__ creation
+        with self.assertRaises(AttributeError):
+            _ = element.__dict__
     
     def test_error_with_typo_in_property_name(self):
         """Test helpful error when user makes typo in property name."""
