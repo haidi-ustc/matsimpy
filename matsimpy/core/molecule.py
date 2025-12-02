@@ -382,12 +382,24 @@ class Molecule(Structure):
         Convert a Molecule to a Crystal structure by automatically creating a box
         with vacuum padding around the molecule.
 
+        The resulting Crystal has PBC set to [False, False, False] since molecules
+        are non-periodic structures. This is important for correct behavior in
+        calculations and neighbor finding.
+
         Args:
             vacuum (float): Vacuum padding in Angstroms to add around the molecule.
                            Default is 15.0 Å.
 
         Returns:
             Crystal: The Crystal structure with the molecule centered in a cubic box.
+                    PBC is set to [False, False, False] to indicate non-periodic structure.
+
+        Examples:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> crystal = molecule.to_crystal()
+            >>> print(crystal.pbc)  # [False, False, False]
+            >>> # Use custom vacuum padding
+            >>> crystal = molecule.to_crystal(vacuum=20.0)
         """
         if len(self.positions) == 0:
             raise ValueError("Cannot convert empty molecule to crystal")
@@ -420,11 +432,13 @@ class Molecule(Structure):
         ]
 
         # Create Crystal with Cartesian coordinates
+        # Set PBC to [False, False, False] since molecules are non-periodic
         crystal = Crystal(
             list(self.species),
             centered_positions.tolist(),
             Lattice(lattice_vectors),
             coords_are_cartesian=True,
+            pbc=[False, False, False],  # Molecules are non-periodic
         )
 
         return crystal
