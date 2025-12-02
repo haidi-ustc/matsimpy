@@ -143,6 +143,178 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         
         with self.assertRaises(ValueError):
             crystal2.perturb(0.1, indices=sel)
+    
+    def test_perturb_lattice_only(self):
+        """Test perturbing lattice only."""
+        original_lattice = self.crystal.lattice.lattice_vectors.copy()
+        original_volume = self.crystal.volume
+        original_positions = self.crystal.positions.copy()
+        
+        # Perturb lattice only
+        result = self.crystal.perturb(
+            0.1, 
+            perturb_positions=False, 
+            perturb_lattice=True, 
+            seed=42
+        )
+        
+        # Should modify in-place
+        self.assertIs(result, self.crystal)
+        
+        # Lattice should have changed
+        self.assertFalse(np.allclose(original_lattice, self.crystal.lattice.lattice_vectors))
+        self.assertNotAlmostEqual(original_volume, self.crystal.volume, places=3)
+        
+        # Positions should be unchanged (fractional)
+        self.assertTrue(np.allclose(original_positions, self.crystal.positions))
+    
+    def test_perturb_both_positions_and_lattice(self):
+        """Test perturbing both positions and lattice."""
+        original_lattice = self.crystal.lattice.lattice_vectors.copy()
+        original_volume = self.crystal.volume
+        original_positions = self.crystal.positions.copy()
+        
+        # Perturb both
+        result = self.crystal.perturb(
+            0.1, 
+            perturb_positions=True, 
+            perturb_lattice=True, 
+            seed=42
+        )
+        
+        # Should modify in-place
+        self.assertIs(result, self.crystal)
+        
+        # Both should have changed
+        self.assertFalse(np.allclose(original_lattice, self.crystal.lattice.lattice_vectors))
+        self.assertFalse(np.allclose(original_positions, self.crystal.positions))
+        self.assertNotAlmostEqual(original_volume, self.crystal.volume, places=3)
+    
+    def test_perturb_different_amplitudes(self):
+        """Test using different amplitudes for positions and lattice."""
+        original_lattice = self.crystal.lattice.lattice_vectors.copy()
+        original_positions = self.crystal.positions.copy()
+        
+        # Perturb with different amplitudes
+        result = self.crystal.perturb(
+            0.1,  # amplitude for positions
+            perturb_lattice=True,
+            amplitude_lattice=0.05,  # smaller amplitude for lattice
+            seed=42
+        )
+        
+        # Should modify in-place
+        self.assertIs(result, self.crystal)
+        
+        # Both should have changed
+        self.assertFalse(np.allclose(original_lattice, self.crystal.lattice.lattice_vectors))
+        self.assertFalse(np.allclose(original_positions, self.crystal.positions))
+    
+    def test_perturb_lattice_only_not_inplace(self):
+        """Test perturbing lattice only with inplace=False."""
+        original_lattice = self.crystal.lattice.lattice_vectors.copy()
+        original_volume = self.crystal.volume
+        
+        # Perturb lattice without modifying original
+        new_crystal = self.crystal.perturb(
+            0.1,
+            perturb_positions=False,
+            perturb_lattice=True,
+            seed=42,
+            inplace=False
+        )
+        
+        # Original should be unchanged
+        self.assertTrue(np.allclose(original_lattice, self.crystal.lattice.lattice_vectors))
+        self.assertAlmostEqual(original_volume, self.crystal.volume, places=5)
+        
+        # New crystal should be perturbed
+        self.assertIsNot(new_crystal, self.crystal)
+        self.assertFalse(np.allclose(original_lattice, new_crystal.lattice.lattice_vectors))
+        self.assertNotAlmostEqual(original_volume, new_crystal.volume, places=3)
+    
+    def test_perturb_both_not_inplace(self):
+        """Test perturbing both with inplace=False."""
+        original_lattice = self.crystal.lattice.lattice_vectors.copy()
+        original_positions = self.crystal.positions.copy()
+        
+        # Perturb both without modifying original
+        new_crystal = self.crystal.perturb(
+            0.1,
+            perturb_positions=True,
+            perturb_lattice=True,
+            seed=42,
+            inplace=False
+        )
+        
+        # Original should be unchanged
+        self.assertTrue(np.allclose(original_lattice, self.crystal.lattice.lattice_vectors))
+        self.assertTrue(np.allclose(original_positions, self.crystal.positions))
+        
+        # New crystal should be perturbed
+        self.assertIsNot(new_crystal, self.crystal)
+        self.assertFalse(np.allclose(original_lattice, new_crystal.lattice.lattice_vectors))
+        self.assertFalse(np.allclose(original_positions, new_crystal.positions))
+    
+    def test_perturb_lattice_reproducibility(self):
+        """Test that lattice perturbation is reproducible with same seed."""
+        crystal1 = from_prototype('diamond', 'Si', 5.43)
+        crystal2 = from_prototype('diamond', 'Si', 5.43)
+        
+        # Perturb lattice of both with same seed
+        crystal1.perturb(0.1, perturb_positions=False, perturb_lattice=True, seed=42)
+        crystal2.perturb(0.1, perturb_positions=False, perturb_lattice=True, seed=42)
+        
+        # Should get same result
+        self.assertTrue(np.allclose(
+            crystal1.lattice.lattice_vectors, 
+            crystal2.lattice.lattice_vectors
+        ))
+    
+    def test_perturb_both_reproducibility(self):
+        """Test that perturbing both is reproducible with same seed."""
+        crystal1 = from_prototype('diamond', 'Si', 5.43)
+        crystal2 = from_prototype('diamond', 'Si', 5.43)
+        
+        # Perturb both with same seed
+        crystal1.perturb(0.1, perturb_lattice=True, seed=42)
+        crystal2.perturb(0.1, perturb_lattice=True, seed=42)
+        
+        # Should get same result
+        self.assertTrue(np.allclose(crystal1.positions, crystal2.positions))
+        self.assertTrue(np.allclose(
+            crystal1.lattice.lattice_vectors, 
+            crystal2.lattice.lattice_vectors
+        ))
+    
+    def test_perturb_error_both_false(self):
+        """Test that ValueError is raised when both perturb options are False."""
+        with self.assertRaises(ValueError) as context:
+            self.crystal.perturb(
+                0.1,
+                perturb_positions=False,
+                perturb_lattice=False
+            )
+        
+        self.assertIn("At least one of perturb_positions or perturb_lattice must be True", 
+                     str(context.exception))
+    
+    def test_perturb_backward_compatibility(self):
+        """Test that default behavior (positions only) is backward compatible."""
+        original_lattice = self.crystal.lattice.lattice_vectors.copy()
+        original_positions = self.crystal.positions.copy()
+        
+        # Default call should only perturb positions (backward compatible)
+        result = self.crystal.perturb(0.1, seed=42)
+        
+        # Should modify in-place
+        self.assertIs(result, self.crystal)
+        
+        # Positions should have changed
+        self.assertFalse(np.allclose(original_positions, self.crystal.positions))
+        
+        # Lattice should be unchanged
+        self.assertTrue(np.allclose(original_lattice, self.crystal.lattice.lattice_vectors))
 
 if __name__ == '__main__':
     unittest.main()
