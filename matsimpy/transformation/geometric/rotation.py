@@ -7,7 +7,7 @@ Provides both functional (immutable-style) and in-place rotation operations.
 from typing import List, Optional, Union
 import numpy as np
 from ...core import Crystal, Molecule
-from ..base import _copy_structure, _validate_structure
+from ..base import _validate_structure
 
 
 def rotate(
@@ -98,7 +98,7 @@ def rotate(
             return structure
     else:
         # Create copy and rotate
-        new_structure = _copy_structure(structure)
+        new_structure = structure.copy()
         return rotate(new_structure, angle, axis, center, inplace=True)
 
 

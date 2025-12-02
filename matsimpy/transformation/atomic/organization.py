@@ -37,11 +37,10 @@ def sort_atoms(
         >>> # Sort by distance from origin
         >>> sorted_struct = sort_atoms(structure, key='distance')
     """
-    from ..base import _copy_structure
     from ...core import Element
 
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     # Create list of (index, key_value) tuples
     n_atoms = len(structure.species)
@@ -114,10 +113,8 @@ def center_structure(
         >>> # Center at specific point
         >>> centered = center_structure(molecule, center=[5, 5, 5])
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     if center is None:
         center = np.array([0.0, 0.0, 0.0])
@@ -176,10 +173,8 @@ def perturb_positions(
         >>> # Perturb specific atoms
         >>> perturbed = perturb_positions(structure, 0.1, indices=[0, 1, 2])
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     if seed is not None:
         np.random.seed(seed)

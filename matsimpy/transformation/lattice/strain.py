@@ -32,10 +32,8 @@ def apply_strain(
         >>> strain = [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]]
         >>> strained = apply_strain(crystal, strain)
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     strain_matrix = np.array(strain_matrix, dtype=np.float64)
 
@@ -78,10 +76,8 @@ def apply_deformation(
         >>> shear = [[1, 0.1, 0], [0, 1, 0], [0, 0, 1]]
         >>> deformed = apply_deformation(crystal, shear)
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     deformation_matrix = np.array(deformation_matrix, dtype=np.float64)
 
@@ -136,10 +132,8 @@ def perturb_lattice(
         >>> # With random seed for reproducibility
         >>> perturbed = perturb_lattice(crystal, 0.05, seed=42)
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     if seed is not None:
         np.random.seed(seed)

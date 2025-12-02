@@ -7,7 +7,7 @@ Provides both functional (immutable-style) and in-place translation operations.
 from typing import List, Union
 import numpy as np
 from ...core import Crystal, Molecule
-from ..base import _copy_structure, _validate_structure
+from ..base import _validate_structure
 
 
 def translate(
@@ -65,7 +65,7 @@ def translate(
             return structure
     else:
         # Create copy and translate
-        new_structure = _copy_structure(structure)
+        new_structure = structure.copy()
         return translate(new_structure, vector, inplace=True)
 
 

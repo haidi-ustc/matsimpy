@@ -8,7 +8,7 @@ parameters systematically.
 import itertools
 from typing import List, Callable, Union, Any, Dict, Iterator, Tuple
 from ...core import Crystal, Molecule
-from ..base import _copy_structure, _validate_structure
+from ..base import _validate_structure
 
 
 class ParameterSweep:
@@ -212,7 +212,7 @@ class ParameterSweep:
         """Iterate over generated structures."""
         for combo in self._combinations:
             # Start with base structure
-            structure = _copy_structure(self.base_structure)
+            structure = self.base_structure.copy()
 
             # Apply transformations in order
             for transform_name, param_combo in combo.items():

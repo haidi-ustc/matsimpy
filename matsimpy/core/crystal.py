@@ -1530,8 +1530,7 @@ class Crystal(Structure):
 
         # Determine if we need to copy the structure
         if not inplace:
-            from ..transformation.base import _copy_structure
-            result = _copy_structure(self)
+            result = self.copy()
         else:
             result = self
 

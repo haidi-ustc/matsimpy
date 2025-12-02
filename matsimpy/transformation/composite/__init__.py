@@ -10,7 +10,7 @@ This module provides advanced tools for:
 
 from typing import List, Callable, Union, Any
 from ...core import Crystal, Molecule
-from ..base import _copy_structure, _validate_structure
+from ..base import _validate_structure
 
 
 # Import basic chain functions
@@ -40,7 +40,7 @@ def chain(
     _validate_structure(structure)
 
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     result = structure
     for transform in transformations:

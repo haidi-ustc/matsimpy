@@ -30,10 +30,8 @@ def scale_lattice(
         >>> # Anisotropic scaling
         >>> scaled = scale_lattice(crystal, [1.1, 1.0, 0.95])
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     if isinstance(scale_factor, (int, float)):
         scale_matrix = np.eye(3) * scale_factor

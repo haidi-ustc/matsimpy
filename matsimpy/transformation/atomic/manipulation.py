@@ -39,10 +39,8 @@ def move_atoms(
         >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
         >>> moved = move_atoms(mol, [0, 1], [0.1, 0.1, 0])
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     # Ensure indices is a list
     if isinstance(indices, int):
@@ -107,10 +105,8 @@ def swap_atoms(
         >>> from matsimpy.transformation.atomic import swap_atoms
         >>> swapped = swap_atoms(structure, 0, 1)
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     # Swap species
     species_list = list(structure.species)
@@ -170,10 +166,8 @@ def merge_atoms(
         >>> # Merge with specific species and position
         >>> merged = merge_atoms(structure, 0, 1, species='C', position=[0.25, 0.25, 0.25])
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     # Determine merged species
     if species is None:
@@ -226,10 +220,8 @@ def split_atom(
         >>> # Split one atom into two
         >>> split = split_atom(structure, 0, ['H', 'H'], [[0, 0, 0], [0.1, 0, 0]])
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     # Remove original atom
     structure.remove_atom(index)

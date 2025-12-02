@@ -8,7 +8,7 @@ Can use selection utilities from matsimpy.utils.selection for flexible atom sele
 from typing import List, Union, Dict
 import numpy as np
 from ...core import Crystal, Molecule
-from ..base import _copy_structure, _validate_structure
+from ..base import _validate_structure
 
 
 def substitute(
@@ -115,7 +115,7 @@ def substitute(
             )
 
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
 
     # Perform substitutions
     species_list = list(structure.species)
@@ -166,7 +166,7 @@ def substitute_all(
 
     if not indices:
         # No substitution needed
-        return structure if inplace else _copy_structure(structure)
+        return structure if inplace else structure.copy()
 
     # Substitute all at once
     return substitute(structure, indices, [new_species] * len(indices), inplace=inplace)

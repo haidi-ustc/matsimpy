@@ -35,10 +35,8 @@ def rotate_lattice(
         ...      [0, 0, 1]]
         >>> rotated = rotate_lattice(crystal, R)
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     rotation_matrix = np.array(rotation_matrix, dtype=np.float64)
 
@@ -115,10 +113,8 @@ def get_niggli_reduced(crystal: Crystal, inplace: bool = False) -> Crystal:
     Note:
         Requires spglib for full implementation.
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     # Placeholder - full implementation would use spglib
     return crystal
@@ -143,10 +139,8 @@ def standardize_cell(
         >>> standardized = standardize_cell(crystal)
         >>> primitive = standardize_cell(crystal, to_primitive=True)
     """
-    from ..base import _copy_structure
-
     if not inplace:
-        crystal = _copy_structure(crystal)
+        crystal = crystal.copy()
 
     # Placeholder - full implementation would use spglib
     try:

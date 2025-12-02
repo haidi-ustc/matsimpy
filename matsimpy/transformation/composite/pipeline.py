@@ -8,7 +8,7 @@ to multiple structures.
 import json
 from typing import List, Callable, Union, Any, Dict, Optional
 from pathlib import Path
-from ..base import _copy_structure, _validate_structure
+from ..base import _validate_structure
 from ...core import Crystal, Molecule
 
 
@@ -106,7 +106,7 @@ class TransformationPipeline:
             # No steps, return copy or original
             if inplace:
                 return structure
-            return _copy_structure(structure)
+            return structure.copy()
 
         # Apply first step (may be inplace)
         result = self.steps[0]["func"](
