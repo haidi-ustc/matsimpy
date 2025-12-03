@@ -1,3 +1,34 @@
+"""
+Structure module for MatSimPy.
+
+This module provides the Structure abstract base class for representing
+atomic structures (crystals and molecules). The Structure class serves as
+the foundation for both Crystal (periodic structures) and Molecule (non-periodic
+structures) classes.
+
+The Structure class provides:
+- Common interface for atomic structures
+- Species and position management
+- Composition and formula calculation
+- Atom addition/removal operations
+- Serialization support (MSONable)
+- Caching for performance optimization
+
+Example:
+    >>> from matsimpy.core.structure import Structure
+    >>> from matsimpy.core import Crystal, Molecule, Lattice
+    >>>
+    >>> # Structure is abstract - use Crystal or Molecule instead
+    >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+    >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+    >>>
+    >>> # Common operations work on both
+    >>> crystal.formula  # 'ClNa'
+    >>> molecule.formula  # 'H2O'
+    >>> crystal.add_atom('H', [0.1, 0, 0])
+    >>> molecule.remove_atom(0)
+"""
+
 import numpy as np
 from typing import List, Union, Optional, Dict, Tuple, Any
 import hashlib
@@ -12,39 +43,105 @@ from .periodic_table import Element
 
 class Structure(ABC, MSONable):
     """
-    An abstract base class for representing crystal and molecule structures.
+    Abstract base class for representing crystal and molecule structures.
 
-    This class should not be instantiated directly. Use Crystal or Molecule instead.
+    This class provides a common interface for both periodic (Crystal) and
+    non-periodic (Molecule) atomic structures. It should not be instantiated
+    directly - use :class:`~matsimpy.core.crystal.Crystal` or
+    :class:`~matsimpy.core.molecule.Molecule` instead.
 
-    Args:
-        species (List[str]): List of atomic species.
-        positions (List[List[float]]): List of atomic positions.
-        lattice (Lattice): Structure's lattice.
+    The Structure class handles:
+    - Species and position management
+    - Composition and formula calculation (with caching)
+    - Atom addition and removal
+    - Serialization (MSONable interface)
+    - Equality comparison and hashing
 
     Attributes:
-        species (Tuple[str]): Tuple of atomic species.
-        positions (np.ndarray): Numpy array of atomic positions.
-        lattice (Lattice): Structure's lattice.
-        formula (str): Chemical formula of the structure.
-        composition (Composition): Composition of the structure.
+        species (Tuple[str]): Immutable tuple of atomic species symbols.
+        positions (np.ndarray): Numpy array of atomic positions with shape (n_atoms, 3).
+        lattice (Optional[Lattice]): Lattice object for periodic structures (None for molecules).
+        formula (str): Chemical formula of the structure (cached property).
+        composition (Composition): Composition object (cached property).
+        symbol_set (tuple): Tuple of unique element symbols in order of first appearance.
+        elements (List[Element]): List of Element objects for all species.
 
-    Methods:
-        as_dict(): Returns a dictionary representation of the structure.
-        from_dict(d): Constructs the structure from a dictionary.
-        formula: Chemical formula property (cached).
-        composition: Composition property (cached).
-        add_atom(species, position): Adds an atom to the structure.
-        remove_atom(index): Removes an atom from the structure.
-        get_neighbor_list(cutoff): Returns a list of atoms within a cutoff radius of each atom.
+    Args:
+        species: List of atomic species. Can be:
+            - List[str]: List of element symbols (e.g., ['Na', 'Cl', 'Na'])
+            - List[int]: List of atomic numbers (e.g., [11, 17, 11])
+            - List[Element]: List of Element objects
+        positions: List of atomic positions. Each position is a 3D coordinate [x, y, z].
+                  For crystals, positions are typically fractional coordinates.
+                  For molecules, positions are Cartesian coordinates in Angstroms.
+        lattice: Optional Lattice object. Required for Crystal, None for Molecule.
 
+    Raises:
+        TypeError: If species contains mixed types or invalid types.
+        ValueError: If species and positions have different lengths.
+        ValueError: If positions are not 3D coordinates or contain invalid values.
+
+    Note:
+        This is an abstract class. Subclasses must implement:
+        - :meth:`get_neighbor_list`: Neighbor finding method
+
+    Examples:
+        >>> from matsimpy.core import Crystal, Molecule, Lattice
+        >>>
+        >>> # Create a crystal structure
+        >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+        >>> crystal.formula
+        'ClNa'
+        >>> crystal.composition['Na']
+        1
+        >>>
+        >>> # Create a molecule
+        >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        >>> molecule.formula
+        'H2O'
+        >>> molecule.symbol_set
+        ('O', 'H')
+        >>>
+        >>> # Add atoms
+        >>> crystal.add_atom('H', [0.1, 0, 0])
+        >>> crystal.add_atom(['H', 'O'], [[0.2, 0, 0], [0.3, 0, 0]])
+        >>>
+        >>> # Remove atoms
+        >>> molecule.remove_atom(0)  # Remove first atom
+        >>>
+        >>> # Access elements
+        >>> elements = crystal.elements
+        >>> elements[0].atomic_no  # Atomic number of first element
     """
 
     def __init__(
         self,
         species: Union[List[str], List[int], List[Element]],
         positions: List[List[float]],
-        lattice: Lattice = None,
+        lattice: Optional[Lattice] = None,
     ) -> None:
+        """
+        Initialize a Structure object.
+
+        Args:
+            species: List of atomic species. Can be:
+                - List[str]: Element symbols (e.g., ['Na', 'Cl', 'Na'])
+                - List[int]: Atomic numbers (e.g., [11, 17, 11])
+                - List[Element]: Element objects
+            positions: List of 3D atomic positions. Each position is [x, y, z].
+                     For crystals, typically fractional coordinates.
+                     For molecules, Cartesian coordinates in Angstroms.
+            lattice: Optional Lattice object. Required for Crystal, None for Molecule.
+
+        Raises:
+            TypeError: If species contains mixed types or invalid types.
+            ValueError: If species and positions have different lengths.
+            ValueError: If positions are not 3D coordinates or contain NaN/Inf.
+
+        Note:
+            This is an abstract base class constructor. Use Crystal or Molecule
+            subclasses instead of instantiating Structure directly.
+        """
         # Convert to list first, then tuple for immutability
         if all(isinstance(s, str) for s in species):
             species_list = list(species)
@@ -87,15 +184,38 @@ class Structure(ABC, MSONable):
         """
         Validate and convert positions to proper numpy array format.
 
+        Validates that positions are:
+        - Convertible to numeric array
+        - 2D array with shape (n_atoms, 3)
+        - Contain only finite values (no NaN or Inf)
+
         Args:
-            positions: Input positions (list of lists, numpy array, etc.)
+            positions: Input positions. Can be:
+                - List of lists: [[x1, y1, z1], [x2, y2, z2], ...]
+                - Numpy array: shape (n_atoms, 3)
 
         Returns:
-            np.ndarray: Validated positions array of shape (n_atoms, 3)
+            np.ndarray: Validated positions array of shape (n_atoms, 3) with dtype float64.
 
         Raises:
-            ValueError: If positions are not 2D with 3 columns.
             TypeError: If positions cannot be converted to numeric array.
+            ValueError: If positions are 1D (should be 2D list of 3D coordinates).
+            ValueError: If positions are not 2D with 3 columns.
+            ValueError: If positions contain NaN or infinite values.
+
+        Note:
+            This is an internal method used during initialization and when setting positions.
+            For a single atom, use [[x, y, z]] instead of [x, y, z].
+
+        Example:
+            >>> # Valid: 2D array
+            >>> positions = [[0, 0, 0], [1, 1, 1]]
+            >>> validated = structure._validate_positions(positions)
+            >>> validated.shape
+            (2, 3)
+            >>>
+            >>> # Invalid: 1D array
+            >>> positions = [0, 0, 0]  # Will raise ValueError
         """
         # Convert to numpy array
         try:
@@ -143,23 +263,49 @@ class Structure(ABC, MSONable):
     @property
     def positions(self) -> np.ndarray:
         """
-        Get positions as numpy array.
+        Get atomic positions as numpy array.
 
         Returns:
-            np.ndarray: Array of positions with shape (n_atoms, 3)
+            np.ndarray: Array of positions with shape (n_atoms, 3).
+                      Each row is a 3D coordinate [x, y, z].
+
+        Note:
+            For Crystal structures, these are typically fractional coordinates.
+            For Molecule structures, these are Cartesian coordinates in Angstroms.
+
+        Example:
+            >>> structure.positions
+            array([[0. , 0. , 0. ],
+                   [0.5, 0.5, 0.5]])
+            >>> structure.positions.shape
+            (2, 3)
         """
         return self._positions
 
     @positions.setter
     def positions(self, positions: Union[List, np.ndarray]) -> None:
         """
-        Set positions with validation.
+        Set atomic positions with validation.
+
+        Validates positions and updates internal state. Also invalidates
+        cached properties that depend on positions (e.g., sites, neighbor trees).
 
         Args:
-            positions: New positions (list of lists or numpy array)
+            positions: New positions. Can be:
+                - List of lists: [[x1, y1, z1], [x2, y2, z2], ...]
+                - Numpy array: shape (n_atoms, 3)
 
         Raises:
-            ValueError: If positions are invalid or don't match species count.
+            ValueError: If positions are invalid (not 3D, contain NaN/Inf).
+            ValueError: If number of positions doesn't match number of species.
+
+        Note:
+            Setting positions invalidates cached properties like sites and
+            neighbor trees, which will be recomputed on next access.
+
+        Example:
+            >>> structure.positions = [[0, 0, 0], [1, 1, 1]]
+            >>> structure.positions = np.array([[0, 0, 0], [1, 1, 1]])
         """
         validated_positions = self._validate_positions(positions)
 
@@ -180,12 +326,31 @@ class Structure(ABC, MSONable):
             self._neighbor_tree = None
             self._neighbor_tree_positions = None
 
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
         """
-        Returns a dictionary representation of the structure.
+        Convert structure to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
 
         Returns:
-            (dict): Dictionary representation of the structure.
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name
+                - species: List of species symbols
+                - positions: List of positions (converted from numpy array)
+                - lattice: Lattice dictionary (if lattice exists)
+
+        Example:
+            >>> d = structure.as_dict()
+            >>> d['@class']
+            'Crystal'
+            >>> d['species']
+            ['Na', 'Cl']
+            >>> d['positions']
+            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
+            >>> d.get('lattice')  # None for molecules, dict for crystals
         """
         d = {
             "@module": self.__class__.__module__,
@@ -200,13 +365,36 @@ class Structure(ABC, MSONable):
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Structure":
         """
-        Constructs the structure from a dictionary.
+        Create Structure object from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a Structure object (Crystal or Molecule) from its dictionary
+        representation.
 
         Args:
-            d: Dictionary representation of the structure.
+            d: Dictionary containing:
+                - species: List of species symbols
+                - positions: List of positions
+                - lattice: Optional lattice dictionary (for crystals)
 
         Returns:
-            Structure object.
+            Structure: A new Structure instance (Crystal or Molecule).
+
+        Raises:
+            KeyError: If required keys ('species', 'positions') are missing.
+            ValueError: If species and positions have different lengths.
+
+        Example:
+            >>> d = {
+            ...     '@module': 'matsimpy.core.crystal',
+            ...     '@class': 'Crystal',
+            ...     'species': ['Na', 'Cl'],
+            ...     'positions': [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+            ...     'lattice': {...}
+            ... }
+            >>> structure = Crystal.from_dict(d)
+            >>> structure.formula
+            'ClNa'
         """
         species = d["species"]
         positions = d["positions"]
@@ -218,13 +406,30 @@ class Structure(ABC, MSONable):
     @property
     def formula(self) -> str:
         """
-        Calculates the chemical formula of the structure with caching.
+        Get the chemical formula of the structure (cached).
 
-        Preserves the original order of elements as they appear in the structure,
-        rather than sorting alphabetically or by atomic number.
+        Calculates the chemical formula preserving the original order of elements
+        as they appear in the structure, rather than sorting alphabetically or
+        by atomic number. The result is cached for performance.
 
         Returns:
-            (str): Chemical formula of the structure.
+            str: Chemical formula string (e.g., 'H2O', 'NaCl', 'Fe2O3').
+
+        Note:
+            The formula preserves the order of first appearance of elements,
+            matching VASP POSCAR format style. The cache is invalidated when
+            atoms are added, removed, or substituted.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
+            >>> crystal.formula
+            'ClNa'
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
+            >>> molecule.formula
+            'O2'
+            >>> crystal.add_atom('H', [0.1, 0, 0])
+            >>> crystal.formula  # Cache invalidated, recalculated
+            'ClHNa'
         """
         if self._cached_formula is None or self._formula_dirty:
             element_counter = Counter(self.species)
@@ -278,14 +483,19 @@ class Structure(ABC, MSONable):
                 seen.add(specie)
         return tuple(unique_symbols)
 
-    def copy(self):
+    def copy(self) -> "Structure":
         """
-        Create a copy of the structure.
+        Create a deep copy of the structure.
+
+        Creates a new Structure instance (Crystal or Molecule) with copied
+        data. The copy is independent of the original - modifications to
+        one will not affect the other.
 
         Returns:
             Structure: A new instance of the structure with copied data.
+                     Type matches the original (Crystal or Molecule).
 
-        Examples:
+        Example:
             >>> from matsimpy.core import Crystal, Lattice
             >>> crystal = Crystal(['Si', 'Si'], [[0,0,0], [0.25,0.25,0.25]], Lattice.cubic(5.43))
             >>> crystal_copy = crystal.copy()
@@ -293,19 +503,36 @@ class Structure(ABC, MSONable):
             True
             >>> crystal_copy.species == crystal.species  # Same data
             True
+            >>> crystal_copy.add_atom('H', [0.5, 0.5, 0.5])
+            >>> len(crystal)  # Original unchanged
+            2
+            >>> len(crystal_copy)  # Copy modified
+            3
         """
         return self.from_dict(self.as_dict())
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """
         Generate a hash for the structure.
 
-        Positions are rounded to 8 decimal places to handle floating-point precision issues.
-        This ensures that structures with nearly identical positions (within tolerance)
-        hash to the same value.
+        Positions are rounded to 8 decimal places to handle floating-point
+        precision issues. This ensures that structures with nearly identical
+        positions (within tolerance) hash to the same value.
 
         Returns:
-            int: Hash value for the structure
+            int: Hash value for the structure.
+
+        Note:
+            This method enables Structure objects to be used as dictionary keys
+            or in sets. The hash is based on species, positions, and lattice.
+
+        Example:
+            >>> crystal1 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
+            >>> crystal2 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
+            >>> hash(crystal1) == hash(crystal2)
+            True
+            >>> {crystal1: 'value'}  # Can use as dictionary key
+            {<Crystal object>: 'value'}
         """
         # Create a normalized dictionary with rounded positions
         hash_dict = {
@@ -323,18 +550,34 @@ class Structure(ABC, MSONable):
         # Use first 8 bytes for standard Python hash size (64-bit)
         return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         """
-        Test equality between structures.
+        Check equality with another Structure.
 
-        Two structures are equal if they have the same species and positions
-        (within floating-point tolerance of 1e-8).
+        Two structures are equal if they have:
+        - Same species (exact match)
+        - Same positions (within floating-point tolerance of 1e-8)
+        - Same lattice (if both have lattices, compared with tolerance)
 
         Args:
-            other: Another Structure object
+            other: Another object to compare with.
 
         Returns:
-            bool: True if structures are equal
+            bool: True if structures are equal within tolerance, False otherwise.
+
+        Note:
+            Uses numpy.allclose() for numerical tolerance to handle
+            floating-point precision issues. Lattices are compared if both
+            structures have them.
+
+        Example:
+            >>> crystal1 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
+            >>> crystal2 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
+            >>> crystal1 == crystal2
+            True
+            >>> crystal3 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.65))
+            >>> crystal1 == crystal3  # Different lattice
+            False
         """
         if not isinstance(other, Structure):
             return False
@@ -363,10 +606,35 @@ class Structure(ABC, MSONable):
     @property
     def composition(self) -> Composition:
         """
-        Calculates the composition of the structure with caching.
+        Get the Composition object for the structure (cached).
+
+        Returns a Composition object that provides access to element counts,
+        mass calculations, and formatted output. The result is cached for
+        performance.
 
         Returns:
-            (Composition): Composition object.
+            Composition: Composition object with element counts and properties.
+
+        Note:
+            The composition is derived from the formula and cached. The cache
+            is invalidated when atoms are added, removed, or substituted.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
+            >>> comp = crystal.composition
+            >>> comp['Na']
+            1
+            >>> comp['Cl']
+            1
+            >>> comp.mass  # Total mass in atomic mass units
+            58.4428...
+            >>>
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
+            >>> comp = molecule.composition
+            >>> comp['H']
+            2
+            >>> comp['O']
+            1
         """
         if self._cached_composition is None or self._formula_dirty:
             self._cached_composition = Composition(self.formula)
@@ -399,19 +667,41 @@ class Structure(ABC, MSONable):
         position: Union[List[float], List[List[float]]],
     ) -> None:
         """
-        Adds one or more atoms to the structure and invalidates cache.
+        Add one or more atoms to the structure (in-place).
+
+        Adds atoms to the structure and invalidates cached properties
+        (formula, composition). The operation modifies the structure directly.
 
         Args:
-            species: Atomic species (single string or list of strings).
-            position: Atomic position(s). Either a single 3D coordinate [x, y, z]
-                     or a list of 3D coordinates [[x1, y1, z1], [x2, y2, z2], ...].
+            species: Atomic species. Can be:
+                - str: Single element symbol (e.g., 'H')
+                - List[str]: List of element symbols (e.g., ['H', 'O'])
+            position: Atomic position(s). Can be:
+                - List[float]: Single 3D coordinate [x, y, z]
+                - List[List[float]]: List of 3D coordinates [[x1, y1, z1], [x2, y2, z2], ...]
 
         Raises:
-            ValueError: If position is not 3D or if species/position counts don't match.
+            ValueError: If position is not 3D.
+            ValueError: If number of species doesn't match number of positions.
 
-        Examples:
-            >>> structure.add_atom('H', [0, 0, 0])  # Add single atom
-            >>> structure.add_atom(['H', 'O'], [[0, 0, 0], [1, 0, 0]])  # Add multiple
+        Note:
+            This method modifies the structure in-place. Cached properties
+            (formula, composition) are invalidated and will be recalculated
+            on next access.
+
+        Example:
+            >>> # Add single atom
+            >>> structure.add_atom('H', [0, 0, 0])
+            >>> len(structure)
+            3
+            >>>
+            >>> # Add multiple atoms
+            >>> structure.add_atom(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
+            >>> len(structure)
+            5
+            >>>
+            >>> # Formula is recalculated
+            >>> structure.formula  # Cache invalidated, recalculated
         """
         # Handle single atom case
         if isinstance(species, str):
@@ -458,10 +748,34 @@ class Structure(ABC, MSONable):
 
     def remove_atom(self, index: int) -> None:
         """
-        Removes an atom from the structure and invalidates cache.
+        Remove an atom from the structure by index (in-place).
+
+        Removes the atom at the specified index and invalidates cached
+        properties (formula, composition). The operation modifies the
+        structure directly.
 
         Args:
-            index (int): Index of atom to be removed.
+            index: Zero-based index of the atom to remove.
+
+        Raises:
+            IndexError: If index is out of range (not in [0, len(structure))).
+
+        Note:
+            This method modifies the structure in-place. Cached properties
+            (formula, composition) are invalidated and will be recalculated
+            on next access.
+
+        Example:
+            >>> structure = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
+            >>> len(structure)
+            3
+            >>> structure.remove_atom(0)  # Remove first atom (O)
+            >>> len(structure)
+            2
+            >>> structure.species
+            ('H', 'H')
+            >>> structure.formula  # Cache invalidated, recalculated
+            'H2'
         """
         if not (0 <= index < len(self.species)):
             raise IndexError("Invalid atom index.")
@@ -542,17 +856,35 @@ class Structure(ABC, MSONable):
 
     def sort_atoms(self, sort_by: str = "element") -> None:
         """
-        Sort atoms in the structure by element (in-place).
+        Sort atoms in the structure (in-place).
 
-        This method actually reorders the internal species and positions arrays,
-        unlike __str__ which only sorts for display.
+        Reorders the internal species and positions arrays according to the
+        specified sorting method. This affects the order of atoms in the
+        structure and may change the symbol_set property.
 
         Args:
-            sort_by: Sorting method ('element' for atomic number, 'alphabet' for alphabetical)
+            sort_by: Sorting method. Options:
+                - 'element': Sort by atomic number, then by position (x, y, z)
+                - 'alphabet': Sort alphabetically by species symbol, then by position
 
-        Examples:
+        Raises:
+            ValueError: If sort_by is not 'element' or 'alphabet'.
+
+        Note:
+            This method modifies the structure in-place. The symbol_set property
+            will reflect the new order of first appearance after sorting.
+
+        Example:
+            >>> structure = Crystal(['Na', 'Cl', 'Na'], [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25]], lattice)
+            >>> structure.symbol_set
+            ('Na', 'Cl')
             >>> structure.sort_atoms('element')  # Sort by atomic number
+            >>> structure.symbol_set  # May change based on new order
+            ('Na', 'Cl')  # or ('Cl', 'Na') depending on sorting
+            >>>
             >>> structure.sort_atoms('alphabet')  # Sort alphabetically
+            >>> structure.symbol_set
+            ('Cl', 'Na')
         """
         # Create list of (index, specie, position) tuples
         atoms = list(zip(range(len(self.species)), self.species, self.positions))
@@ -603,28 +935,60 @@ class Structure(ABC, MSONable):
         """
         Get neighbor list with consistent interface across all subclasses.
 
+        This is an abstract method that must be implemented by subclasses
+        (Crystal or Molecule). Each subclass provides its own implementation
+        that handles periodic boundary conditions appropriately.
+
         Args:
-            cutoff: Cutoff radius for neighbor finding
+            cutoff: Cutoff radius in Angstroms for neighbor finding.
             atom_index: Optional atom index. If None, returns neighbors for all atoms.
                        If specified, returns neighbors only for that atom.
-            **kwargs: Additional subclass-specific parameters (e.g., use_pbc for Crystal)
+            **kwargs: Additional subclass-specific parameters:
+                - use_pbc (Crystal only): Whether to use periodic boundary conditions
+                - Other subclass-specific parameters
 
         Returns:
-            Dict mapping atom index to list of (neighbor_index, distance) tuples.
-            If atom_index is provided, dict contains only that entry.
-            If atom_index is None, dict contains entries for all atoms.
+            Dict[int, List[Tuple[int, float]]]: Dictionary mapping atom index to
+            list of (neighbor_index, distance) tuples. Distances are in Angstroms.
+            - If atom_index is provided: dict contains only that entry {atom_index: [(neighbor, dist), ...]}
+            - If atom_index is None: dict contains entries for all atoms
 
         Raises:
-            NotImplementedError: If not implemented by subclass
-            IndexError: If atom_index is out of range
+            NotImplementedError: If not implemented by subclass (should not occur
+                                in normal usage as Crystal and Molecule implement this).
+            IndexError: If atom_index is out of range.
 
-        Examples:
+        Note:
+            This is an abstract method. Subclasses must implement it:
+            - :class:`~matsimpy.core.crystal.Crystal`: Handles PBC
+            - :class:`~matsimpy.core.molecule.Molecule`: No PBC
+
+        Example:
             >>> # Get neighbors for all atoms
             >>> neighbors = structure.get_neighbor_list(5.0)
+            >>> neighbors[0]  # Neighbors of atom 0
+            [(1, 2.5), (2, 3.1), ...]
+            >>>
             >>> # Get neighbors for specific atom
             >>> neighbors = structure.get_neighbor_list(5.0, atom_index=0)
+            >>> neighbors
+            {0: [(1, 2.5), (2, 3.1), ...]}
+            >>>
+            >>> # For crystals, can specify PBC usage
+            >>> neighbors = crystal.get_neighbor_list(5.0, use_pbc=True)
         """
         raise NotImplementedError("get_neighbor_list must be implemented by subclasses")
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Get the number of atoms in the structure.
+
+        Returns:
+            int: Number of atoms (equal to len(species) and len(positions)).
+
+        Example:
+            >>> structure = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
+            >>> len(structure)
+            2
+        """
         return len(self.species)
