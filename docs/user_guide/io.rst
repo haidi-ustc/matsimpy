@@ -19,7 +19,7 @@ MatSimPy supports multiple file formats:
 * JSON (structured data)
 
 Usage Examples
--------------
+---------------
 
 High-Level Interface
 ~~~~~~~~~~~~~~~~~~~~

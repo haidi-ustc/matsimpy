@@ -18,6 +18,7 @@ Classical Calculators
 .. automodule:: matsimpy.calculator.classical
    :members:
    :undoc-members:
+   :no-index:
 
 ML Calculators
 --------------
@@ -25,6 +26,7 @@ ML Calculators
 .. automodule:: matsimpy.calculator.ml
    :members:
    :undoc-members:
+   :no-index:
 
 DFT Calculators
 ---------------
@@ -32,4 +34,5 @@ DFT Calculators
 .. automodule:: matsimpy.calculator.dft
    :members:
    :undoc-members:
+   :no-index:
 

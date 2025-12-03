@@ -18,7 +18,7 @@ MatSimPy supports several categories of transformations:
 For complete API documentation, see :doc:`../api_reference/transformation`.
 
 Usage Examples
--------------
+---------------
 
 Geometric Transformations
 ~~~~~~~~~~~~~~~~~~~~~~~~~

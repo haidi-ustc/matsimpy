@@ -6,7 +6,7 @@ MatSimPy provides calculators for computing energies, forces, and stress.
 For complete API documentation, see :doc:`../api_reference/calculator`.
 
 Usage Examples
--------------
+--------------
 
 Classical Potentials
 ~~~~~~~~~~~~~~~~~~~~

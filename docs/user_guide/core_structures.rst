@@ -16,7 +16,7 @@ Usage Examples
 --------------
 
 Creating Crystals
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 

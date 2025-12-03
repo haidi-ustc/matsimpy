@@ -46,4 +46,5 @@ Composite Transformations
 .. automodule:: matsimpy.transformation.composite
    :members:
    :undoc-members:
+   :no-index:
 

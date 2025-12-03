@@ -2,7 +2,7 @@ IO Module
 =========
 
 High-Level Interface
--------------------
+--------------------
 
 .. automodule:: matsimpy.io
    :members:

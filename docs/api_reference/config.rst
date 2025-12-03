@@ -19,7 +19,7 @@ Module-Level Functions
    :no-index:
 
 Default Configuration
---------------------
+---------------------
 
 .. automodule:: matsimpy.config.defaults
    :members:

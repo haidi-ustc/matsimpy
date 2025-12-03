@@ -49,6 +49,7 @@ Periodic Table
 .. automodule:: matsimpy.core.periodic_table
    :members:
    :undoc-members:
+   :no-index:
 
 Graph
 -----

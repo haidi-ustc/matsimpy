@@ -6,7 +6,7 @@ MatSimPy provides comprehensive builders for creating various types of structure
 For complete API documentation, see :doc:`../api_reference/builders`.
 
 Usage Examples
--------------
+--------------
 
 Bulk Structures
 ~~~~~~~~~~~~~~~

@@ -7,27 +7,37 @@ Getting Started
 ---------------
 
 1. Fork the repository
-2. Clone your fork::
+2. Clone your fork:
 
-   git clone https://gitee.com/your-username/MatSimPy.git
-   cd MatSimPy
+   .. code-block:: bash
 
-3. Create a branch for your changes::
+      git clone https://gitee.com/your-username/MatSimPy.git
+      cd MatSimPy
 
-   git checkout -b feature/your-feature-name
+3. Create a branch for your changes:
 
-4. Install in development mode::
+   .. code-block:: bash
 
-   pip install -e .[dev]
+      git checkout -b feature/your-feature-name
+
+4. Install in development mode:
+
+   .. code-block:: bash
+
+      pip install -e .[dev]
 
 5. Make your changes and add tests
-6. Run tests::
+6. Run tests:
 
-   pytest
+   .. code-block:: bash
 
-7. Commit your changes::
+      pytest
 
-   git commit -am "Add feature: your feature description"
+7. Commit your changes:
+
+   .. code-block:: bash
+
+      git commit -am "Add feature: your feature description"
 
 8. Push to your fork and create a pull request
 
