@@ -1,9 +1,13 @@
 Symmetry Module
 ===============
 
+Module Overview
+---------------
+
 .. automodule:: matsimpy.symmetry
    :members:
    :undoc-members:
+   :no-index:
 
 Symmetry Analyzer
 -----------------

@@ -1,9 +1,13 @@
 Storage Module
 ==============
 
+Module Overview
+---------------
+
 .. automodule:: matsimpy.storage
    :members:
    :undoc-members:
+   :no-index:
 
 Data Storage
 ------------

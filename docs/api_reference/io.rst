@@ -1,9 +1,13 @@
 IO Module
 =========
 
+High-Level Interface
+-------------------
+
 .. automodule:: matsimpy.io
    :members:
    :undoc-members:
+   :no-index:
 
 VASP Format
 -----------
