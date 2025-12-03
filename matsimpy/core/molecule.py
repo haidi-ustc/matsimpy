@@ -249,9 +249,7 @@ class Molecule(Structure):
         # Reinitialize sites
         self._sites = self._initialize_sites()
 
-    def remove_atom(
-        self, indices: Union[int, List[int], "AtomSelection"]
-    ) -> None:
+    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:
         """
         Remove one or more atoms from the molecule and update sites.
 

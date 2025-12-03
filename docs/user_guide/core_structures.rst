@@ -17,6 +17,7 @@ Crystal
    :members:
    :special-members: __init__
    :exclude-members: calc
+   :no-index:
 
 Molecule
 --------
@@ -25,6 +26,7 @@ Molecule
    :members:
    :special-members: __init__
    :exclude-members: calc
+   :no-index:
 
 Lattice
 -------

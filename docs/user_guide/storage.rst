@@ -9,6 +9,7 @@ Data Storage
 .. automodule:: matsimpy.storage
    :members:
    :undoc-members:
+   :no-index:
 
 Usage Examples
 --------------

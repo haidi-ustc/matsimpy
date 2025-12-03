@@ -19,7 +19,7 @@ def build_nanotube(
     length: Optional[float] = None,
     periodic: bool = True,
     center: bool = True,
-    **kwargs
+    **kwargs,
 ) -> Crystal:
     """
     Build a nanotube by rolling up any 2D crystal structure.
@@ -285,7 +285,7 @@ def build_carbon_nanotube(
     length: Optional[float] = None,
     periodic: bool = True,
     center: bool = True,
-    **kwargs
+    **kwargs,
 ) -> Crystal:
     """
     Build a carbon nanotube from chirality indices.

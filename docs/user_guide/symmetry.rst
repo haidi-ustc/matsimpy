@@ -9,6 +9,7 @@ Symmetry Analyzer
 .. automodule:: matsimpy.symmetry.analyzer
    :members:
    :undoc-members:
+   :no-index:
 
 Usage Examples
 --------------

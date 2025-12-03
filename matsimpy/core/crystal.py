@@ -79,16 +79,16 @@ class Crystal(Structure):
         # Validate input
         if not isinstance(pbc, (list, tuple)):
             raise ValueError("PBC must be a list or tuple of 3 booleans")
-        
+
         if len(pbc) != 3:
             raise ValueError("PBC must have exactly 3 elements (for a, b, c axes)")
-        
+
         if not all(isinstance(x, bool) for x in pbc):
             raise ValueError("All PBC elements must be booleans")
-        
+
         # Set PBC
         self.pbc = list(pbc)
-        
+
         # Invalidate caches that depend on PBC
         self._invalidate_neighbor_tree()
         # Note: area/length properties will recalculate on access
@@ -119,7 +119,9 @@ class Crystal(Structure):
         if sort_by == "element":
             # Sort by atomic number, then by fractional coordinates
             # Use .elements for efficient Element access
-            species_to_element = {spec: elem for spec, elem in zip(self.species, self.elements)}
+            species_to_element = {
+                spec: elem for spec, elem in zip(self.species, self.elements)
+            }
             return sorted(
                 self.sites,
                 key=lambda s: (
@@ -210,30 +212,30 @@ class Crystal(Structure):
             >>> from matsimpy.core import Crystal, Lattice
             >>> lattice = Lattice.cubic(5.0)
             >>> crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
-            >>> 
+            >>>
             >>> # Add single atom at fractional coordinates (default)
             >>> crystal.add_atom('H', [0.5, 0.5, 0.5])
             >>> print(len(crystal))  # 2 atoms
             2
-            >>> 
+            >>>
             >>> # Add atom at Cartesian coordinates
             >>> crystal.add_atom('O', [2.5, 2.5, 2.5], coords_are_cartesian=True)
-            >>> 
+            >>>
             >>> # Add multiple atoms at once (fractional)
             >>> crystal.add_atom(['O', 'C'], [[0.25, 0.25, 0.25], [0.75, 0.75, 0.75]])
             >>> print(len(crystal))  # 4 atoms
             4
-            >>> 
+            >>>
             >>> # Add multiple atoms at Cartesian coordinates
-            >>> crystal.add_atom(['H', 'O'], [[1.0, 1.0, 1.0], [3.0, 3.0, 3.0]], 
+            >>> crystal.add_atom(['H', 'O'], [[1.0, 1.0, 1.0], [3.0, 3.0, 3.0]],
             ...                  coords_are_cartesian=True)
-            >>> 
+            >>>
             >>> # Add atoms with site properties
             >>> crystal.add_atom(['H', 'O'], [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]],
             ...                  [{'charge': 1.0, 'magmom': 0.5}, {'charge': -2.0}])
             >>> print(crystal.site_properties[4])  # {'charge': 1.0, 'magmom': 0.5}
             {'charge': 1.0, 'magmom': 0.5}
-            >>> 
+            >>>
             >>> # PBC-aware distance checking prevents duplicates across boundaries
             >>> # This will raise ValueError if atom is too close to existing atoms
             >>> # crystal.add_atom('Si', [1.0, 0.0, 0.0])  # Would be duplicate with [0,0,0] due to PBC
@@ -271,21 +273,27 @@ class Crystal(Structure):
         if len(new_cart_positions) > 1:
             # Use pdist for efficient pairwise distance calculation
             distances_condensed = pdist(new_cart_positions)
-            
-            if np.any(distances_condensed < 1e-6):  # Essentially zero distance (duplicate)
+
+            if np.any(
+                distances_condensed < 1e-6
+            ):  # Essentially zero distance (duplicate)
                 # Only convert to square form if we found a problem
                 distances_square = squareform(distances_condensed)
                 # Find pairs with distance < 1e-6 (excluding diagonal)
                 np.fill_diagonal(distances_square, np.inf)
                 i, j = np.where(distances_square < 1e-6)
                 # Convert to list for error message
-                pos_list = new_frac_positions.tolist() if isinstance(new_frac_positions, np.ndarray) else new_frac_positions
+                pos_list = (
+                    new_frac_positions.tolist()
+                    if isinstance(new_frac_positions, np.ndarray)
+                    else new_frac_positions
+                )
                 raise ValueError(
                     f"Duplicate positions detected in new atoms: "
                     f"positions {i[0]} and {j[0]} are at the same location "
                     f"({pos_list[i[0]]})."
                 )
-            
+
             if np.any(distances_condensed < 0.5):  # Too close
                 # Only convert to square form if we found a problem
                 min_dist = np.min(distances_condensed)
@@ -294,7 +302,11 @@ class Crystal(Structure):
                 np.fill_diagonal(distances_square, np.inf)
                 i, j = np.where(np.abs(distances_square - min_dist) < 1e-10)
                 # Convert to list for error message
-                pos_list = new_frac_positions.tolist() if isinstance(new_frac_positions, np.ndarray) else new_frac_positions
+                pos_list = (
+                    new_frac_positions.tolist()
+                    if isinstance(new_frac_positions, np.ndarray)
+                    else new_frac_positions
+                )
                 raise ValueError(
                     f"Atoms being added are too close: distance between "
                     f"positions {i[0]} and {j[0]} is {min_dist:.6f} Angstrom. "
@@ -316,7 +328,11 @@ class Crystal(Structure):
 
                 # Check for duplicates or too close
                 for idx, min_dist in enumerate(min_distances):
-                    pos_repr = new_frac_positions[idx].tolist() if isinstance(new_frac_positions[idx], np.ndarray) else new_frac_positions[idx]
+                    pos_repr = (
+                        new_frac_positions[idx].tolist()
+                        if isinstance(new_frac_positions[idx], np.ndarray)
+                        else new_frac_positions[idx]
+                    )
                     if min_dist < 1e-6:
                         raise ValueError(
                             f"Cannot add atom at position {pos_repr}: "
@@ -336,13 +352,16 @@ class Crystal(Structure):
 
                 # Calculate fractional differences for all pairs at once
                 # Shape: (n_new, n_existing, 3)
-                frac_diffs = new_frac_array[:, np.newaxis, :] - existing_frac_array[np.newaxis, :, :]
+                frac_diffs = (
+                    new_frac_array[:, np.newaxis, :]
+                    - existing_frac_array[np.newaxis, :, :]
+                )
 
                 # Apply minimum image convention to all PBC dimensions at once (vectorized)
                 pbc_mask = np.array(self.pbc, dtype=bool)
                 if np.any(pbc_mask):
-                    frac_diffs[:, :, pbc_mask] = (
-                        frac_diffs[:, :, pbc_mask] - np.round(frac_diffs[:, :, pbc_mask])
+                    frac_diffs[:, :, pbc_mask] = frac_diffs[:, :, pbc_mask] - np.round(
+                        frac_diffs[:, :, pbc_mask]
                     )
 
                 # Convert to Cartesian differences
@@ -350,14 +369,20 @@ class Crystal(Structure):
                 cart_diffs = np.dot(frac_diffs, self.lattice.matrix)
 
                 # Calculate distances
-                distances = np.linalg.norm(cart_diffs, axis=2)  # Shape: (n_new, n_existing)
+                distances = np.linalg.norm(
+                    cart_diffs, axis=2
+                )  # Shape: (n_new, n_existing)
 
                 # Find minimum distance for each new atom
                 min_distances = np.min(distances, axis=1)
 
                 # Check for duplicates or too close
                 for idx, min_dist in enumerate(min_distances):
-                    pos_repr = new_frac_positions[idx].tolist() if isinstance(new_frac_positions[idx], np.ndarray) else new_frac_positions[idx]
+                    pos_repr = (
+                        new_frac_positions[idx].tolist()
+                        if isinstance(new_frac_positions[idx], np.ndarray)
+                        else new_frac_positions[idx]
+                    )
                     if min_dist < 1e-6:
                         raise ValueError(
                             f"Cannot add atom at position {pos_repr}: "
@@ -400,10 +425,14 @@ class Crystal(Structure):
                 # Already a list
                 if len(new_frac_positions) == 1:
                     # Single position: ensure it's a flat list
-                    new_frac_list = new_frac_positions[0] if isinstance(new_frac_positions[0], list) else list(new_frac_positions[0])
+                    new_frac_list = (
+                        new_frac_positions[0]
+                        if isinstance(new_frac_positions[0], list)
+                        else list(new_frac_positions[0])
+                    )
                 else:
                     new_frac_list = new_frac_positions
-            
+
             # Call parent to add atoms (parent expects fractional coordinates)
             super().add_atom(species, new_frac_list)
 
@@ -456,9 +485,7 @@ class Crystal(Structure):
             # Re-raise the original exception
             raise
 
-    def remove_atom(
-        self, indices: Union[int, List[int], "AtomSelection"]
-    ) -> None:
+    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:
         """
         Remove one or more atoms from the crystal structure and update coordinates.
 
@@ -634,11 +661,13 @@ class Crystal(Structure):
         a, b, c = self.lattice.lattice_vectors
         pbc_count = sum(self.pbc)
         if pbc_count != 2:
-            raise ValueError("Area is only defined for 2D materials (exactly 2 PBC True)")
-        
+            raise ValueError(
+                "Area is only defined for 2D materials (exactly 2 PBC True)"
+            )
+
         # Find which dimension is non-periodic
         non_periodic_idx = [i for i, p in enumerate(self.pbc) if not p][0]
-        
+
         if non_periodic_idx == 0:
             # a is non-periodic, use b and c
             area = np.linalg.norm(np.cross(b, c))
@@ -648,7 +677,7 @@ class Crystal(Structure):
         else:  # non_periodic_idx == 2
             # c is non-periodic, use a and b
             area = np.linalg.norm(np.cross(a, b))
-        
+
         return abs(area)
 
     @property
@@ -657,18 +686,20 @@ class Crystal(Structure):
         a, b, c = self.lattice.lattice_vectors
         pbc_count = sum(self.pbc)
         if pbc_count != 1:
-            raise ValueError("Length is only defined for 1D materials (exactly 1 PBC True)")
-        
+            raise ValueError(
+                "Length is only defined for 1D materials (exactly 1 PBC True)"
+            )
+
         # Find which dimension is periodic
         periodic_idx = [i for i, p in enumerate(self.pbc) if p][0]
-        
+
         if periodic_idx == 0:
             length = np.linalg.norm(a)
         elif periodic_idx == 1:
             length = np.linalg.norm(b)
         else:  # periodic_idx == 2
             length = np.linalg.norm(c)
-        
+
         return abs(length)
 
     def __str__(self):
@@ -989,10 +1020,10 @@ class Crystal(Structure):
         # Mass is in atomic mass units (amu)
         # Conversion: 1 amu = 1.66053906660e-24 g
         AMU_TO_GRAM = 1.66053906660e-24
-        
+
         mass_amu = self.composition.mass
         pbc_count = sum(self.pbc)
-        
+
         if pbc_count == 3:
             # 3D material: use volume
             size = self.volume
@@ -1498,19 +1529,19 @@ class Crystal(Structure):
             >>> from matsimpy.builders.bulk import from_prototype
             >>> from matsimpy.utils.selection import AtomSelection
             >>> crystal = from_prototype('diamond', 'Si', 5.43)
-            >>> 
+            >>>
             >>> # Perturb positions only (default, backward compatible)
             >>> crystal.perturb(0.1)
-            >>> 
+            >>>
             >>> # Perturb lattice only
             >>> crystal.perturb(0.05, perturb_positions=False, perturb_lattice=True)
-            >>> 
+            >>>
             >>> # Perturb both positions and lattice
             >>> crystal.perturb(0.1, perturb_lattice=True, amplitude_lattice=0.05)
-            >>> 
+            >>>
             >>> # Perturb specific atoms (positions only)
             >>> perturbed = crystal.perturb(0.1, indices=[0, 1], inplace=False)
-            >>> 
+            >>>
             >>> # Perturb using AtomSelection
             >>> sel = AtomSelection(crystal).by_species('Si')
             >>> crystal.perturb(0.1, indices=sel)
@@ -1537,6 +1568,7 @@ class Crystal(Structure):
         # Set up random seed if provided
         if seed is not None:
             import numpy as np
+
             np.random.seed(seed)
 
         # Perturb positions if requested
@@ -1552,11 +1584,11 @@ class Crystal(Structure):
         if perturb_lattice:
             from ..transformation.lattice import perturb_lattice
 
-            lattice_amplitude = amplitude_lattice if amplitude_lattice is not None else amplitude
-            # Use inplace=True since we're working on result
-            result = perturb_lattice(
-                result, lattice_amplitude, seed=None, inplace=True
+            lattice_amplitude = (
+                amplitude_lattice if amplitude_lattice is not None else amplitude
             )
+            # Use inplace=True since we're working on result
+            result = perturb_lattice(result, lattice_amplitude, seed=None, inplace=True)
 
         if inplace:
             # Update self with result's attributes

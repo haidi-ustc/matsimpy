@@ -17,7 +17,7 @@ def generate_slab(
     min_vacuum_size: float,
     layers: Optional[int] = None,
     center_slab: bool = True,
-    **kwargs
+    **kwargs,
 ) -> Crystal:
     """
     Generate a surface slab from a bulk crystal structure.
@@ -114,7 +114,7 @@ def generate_symmetric_slab(
     miller_index: Tuple[int, int, int],
     min_slab_size: float,
     min_vacuum_size: float,
-    **kwargs
+    **kwargs,
 ) -> Crystal:
     """
     Generate a symmetric slab (same termination on both surfaces).

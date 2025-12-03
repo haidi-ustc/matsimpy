@@ -52,7 +52,7 @@ def chain(
 def apply_transformations(
     structure: Union[Crystal, Molecule],
     *transformations: Callable,
-    inplace: bool = False
+    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Apply multiple transformations as separate arguments.

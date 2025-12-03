@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 
+
 def main():
     """Main CLI entry point for MatSimPy."""
     # Try to find the menu JSON file
@@ -18,18 +19,25 @@ def main():
         if not os.path.exists(json_file):
             print(f"Error: JSON file '{json_file}' not found.")
             sys.exit(1)
-    
+
     # If not provided, try to find it in common locations
     if json_file is None:
         # First, try to find it as package data (if installed)
         try:
             import pkg_resources
-            json_file = pkg_resources.resource_filename("matsimpy.ui.cli", "matsimpy_menu.json")
+
+            json_file = pkg_resources.resource_filename(
+                "matsimpy.ui.cli", "matsimpy_menu.json"
+            )
             if not os.path.exists(json_file):
                 json_file = None
-        except (ImportError, pkg_resources.DistributionNotFound, pkg_resources.ResourceNotFound):
+        except (
+            ImportError,
+            pkg_resources.DistributionNotFound,
+            pkg_resources.ResourceNotFound,
+        ):
             json_file = None
-        
+
         # If not found as package data, check other locations
         if json_file is None:
             # Check current directory
@@ -49,7 +57,7 @@ def main():
                         if parent_json.exists():
                             json_file = str(parent_json)
                             break
-    
+
     if json_file is None:
         print("Error: Could not find matsimpy_menu.json file.")
         print("Please provide the path to the menu JSON file as an argument:")
@@ -58,10 +66,10 @@ def main():
         print("  - Current directory")
         print("  - Package directory")
         sys.exit(1)
-    
+
     # Import and run the menu
     from matsimpy.ui.cli.menu import AdvancedInteractiveMenu
-    
+
     try:
         menu = AdvancedInteractiveMenu(json_file)
         menu.run()
@@ -75,4 +83,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

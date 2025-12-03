@@ -9,6 +9,7 @@ Bulk Structures
 .. automodule:: matsimpy.builders.bulk
    :members:
    :undoc-members:
+   :no-index:
 
 Surface Structures
 ------------------
@@ -16,6 +17,7 @@ Surface Structures
 .. automodule:: matsimpy.builders.surface
    :members:
    :undoc-members:
+   :no-index:
 
 Alloy Generation
 ----------------
@@ -23,6 +25,7 @@ Alloy Generation
 .. automodule:: matsimpy.builders.alloy
    :members:
    :undoc-members:
+   :no-index:
 
 Molecule Builders
 -----------------
@@ -30,6 +33,7 @@ Molecule Builders
 .. automodule:: matsimpy.builders.molecule
    :members:
    :undoc-members:
+   :no-index:
 
 Defect Creation
 ---------------
@@ -37,6 +41,7 @@ Defect Creation
 .. automodule:: matsimpy.builders.defects
    :members:
    :undoc-members:
+   :no-index:
 
 Nanostructures
 --------------
@@ -44,4 +49,5 @@ Nanostructures
 .. automodule:: matsimpy.builders.nanostructure
    :members:
    :undoc-members:
+   :no-index:
 

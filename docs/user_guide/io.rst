@@ -9,6 +9,7 @@ High-Level Interface
 .. automodule:: matsimpy.io
    :members:
    :undoc-members:
+   :no-index:
 
 Format-Specific Functions
 -------------------------
@@ -19,6 +20,7 @@ VASP Format
 .. automodule:: matsimpy.io.vasp
    :members:
    :undoc-members:
+   :no-index:
 
 CIF Format
 ~~~~~~~~~~
@@ -26,6 +28,7 @@ CIF Format
 .. automodule:: matsimpy.io.cif
    :members:
    :undoc-members:
+   :no-index:
 
 XYZ Format
 ~~~~~~~~~~
@@ -33,6 +36,7 @@ XYZ Format
 .. automodule:: matsimpy.io.xyz
    :members:
    :undoc-members:
+   :no-index:
 
 Other Formats
 ~~~~~~~~~~~~~
@@ -44,5 +48,5 @@ MatSimPy also supports:
 * ASE format
 * JSON format
 
-See the :mod:`matsimpy.io` module for details.
+See the :doc:`../api_reference/io` module for details.
 

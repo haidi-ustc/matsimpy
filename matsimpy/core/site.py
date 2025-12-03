@@ -182,7 +182,7 @@ class Site(MSONable):
     def coords_are_cartesian(self) -> bool:
         """
         Get whether coordinates are Cartesian.
-        
+
         Always returns True for Site (molecules/non-periodic structures always use Cartesian).
         This property exists for backward compatibility and consistency with CrystalSite.
         """
@@ -236,9 +236,7 @@ class Site(MSONable):
     def __repr__(self) -> str:
         """Unambiguous string representation (concise, developer-friendly)."""
         props_str = f", {self.properties}" if self.properties else ""
-        return (
-            f"{self.specie} @ {self.position.tolist()} (cartesian){props_str}"
-        )
+        return f"{self.specie} @ {self.position.tolist()} (cartesian){props_str}"
 
     def __str__(self) -> str:
         """Human-readable string representation (verbose, user-friendly)."""
@@ -394,7 +392,7 @@ class CrystalSite(Site):
     def position(self) -> np.ndarray:
         """
         Get position as numpy array.
-        
+
         Returns the original input position (fractional or Cartesian based on coords_are_cartesian).
         This overrides the parent Site.position which always returns Cartesian.
 

@@ -75,7 +75,7 @@ class Composition(MSONable):
         element_counts = self.composition
         if sort_by is None:
             # Preserve original order from input formula
-            if hasattr(self, '_element_order'):
+            if hasattr(self, "_element_order"):
                 # Use tracked order, then add any elements not in order (from parentheses)
                 seen = set()
                 elements = []

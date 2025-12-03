@@ -9,6 +9,7 @@ Config Manager
 .. automodule:: matsimpy.config
    :members:
    :undoc-members:
+   :no-index:
 
 Usage Examples
 --------------

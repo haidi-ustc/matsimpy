@@ -52,7 +52,7 @@ class BaseML(Calculator):
         model: Optional[Any] = None,
         model_path: Optional[Union[str, Path]] = None,
         device: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize ML calculator.

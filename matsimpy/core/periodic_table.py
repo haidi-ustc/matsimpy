@@ -12,21 +12,21 @@ This module is optimized for performance:
 
 Examples:
     >>> from matsimpy.core import Element
-    >>> 
+    >>>
     >>> # Create element by symbol
     >>> h = Element('H')
     >>> print(h.atomic_no)  # 1
     >>> print(h.atomic_mass)  # 1.00794
-    >>> 
+    >>>
     >>> # Create from atomic number
     >>> fe = Element.from_Z(26)
     >>> print(fe.symbol)  # 'Fe'
-    >>> 
+    >>>
     >>> # Use get_element for automatic caching
     >>> h1 = Element.get_element('H')
     >>> h2 = Element.get_element('h')  # Case-insensitive
     >>> print(h1 is h2)  # True (same cached instance)
-    >>> 
+    >>>
     >>> # Access properties
     >>> o = Element('O')
     >>> print(o.name)  # 'Oxygen'
@@ -159,24 +159,24 @@ _available_attrs_cache: Optional[list] = None
 class Element:
     """
     Represents a chemical element with properties from the periodic table.
-    
+
     This class provides access to comprehensive element properties including
     atomic properties, physical properties, mechanical properties, and more.
-    
+
     Performance Optimizations:
         - Uses __slots__ to reduce memory footprint (~40% less memory per instance)
         - Pre-caches frequently accessed properties (atomic_no, atomic_mass, name, X)
           at initialization to avoid repeated dictionary lookups
         - Instance caching via get_element() and from_Z() methods
         - Fast O(1) symbol validation using set lookup
-    
+
     Attributes:
         symbol (str): Element symbol (e.g., 'H', 'Fe', 'O')
         atomic_no (int): Atomic number (cached for performance)
         atomic_mass (float): Atomic mass in amu (cached for performance)
         name (str): Element name (cached for performance)
         X (float): Electronegativity (cached for performance)
-    
+
     Properties:
         All properties from periodic_table.json are accessible as attributes.
         Common properties include:
@@ -186,23 +186,23 @@ class Element:
         - youngs_modulus, bulk_modulus, rigidity_modulus
         - electronegativity (X or x), oxidation_states
         - And many more...
-    
+
     Examples:
         >>> # Create element by symbol
         >>> h = Element('H')
         >>> print(h.atomic_no)  # 1
         >>> print(h.atomic_mass)  # 1.00794
         >>> print(h.name)  # 'Hydrogen'
-        >>> 
+        >>>
         >>> # Create from atomic number
         >>> fe = Element.from_Z(26)
         >>> print(fe.symbol)  # 'Fe'
-        >>> 
+        >>>
         >>> # Use get_element for automatic caching (recommended)
         >>> h1 = Element.get_element('H')
         >>> h2 = Element.get_element('h')  # Case-insensitive
         >>> print(h1 is h2)  # True (same cached instance)
-        >>> 
+        >>>
         >>> # Access various properties
         >>> o = Element('O')
         >>> print(o.atomic_no)  # 8
@@ -210,28 +210,29 @@ class Element:
         >>> print(o.X)  # 3.44 (electronegativity)
         >>> print(o.melting_point)  # -218.79
         >>> print(o.boiling_point)  # -182.96
-        >>> 
+        >>>
         >>> # Access properties via __getattr__ (for less common properties)
         >>> fe = Element('Fe')
         >>> print(fe.youngs_modulus)  # 211.0
         >>> print(fe.bulk_modulus)  # 170.0
     """
+
     __slots__ = ("symbol", "_data", "_atomic_no", "_atomic_mass", "_name", "_X")
 
     def __init__(self, symbol: str):
         """
         Initialize an Element instance.
-        
+
         Args:
             symbol: Element symbol (e.g., 'H', 'Fe', 'O'). Case-insensitive.
-        
+
         Raises:
             ValueError: If symbol is not found in the periodic table.
-        
+
         Note:
             Symbol is automatically normalized (capitalized). For better performance
             and automatic caching, consider using Element.get_element() instead.
-        
+
         Examples:
             >>> h = Element('H')
             >>> fe = Element('Fe')
@@ -241,10 +242,10 @@ class Element:
         symbol = symbol.capitalize()
         if symbol not in _ELEMENTS_SET:
             raise ValueError(f"{symbol} not found in periodic table")
-        
+
         self.symbol = symbol
         self._data = _pdt[symbol]
-        
+
         # Cache frequently accessed properties at initialization
         # This avoids repeated dict lookups and improves performance by ~30-50%
         self._atomic_no: int = self._data["Atomic no"]
@@ -262,24 +263,24 @@ class Element:
     def from_Z(cls, Z: int) -> "Element":
         """
         Create Element from atomic number Z.
-        
+
         This method automatically caches Element instances for better performance.
         Subsequent calls with the same atomic number return the cached instance.
-        
+
         Args:
             Z: Atomic number (1-118)
-        
+
         Returns:
             Element: Element instance for the given atomic number
-        
+
         Raises:
             ValueError: If Z is not in valid range [1, 118]
-        
+
         Examples:
             >>> fe = Element.from_Z(26)
             >>> print(fe.symbol)  # 'Fe'
             >>> print(fe.atomic_no)  # 26
-            >>> 
+            >>>
             >>> # Caching: same instance returned
             >>> fe1 = Element.from_Z(26)
             >>> fe2 = Element.from_Z(26)
@@ -299,28 +300,28 @@ class Element:
     def get_element(cls, symbol: str) -> "Element":
         """
         Get Element instance with automatic caching (recommended method).
-        
+
         This is the recommended way to create Element instances as it provides:
         - Automatic instance caching (same symbol returns same instance)
         - Case-insensitive symbol handling
         - Better performance for repeated access
-        
+
         Args:
             symbol: Element symbol (e.g., 'H', 'Fe', 'O'). Case-insensitive.
-        
+
         Returns:
             Element: Cached Element instance for the given symbol
-        
+
         Raises:
             ValueError: If symbol is not found in the periodic table
-        
+
         Examples:
             >>> # Recommended: use get_element for automatic caching
             >>> h1 = Element.get_element('H')
             >>> h2 = Element.get_element('h')  # Case-insensitive
             >>> h3 = Element.get_element('H')
             >>> print(h1 is h2 is h3)  # True (all same cached instance)
-            >>> 
+            >>>
             >>> # Access properties
             >>> fe = Element.get_element('Fe')
             >>> print(fe.atomic_no)  # 26
@@ -340,13 +341,13 @@ class Element:
     def atomic_no(self) -> int:
         """
         Atomic number (proton number).
-        
+
         Returns:
             int: Atomic number (1-118)
-        
+
         Note:
             This property is cached at initialization for optimal performance.
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.atomic_no)  # 1
@@ -359,14 +360,14 @@ class Element:
     def name(self) -> Optional[str]:
         """
         Element name.
-        
+
         Returns:
             str: Full name of the element (e.g., 'Hydrogen', 'Iron')
             None: If name is not available in the data
-        
+
         Note:
             This property is cached at initialization for optimal performance.
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.name)  # 'Hydrogen'
@@ -379,15 +380,15 @@ class Element:
     def X(self) -> Optional[float]:
         """
         Electronegativity (Pauling scale).
-        
+
         Returns:
             float: Electronegativity value
             None: If electronegativity is not available
-        
+
         Note:
             This property is cached at initialization for optimal performance.
             Use 'x' as an alias for the same property.
-        
+
         Examples:
             >>> o = Element('O')
             >>> print(o.X)  # 3.44
@@ -400,11 +401,11 @@ class Element:
     def x(self) -> Optional[float]:
         """
         Electronegativity (x) - alias for X property.
-        
+
         Returns:
             float: Electronegativity value (same as X)
             None: If electronegativity is not available
-        
+
         Examples:
             >>> o = Element('O')
             >>> print(o.x)  # 3.44 (same as o.X)
@@ -416,13 +417,13 @@ class Element:
     def atomic_mass(self) -> float:
         """
         Atomic mass in atomic mass units (amu).
-        
+
         Returns:
             float: Atomic mass
-        
+
         Note:
             This property is cached at initialization for optimal performance.
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.atomic_mass)  # 1.00794
@@ -434,16 +435,16 @@ class Element:
     # ========================================================================
     # Radius Properties
     # ========================================================================
-    
+
     @property
     def radius(self) -> Optional[float]:
         """
         Atomic radius.
-        
+
         Returns:
             float: Atomic radius in Angstroms
             None: If radius is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.radius)  # May return None or a value
@@ -454,11 +455,11 @@ class Element:
     def calculated_radius(self) -> Optional[float]:
         """
         Calculated atomic radius.
-        
+
         Returns:
             float: Calculated atomic radius in Angstroms
             None: If calculated radius is not available
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.calculated_radius)  # May return None or a value
@@ -469,11 +470,11 @@ class Element:
     def atomic_radius(self) -> Optional[float]:
         """
         Atomic radius (standard value).
-        
+
         Returns:
             float: Atomic radius in Angstroms
             None: If atomic radius is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.atomic_radius)  # May return None or a value
@@ -484,11 +485,11 @@ class Element:
     def atomic_radius_calculated(self) -> Optional[float]:
         """
         Calculated atomic radius.
-        
+
         Returns:
             float: Calculated atomic radius in Angstroms
             None: If calculated atomic radius is not available
-        
+
         Examples:
             >>> o = Element('O')
             >>> print(o.atomic_radius_calculated)  # May return None or a value
@@ -499,11 +500,11 @@ class Element:
     def metallic_radius(self) -> Optional[float]:
         """
         Metallic radius.
-        
+
         Returns:
             float: Metallic radius in Angstroms
             None: If metallic radius is not available (e.g., for non-metals)
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.metallic_radius)  # May return None or a value
@@ -516,11 +517,11 @@ class Element:
     def van_der_waals_radius(self) -> Optional[float]:
         """
         Van der Waals radius.
-        
+
         Returns:
             float: Van der Waals radius in Angstroms
             None: If Van der Waals radius is not available
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.van_der_waals_radius)  # May return None or a value
@@ -531,11 +532,11 @@ class Element:
     def ionic_radii(self) -> Optional[Any]:
         """
         Ionic radii for different oxidation states.
-        
+
         Returns:
             dict or list: Ionic radii data (format depends on data source)
             None: If ionic radii are not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.ionic_radii)  # May return None or a dict/list
@@ -546,11 +547,11 @@ class Element:
     def shannon_radii(self) -> Optional[Any]:
         """
         Shannon ionic radii for different coordination environments.
-        
+
         Returns:
             dict or list: Shannon radii data
             None: If Shannon radii are not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.shannon_radii)  # May return None or a dict/list
@@ -560,16 +561,16 @@ class Element:
     # ========================================================================
     # Physical Properties
     # ========================================================================
-    
+
     @property
     def melting_point(self) -> Optional[float]:
         """
         Melting point.
-        
+
         Returns:
             float: Melting point in Kelvin
             None: If melting point is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.melting_point)  # 1811.0 (Kelvin)
@@ -582,11 +583,11 @@ class Element:
     def boiling_point(self) -> Optional[float]:
         """
         Boiling point.
-        
+
         Returns:
             float: Boiling point in Kelvin
             None: If boiling point is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.boiling_point)  # 3134.0 (Kelvin)
@@ -599,11 +600,11 @@ class Element:
     def density_of_solid(self) -> Optional[float]:
         """
         Density of solid phase.
-        
+
         Returns:
             float: Density in g/cm³
             None: If density is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.density_of_solid)  # 7.874 (g/cm³)
@@ -616,11 +617,11 @@ class Element:
     def thermal_conductivity(self) -> Optional[float]:
         """
         Thermal conductivity.
-        
+
         Returns:
             float: Thermal conductivity (units depend on data source)
             None: If thermal conductivity is not available
-        
+
         Examples:
             >>> cu = Element('Cu')
             >>> print(cu.thermal_conductivity)  # May return None or a value
@@ -631,11 +632,11 @@ class Element:
     def velocity_of_sound(self) -> Optional[float]:
         """
         Velocity of sound in the element.
-        
+
         Returns:
             float: Velocity of sound in m/s
             None: If velocity of sound is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.velocity_of_sound)  # May return None or a value
@@ -646,11 +647,11 @@ class Element:
     def molar_volume(self) -> Optional[float]:
         """
         Molar volume.
-        
+
         Returns:
             float: Molar volume in cm³/mol
             None: If molar volume is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.molar_volume)  # May return None or a value
@@ -661,11 +662,11 @@ class Element:
     def liquid_range(self) -> Optional[float]:
         """
         Liquid range (difference between boiling and melting points).
-        
+
         Returns:
             float: Liquid range in Kelvin
             None: If liquid range is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.liquid_range)  # May return None or a value
@@ -676,11 +677,11 @@ class Element:
     def critical_temperature(self) -> Optional[float]:
         """
         Critical temperature.
-        
+
         Returns:
             float: Critical temperature in Kelvin
             None: If critical temperature is not available
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.critical_temperature)  # May return None or a value
@@ -690,16 +691,16 @@ class Element:
     # ========================================================================
     # Mechanical Properties
     # ========================================================================
-    
+
     @property
     def youngs_modulus(self) -> Optional[float]:
         """
         Young's modulus (elastic modulus).
-        
+
         Returns:
             float: Young's modulus in GPa
             None: If Young's modulus is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.youngs_modulus)  # 211.0 (GPa)
@@ -712,11 +713,11 @@ class Element:
     def bulk_modulus(self) -> Optional[float]:
         """
         Bulk modulus (resistance to uniform compression).
-        
+
         Returns:
             float: Bulk modulus in GPa
             None: If bulk modulus is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.bulk_modulus)  # 170.0 (GPa)
@@ -727,11 +728,11 @@ class Element:
     def rigidity_modulus(self) -> Optional[float]:
         """
         Rigidity modulus (shear modulus).
-        
+
         Returns:
             float: Rigidity modulus in GPa
             None: If rigidity modulus is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.rigidity_modulus)  # 82.0 (GPa)
@@ -742,11 +743,11 @@ class Element:
     def poissons_ratio(self) -> Optional[float]:
         """
         Poisson's ratio.
-        
+
         Returns:
             float: Poisson's ratio (dimensionless, typically 0.2-0.5)
             None: If Poisson's ratio is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.poissons_ratio)  # May return None or a value
@@ -757,11 +758,11 @@ class Element:
     def vickers_hardness(self) -> Optional[float]:
         """
         Vickers hardness.
-        
+
         Returns:
             float: Vickers hardness (units depend on data source)
             None: If Vickers hardness is not available
-        
+
         Examples:
             >>> c = Element('C')
             >>> print(c.vickers_hardness)  # May return None or a value
@@ -772,11 +773,11 @@ class Element:
     def brinell_hardness(self) -> Optional[float]:
         """
         Brinell hardness.
-        
+
         Returns:
             float: Brinell hardness (units depend on data source)
             None: If Brinell hardness is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.brinell_hardness)  # May return None or a value
@@ -787,11 +788,11 @@ class Element:
     def mineral_hardness(self) -> Optional[float]:
         """
         Mineral hardness (Mohs scale).
-        
+
         Returns:
             float: Mineral hardness on Mohs scale (1-10)
             None: If mineral hardness is not available
-        
+
         Examples:
             >>> c = Element('C')
             >>> print(c.mineral_hardness)  # May return None or a value
@@ -802,11 +803,11 @@ class Element:
     def coefficient_of_linear_thermal_expansion(self) -> Optional[float]:
         """
         Coefficient of linear thermal expansion.
-        
+
         Returns:
             float: Thermal expansion coefficient in 1/K
             None: If thermal expansion coefficient is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.coefficient_of_linear_thermal_expansion)  # May return None or a value
@@ -816,16 +817,16 @@ class Element:
     # ========================================================================
     # Electronic and Optical Properties
     # ========================================================================
-    
+
     @property
     def electrical_resistivity(self) -> Optional[float]:
         """
         Electrical resistivity.
-        
+
         Returns:
             float: Electrical resistivity in ohm·cm or ohm·m
             None: If electrical resistivity is not available
-        
+
         Examples:
             >>> cu = Element('Cu')
             >>> print(cu.electrical_resistivity)  # May return None or a value
@@ -836,11 +837,11 @@ class Element:
     def electronic_structure(self) -> Optional[str]:
         """
         Electronic structure (electron configuration).
-        
+
         Returns:
             str: Electron configuration (e.g., '[He] 2s2 2p4' for O)
             None: If electronic structure is not available
-        
+
         Examples:
             >>> o = Element('O')
             >>> print(o.electronic_structure)  # '[He] 2s2 2p4'
@@ -853,11 +854,11 @@ class Element:
     def atomic_orbitals(self) -> Optional[Any]:
         """
         Atomic orbitals information.
-        
+
         Returns:
             dict or list: Atomic orbitals data
             None: If atomic orbitals data is not available
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.atomic_orbitals)  # May return None or orbital data
@@ -868,11 +869,11 @@ class Element:
     def reflectivity(self) -> Optional[float]:
         """
         Reflectivity.
-        
+
         Returns:
             float: Reflectivity (typically as percentage or fraction)
             None: If reflectivity is not available
-        
+
         Examples:
             >>> ag = Element('Ag')
             >>> print(ag.reflectivity)  # May return None or a value
@@ -883,11 +884,11 @@ class Element:
     def refractive_index(self) -> Optional[float]:
         """
         Refractive index.
-        
+
         Returns:
             float: Refractive index (dimensionless)
             None: If refractive index is not available
-        
+
         Examples:
             >>> c = Element('C')
             >>> print(c.refractive_index)  # May return None or a value
@@ -897,16 +898,16 @@ class Element:
     # ========================================================================
     # Chemical Properties
     # ========================================================================
-    
+
     @property
     def oxidation_states(self) -> Optional[list]:
         """
         Oxidation states.
-        
+
         Returns:
             list: List of possible oxidation states
             None: If oxidation states are not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.oxidation_states)  # May return [2, 3] or similar
@@ -917,11 +918,11 @@ class Element:
     def common_oxidation_states(self) -> Optional[list]:
         """
         Common oxidation states.
-        
+
         Returns:
             list: List of common oxidation states
             None: If common oxidation states are not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.common_oxidation_states)  # May return [2, 3] or similar
@@ -931,16 +932,16 @@ class Element:
     # ========================================================================
     # Other Properties
     # ========================================================================
-    
+
     @property
     def superconduction_temperature(self) -> Optional[float]:
         """
         Superconducting transition temperature.
-        
+
         Returns:
             float: Superconducting transition temperature in Kelvin
             None: If element is not a superconductor or data not available
-        
+
         Examples:
             >>> nb = Element('Nb')
             >>> print(nb.superconduction_temperature)  # May return None or a value
@@ -951,11 +952,11 @@ class Element:
     def iupac_ordering(self) -> Optional[int]:
         """
         IUPAC ordering number.
-        
+
         Returns:
             int: IUPAC ordering number
             None: If IUPAC ordering is not available
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.iupac_ordering)  # May return None or a value
@@ -967,11 +968,11 @@ class Element:
     def mendeleev_no(self) -> Optional[int]:
         """
         Mendeleev number.
-        
+
         Returns:
             int: Mendeleev number
             None: If Mendeleev number is not available
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.mendeleev_no)  # May return None or a value
@@ -981,18 +982,18 @@ class Element:
     # ========================================================================
     # Periodic Table Information
     # ========================================================================
-    
+
     @property
     def period(self) -> int:
         """
         Period number (1-7) in the periodic table.
-        
+
         The period indicates the highest energy level occupied by electrons
         in the ground state electron configuration.
-        
+
         Returns:
             int: Period number (1-7)
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.period)  # 1
@@ -1023,16 +1024,16 @@ class Element:
         # Period 7: Fr-Og (87-118)
         else:
             return 7
-    
+
     @property
     def group(self) -> Optional[int]:
         """
         Group number (1-18) in the periodic table.
-        
+
         Returns:
             int: Group number (1-18) for main group and transition metals
             None: For lanthanides and actinides (f-block elements)
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.group)  # 1
@@ -1044,31 +1045,31 @@ class Element:
             >>> print(la.group)  # None (lanthanide)
         """
         z = self._atomic_no
-        
+
         # Lanthanides (57-71) and Actinides (89-103) don't have standard group numbers
         if 57 <= z <= 71 or 89 <= z <= 103:
             return None
-        
+
         # Period 1
         if z == 1:  # H
             return 1
         elif z == 2:  # He
             return 18
-        
+
         # Period 2: Li-Ne (3-10)
         elif 3 <= z <= 10:  # Li-Ne
             if z <= 4:  # Li, Be
                 return z - 2  # 1, 2
             else:  # B-Ne (5-10)
                 return z + 8  # 13, 14, 15, 16, 17, 18
-        
+
         # Period 3: Na-Ar (11-18)
         elif 11 <= z <= 18:  # Na-Ar
             if z <= 12:  # Na, Mg
                 return z - 10  # 1, 2
             else:  # Al-Ar (13-18)
                 return z  # 13, 14, 15, 16, 17, 18
-        
+
         # Period 4: K-Kr (19-36)
         elif 19 <= z <= 36:  # K-Kr
             if z == 19:  # K
@@ -1145,17 +1146,17 @@ class Element:
                 return 17
             elif z == 118:  # Og
                 return 18
-        
+
         return None
-    
+
     @property
     def block(self) -> str:
         """
         Electron block (s, p, d, or f) in the periodic table.
-        
+
         Returns:
             str: Block identifier ('s', 'p', 'd', or 'f')
-        
+
         Examples:
             >>> h = Element('H')
             >>> print(h.block)  # 's'
@@ -1167,38 +1168,37 @@ class Element:
             >>> print(la.block)  # 'f'
         """
         z = self._atomic_no
-        
+
         # s-block: Groups 1-2 (H, He, Li, Be, Na, Mg, K, Ca, Rb, Sr, Cs, Ba, Fr, Ra)
         if z in [1, 2, 3, 4, 11, 12, 19, 20, 37, 38, 55, 56, 87, 88]:
-            return 's'
-        
+            return "s"
+
         # f-block: Lanthanides (57-71) and Actinides (89-103)
         if (57 <= z <= 71) or (89 <= z <= 103):
-            return 'f'
-        
+            return "f"
+
         # d-block: Transition metals (Sc-Zn, Y-Cd, Hf-Hg, Rf-Cn)
-        if ((21 <= z <= 30) or (39 <= z <= 48) or 
-            (72 <= z <= 80) or (104 <= z <= 112)):
-            return 'd'
-        
+        if (21 <= z <= 30) or (39 <= z <= 48) or (72 <= z <= 80) or (104 <= z <= 112):
+            return "d"
+
         # p-block: Groups 13-18 (B, C, N, O, F, Ne, Al, Si, P, S, Cl, Ar, etc.)
-        return 'p'
-    
+        return "p"
+
     # ========================================================================
     # Element Classification Properties
     # ========================================================================
-    
+
     @property
     def is_metal(self) -> bool:
         """
         Check if the element is a metal.
-        
+
         Metals are elements that typically have metallic properties such as
         high electrical conductivity, luster, and malleability.
-        
+
         Returns:
             bool: True if the element is a metal, False otherwise
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.is_metal)  # True
@@ -1209,36 +1209,36 @@ class Element:
         """
         z = self._atomic_no
         symbol = self.symbol
-        
+
         # Non-metals: H, C, N, O, F, P, S, Cl, Se, Br, I, At
-        non_metals = {'H', 'C', 'N', 'O', 'F', 'P', 'S', 'Cl', 'Se', 'Br', 'I', 'At'}
+        non_metals = {"H", "C", "N", "O", "F", "P", "S", "Cl", "Se", "Br", "I", "At"}
         if symbol in non_metals:
             return False
-        
+
         # Noble gases: He, Ne, Ar, Kr, Xe, Rn, Og
-        noble_gases = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og'}
+        noble_gases = {"He", "Ne", "Ar", "Kr", "Xe", "Rn", "Og"}
         if symbol in noble_gases:
             return False
-        
+
         # Metalloids: B, Si, Ge, As, Sb, Te, Po
-        metalloids = {'B', 'Si', 'Ge', 'As', 'Sb', 'Te', 'Po'}
+        metalloids = {"B", "Si", "Ge", "As", "Sb", "Te", "Po"}
         if symbol in metalloids:
             return False
-        
+
         # All other elements are metals
         return True
-    
+
     @property
     def is_nonmetal(self) -> bool:
         """
         Check if the element is a nonmetal.
-        
+
         Nonmetals are elements that lack metallic properties and typically
         have poor electrical conductivity.
-        
+
         Returns:
             bool: True if the element is a nonmetal, False otherwise
-        
+
         Examples:
             >>> o = Element('O')
             >>> print(o.is_nonmetal)  # True
@@ -1248,17 +1248,17 @@ class Element:
             >>> print(h.is_nonmetal)  # True
         """
         return not self.is_metal and not self.is_metalloid
-    
+
     @property
     def is_metalloid(self) -> bool:
         """
         Check if the element is a metalloid (semimetal).
-        
+
         Metalloids have properties intermediate between metals and nonmetals.
-        
+
         Returns:
             bool: True if the element is a metalloid, False otherwise
-        
+
         Examples:
             >>> si = Element('Si')
             >>> print(si.is_metalloid)  # True
@@ -1267,19 +1267,19 @@ class Element:
             >>> fe = Element('Fe')
             >>> print(fe.is_metalloid)  # False
         """
-        metalloids = {'B', 'Si', 'Ge', 'As', 'Sb', 'Te', 'Po'}
+        metalloids = {"B", "Si", "Ge", "As", "Sb", "Te", "Po"}
         return self.symbol in metalloids
-    
+
     @property
     def is_transition_metal(self) -> bool:
         """
         Check if the element is a transition metal.
-        
+
         Transition metals are elements in groups 3-12 (d-block elements).
-        
+
         Returns:
             bool: True if the element is a transition metal, False otherwise
-        
+
         Examples:
             >>> fe = Element('Fe')
             >>> print(fe.is_transition_metal)  # True
@@ -1288,18 +1288,18 @@ class Element:
             >>> al = Element('Al')
             >>> print(al.is_transition_metal)  # False
         """
-        return self.block == 'd'
-    
+        return self.block == "d"
+
     @property
     def is_noble_gas(self) -> bool:
         """
         Check if the element is a noble gas.
-        
+
         Noble gases are elements in group 18 with full valence electron shells.
-        
+
         Returns:
             bool: True if the element is a noble gas, False otherwise
-        
+
         Examples:
             >>> he = Element('He')
             >>> print(he.is_noble_gas)  # True
@@ -1308,19 +1308,19 @@ class Element:
             >>> o = Element('O')
             >>> print(o.is_noble_gas)  # False
         """
-        noble_gases = {'He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og'}
+        noble_gases = {"He", "Ne", "Ar", "Kr", "Xe", "Rn", "Og"}
         return self.symbol in noble_gases
-    
+
     @property
     def is_alkali_metal(self) -> bool:
         """
         Check if the element is an alkali metal.
-        
+
         Alkali metals are elements in group 1 (excluding H): Li, Na, K, Rb, Cs, Fr.
-        
+
         Returns:
             bool: True if the element is an alkali metal, False otherwise
-        
+
         Examples:
             >>> na = Element('Na')
             >>> print(na.is_alkali_metal)  # True
@@ -1329,19 +1329,19 @@ class Element:
             >>> h = Element('H')
             >>> print(h.is_alkali_metal)  # False (H is not considered alkali metal)
         """
-        alkali_metals = {'Li', 'Na', 'K', 'Rb', 'Cs', 'Fr'}
+        alkali_metals = {"Li", "Na", "K", "Rb", "Cs", "Fr"}
         return self.symbol in alkali_metals
-    
+
     @property
     def is_alkaline_earth_metal(self) -> bool:
         """
         Check if the element is an alkaline earth metal.
-        
+
         Alkaline earth metals are elements in group 2: Be, Mg, Ca, Sr, Ba, Ra.
-        
+
         Returns:
             bool: True if the element is an alkaline earth metal, False otherwise
-        
+
         Examples:
             >>> mg = Element('Mg')
             >>> print(mg.is_alkaline_earth_metal)  # True
@@ -1350,19 +1350,19 @@ class Element:
             >>> be = Element('Be')
             >>> print(be.is_alkaline_earth_metal)  # True
         """
-        alkaline_earth_metals = {'Be', 'Mg', 'Ca', 'Sr', 'Ba', 'Ra'}
+        alkaline_earth_metals = {"Be", "Mg", "Ca", "Sr", "Ba", "Ra"}
         return self.symbol in alkaline_earth_metals
-    
+
     @property
     def is_halogen(self) -> bool:
         """
         Check if the element is a halogen.
-        
+
         Halogens are elements in group 17: F, Cl, Br, I, At, Ts.
-        
+
         Returns:
             bool: True if the element is a halogen, False otherwise
-        
+
         Examples:
             >>> cl = Element('Cl')
             >>> print(cl.is_halogen)  # True
@@ -1371,19 +1371,19 @@ class Element:
             >>> o = Element('O')
             >>> print(o.is_halogen)  # False
         """
-        halogens = {'F', 'Cl', 'Br', 'I', 'At', 'Ts'}
+        halogens = {"F", "Cl", "Br", "I", "At", "Ts"}
         return self.symbol in halogens
-    
+
     @property
     def is_lanthanide(self) -> bool:
         """
         Check if the element is a lanthanide.
-        
+
         Lanthanides are elements with atomic numbers 57-71 (La-Lu).
-        
+
         Returns:
             bool: True if the element is a lanthanide, False otherwise
-        
+
         Examples:
             >>> la = Element('La')
             >>> print(la.is_lanthanide)  # True
@@ -1393,17 +1393,17 @@ class Element:
             >>> print(fe.is_lanthanide)  # False
         """
         return 57 <= self._atomic_no <= 71
-    
+
     @property
     def is_actinide(self) -> bool:
         """
         Check if the element is an actinide.
-        
+
         Actinides are elements with atomic numbers 89-103 (Ac-Lr).
-        
+
         Returns:
             bool: True if the element is an actinide, False otherwise
-        
+
         Examples:
             >>> ac = Element('Ac')
             >>> print(ac.is_actinide)  # True
@@ -1413,17 +1413,17 @@ class Element:
             >>> print(fe.is_actinide)  # False
         """
         return 89 <= self._atomic_no <= 103
-    
+
     @property
     def is_rare_earth_metal(self) -> bool:
         """
         Check if the element is a rare earth metal.
-        
+
         Rare earth metals include lanthanides (57-71) and sometimes Sc, Y.
-        
+
         Returns:
             bool: True if the element is a rare earth metal, False otherwise
-        
+
         Examples:
             >>> la = Element('La')
             >>> print(la.is_rare_earth_metal)  # True
@@ -1432,8 +1432,8 @@ class Element:
             >>> y = Element('Y')
             >>> print(y.is_rare_earth_metal)  # True
         """
-        return self.is_lanthanide or self.symbol in {'Sc', 'Y'}
-    
+        return self.is_lanthanide or self.symbol in {"Sc", "Y"}
+
     def __getattr__(self, name: str) -> Any:
         """
         Provide better error messages for non-existent attributes.
@@ -1468,7 +1468,7 @@ class Element:
             "__dict__",  # Doesn't exist with __slots__
             "__weakref__",  # Doesn't exist with __slots__ unless explicitly included
         )
-        
+
         if name in special_dunder_attrs:
             raise AttributeError(
                 f"'{self.__class__.__name__}' object has no attribute '{name}'"
@@ -1492,7 +1492,7 @@ class Element:
         global _available_attrs_cache
         if _available_attrs_cache is None:
             _available_attrs_cache = sorted(data.keys())
-        
+
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'. "
             f"Available data attributes: {', '.join(_available_attrs_cache)}"

@@ -15,7 +15,7 @@ def add_adsorbate(
     adsorbate: Union[str, Crystal],
     position: Tuple[float, float],
     height: float,
-    **kwargs
+    **kwargs,
 ) -> Crystal:
     """
     Add an adsorbate to a slab surface.

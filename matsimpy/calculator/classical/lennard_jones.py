@@ -48,7 +48,7 @@ class LennardJones(Calculator):
         epsilon: float = 0.0104,
         cutoff: Optional[float] = None,
         rc_smooth: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize Lennard-Jones calculator.

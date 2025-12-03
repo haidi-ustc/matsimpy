@@ -219,7 +219,7 @@ class Structure(ABC, MSONable):
     def formula(self) -> str:
         """
         Calculates the chemical formula of the structure with caching.
-        
+
         Preserves the original order of elements as they appear in the structure,
         rather than sorting alphabetically or by atomic number.
 
@@ -321,7 +321,7 @@ class Structure(ABC, MSONable):
         hash_str = str(hash_dict).encode("utf-8")
         hash_bytes = hashlib.sha256(hash_str).digest()
         # Use first 8 bytes for standard Python hash size (64-bit)
-        return int.from_bytes(hash_bytes[:8], byteorder='big', signed=True)
+        return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
 
     def __eq__(self, other):
         """
