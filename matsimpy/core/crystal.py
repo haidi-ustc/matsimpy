@@ -843,6 +843,41 @@ class Crystal(Structure):
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Crystal":
+        """
+        Create Crystal object from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a Crystal object from its dictionary representation.
+
+        Args:
+            d: Dictionary containing:
+                - species: List of species symbols
+                - positions: List of positions
+                - lattice: Lattice dictionary
+                - pbc: Optional periodic boundary conditions list
+                - site_properties: Optional list of site property dictionaries
+                - coords_are_cartesian: Optional boolean (default: False)
+
+        Returns:
+            Crystal: A new Crystal instance.
+
+        Raises:
+            KeyError: If required keys ('species', 'positions', 'lattice') are missing.
+            ValueError: If species and positions have different lengths.
+
+        Example:
+            >>> d = {
+            ...     '@module': 'matsimpy.core.crystal',
+            ...     '@class': 'Crystal',
+            ...     'species': ['Na', 'Cl'],
+            ...     'positions': [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+            ...     'lattice': {...},
+            ...     'pbc': [True, True, True]
+            ... }
+            >>> crystal = Crystal.from_dict(d)
+            >>> crystal.formula
+            'ClNa'
+        """
         species = d["species"]
         positions = d["positions"]
         lattice = Lattice.from_dict(d["lattice"])
