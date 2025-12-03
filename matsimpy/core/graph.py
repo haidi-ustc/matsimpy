@@ -754,7 +754,9 @@ class CrystalGraph(StructureGraph):
 
 # Convenience factory function
 def create_structure_graph(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> StructureGraph:
     """
     Factory function to create appropriate graph for structure.
@@ -945,7 +947,8 @@ def get_edge_list(
         Union[List[Tuple[int, int]], List[Tuple[int, int, float]]]:
             - If include_distances=False: List of (source, target) tuples
             - If include_distances=True: List of (source, target, distance) tuples
-            Distances are in Angstroms.
+
+        Distances are in Angstroms.
 
     Example:
         >>> from matsimpy.core import Molecule
@@ -969,7 +972,9 @@ def get_edge_list(
 
 
 def get_coordination_numbers(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> Dict[int, int]:
     """
     Get coordination numbers (functional API).
@@ -1002,7 +1007,9 @@ def get_coordination_numbers(
 
 
 def get_degree_distribution(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> Dict[int, int]:
     """
     Get degree distribution (functional API).
@@ -1035,7 +1042,9 @@ def get_degree_distribution(
 
 
 def is_connected(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> bool:
     """
     Check if graph is connected (functional API).
@@ -1066,7 +1075,9 @@ def is_connected(
 
 
 def get_connected_components(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> List[List[int]]:
     """
     Get connected components (functional API).
@@ -1141,7 +1152,9 @@ def get_shortest_path(
 
 
 def get_graph_diameter(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> Optional[int]:
     """
     Get graph diameter (functional API).
@@ -1207,7 +1220,9 @@ def get_node_features(
 
 
 def get_graph_statistics(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Get comprehensive graph statistics (functional API).
@@ -1250,7 +1265,9 @@ def get_graph_statistics(
 
 
 def structure_to_networkx(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
+    structure: Union[Crystal, Molecule],
+    cutoff: float = 3.0,
+    use_pbc: Optional[bool] = None,
 ):
     """
     Convert structure to NetworkX graph (functional API).

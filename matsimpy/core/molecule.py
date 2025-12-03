@@ -1137,8 +1137,7 @@ class Molecule(Structure):
         Get the attached calculator.
 
         Returns:
-            Optional[Calculator]: The attached calculator, or None if none attached.
-                               Calculator type is :class:`~matsimpy.calculator.base.Calculator`.
+            :obj:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached.
 
         Example:
             >>> from matsimpy.calculator import LennardJones
@@ -1148,6 +1147,7 @@ class Molecule(Structure):
             >>> molecule.calc  # None
         """
         from ..calculator.base import Calculator
+
         return getattr(self, "_calculator", None)
 
     @calc.setter

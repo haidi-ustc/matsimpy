@@ -14,6 +14,7 @@ Crystal
 .. automodule:: matsimpy.core.crystal
    :members:
    :undoc-members:
+   :no-index:
 
 Molecule
 --------
@@ -21,6 +22,7 @@ Molecule
 .. automodule:: matsimpy.core.molecule
    :members:
    :undoc-members:
+   :no-index:
 
 Lattice
 -------
@@ -28,6 +30,7 @@ Lattice
 .. automodule:: matsimpy.core.lattice
    :members:
    :undoc-members:
+   :no-index:
 
 Composition
 -----------
@@ -35,6 +38,7 @@ Composition
 .. automodule:: matsimpy.core.composition
    :members:
    :undoc-members:
+   :no-index:
 
 Site
 ----
@@ -42,6 +46,7 @@ Site
 .. automodule:: matsimpy.core.site
    :members:
    :undoc-members:
+   :no-index:
 
 Periodic Table
 --------------
@@ -57,4 +62,5 @@ Graph
 .. automodule:: matsimpy.core.graph
    :members:
    :undoc-members:
+   :no-index:
 

@@ -1660,8 +1660,7 @@ class Crystal(Structure):
         Get the attached calculator.
 
         Returns:
-            Optional[Calculator]: The attached calculator, or None if none attached.
-                               Calculator type is :class:`~matsimpy.calculator.base.Calculator`.
+            :obj:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached.
 
         Example:
             >>> from matsimpy.calculator import LennardJones
@@ -1671,6 +1670,7 @@ class Crystal(Structure):
             >>> crystal.calc  # None
         """
         from ..calculator.base import Calculator
+
         return getattr(self, "_calculator", None)
 
     @calc.setter
@@ -1771,7 +1771,8 @@ class Crystal(Structure):
             np.ndarray: Stress tensor. Can be:
                 - Shape (3, 3): Full stress tensor matrix
                 - Shape (6,): Voigt notation [σxx, σyy, σzz, σyz, σxz, σxy]
-                Units are in eV/Å³.
+
+            Units are in eV/Å³.
 
         Raises:
             ValueError: If no calculator is attached.
