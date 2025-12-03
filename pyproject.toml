@@ -80,11 +80,16 @@ all = [
 matsimpy = "matsimpy.ui.cli.__main__:main"
 
 [tool.setuptools]
-packages = ["matsimpy"]
+# Automatically discover all packages (equivalent to find_packages())
+# This will find all packages under matsimpy/
+packages = { find = {} }
 
 [tool.setuptools.package-data]
+# Include JSON data files
 "matsimpy.core" = ["periodic_table.json"]
 "matsimpy.ui.cli" = ["matsimpy_menu.json"]
+"matsimpy.symmetry" = ["*.json", "*.yaml", "*.yml"]
+# Include test data files
 "tests" = ["POSCAR-cart.vasp", "POSCAR-frac.vasp"]
 
 [tool.pytest.ini_options]
