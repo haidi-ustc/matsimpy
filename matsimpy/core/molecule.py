@@ -853,7 +853,7 @@ class Molecule(Structure):
         Get attached calculator.
 
         Returns:
-            Calculator or None: The attached calculator, or None if none attached
+            :class:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached
         """
         return getattr(self, "_calculator", None)
 
@@ -863,7 +863,7 @@ class Molecule(Structure):
         Attach a calculator to this structure.
 
         Args:
-            calculator: Calculator object (e.g., LennardJones, Mattersim, VASP)
+            calculator: :class:`~matsimpy.calculator.base.Calculator` object (e.g., LennardJones, Mattersim, VASP)
 
         Raises:
             TypeError: If calculator is not a Calculator instance
