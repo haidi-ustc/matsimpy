@@ -885,9 +885,37 @@ def get_adjacency_matrix(
 
 
 def get_distance_matrix(
-    structure: Union[Crystal, Molecule], use_pbc: bool = None
+    structure: Union[Crystal, Molecule], use_pbc: Optional[bool] = None
 ) -> np.ndarray:
-    """Get distance matrix (functional API)."""
+    """
+    Get distance matrix (functional API).
+
+    This is a convenience function that creates a graph and returns its distance matrix.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        np.ndarray: Distance matrix of shape (N, N) where N is the number of atoms.
+                   Entry (i, j) is the distance between atoms i and j in Angstroms.
+
+    Note:
+        Uses a large cutoff (20.0 Å) to capture all distances. For very large
+        structures, this may be memory-intensive.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_distance_matrix
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> dist = get_distance_matrix(mol)
+        >>> dist[0, 1]  # Distance between atoms 0 and 1
+        1.2
+    """
     graph = create_structure_graph(structure, cutoff=20.0, use_pbc=use_pbc)
     return graph.distance_matrix
 
@@ -895,10 +923,43 @@ def get_distance_matrix(
 def get_edge_list(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
-    use_pbc: bool = None,
+    use_pbc: Optional[bool] = None,
     include_distances: bool = False,
 ) -> Union[List[Tuple[int, int]], List[Tuple[int, int, float]]]:
-    """Get edge list (functional API)."""
+    """
+    Get edge list (functional API).
+
+    This is a convenience function that creates a graph and returns its edge list.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+        include_distances: If True, return edges with distances as (i, j, dist).
+                          If False, return edges as (i, j) tuples (default).
+
+    Returns:
+        Union[List[Tuple[int, int]], List[Tuple[int, int, float]]]:
+            - If include_distances=False: List of (source, target) tuples
+            - If include_distances=True: List of (source, target, distance) tuples
+            Distances are in Angstroms.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_edge_list
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> edges = get_edge_list(mol, cutoff=2.0)
+        >>> edges
+        [(0, 1)]
+        >>>
+        >>> edges_with_dist = get_edge_list(mol, cutoff=2.0, include_distances=True)
+        >>> edges_with_dist
+        [(0, 1, 1.2)]
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     edges = graph.edge_list
 
@@ -908,33 +969,131 @@ def get_edge_list(
 
 
 def get_coordination_numbers(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> Dict[int, int]:
-    """Get coordination numbers (functional API)."""
+    """
+    Get coordination numbers (functional API).
+
+    This is a convenience function that creates a graph and returns coordination numbers.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        Dict[int, int]: Dictionary mapping atom index to coordination number
+                       (number of neighbors within cutoff).
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_coordination_numbers
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> coord = get_coordination_numbers(mol, cutoff=2.0)
+        >>> coord
+        {0: 1, 1: 1}
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.coordination_numbers
 
 
 def get_degree_distribution(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> Dict[int, int]:
-    """Get degree distribution (functional API)."""
+    """
+    Get degree distribution (functional API).
+
+    This is a convenience function that creates a graph and returns its degree distribution.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        Dict[int, int]: Dictionary mapping coordination number (degree) to the count
+                       of atoms with that coordination number.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_degree_distribution
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> dist = get_degree_distribution(mol, cutoff=2.0)
+        >>> dist
+        {1: 2}  # Both atoms have coordination number 1
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.degree_distribution
 
 
 def is_connected(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> bool:
-    """Check if graph is connected (functional API)."""
+    """
+    Check if graph is connected (functional API).
+
+    This is a convenience function that creates a graph and checks if it's connected.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        bool: True if the graph is connected, False otherwise.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import is_connected
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> is_connected(mol, cutoff=2.0)
+        True
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.is_connected
 
 
 def get_connected_components(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> List[List[int]]:
-    """Get connected components (functional API)."""
+    """
+    Get connected components (functional API).
+
+    This is a convenience function that creates a graph and returns its connected components.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        List[List[int]]: List of connected components. Each component is a list
+                        of atom indices belonging to that component.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_connected_components
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> components = get_connected_components(mol, cutoff=2.0)
+        >>> components
+        [[0, 1]]  # Single connected component
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.connected_components
 
@@ -944,17 +1103,72 @@ def get_shortest_path(
     start_idx: int,
     end_idx: int,
     cutoff: float = 3.0,
-    use_pbc: bool = None,
+    use_pbc: Optional[bool] = None,
 ) -> Optional[List[int]]:
-    """Get shortest path (functional API)."""
+    """
+    Get shortest path between two atoms (functional API).
+
+    This is a convenience function that creates a graph and finds the shortest path.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        start_idx: Starting atom index.
+        end_idx: Ending atom index.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        Optional[List[int]]: List of atom indices in the shortest path, or None
+                            if no path exists.
+
+    Raises:
+        IndexError: If start_idx or end_idx is out of range.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_shortest_path
+        >>>
+        >>> mol = Molecule(['C', 'O', 'H'], [[0,0,0], [1.2,0,0], [2.0,0,0]])
+        >>> path = get_shortest_path(mol, 0, 2, cutoff=2.0)
+        >>> path
+        [0, 1, 2]  # Path through atom 1
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.get_shortest_path(start_idx, end_idx)
 
 
 def get_graph_diameter(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> Optional[int]:
-    """Get graph diameter (functional API)."""
+    """
+    Get graph diameter (functional API).
+
+    This is a convenience function that creates a graph and returns its diameter.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        Optional[int]: Graph diameter (longest shortest path), or None if the
+                      graph is disconnected. Returns 0 for graphs with 1 or fewer nodes.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_graph_diameter
+        >>>
+        >>> mol = Molecule(['C', 'O', 'H'], [[0,0,0], [1.2,0,0], [2.0,0,0]])
+        >>> diameter = get_graph_diameter(mol, cutoff=2.0)
+        >>> diameter
+        2  # Longest shortest path has 2 edges
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.diameter
 
@@ -962,23 +1176,112 @@ def get_graph_diameter(
 def get_node_features(
     structure: Union[Crystal, Molecule], include_properties: bool = True
 ) -> np.ndarray:
-    """Get node features (functional API)."""
+    """
+    Get node features for graph neural networks (functional API).
+
+    This is a convenience function that creates a graph and returns node features.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        include_properties: Currently unused, kept for API compatibility.
+
+    Returns:
+        np.ndarray: Feature matrix of shape (N, F) where N is the number of nodes
+                   and F is the number of features (currently 1: atomic number).
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_node_features
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> features = get_node_features(mol)
+        >>> features.shape
+        (2, 1)
+        >>> features[0]  # Atomic number of C
+        array([6])
+    """
     graph = create_structure_graph(structure, cutoff=3.0)
     return graph.node_features
 
 
 def get_graph_statistics(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> Dict[str, Any]:
-    """Get graph statistics (functional API)."""
+    """
+    Get comprehensive graph statistics (functional API).
+
+    This is a convenience function that creates a graph and returns statistics.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        Dict[str, Any]: Dictionary containing comprehensive graph statistics:
+            - num_nodes: Number of nodes
+            - num_edges: Number of edges
+            - is_connected: Whether graph is connected
+            - num_components: Number of connected components
+            - diameter: Graph diameter
+            - avg_coordination: Average coordination number
+            - max_coordination: Maximum coordination number
+            - min_coordination: Minimum coordination number
+            - degree_distribution: Degree distribution dictionary
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_graph_statistics
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> stats = get_graph_statistics(mol, cutoff=2.0)
+        >>> stats['num_nodes']
+        2
+        >>> stats['avg_coordination']
+        1.0
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.statistics
 
 
 def structure_to_networkx(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ):
-    """Convert to NetworkX graph (functional API)."""
+    """
+    Convert structure to NetworkX graph (functional API).
+
+    This is a convenience function that creates a graph and converts it to NetworkX.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        networkx.Graph: NetworkX Graph object with nodes and edges.
+
+    Raises:
+        ImportError: If networkx is not installed.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import structure_to_networkx
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> G = structure_to_networkx(mol, cutoff=2.0)
+        >>> G.number_of_nodes()
+        2
+        >>> G.number_of_edges()
+        1
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.to_networkx()
 
@@ -987,9 +1290,40 @@ def get_rings(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
     max_ring_size: int = 10,
-    use_pbc: bool = None,
+    use_pbc: Optional[bool] = None,
 ) -> List[List[int]]:
-    """Find rings (functional API)."""
+    """
+    Find ring structures in the graph (functional API).
+
+    This is a convenience function that creates a graph and finds rings.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        max_ring_size: Maximum ring size to search for (default: 10).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+
+    Returns:
+        List[List[int]]: List of rings. Each ring is a list of atom indices
+                        forming a cycle in the graph.
+
+    Raises:
+        ImportError: If networkx is not installed (required for ring finding).
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_rings
+        >>>
+        >>> # Create a ring molecule (benzene-like)
+        >>> mol = Molecule(['C'] * 6, [[0,0,0], [1.4,0,0], [2.1,1.2,0],
+        ...                 [1.4,2.4,0], [0,2.4,0], [-0.7,1.2,0]])
+        >>> rings = get_rings(mol, cutoff=1.5, max_ring_size=6)
+        >>> len(rings)
+        1
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     return graph.find_rings(max_ring_size)
 
@@ -997,10 +1331,40 @@ def get_rings(
 def get_graph_laplacian(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
-    use_pbc: bool = None,
+    use_pbc: Optional[bool] = None,
     normalized: bool = False,
 ) -> np.ndarray:
-    """Get graph Laplacian (functional API)."""
+    """
+    Get graph Laplacian matrix (functional API).
+
+    This is a convenience function that creates a graph and returns its Laplacian.
+    For better performance with multiple operations, consider using the OOP API
+    (:class:`MoleculeGraph` or :class:`CrystalGraph`) directly.
+
+    Args:
+        structure: Crystal or Molecule object.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
+        normalized: If True, return normalized Laplacian; if False, return standard
+                   Laplacian (default: False).
+
+    Returns:
+        np.ndarray: Laplacian matrix of shape (N, N) where N is the number of nodes.
+                   - If normalized=False: L = D - A (standard Laplacian)
+                   - If normalized=True: L = I - D^(-1/2) A D^(-1/2) (normalized)
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import get_graph_laplacian
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> L = get_graph_laplacian(mol, cutoff=2.0)
+        >>> L.shape
+        (2, 2)
+        >>>
+        >>> L_norm = get_graph_laplacian(mol, cutoff=2.0, normalized=True)
+    """
     graph = create_structure_graph(structure, cutoff, use_pbc)
     if normalized:
         return graph.get_normalized_laplacian()
