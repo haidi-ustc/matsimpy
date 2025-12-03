@@ -159,7 +159,7 @@ Key configuration sections:
 
 ```python
 project = 'MatSimPy'
-copyright = '2024, haidi wang'
+copyright = '2025, haidi wang'
 author = 'haidi wang'
 release = '0.1.0'
 ```

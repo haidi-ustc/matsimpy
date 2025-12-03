@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 project = 'MatSimPy'
-copyright = '2024, haidi wang'
+copyright = '2025, haidi wang'
 author = 'haidi wang'
 release = '0.1.0'
 
