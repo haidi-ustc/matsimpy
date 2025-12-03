@@ -86,6 +86,11 @@ nitpick_ignore = [
     ('py:obj', 'Calculator'),
 ]
 
+# Suppress specific warning types
+suppress_warnings = [
+    'ref.python',  # Suppress "more than one target found for cross-reference" warnings
+]
+
 # Use fully qualified names for cross-references to avoid ambiguity
 default_role = None
 
