@@ -19,6 +19,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from dataclasses import dataclass
 from prompt_toolkit.validation import Validator
 from matsimpy.ui.cli.parameter_manager import CLIParameterManager
+from matsimpy import __version__
 
 
 @dataclass
@@ -231,7 +232,7 @@ class AdvancedInteractiveMenu:
 
         # Session info
         session_time = datetime.now() - self.session.start_time
-        session_text = f"MatSimPy v2.0 - Session: {session_time.seconds // 60}m {session_time.seconds % 60}s | Commands: {self.session.commands_executed}"
+        session_text = f"MatSimPy v{__version__} - Session: {session_time.seconds // 60}m {session_time.seconds % 60}s | Commands: {self.session.commands_executed}"
         lines.append(("class:title", session_text.center(70)))
         lines.append(("", "\n"))
         lines.append(("class:separator", "=" * 70))
