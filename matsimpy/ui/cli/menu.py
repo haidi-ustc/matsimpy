@@ -141,7 +141,7 @@ class AdvancedInteractiveMenu:
         lines.append(("class:separator", "=" * 70))
         lines.append(("", "\n"))
         # Create properly centered header
-        title_text = " MatSimPy v2.0 "
+        title_text = f" MatSimPy v{__version__} "
         title_centered = title_text.center(70, "=")
         lines.append(("class:title", title_centered))
         lines.append(("", "\n"))
