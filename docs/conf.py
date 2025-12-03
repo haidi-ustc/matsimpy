@@ -72,3 +72,14 @@ intersphinx_mapping = {
     'scipy': ('https://docs.scipy.org/doc/scipy/', None),
 }
 
+# Suppress warnings for ambiguous cross-references
+# These occur because classes are imported in both __init__.py and their original modules
+nitpicky = False
+nitpick_ignore = [
+    ('py:class', 'AtomSelection'),
+    ('py:class', 'Calculator'),
+]
+
+# Use fully qualified names for cross-references to avoid ambiguity
+default_role = None
+

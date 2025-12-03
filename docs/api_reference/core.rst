@@ -5,6 +5,9 @@ Core Module
    :members:
    :undoc-members:
 
+.. note::
+   For detailed API documentation, see the individual module pages below.
+
 Crystal
 -------
 

@@ -16,6 +16,7 @@ Crystal
 .. autoclass:: matsimpy.core.crystal.Crystal
    :members:
    :special-members: __init__
+   :exclude-members: calc
 
 Molecule
 --------
@@ -23,6 +24,7 @@ Molecule
 .. autoclass:: matsimpy.core.molecule.Molecule
    :members:
    :special-members: __init__
+   :exclude-members: calc
 
 Lattice
 -------
