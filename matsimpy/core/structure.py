@@ -30,7 +30,7 @@ Example:
 """
 
 import numpy as np
-from typing import List, Union, Optional, Dict, Tuple, Any
+from typing import List, Union, Optional, Dict, Tuple, Any, TYPE_CHECKING
 import hashlib
 from collections import Counter
 from abc import ABC, abstractmethod
@@ -39,6 +39,9 @@ from monty.json import MSONable
 from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
+
+if TYPE_CHECKING:
+    from ..utils.selection import AtomSelection
 
 
 class Structure(ABC, MSONable):
