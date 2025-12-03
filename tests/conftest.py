@@ -14,3 +14,39 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+
+def has_torch():
+    """Check if torch is installed."""
+    try:
+        import torch
+        return True
+    except ImportError:
+        return False
+
+
+def has_torch_geometric():
+    """Check if torch_geometric is installed."""
+    try:
+        import torch_geometric
+        return True
+    except ImportError:
+        return False
+
+
+def has_ase():
+    """Check if ase is installed."""
+    try:
+        import ase
+        return True
+    except ImportError:
+        return False
+
+
+def has_pymatgen():
+    """Check if pymatgen is installed."""
+    try:
+        import pymatgen
+        return True
+    except ImportError:
+        return False
+

@@ -29,15 +29,29 @@ from .base import Calculator
 # Classical calculators
 from .classical import LennardJones
 
-# ML calculators
-from .ml import Mattersim, BaseML
+# ML calculators - use try/except to handle missing torch dependencies
+try:
+    from .ml import Mattersim, BaseML
+    _ml_available = True
+except (ImportError, ModuleNotFoundError):
+    # If torch or other ML dependencies are not available, set to None
+    Mattersim = None
+    BaseML = None
+    _ml_available = False
 
 # DFT calculators
 from .dft import BaseDFT
 
 # Category modules (for category-level imports)
 from . import classical
-from . import ml
+# ML module import - use try/except to handle missing torch dependencies
+try:
+    from . import ml
+except (ImportError, ModuleNotFoundError):
+    # If torch or other ML dependencies are not available, create a dummy module
+    import types
+    ml = types.ModuleType('ml')
+    ml.__all__ = []
 from . import dft
 
 __all__ = [
@@ -45,7 +59,7 @@ __all__ = [
     "Calculator",
     # Classical
     "LennardJones",
-    # ML
+    # ML (may be None if dependencies not available)
     "Mattersim",
     "BaseML",
     # DFT

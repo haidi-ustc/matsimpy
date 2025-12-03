@@ -4,7 +4,9 @@ Tests for base Calculator class.
 
 import unittest
 import numpy as np
-from matsimpy import Crystal, Molecule, Lattice
+# Import core classes first to avoid triggering calculator.__init__ imports
+from matsimpy.core import Crystal, Molecule, Lattice
+# Direct import from base module to avoid triggering ML imports
 from matsimpy.calculator.base import Calculator
 
 class MockCalculator(Calculator):

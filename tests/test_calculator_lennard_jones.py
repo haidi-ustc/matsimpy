@@ -5,7 +5,7 @@ Tests for Lennard-Jones calculator.
 import unittest
 import numpy as np
 from matsimpy import Crystal, Molecule, Lattice
-from matsimpy.calculator import LennardJones
+from matsimpy.calculator.classical import LennardJones
 
 class TestLennardJones(unittest.TestCase):
     """Tests for Lennard-Jones calculator."""
