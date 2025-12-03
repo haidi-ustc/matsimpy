@@ -1453,25 +1453,44 @@ class Crystal(Structure):
         return random_crystal(dim, group, species, num_ions, **kwargs)
 
     @property
-    def calc(self):
+    def calc(self) -> Optional["Calculator"]:
         """
-        Get attached calculator.
+        Get the attached calculator.
 
         Returns:
-            :class:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached
+            Optional[Calculator]: The attached calculator, or None if none attached.
+                               Calculator type is :class:`~matsimpy.calculator.base.Calculator`.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> crystal.calc = LennardJones()
+            >>> crystal.calc  # <LennardJones object>
+            >>> crystal.calc = None  # Remove calculator
+            >>> crystal.calc  # None
         """
+        from ..calculator.base import Calculator
         return getattr(self, "_calculator", None)
 
     @calc.setter
-    def calc(self, calculator):
+    def calc(self, calculator: Optional["Calculator"]) -> None:
         """
-        Attach a calculator to this structure.
+        Attach a calculator to this crystal.
+
+        Sets a calculator that can be used to compute energies, forces, and stress.
+        The calculator must be an instance of
+        :class:`~matsimpy.calculator.base.Calculator`.
 
         Args:
-            calculator: :class:`~matsimpy.calculator.base.Calculator` object (e.g., LennardJones, Mattersim, VASP)
+            calculator: Calculator object (e.g., LennardJones, Mattersim, VASP)
+                      or None to remove the calculator.
 
         Raises:
-            TypeError: If calculator is not a Calculator instance
+            TypeError: If calculator is not a Calculator instance or None.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> crystal.calc = LennardJones()
+            >>> energy = crystal.get_potential_energy()
         """
         from ..calculator.base import Calculator
 
@@ -1485,11 +1504,20 @@ class Crystal(Structure):
         """
         Get potential energy from attached calculator.
 
+        Computes the potential energy using the attached calculator. If the
+        calculation hasn't been performed yet, it will be triggered automatically.
+
         Returns:
-            float: Potential energy in eV
+            float: Potential energy in eV.
 
         Raises:
-            ValueError: If no calculator attached or calculation not performed
+            ValueError: If no calculator is attached.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> crystal.calc = LennardJones()
+            >>> energy = crystal.get_potential_energy()
+            >>> print(f"Energy: {energy:.4f} eV")
         """
         if self.calc is None:
             raise ValueError(
@@ -1503,11 +1531,24 @@ class Crystal(Structure):
         """
         Get forces from attached calculator.
 
+        Computes the forces on all atoms using the attached calculator. If the
+        calculation hasn't been performed yet, it will be triggered automatically.
+
         Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/Å
+            np.ndarray: Forces array of shape (N, 3) in eV/Å, where N is the
+                       number of atoms. Each row contains [Fx, Fy, Fz] for one atom.
 
         Raises:
-            ValueError: If no calculator attached or calculation not performed
+            ValueError: If no calculator is attached.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> crystal.calc = LennardJones()
+            >>> forces = crystal.get_forces()
+            >>> forces.shape
+            (2, 3)  # 2 atoms, 3 force components
+            >>> forces[0]  # Force on first atom
+            array([0.123, -0.456, 0.789])
         """
         if self.calc is None:
             raise ValueError(
@@ -1521,11 +1562,25 @@ class Crystal(Structure):
         """
         Get stress tensor from attached calculator.
 
+        Computes the stress tensor using the attached calculator. If the
+        calculation hasn't been performed yet, it will be triggered automatically.
+
         Returns:
-            np.ndarray: Stress tensor of shape (3, 3) or (6,) in eV/Å³
+            np.ndarray: Stress tensor. Can be:
+                - Shape (3, 3): Full stress tensor matrix
+                - Shape (6,): Voigt notation [σxx, σyy, σzz, σyz, σxz, σxy]
+                Units are in eV/Å³.
 
         Raises:
-            ValueError: If no calculator attached or calculation not performed
+            ValueError: If no calculator is attached.
+            AttributeError: If calculator doesn't support stress calculation.
+
+        Example:
+            >>> from matsimpy.calculator import VASP
+            >>> crystal.calc = VASP(...)
+            >>> stress = crystal.get_stress()
+            >>> stress.shape
+            (3, 3)  # or (6,) depending on calculator
         """
         if self.calc is None:
             raise ValueError(
