@@ -3,13 +3,7 @@ Configuration System
 
 MatSimPy provides a global configuration system for managing default settings.
 
-Config Manager
---------------
-
-.. automodule:: matsimpy.config
-   :members:
-   :undoc-members:
-   :no-index:
+For complete API documentation, see :doc:`../api_reference/config`.
 
 Usage Examples
 --------------

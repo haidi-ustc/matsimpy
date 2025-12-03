@@ -3,50 +3,40 @@ File I/O
 
 MatSimPy supports reading and writing structures in various formats.
 
+For complete API documentation, see :doc:`../api_reference/io`.
+
+Supported Formats
+-----------------
+
+MatSimPy supports multiple file formats:
+* VASP (POSCAR, CONTCAR)
+* CIF (Crystallographic Information File)
+* XYZ (atomic coordinates)
+* PDB (Protein Data Bank)
+* MOL (molecular structure)
+* XSF (XCrySDen Structure File)
+* ASE (Atomic Simulation Environment)
+* JSON (structured data)
+
+Usage Examples
+-------------
+
 High-Level Interface
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: matsimpy.io
-   :members:
-   :undoc-members:
-   :no-index:
+.. code-block:: python
 
-Format-Specific Functions
--------------------------
+   from matsimpy.io import read, write
 
-VASP Format
-~~~~~~~~~~~
+   # Auto-detect format from file extension
+   write(crystal, 'structure.vasp')
+   write(molecule, 'molecule.xyz')
 
-.. automodule:: matsimpy.io.vasp
-   :members:
-   :undoc-members:
-   :no-index:
+   # Read structures (format auto-detected)
+   crystal = read('structure.vasp')
+   molecule = read('molecule.xyz')
 
-CIF Format
-~~~~~~~~~~
-
-.. automodule:: matsimpy.io.cif
-   :members:
-   :undoc-members:
-   :no-index:
-
-XYZ Format
-~~~~~~~~~~
-
-.. automodule:: matsimpy.io.xyz
-   :members:
-   :undoc-members:
-   :no-index:
-
-Other Formats
-~~~~~~~~~~~~~
-
-MatSimPy also supports:
-* PDB format
-* MOL format
-* XSF format
-* ASE format
-* JSON format
-
-See the :doc:`../api_reference/io` module for details.
+   # Or use class methods
+   crystal = Crystal.from_file('structure.vasp')
+   crystal.to_file('output.cif', title='My Crystal')
 

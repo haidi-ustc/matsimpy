@@ -3,13 +3,7 @@ Data Storage
 
 MatSimPy provides persistent storage for structures and calculation results.
 
-Data Storage
-------------
-
-.. automodule:: matsimpy.storage
-   :members:
-   :undoc-members:
-   :no-index:
+For complete API documentation, see :doc:`../api_reference/storage`.
 
 Usage Examples
 --------------

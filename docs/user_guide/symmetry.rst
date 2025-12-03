@@ -3,13 +3,7 @@ Symmetry Analysis
 
 MatSimPy provides symmetry analysis capabilities for crystal structures.
 
-Symmetry Analyzer
------------------
-
-.. automodule:: matsimpy.symmetry.analyzer
-   :members:
-   :undoc-members:
-   :no-index:
+For complete API documentation, see :doc:`../api_reference/symmetry`.
 
 Usage Examples
 --------------
