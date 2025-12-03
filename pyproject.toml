@@ -44,18 +44,18 @@ dev = [
     "pytest-xdist",
 ]
 storage = [
-    "maggma",
+    "maggma>=0.70.0",
 ]
 ml = [
-    "torch",
-    "torch-geometric",
+    "torch>=2.0.0",
+    "torch-geometric>=2.0.0",
 ]
 io = [
-    "pymatgen",
-    "ase",
+    "pymatgen>=2024.0.0",
+    "ase>=3.20.0",
 ]
 builders = [
-    "pyxtal",
+    "pyxtal>=1.0.0",
     "rdkit",
 ]
 analysis = [
@@ -66,12 +66,12 @@ all = [
     "pytest>=6.0",
     "pytest-cov>=2.12",
     "pytest-xdist",
-    "maggma",
-    "torch",
-    "torch-geometric",
-    "pymatgen",
-    "ase",
-    "pyxtal",
+    "maggma>=0.70.0",
+    "torch>=2.0.0",
+    "torch-geometric>=2.0.0",
+    "pymatgen>=2024.0.0",
+    "ase>=3.20.0",
+    "pyxtal>=1.0.0",
     "rdkit",
     "spglib",
 ]
