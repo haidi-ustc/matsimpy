@@ -1,14 +1,34 @@
 """
-Graph representation for Crystal and Molecule structures.
+Graph module for MatSimPy.
 
-Provides object-oriented graph classes for analyzing molecular and crystal
-structure connectivity. Supports graph algorithms, ML framework integration,
-and topological analysis.
+This module provides graph representations for Crystal and Molecule structures,
+enabling connectivity analysis, graph algorithms, and machine learning integration.
 
-Classes:
-    - StructureGraph: Base class for structure graphs
-    - MoleculeGraph: Graph representation of molecules
-    - CrystalGraph: Graph representation of crystals with PBC support
+The module provides:
+- Object-oriented graph classes (StructureGraph, MoleculeGraph, CrystalGraph)
+- Graph algorithms (shortest path, connected components, rings)
+- Graph properties (adjacency matrix, distance matrix, coordination numbers)
+- NetworkX integration
+- Functional API for backward compatibility
+
+Example:
+    >>> from matsimpy.core import Crystal, Molecule, Lattice
+    >>> from matsimpy.core.graph import MoleculeGraph, CrystalGraph, create_structure_graph
+    >>>
+    >>> # Create molecule graph
+    >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+    >>> graph = MoleculeGraph(mol, cutoff=2.0)
+    >>> print(graph.num_nodes)  # 2
+    >>> print(graph.is_connected)  # True
+    >>>
+    >>> # Create crystal graph with PBC
+    >>> lat = Lattice.cubic(10)
+    >>> crystal = Crystal(['Si', 'O'], [[0,0,0], [0.5,0.5,0.5]], lat)
+    >>> graph = CrystalGraph(crystal, cutoff=5.0, use_pbc=True)
+    >>> coord = graph.coordination_numbers
+    >>>
+    >>> # Factory function
+    >>> graph = create_structure_graph(mol, cutoff=2.0)
 """
 
 import numpy as np
@@ -24,21 +44,54 @@ class StructureGraph(ABC):
     Abstract base class for structure graph representations.
 
     Provides common graph algorithms and properties for both molecular
-    and crystal structure graphs.
+    and crystal structure graphs. This class should not be instantiated
+    directly - use :class:`MoleculeGraph` or :class:`CrystalGraph` instead.
+
+    The StructureGraph class provides:
+    - Graph construction from atomic structures
+    - Adjacency and distance matrices
+    - Graph algorithms (shortest path, connected components, rings)
+    - Graph properties (coordination numbers, degree distribution)
+    - NetworkX integration
+    - Graph statistics
+
+    Attributes:
+        structure (Union[Crystal, Molecule]): The underlying structure object.
+        cutoff (float): Edge cutoff distance in Angstroms.
+        num_nodes (int): Number of nodes (atoms) in the graph (property).
+        num_edges (int): Number of edges in the graph (property).
+        adjacency_matrix (np.ndarray): Binary adjacency matrix (property).
+        distance_matrix (np.ndarray): Distance matrix in Angstroms (property).
+        edge_list (List[Tuple[int, int, float]]): List of edges with distances (property).
+        coordination_numbers (Dict[int, int]): Coordination number for each atom (property).
+        degree_distribution (Dict[int, int]): Degree distribution (property).
+        is_connected (bool): Whether graph is connected (property).
+        connected_components (List[List[int]]): List of connected components (property).
+        diameter (Optional[int]): Graph diameter (property).
+        node_features (np.ndarray): Node features for GNN (property).
+        laplacian (np.ndarray): Graph Laplacian matrix (property).
+        statistics (Dict[str, Any]): Comprehensive graph statistics (property).
 
     Args:
         structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
 
-    Attributes:
-        structure: The underlying structure object.
-        cutoff: Edge cutoff distance.
+    Note:
+        This is an abstract class. Subclasses must implement:
+        - :meth:`adjacency_matrix`: Compute adjacency matrix
+        - :meth:`distance_matrix`: Compute distance matrix
 
     Examples:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import MoleculeGraph
+        >>>
         >>> # Use MoleculeGraph or CrystalGraph subclasses
         >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
         >>> graph = MoleculeGraph(mol, cutoff=2.0)
         >>> print(graph.num_nodes)  # 2
+        >>> print(graph.num_edges)  # 1
+        >>> print(graph.is_connected)  # True
+        >>> print(graph.coordination_numbers)  # {0: 1, 1: 1}
     """
 
     def __init__(self, structure: Union[Crystal, Molecule], cutoff: float = 3.0):
@@ -57,19 +110,50 @@ class StructureGraph(ABC):
 
     @property
     def num_nodes(self) -> int:
-        """Get number of nodes (atoms)."""
+        """
+        Get the number of nodes (atoms) in the graph.
+
+        Returns:
+            int: Number of nodes, equal to the number of atoms in the structure.
+
+        Example:
+            >>> graph.num_nodes
+            2
+        """
         return len(self.structure)
 
     @property
     @abstractmethod
     def adjacency_matrix(self) -> np.ndarray:
-        """Get adjacency matrix (computed lazily)."""
+        """
+        Get the adjacency matrix (abstract method, computed lazily).
+
+        Returns:
+            np.ndarray: Binary adjacency matrix of shape (N, N) where N is the
+                       number of atoms. Entry (i, j) is 1 if atoms i and j are
+                       within cutoff distance, 0 otherwise.
+
+        Note:
+            This is an abstract method that must be implemented by subclasses.
+            The matrix is typically cached for performance.
+        """
         pass
 
     @property
     @abstractmethod
     def distance_matrix(self) -> np.ndarray:
-        """Get distance matrix (computed lazily)."""
+        """
+        Get the distance matrix (abstract method, computed lazily).
+
+        Returns:
+            np.ndarray: Distance matrix of shape (N, N) where N is the number
+                       of atoms. Entry (i, j) is the distance between atoms i
+                       and j in Angstroms.
+
+        Note:
+            This is an abstract method that must be implemented by subclasses.
+            The matrix is typically cached for performance.
+        """
         pass
 
     @property
@@ -96,7 +180,16 @@ class StructureGraph(ABC):
 
     @property
     def num_edges(self) -> int:
-        """Get number of edges."""
+        """
+        Get the number of edges in the graph.
+
+        Returns:
+            int: Number of edges (bonds) in the graph.
+
+        Example:
+            >>> graph.num_edges
+            1
+        """
         return len(self.edge_list)
 
     @property
@@ -104,8 +197,16 @@ class StructureGraph(ABC):
         """
         Get coordination number for each atom.
 
+        The coordination number is the number of neighbors within the cutoff distance.
+
         Returns:
-            Dictionary mapping atom index to coordination number.
+            Dict[int, int]: Dictionary mapping atom index to coordination number
+                           (number of neighbors).
+
+        Example:
+            >>> coord = graph.coordination_numbers
+            >>> coord[0]  # Coordination number of atom 0
+            4
         """
         adj = self.adjacency_matrix
         return {i: int(adj[i].sum()) for i in range(self.num_nodes)}
@@ -113,10 +214,16 @@ class StructureGraph(ABC):
     @property
     def degree_distribution(self) -> Dict[int, int]:
         """
-        Get degree distribution.
+        Get the degree distribution of the graph.
 
         Returns:
-            Dictionary mapping coordination number to count.
+            Dict[int, int]: Dictionary mapping coordination number (degree) to
+                           the count of atoms with that coordination number.
+
+        Example:
+            >>> dist = graph.degree_distribution
+            >>> dist[4]  # Number of atoms with coordination number 4
+            8
         """
         from collections import Counter
 
@@ -126,10 +233,16 @@ class StructureGraph(ABC):
     @property
     def is_connected(self) -> bool:
         """
-        Check if graph is connected.
+        Check if the graph is connected.
+
+        A graph is connected if there exists a path between any two atoms.
 
         Returns:
-            True if there's a path between any two atoms.
+            bool: True if the graph is connected, False otherwise.
+
+        Example:
+            >>> graph.is_connected
+            True
         """
         if self.num_nodes <= 1:
             return True
@@ -151,10 +264,18 @@ class StructureGraph(ABC):
     @property
     def connected_components(self) -> List[List[int]]:
         """
-        Find connected components.
+        Find all connected components in the graph.
 
         Returns:
-            List of components, each is a list of atom indices.
+            List[List[int]]: List of connected components. Each component is
+                            a list of atom indices belonging to that component.
+
+        Example:
+            >>> components = graph.connected_components
+            >>> len(components)  # Number of components
+            1
+            >>> components[0]  # First component
+            [0, 1, 2, 3]
         """
         if self.num_nodes == 0:
             return []
@@ -229,10 +350,17 @@ class StructureGraph(ABC):
     @property
     def diameter(self) -> Optional[int]:
         """
-        Get graph diameter (longest shortest path).
+        Get the graph diameter (longest shortest path).
+
+        The diameter is the maximum shortest path length between any two atoms.
 
         Returns:
-            Diameter as integer, or None if disconnected.
+            Optional[int]: Graph diameter as integer, or None if the graph is
+                          disconnected. Returns 0 for graphs with 1 or fewer nodes.
+
+        Example:
+            >>> graph.diameter
+            3
         """
         if not self.is_connected:
             return None
@@ -252,10 +380,20 @@ class StructureGraph(ABC):
     @property
     def node_features(self) -> np.ndarray:
         """
-        Get node features for GNN.
+        Get node features for graph neural networks (GNN).
+
+        Currently returns atomic numbers as node features.
 
         Returns:
-            Feature matrix of shape (N, F).
+            np.ndarray: Feature matrix of shape (N, F) where N is the number
+                       of nodes and F is the number of features (currently 1).
+
+        Example:
+            >>> features = graph.node_features
+            >>> features.shape
+            (10, 1)  # 10 atoms, 1 feature (atomic number)
+            >>> features[0]  # Atomic number of first atom
+            array([6])  # Carbon
         """
         atomic_numbers = np.array(
             [elem.atomic_no for elem in self.structure.elements]
@@ -266,10 +404,19 @@ class StructureGraph(ABC):
     @property
     def laplacian(self) -> np.ndarray:
         """
-        Get graph Laplacian matrix.
+        Get the graph Laplacian matrix.
+
+        The Laplacian matrix is defined as L = D - A, where D is the degree
+        matrix and A is the adjacency matrix.
 
         Returns:
-            Laplacian matrix L = D - A.
+            np.ndarray: Laplacian matrix of shape (N, N) where N is the number
+                       of nodes.
+
+        Example:
+            >>> L = graph.laplacian
+            >>> L.shape
+            (10, 10)
         """
         adj = self.adjacency_matrix
         degree = adj.sum(axis=1)
@@ -278,10 +425,20 @@ class StructureGraph(ABC):
 
     def get_normalized_laplacian(self) -> np.ndarray:
         """
-        Get normalized graph Laplacian.
+        Get the normalized graph Laplacian matrix.
+
+        The normalized Laplacian is defined as L = I - D^(-1/2) A D^(-1/2),
+        where I is the identity matrix, D is the degree matrix, and A is the
+        adjacency matrix.
 
         Returns:
-            Normalized Laplacian L = I - D^(-1/2) A D^(-1/2).
+            np.ndarray: Normalized Laplacian matrix of shape (N, N) where N
+                       is the number of nodes.
+
+        Example:
+            >>> L_norm = graph.get_normalized_laplacian()
+            >>> L_norm.shape
+            (10, 10)
         """
         adj = self.adjacency_matrix
         degree = adj.sum(axis=1)
@@ -295,7 +452,23 @@ class StructureGraph(ABC):
         Get comprehensive graph statistics.
 
         Returns:
-            Dictionary with graph properties.
+            Dict[str, Any]: Dictionary containing:
+                - num_nodes: Number of nodes
+                - num_edges: Number of edges
+                - is_connected: Whether graph is connected
+                - num_components: Number of connected components
+                - diameter: Graph diameter
+                - avg_coordination: Average coordination number
+                - max_coordination: Maximum coordination number
+                - min_coordination: Minimum coordination number
+                - degree_distribution: Degree distribution dictionary
+
+        Example:
+            >>> stats = graph.statistics
+            >>> stats['num_nodes']
+            10
+            >>> stats['avg_coordination']
+            4.0
         """
         coord_values = list(self.coordination_numbers.values())
 
@@ -379,7 +552,17 @@ class StructureGraph(ABC):
             return []
 
     def __repr__(self) -> str:
-        """String representation."""
+        """
+        Get unambiguous string representation for debugging.
+
+        Returns:
+            str: String representation with class name, number of nodes,
+                number of edges, and cutoff distance.
+
+        Example:
+            >>> repr(graph)
+            'MoleculeGraph(nodes=2, edges=1, cutoff=2.0)'
+        """
         return (
             f"{self.__class__.__name__}(nodes={self.num_nodes}, "
             f"edges={self.num_edges}, cutoff={self.cutoff})"
@@ -390,9 +573,21 @@ class MoleculeGraph(StructureGraph):
     """
     Graph representation of a Molecule structure.
 
+    MoleculeGraph extends :class:`StructureGraph` to provide graph representation
+    for non-periodic molecular structures. Distances are computed using Cartesian
+    coordinates without periodic boundary conditions.
+
+    Attributes:
+        structure (Molecule): The underlying Molecule object.
+        cutoff (float): Edge cutoff distance in Angstroms.
+        All properties from :class:`StructureGraph` are available.
+
     Args:
         molecule: Molecule object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+
+    Raises:
+        TypeError: If molecule is not a Molecule instance.
 
     Examples:
         >>> from matsimpy.core import Molecule
@@ -403,6 +598,7 @@ class MoleculeGraph(StructureGraph):
         >>> print(graph.num_nodes)  # 2
         >>> print(graph.num_edges)  # 1
         >>> print(graph.is_connected)  # True
+        >>> print(graph.coordination_numbers)  # {0: 1, 1: 1}
     """
 
     def __init__(self, molecule: Molecule, cutoff: float = 3.0):
@@ -452,21 +648,39 @@ class CrystalGraph(StructureGraph):
     """
     Graph representation of a Crystal structure with PBC support.
 
+    CrystalGraph extends :class:`StructureGraph` to provide graph representation
+    for periodic crystal structures. Supports both periodic and non-periodic
+    neighbor finding.
+
+    Attributes:
+        structure (Crystal): The underlying Crystal object.
+        cutoff (float): Edge cutoff distance in Angstroms.
+        use_pbc (bool): Whether to use periodic boundary conditions.
+        All properties from :class:`StructureGraph` are available.
+
     Args:
         crystal: Crystal object.
-        cutoff: Cutoff distance in Angstroms for defining edges.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
         use_pbc: Use periodic boundary conditions (default: True).
+                If True, distances are computed with PBC; if False, only
+                within-unit-cell distances are considered.
+
+    Raises:
+        TypeError: If crystal is not a Crystal instance.
 
     Examples:
         >>> from matsimpy.core import Crystal, Lattice
         >>> from matsimpy.core.graph import CrystalGraph
         >>>
-        >>> lat = Lattice(10)
+        >>> lat = Lattice.cubic(10)
         >>> crystal = Crystal(['Si', 'O'], [[0,0,0], [0.5,0.5,0.5]], lat)
-        >>> graph = CrystalGraph(crystal, cutoff=5.0)
+        >>> graph = CrystalGraph(crystal, cutoff=5.0, use_pbc=True)
         >>> print(graph.num_nodes)  # 2
         >>> coord = graph.coordination_numbers
-        >>> print(coord)  # {0: X, 1: Y}
+        >>> print(coord)  # {0: 4, 1: 4}
+        >>>
+        >>> # Without PBC
+        >>> graph_no_pbc = CrystalGraph(crystal, cutoff=5.0, use_pbc=False)
     """
 
     def __init__(self, crystal: Crystal, cutoff: float = 3.0, use_pbc: bool = True):
@@ -540,22 +754,41 @@ class CrystalGraph(StructureGraph):
 
 # Convenience factory function
 def create_structure_graph(
-    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: bool = None
+    structure: Union[Crystal, Molecule], cutoff: float = 3.0, use_pbc: Optional[bool] = None
 ) -> StructureGraph:
     """
     Factory function to create appropriate graph for structure.
 
+    Automatically creates a :class:`MoleculeGraph` for molecules or a
+    :class:`CrystalGraph` for crystals.
+
     Args:
         structure: Crystal or Molecule object.
-        cutoff: Cutoff distance in Angstroms.
-        use_pbc: Use PBC (only for Crystal). If None, defaults to True for Crystal.
+        cutoff: Cutoff distance in Angstroms for defining edges (default: 3.0).
+        use_pbc: Use periodic boundary conditions (only for Crystal).
+                If None, defaults to True for Crystal. Ignored for Molecule.
 
     Returns:
-        MoleculeGraph or CrystalGraph instance.
+        StructureGraph: A :class:`MoleculeGraph` or :class:`CrystalGraph` instance.
+
+    Raises:
+        TypeError: If structure is not a Crystal or Molecule instance.
 
     Examples:
-        >>> graph = create_structure_graph(molecule, cutoff=2.0)
-        >>> # Returns MoleculeGraph automatically
+        >>> from matsimpy.core import Molecule, Crystal, Lattice
+        >>> from matsimpy.core.graph import create_structure_graph
+        >>>
+        >>> # Automatically creates MoleculeGraph
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> graph = create_structure_graph(mol, cutoff=2.0)
+        >>> type(graph).__name__
+        'MoleculeGraph'
+        >>>
+        >>> # Automatically creates CrystalGraph
+        >>> crystal = Crystal(['Si', 'O'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(10))
+        >>> graph = create_structure_graph(crystal, cutoff=5.0)
+        >>> type(graph).__name__
+        'CrystalGraph'
     """
     if isinstance(structure, Molecule):
         return MoleculeGraph(structure, cutoff)
