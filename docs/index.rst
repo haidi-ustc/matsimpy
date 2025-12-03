@@ -14,6 +14,7 @@ Welcome to MatSimPy's documentation!
    user_guide/index
    api_reference/index
    examples
+   about
    contributing
    changelog
 
