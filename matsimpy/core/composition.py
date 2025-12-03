@@ -1,3 +1,26 @@
+"""
+Composition module for MatSimPy.
+
+This module provides the Composition class for representing and manipulating
+chemical compositions. It supports formula parsing, mass calculations, and
+various output formats (HTML, LaTeX).
+
+The Composition class is designed to be efficient with caching for frequently
+accessed properties like atomic mass calculations.
+
+Example:
+    >>> from matsimpy.core.composition import Composition
+    >>> comp = Composition('H2O')
+    >>> print(comp.formula)
+    H2O
+    >>> print(comp.mass)
+    18.01528
+    >>> print(comp['H'])
+    2
+    >>> print(comp.mass_fractions())
+    {'H': 0.111898..., 'O': 0.888102...}
+"""
+
 import re
 import json
 from collections import Counter
@@ -231,22 +254,56 @@ class Composition(MSONable):
         return self.composition[element]
 
     def __str__(self) -> str:
-        """String representation (returns formula)."""
+        """
+        String representation of the composition.
+
+        Returns:
+            str: The chemical formula string.
+
+        Example:
+            >>> c = Composition('H2O')
+            >>> str(c)
+            'H2O'
+        """
         return self.formula
 
     def __repr__(self) -> str:
-        """Unambiguous representation for debugging."""
+        """
+        Unambiguous representation for debugging.
+
+        Returns:
+            str: A string that can be used to recreate the Composition object.
+
+        Example:
+            >>> c = Composition('H2O')
+            >>> repr(c)
+            "Composition('H2O')"
+        """
         return f"Composition('{self.formula}')"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         """
         Check equality with another Composition.
 
+        Two compositions are equal if they have the same element counts,
+        regardless of formula string representation.
+
         Args:
-            other: Another Composition object.
+            other: Another object to compare with.
 
         Returns:
-            True if compositions are equal.
+            bool: True if compositions are equal, False otherwise.
+
+        Example:
+            >>> c1 = Composition('H2O')
+            >>> c2 = Composition('H2O')
+            >>> c3 = Composition('OH2')
+            >>> c1 == c2
+            True
+            >>> c1 == c3
+            True  # Same composition, different formula string
+            >>> c1 == 'H2O'
+            False
         """
         if isinstance(other, Composition):
             return self.composition == other.composition
@@ -304,10 +361,25 @@ class Composition(MSONable):
 
     def as_dict(self) -> Dict[str, Any]:
         """
-        Convert to dictionary representation.
+        Convert to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
 
         Returns:
-            Dictionary with module, class, and formula.
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name
+                - formula: Chemical formula string
+
+        Example:
+            >>> c = Composition('H2O')
+            >>> d = c.as_dict()
+            >>> d['formula']
+            'H2O'
+            >>> d['@class']
+            'Composition'
         """
         return {
             "@module": self.__class__.__module__,
@@ -318,13 +390,26 @@ class Composition(MSONable):
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Composition":
         """
-        Create Composition from dictionary.
+        Create Composition from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a Composition object from its dictionary representation.
 
         Args:
-            d: Dictionary with 'formula' key.
+            d: Dictionary containing 'formula' key and optionally
+               '@module' and '@class' keys.
 
         Returns:
-            Composition instance.
+            Composition: A new Composition instance.
+
+        Raises:
+            KeyError: If 'formula' key is missing from dictionary.
+
+        Example:
+            >>> d = {'@module': 'matsimpy.core.composition', '@class': 'Composition', 'formula': 'H2O'}
+            >>> c = Composition.from_dict(d)
+            >>> c.formula
+            'H2O'
         """
         formula = d["formula"]
         # Preserve original order by default
@@ -332,10 +417,19 @@ class Composition(MSONable):
 
     def to_json(self) -> str:
         """
-        Convert to JSON string.
+        Convert to JSON string representation.
+
+        Serializes the Composition to a JSON string using the dictionary
+        representation from as_dict().
 
         Returns:
-            JSON string representation.
+            str: JSON string representation of the composition.
+
+        Example:
+            >>> c = Composition('H2O')
+            >>> json_str = c.to_json()
+            >>> 'H2O' in json_str
+            True
         """
         return json.dumps(self.as_dict())
 
@@ -344,11 +438,26 @@ class Composition(MSONable):
         """
         Create Composition from JSON string.
 
+        Deserializes a Composition object from a JSON string representation.
+
         Args:
-            json_string: JSON string.
+            json_string: JSON string containing composition data.
 
         Returns:
-            Composition instance.
+            Composition: A new Composition instance.
+
+        Raises:
+            json.JSONDecodeError: If json_string is not valid JSON.
+            KeyError: If required keys are missing from the JSON data.
+
+        Example:
+            >>> c = Composition('H2O')
+            >>> json_str = c.to_json()
+            >>> c2 = Composition.from_json(json_str)
+            >>> c2.formula
+            'H2O'
+            >>> c == c2
+            True
         """
         return cls.from_dict(json.loads(json_string))
 
