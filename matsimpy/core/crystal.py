@@ -1,7 +1,47 @@
+"""
+Crystal module for MatSimPy.
+
+This module provides the Crystal class for representing periodic crystal structures
+with lattice information and periodic boundary conditions. Crystals are atomic
+structures with periodic repetition in one, two, or three dimensions.
+
+The Crystal class extends Structure and provides:
+- Periodic structure representation with lattice
+- Fractional and Cartesian coordinate systems
+- Periodic boundary conditions (PBC) support
+- Neighbor finding with PBC
+- Volume, area, and length calculations
+- Density calculations
+- Site-based access to atoms
+- File I/O support (POSCAR, CIF, JSON, etc.)
+- Converter support (pymatgen, ASE)
+- DFT code interface
+- Calculator integration
+
+Example:
+    >>> from matsimpy.core.crystal import Crystal
+    >>> from matsimpy.core import Lattice
+    >>>
+    >>> # Create a crystal structure
+    >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+    >>> crystal.formula  # 'NaCl'
+    >>> crystal.volume  # 179.4 Å³
+    >>>
+    >>> # Access fractional and Cartesian coordinates
+    >>> crystal.frac_positions  # Fractional coordinates
+    >>> crystal.cart_positions  # Cartesian coordinates
+    >>>
+    >>> # Set periodic boundary conditions
+    >>> crystal.set_pbc([True, True, False])  # 2D slab
+    >>>
+    >>> # Neighbor finding with PBC
+    >>> neighbors = crystal.get_neighbor_list(5.0, use_pbc=True)
+"""
+
 import numpy as np
 import warnings
 from tabulate import tabulate
-from typing import List, Optional, Union, Dict, Tuple, Any, Callable
+from typing import List, Optional, Union, Dict, Tuple, Any, Callable, TYPE_CHECKING
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import pdist, cdist, squareform
 from collections import Counter
@@ -10,8 +50,106 @@ from .lattice import Lattice
 from .periodic_table import Element
 from .site import CrystalSite
 
+if TYPE_CHECKING:
+    from ..utils.selection import AtomSelection
+    from ..calculator.base import Calculator
+
 
 class Crystal(Structure):
+    """
+    A class representing a periodic crystal structure.
+
+    Crystal extends :class:`~matsimpy.core.structure.Structure` to represent
+    atomic structures with periodic boundary conditions and lattice information.
+    Crystals are used for bulk materials, surfaces, wires, and other periodic systems.
+
+    The Crystal class provides:
+    - Periodic structure representation with lattice
+    - Dual coordinate systems (fractional and Cartesian)
+    - Periodic boundary conditions (PBC) support (3D, 2D, 1D, 0D)
+    - Neighbor finding with PBC
+    - Volume, area, and length calculations
+    - Density calculations
+    - Site-based access to atoms
+    - File I/O support (POSCAR, CIF, JSON, etc.)
+    - Converter support (pymatgen, ASE)
+    - DFT code interface
+    - Calculator integration
+
+    Attributes:
+        species (Tuple[str]): Immutable tuple of atomic species symbols.
+        positions (np.ndarray): Numpy array of fractional positions (default).
+        frac_positions (np.ndarray): Fractional coordinates with shape (n_atoms, 3).
+        cart_positions (np.ndarray): Cartesian coordinates in Angstroms with shape (n_atoms, 3).
+        lattice (Lattice): Lattice object defining the unit cell.
+        sites (List[CrystalSite]): List of CrystalSite objects for each atom.
+        site_properties (List[Dict[str, Any]]): List of site property dictionaries.
+        pbc (List[bool]): Periodic boundary conditions [a, b, c] (default: [True, True, True]).
+        formula (str): Chemical formula of the crystal (cached property).
+        composition (Composition): Composition object (cached property).
+        volume (float): Unit cell volume in cubic Angstroms (property).
+        area (float): Unit cell area in square Angstroms for 2D systems (property).
+        length (float): Unit cell length in Angstroms for 1D systems (property).
+
+    Args:
+        species: List of atomic species. Can be:
+            - List[str]: Element symbols (e.g., ['Na', 'Cl', 'Na'])
+            - List[int]: Atomic numbers (e.g., [11, 17, 11])
+            - List[Element]: Element objects
+        positions: List of atomic positions. Format depends on coords_are_cartesian:
+            - If coords_are_cartesian=False (default): Fractional coordinates [0-1]
+            - If coords_are_cartesian=True: Cartesian coordinates in Angstroms
+        lattice: Lattice object defining the unit cell (required).
+        pbc: Periodic boundary conditions as list of 3 booleans [a, b, c].
+            Default is [True, True, True] for 3D periodic system.
+            - [True, True, True]: 3D bulk material
+            - [True, True, False]: 2D slab/surface
+            - [True, False, False]: 1D wire
+            - [False, False, False]: 0D cluster (non-periodic)
+        coords_are_cartesian: If True, positions are Cartesian; if False, fractional (default).
+        site_properties: Optional list of site property dictionaries.
+                       Each dict can contain properties like 'charge', 'magmom', etc.
+
+    Raises:
+        ValueError: If species and positions have different lengths.
+        ValueError: If positions are not 3D coordinates or contain invalid values.
+        ValueError: If lattice is None (required for crystals).
+
+    Note:
+        Crystals always have a lattice (unlike molecules). Positions can be specified
+        in either fractional or Cartesian coordinates, and both are maintained internally.
+        The default coordinate system is fractional.
+
+    Examples:
+        >>> from matsimpy.core.crystal import Crystal
+        >>> from matsimpy.core import Lattice
+        >>>
+        >>> # Create a crystal with fractional coordinates (default)
+        >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+        >>> crystal.formula
+        'ClNa'
+        >>> crystal.volume
+        179.406...
+        >>>
+        >>> # Create with Cartesian coordinates
+        >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [2.82, 2.82, 2.82]],
+        ...                   Lattice.cubic(5.64), coords_are_cartesian=True)
+        >>>
+        >>> # Access both coordinate systems
+        >>> crystal.frac_positions  # Fractional coordinates
+        >>> crystal.cart_positions  # Cartesian coordinates
+        >>>
+        >>> # Set periodic boundary conditions
+        >>> crystal.set_pbc([True, True, False])  # 2D slab
+        >>> crystal.area  # Area for 2D system
+        >>>
+        >>> # With site properties
+        >>> crystal = Crystal(['Fe', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(4.0),
+        ...                   site_properties=[{'magmom': 2.5}, {'magmom': 0.0}])
+        >>> crystal.sites[0].properties['magmom']
+        2.5
+    """
+
     def __init__(
         self,
         species: Union[List[str], List[int], List[Element]],
@@ -20,7 +158,33 @@ class Crystal(Structure):
         pbc: Optional[List[bool]] = None,
         coords_are_cartesian: bool = False,
         site_properties: Optional[List[dict]] = None,
-    ):  # Add site_properties as an optional argument)
+    ) -> None:
+        """
+        Initialize a Crystal object.
+
+        Args:
+            species: List of atomic species. Can be:
+                - List[str]: Element symbols (e.g., ['Na', 'Cl', 'Na'])
+                - List[int]: Atomic numbers (e.g., [11, 17, 11])
+                - List[Element]: Element objects
+            positions: List of atomic positions. Format depends on coords_are_cartesian:
+                - If coords_are_cartesian=False (default): Fractional coordinates [0-1]
+                - If coords_are_cartesian=True: Cartesian coordinates in Angstroms
+            lattice: Lattice object defining the unit cell (required).
+            pbc: Periodic boundary conditions as list of 3 booleans [a, b, c].
+                Default is [True, True, True] for 3D periodic system.
+            coords_are_cartesian: If True, positions are Cartesian; if False, fractional (default).
+            site_properties: Optional list of site property dictionaries.
+
+        Raises:
+            ValueError: If species and positions have different lengths.
+            ValueError: If positions are not 3D coordinates or contain invalid values.
+            ValueError: If lattice is None (required for crystals).
+
+        Note:
+            Both fractional and Cartesian coordinates are maintained internally.
+            The default coordinate system is fractional.
+        """
         super().__init__(species, positions, lattice)
         self.lattice = lattice
 
