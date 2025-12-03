@@ -764,11 +764,14 @@ pytest tests/ -v --durations=10            # Show slowest tests
 
 ## Documentation
 
-- **Session Summary**: [November 2025 Quality Enhancement](docs/SESSION_SUMMARY_2025_11.md) - Complete details of recent improvements
+- **Sphinx Documentation**: See `docs/` directory for comprehensive Sphinx documentation
+  - Build with: ``cd docs && make html``
+  - View at: ``docs/_build/html/index.html``
+- **AI Documentation**: See `AIdocs/` directory for AI-related documentation and session summaries
+  - [November 2025 Quality Enhancement](AIdocs/SESSION_SUMMARY_2025_11.md) - Complete details of recent improvements
 - **Examples**: See `examples/` directory for comprehensive usage examples
 - **API Reference**: See module docstrings and `examples/` for detailed usage
 - **Project Structure**: See above for module organization
-- **Optimization Guide**: See `docs/` for performance and architecture guides
 
 ## Contributing
 
