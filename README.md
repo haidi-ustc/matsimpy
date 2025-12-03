@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Alpha-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-1300%20passed-brightgreen)](tests/)
-[![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](docs/SESSION_SUMMARY_2025_11.md)
+[![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](AIdocs/SESSION_SUMMARY_2025_11.md)
 
 
 ## Features
