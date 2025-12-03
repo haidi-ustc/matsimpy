@@ -1,6 +1,41 @@
+"""
+Molecule module for MatSimPy.
+
+This module provides the Molecule class for representing non-periodic molecular
+structures. Molecules are atomic structures without periodic boundary conditions,
+typically used for isolated molecules, clusters, or gas-phase systems.
+
+The Molecule class extends Structure and provides:
+- Non-periodic structure representation
+- Center of mass calculations
+- Molecular transformations (translation, rotation)
+- Neighbor finding (without PBC)
+- File I/O support (XYZ, PDB, MOL, JSON)
+- Converter support (pymatgen, ASE)
+- DFT code interface
+- Calculator integration
+
+Example:
+    >>> from matsimpy.core.molecule import Molecule
+    >>>
+    >>> # Create a water molecule
+    >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+    >>> molecule.formula  # 'H2O'
+    >>> molecule.get_center_of_mass()
+    [0.123..., 0.123..., 0.0]
+    >>>
+    >>> # Transformations
+    >>> molecule.translate([1.0, 0.0, 0.0])
+    >>> molecule.rotate(90, [0, 0, 1])
+    >>>
+    >>> # File I/O
+    >>> molecule.to_file('molecule.xyz')
+    >>> molecule2 = Molecule.from_file('molecule.xyz')
+"""
+
 import numpy as np
 import warnings
-from typing import List, Optional, Dict, Any, Union, Tuple
+from typing import List, Optional, Dict, Any, Union, Tuple, TYPE_CHECKING
 from monty.json import MSONable
 from .lattice import Lattice
 from .structure import Structure
@@ -10,14 +45,79 @@ from .periodic_table import Element
 from .site import Site
 from scipy.spatial.distance import cdist
 
+if TYPE_CHECKING:
+    from ..utils.selection import AtomSelection
+    from ..calculator.base import Calculator
+
 
 class Molecule(Structure):
     """
-    A class representing a molecule.
+    A class representing a non-periodic molecular structure.
+
+    Molecule extends :class:`~matsimpy.core.structure.Structure` to represent
+    atomic structures without periodic boundary conditions. Molecules are
+    typically used for isolated molecules, clusters, or gas-phase systems.
+
+    The Molecule class provides:
+    - Non-periodic structure representation (no lattice)
+    - Center of mass calculations
+    - Molecular transformations (translation, rotation)
+    - Neighbor finding (without PBC)
+    - Site-based access to atoms
+    - File I/O support (XYZ, PDB, MOL, JSON)
+    - Converter support (pymatgen, ASE)
+    - DFT code interface
+    - Calculator integration
+
+    Attributes:
+        species (Tuple[str]): Immutable tuple of atomic species symbols.
+        positions (np.ndarray): Numpy array of Cartesian positions with shape (n_atoms, 3).
+        sites (List[Site]): List of Site objects for each atom.
+        site_properties (List[Dict[str, Any]]): List of site property dictionaries.
+        formula (str): Chemical formula of the molecule (cached property).
+        composition (Composition): Composition object (cached property).
+        lattice (None): Always None for molecules (no periodic boundary conditions).
 
     Args:
-        species (List[str]): A list of atomic symbols.
-        positions (List[List[float]]): A list of atomic positions.
+        species: List of atomic species symbols (e.g., ['O', 'H', 'H']).
+        positions: List of Cartesian atomic positions in Angstroms.
+                  Each position is a 3D coordinate [x, y, z].
+        site_properties: Optional list of site property dictionaries.
+                        Each dict can contain properties like 'charge', 'magmom', etc.
+                        Length must match number of atoms if provided.
+
+    Raises:
+        ValueError: If species and positions have different lengths.
+        ValueError: If positions are not 3D coordinates or contain invalid values.
+
+    Note:
+        Molecules have no lattice (lattice=None). All positions are Cartesian
+        coordinates in Angstroms. For periodic structures, use
+        :class:`~matsimpy.core.crystal.Crystal` instead.
+
+    Examples:
+        >>> from matsimpy.core.molecule import Molecule
+        >>>
+        >>> # Create a water molecule
+        >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        >>> molecule.formula
+        'H2O'
+        >>> len(molecule)
+        3
+        >>>
+        >>> # Access sites
+        >>> molecule.sites[0].specie  # 'O'
+        >>> molecule.sites[0].position  # [0, 0, 0]
+        >>>
+        >>> # Center of mass
+        >>> com = molecule.get_center_of_mass()
+        >>> print(com)  # [0.123..., 0.123..., 0.0]
+        >>>
+        >>> # With site properties
+        >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+        ...                     site_properties=[{'charge': -2}, {'charge': 1}, {'charge': 1}])
+        >>> molecule.sites[0].properties['charge']
+        -2
     """
 
     def __init__(
@@ -25,13 +125,31 @@ class Molecule(Structure):
         species: List[str],
         positions: List[List[float]],
         site_properties: Optional[List[Dict[str, Any]]] = None,
-    ):
+    ) -> None:
         """
-        Initializes the Molecule object.
+        Initialize a Molecule object.
 
         Args:
-            species (List[str]): A list of atomic symbols.
-            positions (List[List[float]]): A list of atomic positions.
+            species: List of atomic species symbols (e.g., ['O', 'H', 'H']).
+            positions: List of Cartesian atomic positions in Angstroms.
+                      Each position is a 3D coordinate [x, y, z].
+            site_properties: Optional list of site property dictionaries.
+                           Each dict can contain properties like 'charge', 'magmom', etc.
+                           Length must match number of atoms if provided.
+
+        Raises:
+            ValueError: If species and positions have different lengths.
+            ValueError: If positions are not 3D coordinates or contain invalid values.
+            ValueError: If site_properties length doesn't match number of atoms.
+
+        Note:
+            Molecules have no lattice (lattice=None). All positions are Cartesian
+            coordinates in Angstroms.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]],
+            ...                     site_properties=[{'charge': 0}, {'charge': -2}])
         """
         super().__init__(species, positions, None)
         self.site_properties = site_properties or []  # Make public for consistency
@@ -39,10 +157,17 @@ class Molecule(Structure):
 
     def _initialize_sites(self) -> List[Site]:
         """
-        Initializes the list of Site objects.
+        Initialize the list of Site objects.
+
+        Creates Site objects for each atom, optionally including site properties.
+        This method is called during initialization and when atoms are added/removed.
 
         Returns:
-            List[Site]: A list of Site objects.
+            List[Site]: A list of Site objects, one for each atom.
+
+        Note:
+            This is an internal method. Sites are automatically updated when
+            the structure changes (add_atom, remove_atom, etc.).
         """
         if self.site_properties and len(self.site_properties) == len(self.species):
             return [
@@ -59,9 +184,39 @@ class Molecule(Structure):
 
     @property
     def sites(self) -> List[Site]:
+        """
+        Get the list of Site objects for all atoms.
+
+        Returns:
+            List[Site]: List of Site objects, one for each atom in the molecule.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> molecule.sites[0].specie  # 'O'
+            >>> molecule.sites[0].position  # [0, 0, 0]
+            >>> len(molecule.sites)
+            3
+        """
         return self._sites
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, slice]) -> Union[Site, List[Site]]:
+        """
+        Get Site object(s) by index or slice.
+
+        Args:
+            item: Integer index or slice object.
+
+        Returns:
+            Site: Single Site object if item is int.
+            List[Site]: List of Site objects if item is slice.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> molecule[0]  # First Site (O atom)
+            <Site object>
+            >>> molecule[0:2]  # First two Sites
+            [<Site object>, <Site object>]
+        """
         return self.sites[item]
 
     def get_center_of_mass(self) -> List[float]:
@@ -90,11 +245,23 @@ class Molecule(Structure):
         """
         Translate the molecule by a given vector (in-place).
 
+        Moves all atoms by the specified translation vector. The operation
+        modifies the molecule in-place and invalidates cached properties
+        (center of mass).
+
         Args:
             vector: Translation vector [dx, dy, dz] in Angstroms.
 
-        Examples:
+        Note:
+            This method modifies the molecule in-place. Cached properties
+            (center of mass) are invalidated and will be recalculated on
+            next access.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
             >>> molecule.translate([1.0, 0.0, 0.0])  # Move 1 Å along x-axis
+            >>> molecule.positions[0]
+            array([1., 0., 0.])
         """
         self.positions += np.array(vector)
         # Invalidate center of mass cache
@@ -107,12 +274,24 @@ class Molecule(Structure):
         """
         Rotate the molecule around an axis (in-place).
 
+        Rotates all atoms around the specified axis by the given angle.
+        The rotation axis is automatically normalized. The operation modifies
+        the molecule in-place and invalidates cached properties (center of mass).
+
         Args:
             angle: Rotation angle in degrees.
-            axis: Rotation axis vector [x, y, z] (will be normalized).
+            axis: Rotation axis vector [x, y, z] (will be normalized automatically).
 
-        Examples:
+        Note:
+            This method modifies the molecule in-place. Cached properties
+            (center of mass) are invalidated and will be recalculated on
+            next access. Uses scipy.spatial.transform.Rotation for rotation.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
             >>> molecule.rotate(90, [0, 0, 1])  # 90° rotation around z-axis
+            >>> molecule.positions[1]  # H atom rotated
+            array([0., 0.96, 0.])
         """
         from scipy.spatial.transform import Rotation
 
@@ -251,23 +430,39 @@ class Molecule(Structure):
 
     def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:
         """
-        Remove one or more atoms from the molecule and update sites.
+        Remove one or more atoms from the molecule (in-place).
+
+        Removes atoms by index and updates sites and cached properties.
+        If multiple indices are provided, atoms are removed in reverse order
+        to avoid index shifting issues.
 
         Args:
-            indices: Atom index, list of indices, or AtomSelection object to remove.
-                    If list, atoms are removed in reverse order to avoid index shifting.
+            indices: Atom index, list of indices, or :class:`~matsimpy.utils.selection.AtomSelection`
+                    object to remove. If list, atoms are removed in reverse order
+                    to avoid index shifting.
 
         Raises:
             IndexError: If any index is out of range.
             ValueError: If AtomSelection is from a different structure.
+            TypeError: If indices is not int, list, or AtomSelection.
 
-        Examples:
-            >>> molecule.remove_atom(0)  # Remove atom at index 0
-            >>> molecule.remove_atom([0, 1, 2])  # Remove multiple atoms
+        Note:
+            This method modifies the molecule in-place. Cached properties
+            (formula, composition, center of mass) are invalidated and will
+            be recalculated on next access.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> molecule.remove_atom(0)  # Remove atom at index 0 (O)
+            >>> molecule.formula  # 'H2'
+            >>>
+            >>> # Remove multiple atoms
+            >>> molecule.remove_atom([0, 1])  # Remove first two atoms
+            >>>
             >>> # Using AtomSelection
             >>> from matsimpy.utils.selection import AtomSelection
             >>> sel = AtomSelection(molecule).by_species('H')
-            >>> molecule.remove_atom(sel)  # Remove selected atoms
+            >>> molecule.remove_atom(sel)  # Remove all H atoms
         """
         # Handle AtomSelection object
         from ..utils.selection import AtomSelection
@@ -342,12 +537,30 @@ class Molecule(Structure):
         # Molecule-specific updates: reinitialize sites with updated species
         self._sites = self._initialize_sites()
 
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
         """
-        Returns a dictionary representation of the Molecule object.
+        Convert molecule to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
 
         Returns:
-            dict: A dictionary representation of the Molecule object.
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name ('Molecule')
+                - species: List of species symbols
+                - positions: List of positions (converted from numpy array)
+                - site_properties: List of site property dictionaries (if any)
+
+        Example:
+            >>> d = molecule.as_dict()
+            >>> d['@class']
+            'Molecule'
+            >>> d['species']
+            ['O', 'H', 'H']
+            >>> d['positions']
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
         """
         d = {
             "@module": self.__class__.__module__,
@@ -360,15 +573,37 @@ class Molecule(Structure):
         return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[str, Any]) -> "Molecule":
         """
-        Creates a Molecule object from a dictionary representation.
+        Create Molecule object from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a Molecule object from its dictionary representation.
 
         Args:
-            d (dict): A dictionary representation of a Molecule object.
+            d: Dictionary containing:
+                - species: List of species symbols
+                - positions: List of positions
+                - site_properties: Optional list of site property dictionaries
 
         Returns:
-            Molecule: A Molecule object.
+            Molecule: A new Molecule instance.
+
+        Raises:
+            KeyError: If required keys ('species', 'positions') are missing.
+            ValueError: If species and positions have different lengths.
+
+        Example:
+            >>> d = {
+            ...     '@module': 'matsimpy.core.molecule',
+            ...     '@class': 'Molecule',
+            ...     'species': ['O', 'H', 'H'],
+            ...     'positions': [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+            ...     'site_properties': [{'charge': -2}, {'charge': 1}, {'charge': 1}]
+            ... }
+            >>> molecule = Molecule.from_dict(d)
+            >>> molecule.formula
+            'H2O'
         """
         species = d["species"]
         positions = d["positions"]
@@ -441,13 +676,34 @@ class Molecule(Structure):
 
         return crystal
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
-        Human-readable string representation of Molecule.
+        Get human-readable string representation of Molecule.
 
-        Note: Atoms are displayed in their original insertion order to match
-        the internal structure (species, positions). Use sort_atoms() if you
-        want to actually reorder the internal data.
+        Returns a formatted string with molecule information including:
+        - Formula
+        - Number of atoms
+        - Center of mass
+        - Table of atoms with coordinates and properties
+
+        Returns:
+            str: Formatted string representation of the molecule.
+
+        Note:
+            Atoms are displayed in their original insertion order to match
+            the internal structure (species, positions). Use sort_atoms() if you
+            want to actually reorder the internal data.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> print(molecule)
+            Molecule: H2O
+              Sites: 3 atoms
+              Center of mass: (0.1234, 0.1234, 0.0000) Å
+            Element  Cartesian Coordinates
+            O        (0.0000, 0.0000, 0.0000)
+            H        (0.9600, 0.0000, 0.0000)
+            H        (-0.2400, 0.9300, 0.0000)
         """
         from tabulate import tabulate
 
@@ -488,8 +744,18 @@ class Molecule(Structure):
 
         return info
 
-    def __repr__(self):
-        """Unambiguous string representation of Molecule for debugging."""
+    def __repr__(self) -> str:
+        """
+        Get unambiguous string representation of Molecule for debugging.
+
+        Returns:
+            str: Compact representation with formula and number of sites.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> repr(molecule)
+            "Molecule(formula='H2O', nsites=3)"
+        """
         # Compact representation with key info
         return (
             f"{self.__class__.__name__}(formula='{self.formula}', "
@@ -498,10 +764,28 @@ class Molecule(Structure):
 
     def get_moment_of_inertia(self) -> np.ndarray:
         """
-        Calculates the moment of inertia tensor of the molecule around its center of mass.
+        Calculate the moment of inertia tensor around the center of mass.
+
+        Computes the 3x3 moment of inertia tensor for the molecule, calculated
+        with respect to the center of mass. This is useful for rotational
+        dynamics and spectroscopy calculations.
 
         Returns:
             np.ndarray: The moment of inertia tensor as a 3x3 numpy array.
+                      Units are in atomic mass units × Angstrom² (amu·Å²).
+
+        Note:
+            The tensor is symmetric and calculated with respect to the center
+            of mass. Diagonal elements represent moments of inertia about
+            principal axes, off-diagonal elements represent products of inertia.
+
+        Example:
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> I = molecule.get_moment_of_inertia()
+            >>> I.shape
+            (3, 3)
+            >>> I[0, 0]  # Moment of inertia about x-axis
+            1.234...
         """
         masses = np.array([elem.atomic_mass for elem in self.elements])
         com = self.get_center_of_mass()
@@ -848,25 +1132,44 @@ class Molecule(Structure):
             raise ValueError(f"Unsupported DFT code: {code}") from e
 
     @property
-    def calc(self):
+    def calc(self) -> Optional["Calculator"]:
         """
-        Get attached calculator.
+        Get the attached calculator.
 
         Returns:
-            :class:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached
+            Optional[Calculator]: The attached calculator, or None if none attached.
+                               Calculator type is :class:`~matsimpy.calculator.base.Calculator`.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> molecule.calc = LennardJones()
+            >>> molecule.calc  # <LennardJones object>
+            >>> molecule.calc = None  # Remove calculator
+            >>> molecule.calc  # None
         """
+        from ..calculator.base import Calculator
         return getattr(self, "_calculator", None)
 
     @calc.setter
-    def calc(self, calculator):
+    def calc(self, calculator: Optional["Calculator"]) -> None:
         """
-        Attach a calculator to this structure.
+        Attach a calculator to this molecule.
+
+        Sets a calculator that can be used to compute energies and forces.
+        The calculator must be an instance of
+        :class:`~matsimpy.calculator.base.Calculator`.
 
         Args:
-            calculator: :class:`~matsimpy.calculator.base.Calculator` object (e.g., LennardJones, Mattersim, VASP)
+            calculator: Calculator object (e.g., LennardJones, Mattersim, VASP)
+                      or None to remove the calculator.
 
         Raises:
-            TypeError: If calculator is not a Calculator instance
+            TypeError: If calculator is not a Calculator instance or None.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> molecule.calc = LennardJones()
+            >>> energy = molecule.get_potential_energy()
         """
         from ..calculator.base import Calculator
 
@@ -880,11 +1183,20 @@ class Molecule(Structure):
         """
         Get potential energy from attached calculator.
 
+        Computes the potential energy using the attached calculator. If the
+        calculation hasn't been performed yet, it will be triggered automatically.
+
         Returns:
-            float: Potential energy in eV
+            float: Potential energy in eV.
 
         Raises:
-            ValueError: If no calculator attached or calculation not performed
+            ValueError: If no calculator is attached.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> molecule.calc = LennardJones()
+            >>> energy = molecule.get_potential_energy()
+            >>> print(f"Energy: {energy:.4f} eV")
         """
         if self.calc is None:
             raise ValueError(
@@ -898,11 +1210,24 @@ class Molecule(Structure):
         """
         Get forces from attached calculator.
 
+        Computes the forces on all atoms using the attached calculator. If the
+        calculation hasn't been performed yet, it will be triggered automatically.
+
         Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/Å
+            np.ndarray: Forces array of shape (N, 3) in eV/Å, where N is the
+                       number of atoms. Each row contains [Fx, Fy, Fz] for one atom.
 
         Raises:
-            ValueError: If no calculator attached or calculation not performed
+            ValueError: If no calculator is attached.
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> molecule.calc = LennardJones()
+            >>> forces = molecule.get_forces()
+            >>> forces.shape
+            (3, 3)  # 3 atoms, 3 force components
+            >>> forces[0]  # Force on first atom
+            array([0.123, -0.456, 0.789])
         """
         if self.calc is None:
             raise ValueError(
