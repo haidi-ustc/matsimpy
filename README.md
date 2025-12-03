@@ -2,10 +2,10 @@
 
 **MatSimPy** (Materials Simulation in Python) is a comprehensive Python package for molecular and materials simulation, designed to provide a modern, efficient, and user-friendly interface for materials science research.
 
-[![Python Version](https://img.shields.io/badge/python-3.6%2B-blue)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Alpha-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1292%20passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1300%20passed-brightgreen)](tests/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](docs/SESSION_SUMMARY_2025_11.md)
 
 
@@ -694,7 +694,7 @@ from matsimpy.transformation.composite import (
 
 ### Core Dependencies
 
-- **Python** >=3.6 (tested up to 3.12)
+- **Python** >=3.9 (tested up to 3.12)
 - **NumPy** >=1.20.0
 - **SciPy** >=1.7.0
 - **monty** >=2021.0 (for MSONable serialization)
@@ -727,7 +727,7 @@ Install these based on your needs:
 
 ### Python Version Support
 
-MatSimPy supports Python 3.6 through 3.12. The package is tested on:
+MatSimPy supports Python 3.9 through 3.12. The package is tested on:
 - Python 3.9 ✓
 - Python 3.10 ✓
 - Python 3.11 ✓
