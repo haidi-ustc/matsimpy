@@ -1,10 +1,95 @@
+"""
+Lattice module for MatSimPy.
+
+This module provides the Lattice class for representing crystal lattice structures.
+The Lattice class supports flexible input formats and provides convenient constructors
+for common crystal systems (cubic, tetragonal, orthorhombic, hexagonal, etc.).
+
+The Lattice class handles:
+- Multiple input formats (scalar, list, full matrix)
+- Coordinate transformations (fractional ↔ Cartesian)
+- Lattice parameter calculations (a, b, c, α, β, γ)
+- Reciprocal lattice calculations
+- Validation and error checking
+
+Example:
+    >>> from matsimpy.core.lattice import Lattice
+    >>>
+    >>> # Create cubic lattice (convenient syntax)
+    >>> lat = Lattice(5.0)
+    >>> print(lat.a)  # 5.0
+    >>>
+    >>> # Create orthorhombic lattice
+    >>> lat = Lattice([3, 4, 5])
+    >>> print(lat.a, lat.b, lat.c)  # 3.0 4.0 5.0
+    >>>
+    >>> # Create from full lattice vectors
+    >>> lat = Lattice([[5, 0, 0], [0, 5, 0], [0, 0, 5]])
+    >>>
+    >>> # Use class methods for specific crystal systems
+    >>> lat = Lattice.cubic(5.0)
+    >>> lat = Lattice.hexagonal(3.0, 5.0)
+    >>> lat = Lattice.from_parameters(5.0, 5.0, 5.0, 90, 90, 90)
+"""
+
 import numpy as np
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Any
 from monty.json import MSONable
 from scipy.spatial.distance import pdist, squareform
 
 
 class Lattice(MSONable):
+    """
+    Represents a crystal lattice with flexible input formats.
+
+    The Lattice class provides a convenient interface for working with crystal
+    lattices. It supports multiple input formats and provides methods for
+    coordinate transformations, parameter calculations, and lattice operations.
+
+    Attributes:
+        lattice_vectors (np.ndarray): 3x3 array of lattice vectors.
+        matrix (np.ndarray): Lattice vectors as a 3x3 matrix (property).
+        inv_matrix (np.ndarray): Cached inverse of lattice matrix (property).
+        a (float): Length of a lattice vector (property).
+        b (float): Length of b lattice vector (property).
+        c (float): Length of c lattice vector (property).
+        alpha (float): Angle between b and c vectors in degrees (property).
+        beta (float): Angle between a and c vectors in degrees (property).
+        gamma (float): Angle between a and b vectors in degrees (property).
+
+    Args:
+        lattice_vectors: Can be:
+            - float/int: Single value for cubic lattice (a=b=c)
+            - List[float]: Three values [a, b, c] for orthorhombic lattice
+            - List[List[float]]: Full 3x3 lattice vectors matrix
+
+    Raises:
+        ValueError: If input format is invalid, lattice parameters are non-positive,
+                   lattice vectors are degenerate, or volume is too small.
+        TypeError: If lattice_vectors is not a valid type.
+
+    Examples:
+        >>> # Cubic lattice (convenient syntax)
+        >>> lat = Lattice(5.0)
+        >>> lat.a, lat.b, lat.c
+        (5.0, 5.0, 5.0)
+        >>>
+        >>> # Orthorhombic lattice
+        >>> lat = Lattice([3, 4, 5])
+        >>> lat.a, lat.b, lat.c
+        (3.0, 4.0, 5.0)
+        >>>
+        >>> # Full lattice vectors
+        >>> lat = Lattice([[5, 0, 0], [0, 5, 0], [0, 0, 5]])
+        >>> lat.volume()
+        125.0
+        >>>
+        >>> # Use class methods
+        >>> lat = Lattice.cubic(5.0)
+        >>> lat = Lattice.hexagonal(3.0, 5.0)
+        >>> lat = Lattice.from_parameters(5.0, 5.0, 5.0, 90, 90, 90)
+    """
+
     def __init__(
         self, lattice_vectors: Union[float, int, List[float], List[List[float]]]
     ):
@@ -77,11 +162,20 @@ class Lattice(MSONable):
 
     def _validate_lattice_vectors(self) -> None:
         """
-        Enhanced validation of lattice vectors.
+        Validate lattice vectors for correctness.
+
+        Performs comprehensive validation including:
+        - Dimensionality check (must be 3D)
+        - Finite value check (no NaN or Inf)
+        - Linear independence check (determinant must be non-zero)
+        - Volume check (volume must be reasonable)
 
         Raises:
             ValueError: If the lattice vectors are invalid, contain non-finite values,
                        are linearly dependent, or have too small volume.
+
+        Note:
+            This is an internal method called automatically during initialization.
         """
         if len(self.lattice_vectors) != 3:
             raise ValueError("Lattice vectors must be 3-dimensional.")
@@ -100,7 +194,26 @@ class Lattice(MSONable):
         if volume <= 1e-10:  # Very small volume
             raise ValueError(f"Lattice volume is too small: {volume}")
 
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name
+                - lattice_vectors: Lattice vectors as list (rounded to 8 decimals)
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> d = lat.as_dict()
+            >>> d['lattice_vectors']
+            [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]]
+        """
         d = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
@@ -109,7 +222,34 @@ class Lattice(MSONable):
         return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[str, Any]) -> "Lattice":
+        """
+        Create Lattice object from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a Lattice object from its dictionary representation.
+
+        Args:
+            d: Dictionary containing 'lattice_vectors' key and optionally
+               '@module' and '@class' keys.
+
+        Returns:
+            Lattice: A new Lattice instance.
+
+        Raises:
+            KeyError: If 'lattice_vectors' key is missing from dictionary.
+            ValueError: If lattice_vectors are invalid.
+
+        Example:
+            >>> d = {
+            ...     '@module': 'matsimpy.core.lattice',
+            ...     '@class': 'Lattice',
+            ...     'lattice_vectors': [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]]
+            ... }
+            >>> lat = Lattice.from_dict(d)
+            >>> lat.a
+            5.0
+        """
         lattice_vectors = d["lattice_vectors"]
         return cls(lattice_vectors)
 
@@ -119,17 +259,36 @@ class Lattice(MSONable):
         Get the lattice vectors as a matrix.
 
         Returns:
-            (np.ndarray): Lattice vectors as a 3x3 matrix.
+            np.ndarray: Lattice vectors as a 3x3 matrix where each row is a lattice vector.
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> mat = lat.matrix
+            >>> mat.shape
+            (3, 3)
+            >>> mat[0]  # First lattice vector
+            array([5., 0., 0.])
         """
         return self.lattice_vectors.reshape((3, 3))
 
     @property
     def inv_matrix(self) -> np.ndarray:
         """
-        Cached inverse of lattice matrix.
+        Get the cached inverse of the lattice matrix.
+
+        The inverse matrix is computed once and cached for performance.
+        Used for converting Cartesian coordinates to fractional coordinates.
 
         Returns:
-            (np.ndarray): Inverse of lattice matrix.
+            np.ndarray: Inverse of the lattice matrix (3x3).
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> inv = lat.inv_matrix
+            >>> np.dot(lat.matrix, inv)  # Should be identity matrix
+            array([[1., 0., 0.],
+                   [0., 1., 0.],
+                   [0., 0., 1.]])
         """
         if self._inv_matrix is None:
             self._inv_matrix = np.linalg.inv(self.matrix)
@@ -137,22 +296,62 @@ class Lattice(MSONable):
 
     @property
     def a(self) -> float:
-        """Get the length of the a lattice vector."""
+        """
+        Get the length of the a lattice vector.
+
+        Returns:
+            float: Length of the first lattice vector in Angstroms.
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.a
+            5.0
+        """
         return np.linalg.norm(self.lattice_vectors[0])
 
     @property
     def b(self) -> float:
-        """Get the length of the b lattice vector."""
+        """
+        Get the length of the b lattice vector.
+
+        Returns:
+            float: Length of the second lattice vector in Angstroms.
+
+        Example:
+            >>> lat = Lattice([3, 4, 5])
+            >>> lat.b
+            4.0
+        """
         return np.linalg.norm(self.lattice_vectors[1])
 
     @property
     def c(self) -> float:
-        """Get the length of the c lattice vector."""
+        """
+        Get the length of the c lattice vector.
+
+        Returns:
+            float: Length of the third lattice vector in Angstroms.
+
+        Example:
+            >>> lat = Lattice([3, 4, 5])
+            >>> lat.c
+            5.0
+        """
         return np.linalg.norm(self.lattice_vectors[2])
 
     @property
     def alpha(self) -> float:
-        """Get the angle between the b and c lattice vectors in degrees."""
+        """
+        Get the angle between the b and c lattice vectors.
+
+        Returns:
+            float: Angle α in degrees (0-180°).
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.alpha
+            90.0
+        """
         return np.degrees(
             np.arccos(
                 np.dot(self.lattice_vectors[1], self.lattice_vectors[2])
@@ -162,7 +361,17 @@ class Lattice(MSONable):
 
     @property
     def beta(self) -> float:
-        """Get the angle between the a and c lattice vectors in degrees."""
+        """
+        Get the angle between the a and c lattice vectors.
+
+        Returns:
+            float: Angle β in degrees (0-180°).
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.beta
+            90.0
+        """
         return np.degrees(
             np.arccos(
                 np.dot(self.lattice_vectors[0], self.lattice_vectors[2])
@@ -172,7 +381,20 @@ class Lattice(MSONable):
 
     @property
     def gamma(self) -> float:
-        """Get the angle between the a and b lattice vectors in degrees."""
+        """
+        Get the angle between the a and b lattice vectors.
+
+        Returns:
+            float: Angle γ in degrees (0-180°).
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.gamma
+            90.0
+            >>> lat = Lattice.hexagonal(3.0, 5.0)
+            >>> lat.gamma
+            120.0
+        """
         return np.degrees(
             np.arccos(
                 np.dot(self.lattice_vectors[0], self.lattice_vectors[1])
@@ -181,7 +403,23 @@ class Lattice(MSONable):
         )
 
     def volume(self) -> float:
-        """Calculate the volume of the unit cell."""
+        """
+        Calculate the volume of the unit cell.
+
+        The volume is calculated as the absolute value of the determinant
+        of the lattice matrix.
+
+        Returns:
+            float: Unit cell volume in cubic Angstroms (Å³).
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.volume()
+            125.0
+            >>> lat = Lattice([3, 4, 5])
+            >>> lat.volume()
+            60.0
+        """
         return abs(np.linalg.det(self.matrix))
 
     def _format_lattice_params(self, include_units: bool = True) -> str:
@@ -195,7 +433,17 @@ class Lattice(MSONable):
             include_units: If True, include Å units for lengths (default: True).
 
         Returns:
-            Formatted string with lattice parameters on two lines.
+            str: Formatted string with lattice parameters on two lines.
+                 First line: lengths (a, b, c)
+                 Second line: angles (α, β, γ)
+
+        Note:
+            This is an internal method used by __str__.
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat._format_lattice_params()
+            'a=5.0000 Å, b=5.0000 Å, c=5.0000 Å\\n           α=90.00°, β=90.00°, γ=90.00°'
         """
         if include_units:
             lengths = f"a={self.a:.4f} Å, b={self.b:.4f} Å, c={self.c:.4f} Å"
@@ -243,21 +491,39 @@ class Lattice(MSONable):
     @classmethod
     def from_parameters(
         cls, a: float, b: float, c: float, alpha: float, beta: float, gamma: float
-    ):
+    ) -> "Lattice":
         """
-        Initialize a Lattice object with lattice parameters.
+        Create a Lattice object from lattice parameters.
+
+        Constructs a lattice from the six lattice parameters (a, b, c, α, β, γ).
+        This is the standard way to specify a crystal lattice.
 
         Args:
-            a: The length of the a lattice vector.
-            b: The length of the b lattice vector.
-            c: The length of the c lattice vector.
-            alpha: The angle between the b and c lattice vectors in degrees.
-            beta: The angle between the a and c lattice vectors in degrees.
-            gamma: The angle between the a and b lattice vectors in degrees.
+            a: Length of the a lattice vector in Angstroms.
+            b: Length of the b lattice vector in Angstroms.
+            c: Length of the c lattice vector in Angstroms.
+            alpha: Angle between b and c vectors in degrees (0-180°).
+            beta: Angle between a and c vectors in degrees (0-180°).
+            gamma: Angle between a and b vectors in degrees (0-180°).
+
+        Returns:
+            Lattice: A new Lattice instance.
 
         Raises:
-            ValueError: If gamma is 0 or 180 degrees (a and b vectors would be parallel,
-                       making the lattice linearly dependent)
+            ValueError: If any lattice parameter is non-positive.
+            ValueError: If gamma is 0 or 180 degrees (would make a and b vectors parallel,
+                       resulting in a linearly dependent lattice).
+
+        Example:
+            >>> # Cubic lattice
+            >>> lat = Lattice.from_parameters(5.0, 5.0, 5.0, 90, 90, 90)
+            >>> lat.a, lat.alpha
+            (5.0, 90.0)
+            >>>
+            >>> # Hexagonal lattice
+            >>> lat = Lattice.from_parameters(3.0, 3.0, 5.0, 90, 90, 120)
+            >>> lat.gamma
+            120.0
         """
         for param in [a, b, c]:
             if param <= 0:
@@ -293,49 +559,109 @@ class Lattice(MSONable):
         return cls(lattice_vectors)
 
     @classmethod
-    def cubic(cls, a: float):
+    def cubic(cls, a: float) -> "Lattice":
         """
-        Initialize a Lattice object with lattice parameters.
+        Create a cubic lattice.
+
+        All three lattice vectors have the same length and are mutually perpendicular.
 
         Args:
-            a: The length of the a lattice vector.
+            a: Length of all three lattice vectors in Angstroms (a = b = c).
+
+        Returns:
+            Lattice: A new cubic Lattice instance.
+
+        Raises:
+            ValueError: If a is non-positive.
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.a, lat.b, lat.c
+            (5.0, 5.0, 5.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (90.0, 90.0, 90.0)
         """
         lattice_vectors = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]]
         return cls(lattice_vectors)
 
     @classmethod
-    def tetragonal(cls, a: float, c: float):
+    def tetragonal(cls, a: float, c: float) -> "Lattice":
         """
-        Initialize a Lattice object with lattice parameters.
+        Create a tetragonal lattice.
+
+        Two lattice vectors have the same length (a = b), and all angles are 90°.
 
         Args:
-            a: The length of the a lattice vector.
-            c: The length of the c lattice vector.
+            a: Length of a and b lattice vectors in Angstroms (a = b).
+            c: Length of c lattice vector in Angstroms.
+
+        Returns:
+            Lattice: A new tetragonal Lattice instance.
+
+        Raises:
+            ValueError: If a or c is non-positive.
+
+        Example:
+            >>> lat = Lattice.tetragonal(4.0, 5.0)
+            >>> lat.a, lat.b, lat.c
+            (4.0, 4.0, 5.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (90.0, 90.0, 90.0)
         """
         lattice_vectors = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, c]]
         return cls(lattice_vectors)
 
     @classmethod
-    def orthorhombic(cls, a: float, b: float, c: float):
+    def orthorhombic(cls, a: float, b: float, c: float) -> "Lattice":
         """
-        Initialize an orthorhombic Lattice object.
+        Create an orthorhombic lattice.
+
+        All three lattice vectors have different lengths, and all angles are 90°.
 
         Args:
-            a: The length of the a lattice vector.
-            b: The length of the b lattice vector.
-            c: The length of the c lattice vector.
+            a: Length of a lattice vector in Angstroms.
+            b: Length of b lattice vector in Angstroms.
+            c: Length of c lattice vector in Angstroms.
+
+        Returns:
+            Lattice: A new orthorhombic Lattice instance.
+
+        Raises:
+            ValueError: If any parameter is non-positive.
+
+        Example:
+            >>> lat = Lattice.orthorhombic(3.0, 4.0, 5.0)
+            >>> lat.a, lat.b, lat.c
+            (3.0, 4.0, 5.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (90.0, 90.0, 90.0)
         """
         lattice_vectors = [[a, 0.0, 0.0], [0.0, b, 0.0], [0.0, 0.0, c]]
         return cls(lattice_vectors)
 
     @classmethod
-    def hexagonal(cls, a: float, c: float):
+    def hexagonal(cls, a: float, c: float) -> "Lattice":
         """
-        Initialize a hexagonal Lattice object.
+        Create a hexagonal lattice.
+
+        Two lattice vectors have the same length (a = b), with γ = 120° and α = β = 90°.
 
         Args:
-            a: The length of the a (and b) lattice vector.
-            c: The length of the c lattice vector.
+            a: Length of a and b lattice vectors in Angstroms (a = b).
+            c: Length of c lattice vector in Angstroms.
+
+        Returns:
+            Lattice: A new hexagonal Lattice instance.
+
+        Raises:
+            ValueError: If a or c is non-positive.
+
+        Example:
+            >>> lat = Lattice.hexagonal(3.0, 5.0)
+            >>> lat.a, lat.b, lat.c
+            (3.0, 3.0, 5.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (90.0, 90.0, 120.0)
         """
         # Standard hexagonal lattice vectors
         # a = b, alpha = beta = 90°, gamma = 120°
@@ -347,27 +673,57 @@ class Lattice(MSONable):
         return cls(lattice_vectors)
 
     @classmethod
-    def rhombohedral(cls, a: float, alpha: float):
+    def rhombohedral(cls, a: float, alpha: float) -> "Lattice":
         """
-        Initialize a rhombohedral Lattice object.
+        Create a rhombohedral lattice.
+
+        All three lattice vectors have the same length, and all angles are equal.
 
         Args:
-            a: The length of all three lattice vectors (a = b = c).
-            alpha: The angle between all three lattice vectors (alpha = beta = gamma) in degrees.
+            a: Length of all three lattice vectors in Angstroms (a = b = c).
+            alpha: Angle between all lattice vectors in degrees (α = β = γ).
+
+        Returns:
+            Lattice: A new rhombohedral Lattice instance.
+
+        Raises:
+            ValueError: If a is non-positive or alpha is invalid.
+
+        Example:
+            >>> lat = Lattice.rhombohedral(5.0, 60.0)
+            >>> lat.a, lat.b, lat.c
+            (5.0, 5.0, 5.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (60.0, 60.0, 60.0)
         """
         # Use from_parameters for rhombohedral (a = b = c, alpha = beta = gamma)
         return cls.from_parameters(a=a, b=a, c=a, alpha=alpha, beta=alpha, gamma=alpha)
 
     @classmethod
-    def monoclinic(cls, a: float, b: float, c: float, beta: float):
+    def monoclinic(cls, a: float, b: float, c: float, beta: float) -> "Lattice":
         """
-        Initialize a monoclinic Lattice object.
+        Create a monoclinic lattice.
+
+        All three lattice vectors have different lengths, with α = γ = 90° and β variable.
 
         Args:
-            a: The length of the a lattice vector.
-            b: The length of the b lattice vector.
-            c: The length of the c lattice vector.
-            beta: The angle between the a and c lattice vectors in degrees.
+            a: Length of a lattice vector in Angstroms.
+            b: Length of b lattice vector in Angstroms.
+            c: Length of c lattice vector in Angstroms.
+            beta: Angle between a and c vectors in degrees (α = γ = 90°).
+
+        Returns:
+            Lattice: A new monoclinic Lattice instance.
+
+        Raises:
+            ValueError: If any length parameter is non-positive or beta is invalid.
+
+        Example:
+            >>> lat = Lattice.monoclinic(5.0, 6.0, 7.0, 100.0)
+            >>> lat.a, lat.b, lat.c
+            (5.0, 6.0, 7.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (90.0, 100.0, 90.0)
         """
         # Monoclinic: alpha = gamma = 90°, beta can vary
         return cls.from_parameters(a=a, b=b, c=c, alpha=90.0, beta=beta, gamma=90.0)
@@ -375,30 +731,57 @@ class Lattice(MSONable):
     @classmethod
     def triclinic(
         cls, a: float, b: float, c: float, alpha: float, beta: float, gamma: float
-    ):
+    ) -> "Lattice":
         """
-        Initialize a triclinic Lattice object.
+        Create a triclinic lattice.
+
+        All three lattice vectors have different lengths, and all angles can vary.
 
         Args:
-            a: The length of the a lattice vector.
-            b: The length of the b lattice vector.
-            c: The length of the c lattice vector.
-            alpha: The angle between the b and c lattice vectors in degrees.
-            beta: The angle between the a and c lattice vectors in degrees.
-            gamma: The angle between the a and b lattice vectors in degrees.
+            a: Length of a lattice vector in Angstroms.
+            b: Length of b lattice vector in Angstroms.
+            c: Length of c lattice vector in Angstroms.
+            alpha: Angle between b and c vectors in degrees.
+            beta: Angle between a and c vectors in degrees.
+            gamma: Angle between a and b vectors in degrees.
+
+        Returns:
+            Lattice: A new triclinic Lattice instance.
+
+        Raises:
+            ValueError: If any length parameter is non-positive or angles are invalid.
+
+        Example:
+            >>> lat = Lattice.triclinic(5.0, 6.0, 7.0, 90, 100, 110)
+            >>> lat.a, lat.b, lat.c
+            (5.0, 6.0, 7.0)
+            >>> lat.alpha, lat.beta, lat.gamma
+            (90.0, 100.0, 110.0)
         """
         # Triclinic: all parameters can vary
         return cls.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """
         Generate a hash for the lattice with consistent floating-point handling.
 
         Lattice vectors are rounded to 8 decimal places to handle floating-point
-        precision issues, matching the approach used in Structure.
+        precision issues, matching the approach used in Structure. This ensures
+        that lattices with very similar (but not identical) vectors hash to the
+        same value.
 
         Returns:
-            int: Hash value for the lattice
+            int: Hash value for the lattice.
+
+        Note:
+            This method enables Lattice objects to be used as dictionary keys
+            or in sets.
+
+        Example:
+            >>> lat1 = Lattice.cubic(5.0)
+            >>> lat2 = Lattice.cubic(5.0)
+            >>> hash(lat1) == hash(lat2)
+            True
         """
         import hashlib
 
@@ -408,15 +791,33 @@ class Lattice(MSONable):
         # Use first 8 bytes for standard Python hash size (64-bit)
         return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         """
-        Equality comparison with tolerance for floating-point numbers.
+        Check equality with another Lattice.
+
+        Two lattices are equal if their lattice vectors are equal within
+        numerical tolerance (using numpy.allclose with rtol=1e-8).
 
         Args:
-            other: Another Lattice object to compare with.
+            other: Another object to compare with.
 
         Returns:
-            True if lattices are equal within tolerance, False otherwise.
+            bool: True if lattices are equal within tolerance, False otherwise.
+
+        Note:
+            Uses numpy.allclose() for numerical tolerance to handle
+            floating-point precision issues.
+
+        Example:
+            >>> lat1 = Lattice.cubic(5.0)
+            >>> lat2 = Lattice.cubic(5.0)
+            >>> lat3 = Lattice.cubic(5.0000001)  # Very close
+            >>> lat1 == lat2
+            True
+            >>> lat1 == lat3
+            True  # Within tolerance
+            >>> lat1 == Lattice.cubic(6.0)
+            False
         """
         if not isinstance(other, Lattice):
             return False
@@ -425,21 +826,101 @@ class Lattice(MSONable):
         return np.allclose(self.lattice_vectors, other.lattice_vectors, rtol=1e-8)
 
     def get_reciprocal_lattice(self) -> "Lattice":
-        """Get the reciprocal lattice."""
+        """
+        Get the reciprocal lattice.
+
+        The reciprocal lattice is calculated as 2π times the transpose of
+        the inverse lattice matrix. This is useful for k-space calculations
+        and diffraction analysis.
+
+        Returns:
+            Lattice: The reciprocal lattice object.
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> recip = lat.get_reciprocal_lattice()
+            >>> recip.a  # Reciprocal lattice parameter
+            1.256637...
+        """
         # Reciprocal lattice vectors are 2π times the transpose of the inverse
         reciprocal_vectors = 2 * np.pi * self.inv_matrix.T
         return Lattice(reciprocal_vectors)
 
     def get_cartesian_coords(self, fractional_coords: np.ndarray) -> np.ndarray:
-        """Convert fractional coordinates to Cartesian coordinates."""
+        """
+        Convert fractional coordinates to Cartesian coordinates.
+
+        Args:
+            fractional_coords: Fractional coordinates as numpy array.
+                              Can be a single coordinate (3,) or multiple (N, 3).
+
+        Returns:
+            np.ndarray: Cartesian coordinates in Angstroms.
+                       Shape matches input (3,) or (N, 3).
+
+        Example:
+            >>> lat = Lattice.cubic(10.0)
+            >>> frac = np.array([0.5, 0.5, 0.5])
+            >>> cart = lat.get_cartesian_coords(frac)
+            >>> cart
+            array([5., 5., 5.])
+            >>>
+            >>> # Multiple coordinates
+            >>> fracs = np.array([[0, 0, 0], [0.5, 0.5, 0.5]])
+            >>> carts = lat.get_cartesian_coords(fracs)
+            >>> carts.shape
+            (2, 3)
+        """
         return np.dot(fractional_coords, self.matrix)
 
     def get_fractional_coords(self, cartesian_coords: np.ndarray) -> np.ndarray:
-        """Convert Cartesian coordinates to fractional coordinates."""
+        """
+        Convert Cartesian coordinates to fractional coordinates.
+
+        Args:
+            cartesian_coords: Cartesian coordinates in Angstroms as numpy array.
+                            Can be a single coordinate (3,) or multiple (N, 3).
+
+        Returns:
+            np.ndarray: Fractional coordinates.
+                       Shape matches input (3,) or (N, 3).
+
+        Example:
+            >>> lat = Lattice.cubic(10.0)
+            >>> cart = np.array([5.0, 5.0, 5.0])
+            >>> frac = lat.get_fractional_coords(cart)
+            >>> frac
+            array([0.5, 0.5, 0.5])
+            >>>
+            >>> # Multiple coordinates
+            >>> carts = np.array([[0, 0, 0], [5, 5, 5]])
+            >>> fracs = lat.get_fractional_coords(carts)
+            >>> fracs.shape
+            (2, 3)
+        """
         return np.dot(cartesian_coords, self.inv_matrix)
 
     def is_orthogonal(self, tol: float = 1e-8) -> bool:
-        """Check if the lattice is orthogonal (all angles are 90°)."""
+        """
+        Check if the lattice is orthogonal (all angles are 90°).
+
+        A lattice is orthogonal if all three angles (α, β, γ) are 90 degrees
+        within the specified tolerance.
+
+        Args:
+            tol: Tolerance for angle comparison in degrees (default: 1e-8).
+
+        Returns:
+            bool: True if all angles are 90° within tolerance, False otherwise.
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> lat.is_orthogonal()
+            True
+            >>> lat = Lattice.hexagonal(3.0, 5.0)
+            >>> lat.is_orthogonal()
+            False  # gamma = 120°
+        """
         return (
             abs(self.alpha - 90) < tol
             and abs(self.beta - 90) < tol
@@ -447,8 +928,28 @@ class Lattice(MSONable):
         )
 
     @property
-    def parameters(self) -> dict:
-        """Get all lattice parameters as a dictionary."""
+    def parameters(self) -> Dict[str, float]:
+        """
+        Get all lattice parameters as a dictionary.
+
+        Returns a dictionary containing all six lattice parameters plus volume.
+
+        Returns:
+            Dict[str, float]: Dictionary with keys:
+                - a, b, c: Lattice vector lengths in Angstroms
+                - alpha, beta, gamma: Lattice angles in degrees
+                - volume: Unit cell volume in cubic Angstroms
+
+        Example:
+            >>> lat = Lattice.cubic(5.0)
+            >>> params = lat.parameters
+            >>> params['a']
+            5.0
+            >>> params['alpha']
+            90.0
+            >>> params['volume']
+            125.0
+        """
         return {
             "a": self.a,
             "b": self.b,
