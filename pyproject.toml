@@ -1,0 +1,106 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "MatSimPy"
+version = "0.1"
+description = "A package for materials simulation and analysis"
+readme = "README.md"
+requires-python = ">=3.6"
+license = {text = "MIT"}
+authors = [
+    {name = "haidi wang", email = "haidi@hfut.edu.cn"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = ["materials", "simulation", "crystal", "molecule", "dft", "ml"]
+urls = {Homepage = "https://gitee.com/haidi-hfut/MatSimPy"}
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "monty",
+    "tabulate",
+]
+
+[project.optional-dependencies]
+cli = [
+    "prompt-toolkit",
+]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.12",
+    "pytest-xdist",
+]
+storage = [
+    "maggma",
+]
+ml = [
+    "torch",
+    "torch-geometric",
+]
+io = [
+    "pymatgen",
+    "ase",
+]
+builders = [
+    "pyxtal",
+    "rdkit",
+]
+analysis = [
+    "spglib",
+]
+all = [
+    "prompt-toolkit",
+    "pytest>=6.0",
+    "pytest-cov>=2.12",
+    "pytest-xdist",
+    "maggma",
+    "torch",
+    "torch-geometric",
+    "pymatgen",
+    "ase",
+    "pyxtal",
+    "rdkit",
+    "spglib",
+]
+
+[project.scripts]
+matsimpy = "matsimpy.ui.cli.__main__:main"
+
+[tool.setuptools]
+packages = ["matsimpy"]
+
+[tool.setuptools.package-data]
+"matsimpy.core" = ["periodic_table.json"]
+"matsimpy.ui.cli" = ["matsimpy_menu.json"]
+"tests" = ["POSCAR-cart.vasp", "POSCAR-frac.vasp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "requires_torch: marks tests that require torch",
+    "requires_ase: marks tests that require ase",
+    "requires_pymatgen: marks tests that require pymatgen",
+]
+

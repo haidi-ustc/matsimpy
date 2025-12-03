@@ -1,0 +1,31 @@
+# Development dependencies for MatSimPy
+-r requirements.txt
+
+# Testing
+pytest>=6.0
+pytest-cov>=2.12
+pytest-xdist
+
+# Optional dependencies for full test coverage
+# Uncomment the ones you need for testing
+# CLI interface
+# prompt-toolkit
+
+# ML calculators
+# torch
+# torch-geometric
+
+# I/O converters
+# pymatgen
+# ase
+
+# Builders
+# pyxtal
+# rdkit
+
+# Analysis
+# spglib
+
+# Storage
+# maggma
+
