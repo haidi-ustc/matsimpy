@@ -1,7 +1,9 @@
 # Sphinx build output
 _build/
-_static/
-_templates/
+
+# Note: _static/ and _templates/ directories should exist (even if empty)
+# They are created by conf.py automatically, but .gitkeep files are ignored
+# This is OK - the directories will be created when needed
 
 # Generated documentation
 *.html

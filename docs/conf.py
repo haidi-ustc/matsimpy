@@ -36,8 +36,12 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_rtd_theme'
-# Only include _static if it exists and has content
-html_static_path = []  # Add '_static' if you have custom static files
+# _static directory for custom CSS/JS (optional)
+# Create it if it doesn't exist to avoid warnings
+import os
+static_dir = os.path.join(os.path.dirname(__file__), '_static')
+os.makedirs(static_dir, exist_ok=True)
+html_static_path = ['_static']
 
 # -- Extension configuration -------------------------------------------------
 
