@@ -29,39 +29,91 @@
 
 ## Installation
 
+### Basic Installation
+
 Install MatSimPy using pip:
 
 ```bash
 pip install MatSimPy
 ```
 
-### Development Installation
+This installs the core package with required dependencies:
+- numpy
+- scipy
+- monty
+- tabulate
 
-For development with testing support:
+### Installation from Source
 
-```bash
-pip install MatSimPy[dev]
-```
-
-### Optional Features
-
-Install with optional dependencies:
-
-```bash
-# With storage support (maggma)
-pip install MatSimPy[storage]
-
-# With all optional features
-pip install MatSimPy[all]
-```
-
-Or clone and install from source:
+Clone the repository and install in editable mode:
 
 ```bash
 git clone https://gitee.com/haidi-hfut/MatSimPy.git
 cd MatSimPy
 pip install -e .
 ```
+
+For development with testing support:
+
+```bash
+pip install -e .[dev]
+```
+
+This includes:
+- pytest
+- pytest-cov
+- pytest-xdist
+
+### Optional Dependencies
+
+MatSimPy supports optional features through extra dependencies:
+
+```bash
+# CLI interface (interactive menu)
+pip install -e .[cli]
+
+# Machine learning calculators (torch, torch-geometric)
+pip install -e .[ml]
+
+# I/O converters (pymatgen, ase)
+pip install -e .[io]
+
+# Structure builders (pyxtal, rdkit)
+pip install -e .[builders]
+
+# Symmetry analysis (spglib)
+pip install -e .[analysis]
+
+# Data storage (maggma)
+pip install -e .[storage]
+
+# All optional features
+pip install -e .[all]
+```
+
+### Using requirements.txt
+
+For a minimal installation with only core dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+For development:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Package Configuration
+
+MatSimPy uses modern Python packaging standards:
+- **pyproject.toml** - PEP 517/518 compliant build configuration
+- **requirements.txt** - Core dependencies
+- **requirements-dev.txt** - Development dependencies
+- **pytest.ini** - Test configuration
+
+The package automatically discovers all modules and includes necessary data files (JSON, YAML) from the package directories.
 
 ## Quick Start
 
@@ -642,19 +694,44 @@ from matsimpy.transformation.composite import (
 
 ### Core Dependencies
 
-- Python >=3.6
-- NumPy
-- SciPy
-- monty (for MSONable serialization)
-- tabulate (for formatted output)
+- **Python** >=3.6 (tested up to 3.12)
+- **NumPy** >=1.20.0
+- **SciPy** >=1.7.0
+- **monty** >=2021.0 (for MSONable serialization)
+- **tabulate** >=0.9.0 (for formatted output)
 
 ### Optional Dependencies
 
-- `pymatgen` - For pymatgen interoperability
-- `ase` - For ASE interoperability
-- `rdkit` - For SMILES parsing in molecule builders
-- `pyxtal` - For random crystal generation
-- `spglib` - For symmetry analysis
+Install these based on your needs:
+
+- **CLI Interface**:
+  - `prompt-toolkit` - Interactive command-line interface
+
+- **Machine Learning**:
+  - `torch` >=2.0.0 - PyTorch for ML calculators
+  - `torch-geometric` >=2.0.0 - Graph neural networks
+
+- **I/O Converters**:
+  - `pymatgen` >=2024.0.0 - Pymatgen interoperability
+  - `ase` >=3.20.0 - ASE interoperability
+
+- **Structure Builders**:
+  - `pyxtal` >=1.0.0 - Random crystal generation
+  - `rdkit` - SMILES parsing for molecule builders
+
+- **Analysis**:
+  - `spglib` - Symmetry analysis
+
+- **Storage**:
+  - `maggma` >=0.70.0 - Persistent data storage
+
+### Python Version Support
+
+MatSimPy supports Python 3.6 through 3.12. The package is tested on:
+- Python 3.9 ✓
+- Python 3.10 ✓
+- Python 3.11 ✓
+- Python 3.12 ✓
 
 ## Testing
 
