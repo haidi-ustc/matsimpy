@@ -83,6 +83,7 @@ nitpicky = False
 nitpick_ignore = [
     ('py:class', 'AtomSelection'),
     ('py:class', 'Calculator'),
+    ('py:obj', 'Calculator'),
 ]
 
 # Use fully qualified names for cross-references to avoid ambiguity
