@@ -750,10 +750,17 @@ class Crystal(Structure):
 
     def _initialize_sites(self) -> List[CrystalSite]:
         """
-        Initializes the list of CrystalSite objects.
+        Initialize the list of CrystalSite objects.
+
+        Creates CrystalSite objects for each atom, optionally including site properties.
+        This method is called during initialization and when atoms are added/removed.
 
         Returns:
-            List[CrystalSite]: A list of CrystalSite objects.
+            List[CrystalSite]: A list of CrystalSite objects, one for each atom.
+
+        Note:
+            This is an internal method. Sites are automatically updated when
+            the structure changes (add_atom, remove_atom, etc.).
         """
         if self.site_properties and len(self.site_properties) == len(self.species):
             return [
@@ -781,9 +788,48 @@ class Crystal(Structure):
 
     @property
     def sites(self) -> List[CrystalSite]:
+        """
+        Get the list of CrystalSite objects for all atoms.
+
+        Returns:
+            List[CrystalSite]: List of CrystalSite objects, one for each atom in the crystal.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+            >>> crystal.sites[0].specie  # 'Na'
+            >>> crystal.sites[0].frac_position  # [0, 0, 0]
+            >>> len(crystal.sites)
+            2
+        """
         return self._sites
 
-    def as_dict(self):
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Convert crystal to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name ('Crystal')
+                - pbc: Periodic boundary conditions list
+                - lattice: Lattice dictionary
+                - species: List of species symbols
+                - positions: List of positions (fractional, converted from numpy array)
+                - site_properties: List of site property dictionaries (if any)
+
+        Example:
+            >>> d = crystal.as_dict()
+            >>> d['@class']
+            'Crystal'
+            >>> d['pbc']
+            [True, True, True]
+            >>> d['species']
+            ['Na', 'Cl']
+        """
         d = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
@@ -796,7 +842,7 @@ class Crystal(Structure):
         return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[str, Any]) -> "Crystal":
         species = d["species"]
         positions = d["positions"]
         lattice = Lattice.from_dict(d["lattice"])
@@ -814,14 +860,47 @@ class Crystal(Structure):
 
     @property
     def volume(self) -> float:
-        """Calculate the volume of the crystal."""
+        """
+        Calculate the volume of the unit cell.
+
+        Returns:
+            float: Unit cell volume in cubic Angstroms (Å³).
+
+        Note:
+            This property is only meaningful for 3D periodic systems
+            (PBC = [True, True, True]). For 2D systems, use :attr:`area`.
+            For 1D systems, use :attr:`length`.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+            >>> crystal.volume
+            179.406...
+        """
         a, b, c = self.lattice.lattice_vectors
         volume = np.dot(a, np.cross(b, c))
         return abs(volume)
 
     @property
     def area(self) -> float:
-        """Calculate the area for 2D materials (when one PBC is False)."""
+        """
+        Calculate the area for 2D materials (when exactly one PBC is False).
+
+        Returns:
+            float: Unit cell area in square Angstroms (Å²).
+
+        Raises:
+            ValueError: If the crystal is not a 2D material (exactly 2 PBC True).
+
+        Note:
+            This property is only defined for 2D periodic systems
+            (e.g., PBC = [True, True, False] for a slab).
+
+        Example:
+            >>> crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
+            >>> crystal.set_pbc([True, True, False])  # 2D slab
+            >>> crystal.area
+            100.0
+        """
         a, b, c = self.lattice.lattice_vectors
         pbc_count = sum(self.pbc)
         if pbc_count != 2:
@@ -846,7 +925,25 @@ class Crystal(Structure):
 
     @property
     def length(self) -> float:
-        """Calculate the length for 1D materials (when two PBC are False)."""
+        """
+        Calculate the length for 1D materials (when exactly two PBC are False).
+
+        Returns:
+            float: Unit cell length in Angstroms (Å).
+
+        Raises:
+            ValueError: If the crystal is not a 1D material (exactly 1 PBC True).
+
+        Note:
+            This property is only defined for 1D periodic systems
+            (e.g., PBC = [True, False, False] for a wire).
+
+        Example:
+            >>> crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
+            >>> crystal.set_pbc([True, False, False])  # 1D wire
+            >>> crystal.length
+            10.0
+        """
         a, b, c = self.lattice.lattice_vectors
         pbc_count = sum(self.pbc)
         if pbc_count != 1:
@@ -866,8 +963,32 @@ class Crystal(Structure):
 
         return abs(length)
 
-    def __str__(self):
-        """Human-readable string representation of Crystal."""
+    def __str__(self) -> str:
+        """
+        Get human-readable string representation of Crystal.
+
+        Returns:
+            str: Formatted string with crystal information including:
+                - Formula
+                - Number of atoms
+                - PBC information
+                - Lattice parameters
+                - Volume/Area/Length (depending on dimensionality)
+                - Density
+                - Table of atoms with coordinates
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+            >>> print(crystal)
+            Crystal: ClNa
+              Sites: 2 atoms
+              PBC: [T T T]
+              Lattice: a=5.6400 Å, b=5.6400 Å, c=5.6400 Å
+                       α=90.00°, β=90.00°, γ=90.00°
+              Volume: 179.4064 Å³
+              Density: 2.1650 g/cm³
+            ...
+        """
         # Basic info
         info = f"{self.__class__.__name__}: {self.formula}\n"
         info += f"  Sites: {len(self)} atoms\n"
@@ -991,8 +1112,14 @@ class Crystal(Structure):
         """
         Convert fractional coordinates to Cartesian coordinates.
 
+        Uses the lattice matrix to transform fractional coordinates to Cartesian
+        coordinates in Angstroms.
+
         Returns:
-            Numpy array of Cartesian positions.
+            np.ndarray: Cartesian positions array of shape (n_atoms, 3) in Angstroms.
+
+        Note:
+            This is an internal method used for coordinate conversion.
         """
         return np.dot(self.frac_positions, self.lattice.matrix)
 
@@ -1000,8 +1127,15 @@ class Crystal(Structure):
         """
         Convert Cartesian coordinates to fractional coordinates.
 
+        Uses the cached inverse lattice matrix to transform Cartesian coordinates
+        to fractional coordinates (0-1 range).
+
         Returns:
-            Numpy array of fractional positions.
+            np.ndarray: Fractional positions array of shape (n_atoms, 3).
+
+        Note:
+            This is an internal method used for coordinate conversion.
+            Uses the cached inverse matrix for performance.
         """
         # Use cached inverse matrix
         return np.dot(self.cart_positions, self.lattice.inv_matrix)
@@ -1079,26 +1213,45 @@ class Crystal(Structure):
         """
         Get neighbor list with optimized KDTree and consistent interface.
 
+        Uses a cached KDTree for efficient neighbor finding. The tree is
+        automatically rebuilt when the structure changes or when a different
+        cutoff is used.
+
         Args:
-            cutoff: Cutoff radius for neighbor finding
+            cutoff: Cutoff radius in Angstroms for neighbor finding.
             atom_index: Optional atom index. If None, returns neighbors for all atoms.
                        If specified, returns neighbors only for that atom.
-            use_pbc: Whether to use periodic boundary conditions
+            use_pbc: Whether to use periodic boundary conditions (default: True).
+                    If True, considers neighbors across unit cell boundaries.
 
         Returns:
-            Dict mapping atom index to list of (neighbor_index, distance) tuples.
-            If atom_index is provided, dict contains only that entry.
-            If atom_index is None, dict contains entries for all atoms.
+            Dict[int, List[Tuple[int, float]]]: Dictionary mapping atom index to
+            list of (neighbor_index, distance) tuples. Distances are in Angstroms.
+            - If atom_index is provided: dict contains only that entry {atom_index: [(neighbor, dist), ...]}
+            - If atom_index is None: dict contains entries for all atoms
 
         Raises:
-            IndexError: If atom_index is out of range
+            IndexError: If atom_index is out of range.
 
-        Examples:
+        Note:
+            The KDTree is cached and automatically invalidated when the structure
+            changes. For large structures with PBC, periodic images are generated
+            and cached for efficient neighbor finding.
+
+        Example:
             >>> crystal = Crystal(['Si', 'Si'], [[0, 0, 0], [0.25, 0.25, 0.25]], lattice)
             >>> # Get neighbors for all atoms
             >>> neighbors = crystal.get_neighbor_list(5.0)
+            >>> neighbors[0]  # Neighbors of atom 0
+            [(1, 2.35), ...]
+            >>>
             >>> # Get neighbors for specific atom
             >>> neighbors = crystal.get_neighbor_list(5.0, atom_index=0)
+            >>> neighbors
+            {0: [(1, 2.35), ...]}
+            >>>
+            >>> # Without PBC
+            >>> neighbors = crystal.get_neighbor_list(5.0, use_pbc=False)
         """
         # Check if we need to rebuild tree
         n_atoms = len(self.cart_positions)
@@ -1172,14 +1325,28 @@ class Crystal(Structure):
         """
         Calculate the density of the crystal based on PBC dimensionality.
 
+        The density calculation automatically adapts to the dimensionality
+        of the periodic system (3D, 2D, or 1D) based on the PBC settings.
+
         Returns:
             float: Density in appropriate units:
                    - 3D (all PBC True): g/cm³
                    - 2D (two PBC True): g/cm²
                    - 1D (one PBC True): g/cm
+                   - 0D (no PBC): g/cm³ (uses volume)
 
         Raises:
-            ValueError: If crystal volume/area/length is zero or negative
+            ValueError: If crystal volume/area/length is zero or negative.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+            >>> crystal.density()  # 3D density in g/cm³
+            2.165...
+            >>>
+            >>> # 2D material
+            >>> crystal.set_pbc([True, True, False])
+            >>> crystal.density()  # 2D density in g/cm²
+            0.123...
         """
         # Mass is in atomic mass units (amu)
         # Conversion: 1 amu = 1.66053906660e-24 g

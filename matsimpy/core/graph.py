@@ -813,18 +813,43 @@ def structure_to_graph_data(
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    Convert MatSimPy structure to graph data format.
+    Convert MatSimPy structure to graph data format (legacy functional API).
 
-    Note: This is a legacy function. Consider using create_structure_graph() for OOP API.
+    This is a legacy function that converts a structure to a dictionary format
+    suitable for graph-based machine learning. For new code, consider using
+    the OOP API (:class:`MoleculeGraph` or :class:`CrystalGraph`) instead.
 
     Args:
         structure: Crystal or Molecule object.
-        cutoff: Cutoff radius for graph construction (Å).
-        threebody_cutoff: Cutoff for three-body interactions (Å).
-        **kwargs: Additional parameters.
+        cutoff: Cutoff radius in Angstroms for graph construction (default: 5.0).
+        threebody_cutoff: Cutoff for three-body interactions in Angstroms (default: 4.0).
+        **kwargs: Additional parameters (currently unused).
 
     Returns:
-        Dictionary containing graph data.
+        Dict[str, Any]: Dictionary containing:
+            - positions: Numpy array of positions (shape: n_atoms, 3)
+            - species: List of species symbols
+            - cell: Lattice vectors as numpy array (Crystal only, None for Molecule)
+            - pbc: Periodic boundary conditions as numpy array (Crystal only)
+            - num_atoms: Number of atoms
+            - is_crystal: Boolean indicating if structure is a Crystal
+            - cutoff: Cutoff distance used
+            - threebody_cutoff: Three-body cutoff distance
+
+    Note:
+        This is a legacy function. For new code, use :func:`create_structure_graph`
+        or the OOP API directly.
+
+    Example:
+        >>> from matsimpy.core import Molecule
+        >>> from matsimpy.core.graph import structure_to_graph_data
+        >>>
+        >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
+        >>> data = structure_to_graph_data(mol, cutoff=2.0)
+        >>> data['num_atoms']
+        2
+        >>> data['is_crystal']
+        False
     """
     if isinstance(structure, Crystal):
         positions = np.array(structure.cart_positions, dtype=np.float64)
