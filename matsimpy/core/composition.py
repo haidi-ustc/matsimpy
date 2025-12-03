@@ -188,18 +188,8 @@ class Composition(MSONable):
                 f"Formula must contain only letters, numbers, and parentheses."
             )
 
-        def parse_subformula(sub_formula: str, count: int, track_order: bool = True) -> None:
-            """
-            Parse a subformula and add to composition.
-
-            Helper function to parse a portion of a chemical formula and
-            accumulate element counts into the composition Counter.
-
-            Args:
-                sub_formula: Substring of the formula to parse.
-                count: Multiplier for element counts (used for parentheses groups).
-                track_order: If True, track the order of elements as they appear.
-            """
+        def parse_subformula(sub_formula, count, track_order=True):
+            """Parse a subformula and add to composition."""
             sub_counts = re.findall(element_pattern, sub_formula)
             for element, sub_count in sub_counts:
                 composition[element] += (int(sub_count) if sub_count else 1) * count

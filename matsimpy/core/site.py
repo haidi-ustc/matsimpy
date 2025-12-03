@@ -1,3 +1,30 @@
+"""
+Site module for MatSimPy.
+
+This module provides classes for representing atomic sites in structures.
+It includes two main classes:
+- Site: For molecules and non-periodic structures (Cartesian coordinates only)
+- CrystalSite: For crystal structures with lattice (supports both fractional and Cartesian)
+
+The Site classes are used internally by Crystal and Molecule classes to represent
+individual atoms with their positions, species, and optional properties.
+
+Example:
+    >>> from matsimpy.core.site import Site, CrystalSite
+    >>> from matsimpy.core import Lattice
+    >>>
+    >>> # Create a Site (for molecules)
+    >>> site = Site([0, 0, 0], 'Fe')
+    >>> print(site.position)  # [0. 0. 0.]
+    >>> print(site.specie)    # 'Fe'
+    >>>
+    >>> # Create a CrystalSite (for crystals)
+    >>> lattice = Lattice.cubic(10.0)
+    >>> crystal_site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+    >>> print(crystal_site.frac_position)  # Fractional coordinates
+    >>> print(crystal_site.cart_position)  # Cartesian coordinates
+"""
+
 import numpy as np
 import warnings
 from typing import List, Optional, Union, Dict, Any
@@ -31,17 +58,81 @@ class Site(MSONable):
         specie: Union[str, int, Element] = "X",
         properties: Optional[Dict[str, Any]] = None,
     ):
+        """
+        Initialize a Site object.
+
+        Args:
+            position: 3D position coordinates [x, y, z] in Angstroms.
+                     Must be a list of 3 floats or a numpy array of shape (3,).
+                     Always interpreted as Cartesian coordinates.
+            specie: Atomic species. Can be:
+                   - str: Element symbol (e.g., 'Fe', 'Si', 'O')
+                   - int: Atomic number (e.g., 26 for Fe, 14 for Si)
+                   - Element: Element object from periodic_table
+                   Default is 'X' (unknown element).
+            properties: Optional dictionary of site properties.
+                       Common properties include:
+                       - charge: Formal charge
+                       - magmom: Magnetic moment
+                       - occupancy: Site occupancy
+                       - Any other custom properties
+
+        Raises:
+            TypeError: If position is not a list or numpy array.
+            ValueError: If position doesn't have exactly 3 elements.
+            ValueError: If position contains NaN or inf values.
+            TypeError: If specie is not a valid type.
+            ValueError: If atomic number is out of valid range (1-118).
+            TypeError: If properties is not a dictionary or None.
+
+        Examples:
+            >>> # Create site with element symbol
+            >>> site = Site([0, 0, 0], 'Fe')
+            >>> site.specie
+            'Fe'
+            >>>
+            >>> # Create site with atomic number
+            >>> site = Site([1.0, 2.0, 3.0], 26)  # Fe
+            >>> site.specie
+            'Fe'
+            >>>
+            >>> # Create site with properties
+            >>> site = Site([0, 0, 0], 'Fe', properties={'charge': 2.0, 'magmom': 5.0})
+            >>> site.properties
+            {'charge': 2.0, 'magmom': 5.0}
+        """
         self._position = self._validate_position(position)
         self._specie = self._validate_specie(specie)
         self._properties = self._validate_properties(properties)
 
     def as_dict(self) -> Dict[str, Any]:
         """
-        Returns a dictionary representation of the Site.
+        Convert to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
 
         Returns:
-            Dictionary containing position, specie, and properties.
-            Note: coords_are_cartesian is not included as Site always uses Cartesian coordinates.
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name
+                - position: Position coordinates as list [x, y, z]
+                - specie: Element symbol as string
+                - properties: Properties dictionary (empty dict if no properties)
+
+        Note:
+            coords_are_cartesian is not included as Site always uses Cartesian coordinates.
+
+        Example:
+            >>> site = Site([1.0, 2.0, 3.0], 'Fe', properties={'charge': 2.0})
+            >>> d = site.as_dict()
+            >>> d['position']
+            [1.0, 2.0, 3.0]
+            >>> d['specie']
+            'Fe'
+            >>> d['properties']
+            {'charge': 2.0}
         """
         return {
             "@module": self.__class__.__module__,
@@ -54,15 +145,37 @@ class Site(MSONable):
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Site":
         """
-        Creates a Site object from a dictionary representation.
+        Create Site object from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a Site object from its dictionary representation.
 
         Args:
-            d: Dictionary containing position, specie, and properties.
-               Old dicts may contain coords_are_cartesian, which is ignored
-               (Site always uses Cartesian coordinates).
+            d: Dictionary containing:
+                - position: Position coordinates [x, y, z] (required)
+                - specie: Element symbol (optional, defaults to 'X')
+                - properties: Properties dictionary (optional)
+                - coords_are_cartesian: Ignored if present (Site always uses Cartesian)
 
         Returns:
-            Site object
+            Site: A new Site instance.
+
+        Raises:
+            KeyError: If 'position' key is missing from dictionary.
+
+        Example:
+            >>> d = {
+            ...     '@module': 'matsimpy.core.site',
+            ...     '@class': 'Site',
+            ...     'position': [1.0, 2.0, 3.0],
+            ...     'specie': 'Fe',
+            ...     'properties': {'charge': 2.0}
+            ... }
+            >>> site = Site.from_dict(d)
+            >>> site.position.tolist()
+            [1.0, 2.0, 3.0]
+            >>> site.specie
+            'Fe'
         """
         # Ignore coords_are_cartesian from old dicts for backward compatibility
         # Site always uses Cartesian coordinates (no lattice)
@@ -185,22 +298,71 @@ class Site(MSONable):
 
         Always returns True for Site (molecules/non-periodic structures always use Cartesian).
         This property exists for backward compatibility and consistency with CrystalSite.
+
+        Returns:
+            bool: Always True for Site objects.
+
+        Example:
+            >>> site = Site([0, 0, 0], 'Fe')
+            >>> site.coords_are_cartesian
+            True
         """
         return True
 
     @property
     def coords_type(self) -> str:
-        """Get coordinate type as string. Always returns 'cartesian' for Site."""
+        """
+        Get coordinate type as string.
+
+        Returns:
+            str: Always 'cartesian' for Site objects.
+
+        Example:
+            >>> site = Site([0, 0, 0], 'Fe')
+            >>> site.coords_type
+            'cartesian'
+        """
         return "cartesian"
 
     @property
     def properties(self) -> Dict[str, Any]:
-        """Get site properties dictionary."""
+        """
+        Get site properties dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary of site properties. Returns empty dict
+                           if no properties are set.
+
+        Example:
+            >>> site = Site([0, 0, 0], 'Fe', properties={'charge': 2.0})
+            >>> site.properties
+            {'charge': 2.0}
+            >>> site2 = Site([0, 0, 0], 'Fe')
+            >>> site2.properties
+            {}
+        """
         return self._properties
 
     @properties.setter
     def properties(self, properties: Optional[Dict[str, Any]]) -> None:
-        """Set site properties dictionary."""
+        """
+        Set site properties dictionary.
+
+        Args:
+            properties: Dictionary of properties to set. Can be None to clear properties.
+
+        Raises:
+            TypeError: If properties is not a dictionary or None.
+
+        Example:
+            >>> site = Site([0, 0, 0], 'Fe')
+            >>> site.properties = {'charge': 2.0, 'magmom': 5.0}
+            >>> site.properties
+            {'charge': 2.0, 'magmom': 5.0}
+            >>> site.properties = None  # Clear properties
+            >>> site.properties
+            {}
+        """
         self._properties = self._validate_properties(properties)
 
     @property
@@ -215,7 +377,28 @@ class Site(MSONable):
 
     @specie.setter
     def specie(self, specie: Union[str, int, Element]) -> None:
-        """Set atomic species."""
+        """
+        Set atomic species.
+
+        Args:
+            specie: Atomic species. Can be:
+                   - str: Element symbol (e.g., 'Fe', 'Si')
+                   - int: Atomic number (e.g., 26 for Fe)
+                   - Element: Element object
+
+        Raises:
+            TypeError: If specie is not a valid type.
+            ValueError: If atomic number is out of valid range (1-118).
+
+        Example:
+            >>> site = Site([0, 0, 0], 'Fe')
+            >>> site.specie = 'Si'
+            >>> site.specie
+            'Si'
+            >>> site.specie = 26  # Fe
+            >>> site.specie
+            'Fe'
+        """
         self._specie = self._validate_specie(specie)
 
     @property
@@ -230,21 +413,81 @@ class Site(MSONable):
 
     @position.setter
     def position(self, position: Union[List[float], np.ndarray]) -> None:
-        """Set position coordinates."""
+        """
+        Set position coordinates.
+
+        Args:
+            position: 3D position coordinates [x, y, z] in Angstroms.
+                     Must be a list of 3 floats or a numpy array of shape (3,).
+
+        Raises:
+            TypeError: If position is not a list or numpy array.
+            ValueError: If position doesn't have exactly 3 elements.
+            ValueError: If position contains NaN or inf values.
+
+        Example:
+            >>> site = Site([0, 0, 0], 'Fe')
+            >>> site.position = [1.0, 2.0, 3.0]
+            >>> site.position.tolist()
+            [1.0, 2.0, 3.0]
+        """
         self._position = self._validate_position(position)
 
     def __repr__(self) -> str:
-        """Unambiguous string representation (concise, developer-friendly)."""
+        """
+        Unambiguous string representation for debugging.
+
+        Returns:
+            str: Concise representation showing specie, position, and properties.
+
+        Example:
+            >>> site = Site([1.0, 2.0, 3.0], 'Fe', properties={'charge': 2.0})
+            >>> repr(site)
+            "Fe @ [1.0, 2.0, 3.0] (cartesian), {'charge': 2.0}"
+        """
         props_str = f", {self.properties}" if self.properties else ""
         return f"{self.specie} @ {self.position.tolist()} (cartesian){props_str}"
 
     def __str__(self) -> str:
-        """Human-readable string representation (verbose, user-friendly)."""
+        """
+        Human-readable string representation.
+
+        Returns:
+            str: Verbose representation with all site information.
+
+        Example:
+            >>> site = Site([1.0, 2.0, 3.0], 'Fe', properties={'charge': 2.0})
+            >>> str(site)
+            "Site(position=[1.0, 2.0, 3.0], specie='Fe', properties={'charge': 2.0})"
+        """
         props_str = f", properties={self.properties}" if self.properties else ""
         return f"Site(position={self.position.tolist()}, specie='{self.specie}'{props_str})"
 
-    def __eq__(self, other) -> bool:
-        """Check equality with another Site."""
+    def __eq__(self, other: Any) -> bool:
+        """
+        Check equality with another Site.
+
+        Two sites are equal if they have the same specie, position (within
+        numerical tolerance), and properties.
+
+        Args:
+            other: Another object to compare with.
+
+        Returns:
+            bool: True if sites are equal, False otherwise.
+
+        Note:
+            Position comparison uses numpy.allclose() for numerical tolerance.
+
+        Example:
+            >>> site1 = Site([1.0, 2.0, 3.0], 'Fe')
+            >>> site2 = Site([1.0, 2.0, 3.0], 'Fe')
+            >>> site3 = Site([1.0, 2.0, 3.0], 'Si')
+            >>> site1 == site2
+            True
+            >>> site1 == site3
+            False
+        """
         if not isinstance(other, Site):
             return False
         return (
@@ -283,6 +526,50 @@ class CrystalSite(Site):
         properties: Optional[Dict[str, Any]] = None,
         coords_are_cartesian: bool = False,
     ):
+        """
+        Initialize a CrystalSite object.
+
+        Args:
+            position: Position coordinates [x, y, z] or [a, b, c].
+                     Interpretation depends on coords_are_cartesian:
+                     - If True: Cartesian coordinates in Angstroms
+                     - If False: Fractional coordinates (default)
+            specie: Atomic species. Can be:
+                   - str: Element symbol (e.g., 'Fe', 'Si')
+                   - int: Atomic number (e.g., 26 for Fe)
+                   - Element: Element object
+            lattice: Lattice object or list of 3 lattice vectors.
+                     Can be:
+                     - Lattice: Lattice object
+                     - List[List[float]]: List of 3 lattice vectors
+            properties: Optional dictionary of site properties.
+            coords_are_cartesian: If True, position is interpreted as Cartesian.
+                                If False, position is interpreted as fractional (default).
+
+        Raises:
+            TypeError: If position, specie, or lattice is not a valid type.
+            ValueError: If position doesn't have exactly 3 elements.
+            ValueError: If position contains NaN or inf values.
+            ValueError: If atomic number is out of valid range (1-118).
+
+        Examples:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>>
+            >>> # Create with fractional coordinates (default)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+            >>> site.frac_position.tolist()
+            [0.5, 0.5, 0.5]
+            >>> site.cart_position.tolist()
+            [5.0, 5.0, 5.0]
+            >>>
+            >>> # Create with Cartesian coordinates
+            >>> site = CrystalSite([5.0, 5.0, 5.0], 'Fe', lattice, coords_are_cartesian=True)
+            >>> site.cart_position.tolist()
+            [5.0, 5.0, 5.0]
+            >>> site.frac_position.tolist()
+            [0.5, 0.5, 0.5]
+        """
         self._lattice = self._validate_lattice(lattice)
         self._coords_are_cartesian = coords_are_cartesian
 
@@ -304,11 +591,35 @@ class CrystalSite(Site):
 
     def as_dict(self) -> Dict[str, Any]:
         """
-        Returns a dictionary representation of the CrystalSite.
+        Convert to dictionary representation for serialization.
+
+        Implements the MSONable interface for JSON serialization.
+        The dictionary includes module and class information for proper
+        deserialization.
 
         Returns:
-            Dictionary containing position, specie, properties, lattice, and coordinate type.
-            Position stored is the original input (fractional or Cartesian based on coords_are_cartesian).
+            Dict[str, Any]: Dictionary containing:
+                - @module: Module path of the class
+                - @class: Class name
+                - position: Position coordinates (original input format)
+                - specie: Element symbol as string
+                - properties: Properties dictionary
+                - lattice: Lattice dictionary representation
+                - coords_are_cartesian: Boolean indicating coordinate type
+
+        Note:
+            Position stored is the original input format (fractional or Cartesian
+            based on coords_are_cartesian), not the converted format.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+            >>> d = site.as_dict()
+            >>> d['position']  # Fractional coordinates (original input)
+            [0.5, 0.5, 0.5]
+            >>> d['coords_are_cartesian']
+            False
         """
         d = super().as_dict()
         # Override position with the original input position (fractional or Cartesian)
@@ -324,13 +635,41 @@ class CrystalSite(Site):
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "CrystalSite":
         """
-        Creates a CrystalSite object from a dictionary representation.
+        Create CrystalSite object from dictionary representation.
+
+        Implements the MSONable interface for JSON deserialization.
+        Restores a CrystalSite object from its dictionary representation.
 
         Args:
-            d: Dictionary containing position, specie, properties, and lattice
+            d: Dictionary containing:
+                - position: Position coordinates (required)
+                - specie: Element symbol (optional, defaults to 'X')
+                - properties: Properties dictionary (optional)
+                - lattice: Lattice dictionary (required)
+                - coords_are_cartesian: Boolean indicating coordinate type (optional, defaults to False)
 
         Returns:
-            CrystalSite object
+            CrystalSite: A new CrystalSite instance.
+
+        Raises:
+            KeyError: If 'position' or 'lattice' keys are missing.
+            ValueError: If lattice dictionary is None.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> d = {
+            ...     '@module': 'matsimpy.core.site',
+            ...     '@class': 'CrystalSite',
+            ...     'position': [0.5, 0.5, 0.5],
+            ...     'specie': 'Fe',
+            ...     'properties': {'charge': 2.0},
+            ...     'lattice': lattice.as_dict(),
+            ...     'coords_are_cartesian': False
+            ... }
+            >>> site = CrystalSite.from_dict(d)
+            >>> site.frac_position.tolist()
+            [0.5, 0.5, 0.5]
         """
         position = d["position"]
         specie = d.get("specie", "X")
@@ -374,12 +713,49 @@ class CrystalSite(Site):
 
     @property
     def lattice(self) -> Lattice:
-        """Get the lattice object."""
+        """
+        Get the lattice object.
+
+        Returns:
+            Lattice: The lattice object associated with this site.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+            >>> site.lattice == lattice
+            True
+        """
         return self._lattice
 
     @lattice.setter
     def lattice(self, lattice: Union[List[List[float]], Lattice]) -> None:
-        """Set lattice and recalculate coordinates."""
+        """
+        Set lattice and recalculate coordinates.
+
+        When the lattice is changed, the fractional position is kept constant
+        and the Cartesian position is recalculated.
+
+        Args:
+            lattice: Lattice object or list of 3 lattice vectors.
+
+        Raises:
+            TypeError: If lattice is not a valid type.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice1 = Lattice.cubic(10.0)
+            >>> lattice2 = Lattice.cubic(20.0)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice1)
+            >>> frac_pos = site.frac_position.copy()
+            >>> site.lattice = lattice2
+            >>> # Fractional position unchanged
+            >>> np.allclose(site.frac_position, frac_pos)
+            True
+            >>> # Cartesian position recalculated
+            >>> site.cart_position.tolist()
+            [10.0, 10.0, 10.0]
+        """
         old_lattice = self._lattice
         self._lattice = self._validate_lattice(lattice)
 
@@ -428,10 +804,23 @@ class CrystalSite(Site):
         """
         Convert Cartesian coordinates to fractional coordinates.
 
-        Uses cached inverse matrix for better performance.
+        Uses the lattice inverse matrix for conversion. This method is called
+        automatically when needed and uses cached inverse matrix for better performance.
 
         Returns:
-            Fractional coordinates as numpy array
+            np.ndarray: Fractional coordinates as numpy array of shape (3,).
+
+        Note:
+            This is an internal method. Use the frac_position property to access
+            fractional coordinates.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([5.0, 5.0, 5.0], 'Fe', lattice, coords_are_cartesian=True)
+            >>> frac = site._convert_to_fractional()
+            >>> frac.tolist()
+            [0.5, 0.5, 0.5]
         """
         return np.dot(self._cart_position, self.lattice.inv_matrix)
 
@@ -439,25 +828,89 @@ class CrystalSite(Site):
         """
         Convert fractional coordinates to Cartesian coordinates.
 
+        Uses the lattice matrix for conversion. This method is called
+        automatically when needed.
+
         Returns:
-            Cartesian coordinates as numpy array
+            np.ndarray: Cartesian coordinates as numpy array of shape (3,).
+
+        Note:
+            This is an internal method. Use the cart_position property to access
+            Cartesian coordinates.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+            >>> cart = site._convert_to_cartesian()
+            >>> cart.tolist()
+            [5.0, 5.0, 5.0]
         """
         return np.dot(self._frac_position, self.lattice.matrix)
 
     def __repr__(self) -> str:
-        """Unambiguous string representation (concise, developer-friendly)."""
+        """
+        Unambiguous string representation for debugging.
+
+        Returns:
+            str: Concise representation showing specie, position, coordinate type, and properties.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice, properties={'charge': 2.0})
+            >>> repr(site)
+            "Fe @ [0.5, 0.5, 0.5] (frac), {'charge': 2.0}"
+        """
         props_str = f", {self.properties}" if self.properties else ""
         coord_type = "cart" if self._coords_are_cartesian else "frac"
         return f"{self.specie} @ {self.position.tolist()} ({coord_type}){props_str}"
 
     def __str__(self) -> str:
-        """Human-readable string representation (verbose, user-friendly)."""
+        """
+        Human-readable string representation.
+
+        Returns:
+            str: Verbose representation with all site information including lattice.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice, properties={'charge': 2.0})
+            >>> str(site)
+            "CrystalSite(position=[0.5, 0.5, 0.5], specie='Fe', properties={'charge': 2.0}, ...)"
+        """
         props_str = f", properties={self.properties}" if self.properties else ""
         coord_type = "cartesian" if self._coords_are_cartesian else "fractional"
         return f"CrystalSite(position={self.position.tolist()}, specie='{self.specie}'{props_str}, lattice={self.lattice}, coords_type='{coord_type}')"
 
-    def __eq__(self, other) -> bool:
-        """Check equality with another CrystalSite."""
+    def __eq__(self, other: Any) -> bool:
+        """
+        Check equality with another CrystalSite.
+
+        Two crystal sites are equal if they have the same specie, position (within
+        numerical tolerance), properties, lattice, and coordinate type.
+
+        Args:
+            other: Another object to compare with.
+
+        Returns:
+            bool: True if crystal sites are equal, False otherwise.
+
+        Note:
+            Position and lattice comparison use numpy.allclose() for numerical tolerance.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site1 = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+            >>> site2 = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
+            >>> site3 = CrystalSite([0.5, 0.5, 0.5], 'Si', lattice)
+            >>> site1 == site2
+            True
+            >>> site1 == site3
+            False
+        """
         if not isinstance(other, CrystalSite):
             return False
 
