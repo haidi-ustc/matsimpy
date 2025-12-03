@@ -68,12 +68,31 @@ class TestFinalCoverage(unittest.TestCase):
         """Test periodic_table.py main block."""
         # This tests the if __name__ == '__main__' block
         import subprocess
+        import sys
+        import os
+        
+        # Get the project root directory (parent of tests directory)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        
+        # Use sys.executable to ensure we use the same Python interpreter
+        # Set PYTHONPATH to include project root so subprocess can find matsimpy
+        env = os.environ.copy()
+        pythonpath = env.get('PYTHONPATH', '')
+        if pythonpath:
+            env['PYTHONPATH'] = f"{project_root}{os.pathsep}{pythonpath}"
+        else:
+            env['PYTHONPATH'] = project_root
+        
         result = subprocess.run(
-            ['python', '-c', 'from matsimpy.core.periodic_table import Element; h=Element("H"); print(h)'],
+            [sys.executable, '-c', 'from matsimpy.core.periodic_table import Element; h=Element("H"); print(h)'],
             capture_output=True,
-            text=True
+            text=True,
+            env=env,
+            cwd=project_root
         )
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, 
+                        f"Command failed with return code {result.returncode}. "
+                        f"STDERR: {result.stderr}. STDOUT: {result.stdout}")
 
 if __name__ == '__main__':
     unittest.main()
