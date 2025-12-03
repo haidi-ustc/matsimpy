@@ -803,14 +803,15 @@ class Structure(ABC, MSONable):
         Note: This method delegates to the transformation module for the actual implementation.
 
         Args:
-            indices: Atom index, list of indices, or AtomSelection object to substitute
+            indices: Atom index, list of indices, or :class:`~matsimpy.utils.selection.AtomSelection`
+                    object to substitute.
             new_species: New species symbol, list of symbols, or dict mapping old->new species.
-                       If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'})
+                       If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'}).
 
         Raises:
-            IndexError: If index is out of range
-            ValueError: If number of indices doesn't match number of species
-            KeyError: If dict mapping doesn't contain a species
+            IndexError: If index is out of range.
+            ValueError: If number of indices doesn't match number of species.
+            KeyError: If dict mapping doesn't contain a species.
 
         Examples:
             >>> structure.substitute(0, 'Ge')  # Substitute atom at index 0
