@@ -6,21 +6,6 @@ from typing import Union
 from ..core import Crystal, Molecule
 
 
-def _copy_structure(structure: Union[Crystal, Molecule]) -> Union[Crystal, Molecule]:
-    """
-    Create a copy of a structure.
-
-    Args:
-        structure: Crystal or Molecule to copy
-
-    Returns:
-        Deep copy of the structure
-    """
-    from copy import deepcopy
-
-    return deepcopy(structure)
-
-
 def _validate_structure(structure: Union[Crystal, Molecule, None]) -> None:
     """
     Validate that structure is a Crystal or Molecule.
@@ -35,4 +20,4 @@ def _validate_structure(structure: Union[Crystal, Molecule, None]) -> None:
         raise TypeError(f"Structure must be Crystal or Molecule, got {type(structure)}")
 
 
-__all__ = ["_copy_structure", "_validate_structure"]
+__all__ = ["_validate_structure"]

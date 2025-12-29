@@ -381,10 +381,8 @@ Create your own transformation functions:
 
 ```python
 def my_transformation(structure, param1, param2, inplace=False):
-    from matsimpy.transformation.base import _copy_structure
-    
     if not inplace:
-        structure = _copy_structure(structure)
+        structure = structure.copy()
     
     # Your transformation logic here
     # ...
