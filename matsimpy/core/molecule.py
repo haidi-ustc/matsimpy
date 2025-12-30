@@ -1321,8 +1321,9 @@ class Molecule(Structure):
 
         from ..transformation.atomic import perturb_positions
 
+        # perturb_positions always returns a new structure
         result = perturb_positions(
-            self, amplitude, indices=indices, seed=seed, inplace=inplace
+            self, amplitude, indices=indices, seed=seed
         )
         if inplace:
             # Update self with result's attributes

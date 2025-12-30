@@ -11,23 +11,20 @@ from ..base import _validate_structure
 
 
 def translate(
-    structure: Union[Crystal, Molecule], vector: List[float], inplace: bool = False
+    structure: Union[Crystal, Molecule], vector: List[float]
 ) -> Union[Crystal, Molecule]:
     """
     Translate structure by a vector.
 
-    This function provides a functional interface to translation. For molecules,
-    you can also use the in-place method: molecule.translate(vector).
+    Always returns a new structure. For in-place modification, use the
+    structure's translate method directly.
 
     Args:
         structure: Crystal or Molecule to translate
         vector: Translation vector [x, y, z] in Angstroms
-        inplace: If True, modify structure in-place and return same object.
-                If False, return a new structure (default: False)
 
     Returns:
-        Translated structure. If inplace=True, returns the same object.
-        If inplace=False, returns a new structure.
+        New translated structure.
 
     Raises:
         TypeError: If structure is not Crystal or Molecule
@@ -37,10 +34,8 @@ def translate(
         >>> from matsimpy.core import Molecule
         >>> from matsimpy.transformation import translate
         >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> # Functional (returns new)
+        >>> # Always returns new structure
         >>> mol2 = translate(mol, [1, 1, 1])
-        >>> # In-place
-        >>> translate(mol, [1, 1, 1], inplace=True)
     """
     _validate_structure(structure)
 
@@ -48,39 +43,37 @@ def translate(
     if vector.ndim != 1 or len(vector) != 3:
         raise ValueError("Translation vector must be 3D [x, y, z]")
 
-    if inplace:
-        # Use in-place method if available (for molecules)
-        if isinstance(structure, Molecule):
-            structure.translate(vector.tolist(), inplace=True)
-            return structure
-        else:
-            # For crystals, modify positions directly
-            structure.cart_positions += vector
-            structure.frac_positions = structure._convert_to_fractional()
-            # Invalidate caches
-            structure._neighbor_tree = None
-            structure._neighbor_tree_positions = None
-            if hasattr(structure, "_sites"):
-                structure._sites = structure._initialize_sites()
-            return structure
+    # Always create a new structure
+    new_structure = structure.copy()
+    
+    # Use structure's translate method if available (for molecules)
+    if isinstance(new_structure, Molecule):
+        return new_structure.translate(vector.tolist(), inplace=False)
     else:
-        # Create copy and translate
-        new_structure = structure.copy()
-        return translate(new_structure, vector, inplace=True)
+        # For crystals, modify positions directly
+        new_structure.cart_positions += vector
+        new_structure.frac_positions = new_structure._convert_to_fractional()
+        # Invalidate caches
+        new_structure._neighbor_tree = None
+        new_structure._neighbor_tree_positions = None
+        if hasattr(new_structure, "_sites"):
+            new_structure._sites = new_structure._initialize_sites()
+        return new_structure
 
 
 def translate_to_origin(
-    structure: Union[Crystal, Molecule], inplace: bool = False
+    structure: Union[Crystal, Molecule]
 ) -> Union[Crystal, Molecule]:
     """
     Translate structure so its center of mass is at the origin.
 
+    Always returns a new structure.
+
     Args:
         structure: Crystal or Molecule to translate
-        inplace: If True, modify structure in-place (default: False)
 
     Returns:
-        Translated structure with COM at origin
+        New translated structure with COM at origin
 
     Examples:
         >>> from matsimpy.transformation import translate_to_origin
@@ -96,7 +89,7 @@ def translate_to_origin(
         com = np.mean(structure.cart_positions, axis=0)
         translation_vector = (-com).tolist()
 
-    return translate(structure, translation_vector, inplace=inplace)
+    return translate(structure, translation_vector)
 
 
 __all__ = ["translate", "translate_to_origin"]

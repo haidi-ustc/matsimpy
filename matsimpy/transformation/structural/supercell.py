@@ -7,31 +7,26 @@ Create supercells from unit cells by repeating the unit cell.
 from typing import List, Union
 import numpy as np
 from ...core import Crystal, Lattice
-from ..base import _validate_structure
 
 
 def make_supercell(
     crystal: Crystal,
     scaling_matrix: Union[List[int], List[List[int]], np.ndarray],
-    inplace: bool = False,
 ) -> Crystal:
     """
     Create supercell from unit cell.
 
     This function replicates the unit cell according to the scaling matrix.
-    The scaling_matrix can be:
+    Always returns a new Crystal object. The scaling_matrix can be:
     - Simple: [a, b, c] - repeats a times in a, b times in b, c times in c
     - Matrix: [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]] - general transformation
 
     Args:
         crystal: Unit cell to expand
         scaling_matrix: Scaling matrix for supercell generation
-        inplace: If True, modify crystal in-place (default: False)
-                Note: Supercell creation always creates new atoms, so this
-                option mainly affects whether the original lattice is modified.
 
     Returns:
-        Supercell Crystal structure
+        New supercell Crystal structure
 
     Raises:
         TypeError: If crystal is not a Crystal object
@@ -153,32 +148,14 @@ def make_supercell(
                 f"scaling matrix or the algorithm."
             )
 
-    # Create new crystal
-    if inplace:
-        # Update crystal in-place (replace all data)
-        crystal.species = tuple(new_species)
-        crystal.positions = np.array(new_positions, dtype=np.float64)
-        crystal.frac_positions = crystal.positions
-        crystal.cart_positions = crystal._convert_to_cartesian()
-        crystal.lattice = new_lattice
-        if new_site_properties is not None:
-            crystal.site_properties = new_site_properties
-        crystal._neighbor_tree = None
-        crystal._neighbor_tree_positions = None
-        crystal._sites = crystal._initialize_sites()
-        crystal._formula_dirty = True
-        crystal._cached_composition = None
-        crystal._cached_formula = None
-        return crystal
-    else:
-        # Create new crystal
-        return Crystal(
-            new_species,
-            new_positions,
-            new_lattice,
-            site_properties=new_site_properties,
-            coords_are_cartesian=False,
-        )
+    # Always create and return a new crystal
+    return Crystal(
+        new_species,
+        new_positions,
+        new_lattice,
+        site_properties=new_site_properties,
+        coords_are_cartesian=False,
+    )
 
 
 __all__ = ["make_supercell"]

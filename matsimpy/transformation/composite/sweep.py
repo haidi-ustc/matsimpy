@@ -5,6 +5,7 @@ Provides functionality to generate multiple structures by varying transformation
 parameters systematically.
 """
 
+import inspect
 import itertools
 from typing import List, Callable, Union, Any, Dict, Iterator, Tuple
 from ...core import Crystal, Molecule
@@ -220,7 +221,8 @@ class ParameterSweep:
                 func = config["func"]
 
                 # Call function with parameters
-                structure = func(structure, **param_combo, inplace=False)
+                # Transformation functions always return new structures
+                structure = func(structure, **param_combo)
 
             # Yield structure and metadata
             yield structure, combo

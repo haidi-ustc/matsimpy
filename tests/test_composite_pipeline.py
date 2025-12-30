@@ -70,10 +70,10 @@ class TestTransformationPipeline(unittest.TestCase):
         pipeline.add_step(translate, vector=[1, 1, 1])
         
         original_id = id(self.molecule)
-        result = pipeline.apply(self.molecule, inplace=True)
+        result = pipeline.apply(self.molecule)
         
-        # First step can be inplace, but subsequent steps create new objects
-        # So result might be different object
+        # Pipeline always returns a new object
+        self.assertIsNot(result, self.molecule)
         self.assertIsInstance(result, Molecule)
     
     def test_apply_empty_pipeline(self):

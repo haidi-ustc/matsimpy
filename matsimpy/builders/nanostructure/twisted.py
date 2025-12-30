@@ -76,7 +76,7 @@ def build_twisted_bilayer(
         center_3d = np.array([0.0, 0.0, 0.0])
 
     # Rotate layer2 around z-axis
-    layer2 = rotate(layer2, twist_angle, [0, 0, 1], center=center_3d, inplace=False)
+    layer2 = rotate(layer2, twist_angle, [0, 0, 1], center=center_3d)
 
     # Ensure layer1 is at z=0 (or close to it) in fractional coordinates
     # For crystals, positions are fractional, so we need to work with cartesian
@@ -106,7 +106,7 @@ def build_twisted_bilayer(
 
         # Translate layer2
         translation = np.array([0.0, 0.0, layer_spacing])
-        layer2 = translate(layer2, translation, inplace=False)
+        layer2 = translate(layer2, translation)
 
         combined_species = list(layer1.species) + list(layer2.species)
         combined_positions = np.vstack([layer1.positions, layer2.positions])
@@ -295,7 +295,7 @@ def build_twisted_multilayer(
 
         # Rotate around z-axis
         new_layer = rotate(
-            new_layer, cumulative_angle, [0, 0, 1], center=center_3d, inplace=False
+            new_layer, cumulative_angle, [0, 0, 1], center=center_3d
         )
 
         # Translate vertically
@@ -309,7 +309,7 @@ def build_twisted_multilayer(
             spacing = layer_spacing
 
         translation = np.array([0.0, 0.0, i * spacing])
-        new_layer = translate(new_layer, translation, inplace=False)
+        new_layer = translate(new_layer, translation)
 
         # Combine layers
         combined_species = list(result.species) + list(new_layer.species)

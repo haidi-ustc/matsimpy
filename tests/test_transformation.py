@@ -30,15 +30,17 @@ class TestTranslation(unittest.TestCase):
         np.testing.assert_array_almost_equal(new_molecule.positions[0], original_pos + [1, 1, 1])
         self.assertIsNot(self.molecule, new_molecule)
     
-    def test_translate_inplace(self):
-        """Test in-place translation."""
+    def test_translate_always_returns_new(self):
+        """Test that translate always returns a new object."""
         original_pos = self.molecule.positions[0].copy()
-        result = translate(self.molecule, [1, 1, 1], inplace=True)
+        result = translate(self.molecule, [1, 1, 1])
         
-        # Should be same object
-        self.assertIs(self.molecule, result)
-        # Should be translated
-        np.testing.assert_array_almost_equal(self.molecule.positions[0], original_pos + [1, 1, 1])
+        # Should be different object
+        self.assertIsNot(self.molecule, result)
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.molecule.positions[0], original_pos)
+        # Result should be translated
+        np.testing.assert_array_almost_equal(result.positions[0], original_pos + [1, 1, 1])
     
     def test_translate_crystal(self):
         """Test translation of crystal."""
@@ -50,7 +52,7 @@ class TestTranslation(unittest.TestCase):
     def test_translate_to_origin(self):
         """Test translate to origin."""
         # Move molecule away from origin
-        self.molecule.translate([5, 5, 5], inplace=True)
+        self.molecule = self.molecule.translate([5, 5, 5], inplace=False)
         centered = translate_to_origin(self.molecule)
         
         com = centered.get_center_of_mass()
@@ -81,19 +83,22 @@ class TestRotation(unittest.TestCase):
         # O atom should have moved (from [1.2, 0, 0] to approximately [0, 1.2, 0])
         np.testing.assert_array_almost_equal(new_molecule.positions[1], [0, 1.2, 0], decimal=3)
     
-    def test_rotate_inplace(self):
-        """Test in-place rotation."""
+    def test_rotate_always_returns_new(self):
+        """Test that rotate always returns a new object."""
+        original_pos = self.molecule.positions[1].copy()
         # Rotate around origin (not COM)
-        result = rotate(self.molecule, angle=90, axis=[0, 0, 1], center=[0, 0, 0], inplace=True)
+        result = rotate(self.molecule, angle=90, axis=[0, 0, 1], center=[0, 0, 0])
         
-        self.assertIs(self.molecule, result)
-        # O atom should be rotated
-        np.testing.assert_array_almost_equal(self.molecule.positions[1], [0, 1.2, 0], decimal=3)
+        self.assertIsNot(self.molecule, result)
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.molecule.positions[1], original_pos)
+        # O atom should be rotated in result
+        np.testing.assert_array_almost_equal(result.positions[1], [0, 1.2, 0], decimal=3)
     
     def test_rotate_around_center(self):
         """Test rotation around custom center."""
         # Molecule at [1, 1, 1], rotate around origin
-        self.molecule.translate([1, 1, 1], inplace=True)
+        self.molecule = self.molecule.translate([1, 1, 1], inplace=False)
         rotated = rotate(self.molecule, angle=180, axis=[0, 0, 1], center=[0, 0, 0])
         
         # Should be rotated around origin
@@ -129,14 +134,17 @@ class TestSubstitution(unittest.TestCase):
         self.assertEqual(new_crystal.species[0], 'Ge')
         self.assertEqual(new_crystal.species[1], 'O')
     
-    def test_substitute_inplace(self):
-        """Test in-place substitution."""
+    def test_substitute_always_returns_new(self):
+        """Test that substitute always returns a new object."""
         original_species = list(self.crystal.species)
-        result = substitute(self.crystal, 0, 'Ge', inplace=True)
+        result = substitute(self.crystal, 0, 'Ge')
         
-        self.assertIs(self.crystal, result)
-        self.assertEqual(self.crystal.species[0], 'Ge')
-        self.assertEqual(self.crystal.species[1], original_species[1])
+        self.assertIsNot(self.crystal, result)
+        # Original should be unchanged
+        self.assertEqual(self.crystal.species[0], original_species[0])
+        # Result should be substituted
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[1], original_species[1])
 
 class TestSupercell(unittest.TestCase):
     """Tests for supercell generation."""
@@ -158,13 +166,17 @@ class TestSupercell(unittest.TestCase):
         self.assertAlmostEqual(supercell.lattice.a, expected_a, places=5)
         self.assertIsNot(self.unit_cell, supercell)
     
-    def test_make_supercell_inplace(self):
-        """Test in-place supercell creation."""
-        result = make_supercell(self.unit_cell, [2, 2, 2], inplace=True)
+    def test_make_supercell_always_returns_new(self):
+        """Test that transformation function always returns a new object."""
+        original_nsites = len(self.unit_cell)
+        result = make_supercell(self.unit_cell, [2, 2, 2])
         
-        self.assertIs(self.unit_cell, result)
+        # Transformation function always returns a new object
+        self.assertIsNot(self.unit_cell, result)
+        # Original should not be modified
+        self.assertEqual(len(self.unit_cell), original_nsites)
         # Diamond structure has 2 atoms in primitive cell, so 2x2x2 supercell = 2 * 8 = 16 atoms
-        self.assertEqual(len(self.unit_cell), 16)
+        self.assertEqual(len(result), 16)
     
     def test_make_supercell_invalid_matrix(self):
         """Test supercell with invalid matrix."""

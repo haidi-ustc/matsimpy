@@ -1942,14 +1942,28 @@ class Crystal(Structure):
         """
         from ..transformation.structural import make_supercell
 
+        # Transformation function always returns a new object
+        new_crystal = make_supercell(self, scaling_matrix)
+
         if inplace:
-            # The transformation function modifies self and returns self when inplace=True
-            result = make_supercell(self, scaling_matrix, inplace=True)
-            # Ensure we return self for method chaining, even if transformation returns something else
-            return self if result is self else result
+            # Copy data from new_crystal to self
+            self.species = new_crystal.species
+            self.positions = new_crystal.positions
+            self.frac_positions = new_crystal.frac_positions
+            self.cart_positions = new_crystal.cart_positions
+            self.lattice = new_crystal.lattice
+            self.site_properties = new_crystal.site_properties
+            # Invalidate caches
+            self._neighbor_tree = None
+            self._neighbor_tree_positions = None
+            self._sites = self._initialize_sites()
+            self._formula_dirty = True
+            self._cached_composition = None
+            self._cached_formula = None
+            return self
         else:
-            # Return new object when inplace=False
-            return make_supercell(self, scaling_matrix, inplace=False)
+            # Return the new object
+            return new_crystal
 
     def perturb(
         self,
@@ -2037,9 +2051,9 @@ class Crystal(Structure):
         if perturb_positions:
             from ..transformation.atomic import perturb_positions
 
-            # Use inplace=True since we're working on result
+            # perturb_positions always returns a new structure
             result = perturb_positions(
-                result, amplitude, indices=indices, seed=None, inplace=True
+                result, amplitude, indices=indices, seed=None
             )
 
         # Perturb lattice if requested
@@ -2049,8 +2063,8 @@ class Crystal(Structure):
             lattice_amplitude = (
                 amplitude_lattice if amplitude_lattice is not None else amplitude
             )
-            # Use inplace=True since we're working on result
-            result = perturb_lattice(result, lattice_amplitude, seed=None, inplace=True)
+            # perturb_lattice always returns a new structure
+            result = perturb_lattice(result, lattice_amplitude, seed=None)
 
         if inplace:
             # Update self with result's attributes

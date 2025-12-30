@@ -15,13 +15,12 @@ def rotate(
     angle: float,
     axis: List[float],
     center: Optional[List[float]] = None,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Rotate structure around an axis.
 
-    This function provides a functional interface to rotation. For molecules,
-    you can also use the in-place method: molecule.rotate(angle, axis).
+    Always returns a new structure. For in-place modification, use the
+    structure's rotate method directly.
 
     Args:
         structure: Crystal or Molecule to rotate
@@ -29,12 +28,9 @@ def rotate(
         axis: Rotation axis [x, y, z] (will be normalized)
         center: Rotation center in Cartesian coordinates.
                 If None, uses origin for crystals or COM for molecules (default: None)
-        inplace: If True, modify structure in-place and return same object.
-                If False, return a new structure (default: False)
 
     Returns:
-        Rotated structure. If inplace=True, returns the same object.
-        If inplace=False, returns a new structure.
+        New rotated structure.
 
     Raises:
         TypeError: If structure is not Crystal or Molecule
@@ -44,10 +40,8 @@ def rotate(
         >>> from matsimpy.core import Molecule
         >>> from matsimpy.transformation import rotate
         >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
-        >>> # Functional (returns new)
+        >>> # Always returns new structure
         >>> mol2 = rotate(mol, angle=90, axis=[0, 0, 1])
-        >>> # In-place
-        >>> rotate(mol, angle=90, axis=[0, 0, 1], inplace=True)
     """
     _validate_structure(structure)
 
@@ -69,37 +63,34 @@ def rotate(
             center = [0.0, 0.0, 0.0]
     center = np.array(center, dtype=np.float64)
 
-    if inplace:
-        # Use in-place method if available (for molecules)
-        if isinstance(structure, Molecule):
-            # Translate to origin, rotate, translate back
-            structure.translate((-center).tolist(), inplace=True)
-            structure.rotate(angle, axis.tolist(), inplace=True)
-            structure.translate(center.tolist(), inplace=True)
-            return structure
-        else:
-            # For crystals, rotate Cartesian positions
-            from scipy.spatial.transform import Rotation
-
-            rotation = Rotation.from_rotvec(np.radians(angle) * axis)
-
-            # Translate to rotation center, rotate, translate back
-            translated_positions = structure.cart_positions - center
-            rotated_positions = rotation.apply(translated_positions)
-            structure.cart_positions = rotated_positions + center
-
-            # Update fractional positions
-            structure.frac_positions = structure._convert_to_fractional()
-            # Invalidate caches
-            structure._neighbor_tree = None
-            structure._neighbor_tree_positions = None
-            if hasattr(structure, "_sites"):
-                structure._sites = structure._initialize_sites()
-            return structure
+    # Always create a new structure
+    new_structure = structure.copy()
+    
+    # Use structure's rotate method if available (for molecules)
+    if isinstance(new_structure, Molecule):
+        # Translate to origin, rotate, translate back
+        new_structure = new_structure.translate((-center).tolist(), inplace=False)
+        new_structure = new_structure.rotate(angle, axis.tolist(), inplace=False)
+        return new_structure.translate(center.tolist(), inplace=False)
     else:
-        # Create copy and rotate
-        new_structure = structure.copy()
-        return rotate(new_structure, angle, axis, center, inplace=True)
+        # For crystals, rotate Cartesian positions
+        from scipy.spatial.transform import Rotation
+
+        rotation = Rotation.from_rotvec(np.radians(angle) * axis)
+
+        # Translate to rotation center, rotate, translate back
+        translated_positions = new_structure.cart_positions - center
+        rotated_positions = rotation.apply(translated_positions)
+        new_structure.cart_positions = rotated_positions + center
+
+        # Update fractional positions
+        new_structure.frac_positions = new_structure._convert_to_fractional()
+        # Invalidate caches
+        new_structure._neighbor_tree = None
+        new_structure._neighbor_tree_positions = None
+        if hasattr(new_structure, "_sites"):
+            new_structure._sites = new_structure._initialize_sites()
+        return new_structure
 
 
 def rotate_around_axis(
@@ -107,24 +98,23 @@ def rotate_around_axis(
     angle: float,
     axis: List[float],
     point: Optional[List[float]] = None,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Rotate structure around an axis passing through a point.
 
     Alias for rotate() with center parameter for clarity.
+    Always returns a new structure.
 
     Args:
         structure: Crystal or Molecule to rotate
         angle: Rotation angle in degrees
         axis: Rotation axis [x, y, z]
         point: Point on the rotation axis (default: COM for molecules, origin for crystals)
-        inplace: If True, modify structure in-place (default: False)
 
     Returns:
-        Rotated structure
+        New rotated structure
     """
-    return rotate(structure, angle, axis, center=point, inplace=inplace)
+    return rotate(structure, angle, axis, center=point)
 
 
 __all__ = ["rotate", "rotate_around_axis"]

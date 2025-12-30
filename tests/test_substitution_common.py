@@ -150,7 +150,8 @@ class TestSubstitutionConsistency(unittest.TestCase):
         
         # Test with transformation module (inplace)
         mol2 = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        substitute(mol2, 0, 'N', inplace=True)
+        # Transformation functions always return new objects
+        mol2 = substitute(mol2, 0, 'N')
         
         # Results should be the same
         self.assertEqual(mol1.species, mol2.species)
@@ -166,7 +167,8 @@ class TestSubstitutionConsistency(unittest.TestCase):
         
         # Test with transformation module (inplace)
         mol2 = Molecule(['C', 'C', 'O'], [[0, 0, 0], [1, 0, 0], [2, 0, 0]])
-        substitute_all(mol2, 'C', 'N', inplace=True)
+        # Transformation functions always return new objects
+        mol2 = substitute_all(mol2, 'C', 'N')
         
         # Results should be the same
         self.assertEqual(mol1.species, mol2.species)

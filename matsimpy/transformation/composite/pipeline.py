@@ -83,15 +83,16 @@ class TransformationPipeline:
         return self
 
     def apply(
-        self, structure: Union[Crystal, Molecule], inplace: bool = False
+        self, structure: Union[Crystal, Molecule]
     ) -> Union[Crystal, Molecule]:
         """
         Apply pipeline to a single structure.
 
+        Always returns a new structure. For in-place modification, use the
+        structure's methods directly.
+
         Args:
             structure: Crystal or Molecule to transform
-            inplace: If True, apply first transformation in-place (default: False)
-                    Note: Subsequent transformations always create new objects
 
         Returns:
             Transformed structure
@@ -103,19 +104,15 @@ class TransformationPipeline:
         _validate_structure(structure)
 
         if not self.steps:
-            # No steps, return copy or original
-            if inplace:
-                return structure
+            # No steps, return copy
             return structure.copy()
 
-        # Apply first step (may be inplace)
-        result = self.steps[0]["func"](
-            structure, **self.steps[0]["kwargs"], inplace=inplace
-        )
-
-        # Apply remaining steps (always create new objects)
-        for step in self.steps[1:]:
-            result = step["func"](result, **step["kwargs"], inplace=False)
+        # Apply all steps, always creating new objects
+        result = structure.copy()
+        for step in self.steps:
+            step_func = step["func"]
+            step_kwargs = step["kwargs"].copy()
+            result = step_func(result, **step_kwargs)
 
         return result
 
@@ -153,9 +150,8 @@ class TransformationPipeline:
                 # Use 'spawn' context to avoid fork() warnings in Python 3.12+
                 # when running in multi-threaded environments
                 ctx = multiprocessing.get_context("spawn")
-                apply_func = partial(self.apply, inplace=False)
                 with ctx.Pool(n_workers) as pool:
-                    results = pool.map(apply_func, structures)
+                    results = pool.map(self.apply, structures)
                 return results
             except Exception as e:
                 # Fallback to sequential if parallel fails
@@ -167,7 +163,7 @@ class TransformationPipeline:
                 )
 
         # Sequential processing
-        return [self.apply(s, inplace=False) for s in structures]
+        return [self.apply(s) for s in structures]
 
     def __len__(self) -> int:
         """Return number of steps in pipeline."""

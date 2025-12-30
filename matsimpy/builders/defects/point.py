@@ -165,8 +165,20 @@ def create_substitution(
             f"number of species ({len(new_species)})"
         )
 
-    # Use transformation function for substitution (handles copying and validation)
-    return substitute(structure, indices, new_species, inplace=inplace)
+    # Use transformation function for substitution (always returns new structure)
+    result = substitute(structure, indices, new_species)
+    if inplace:
+        # Copy result back to original structure
+        structure.species = result.species
+        structure.positions = result.positions
+        if isinstance(structure, Crystal):
+            structure.frac_positions = result.frac_positions
+            structure.cart_positions = result.cart_positions
+            structure._sites = result._sites
+        structure._formula_dirty = True
+        structure._cached_composition = None
+        return structure
+    return result
 
 
 def create_frenkel(
@@ -315,8 +327,20 @@ def create_antisite(
     if index1 == index2:
         raise ValueError("Cannot swap atom with itself")
 
-    # Use transformation function for swapping atoms
-    return swap_atoms(structure, index1, index2, inplace=inplace)
+    # Use transformation function for swapping atoms (always returns new structure)
+    result = swap_atoms(structure, index1, index2)
+    if inplace:
+        # Copy result back to original structure
+        structure.species = result.species
+        structure.positions = result.positions
+        if isinstance(structure, Crystal):
+            structure.frac_positions = result.frac_positions
+            structure.cart_positions = result.cart_positions
+            structure._sites = result._sites
+        structure._formula_dirty = True
+        structure._cached_composition = None
+        return structure
+    return result
 
 
 __all__ = [

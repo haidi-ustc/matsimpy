@@ -29,14 +29,14 @@ organized into categories:
 - fragment_molecule, align_molecules, merge_molecules (Molecule)
 
 Usage:
-    # Functional style (returns new object)
+    # Functional style (always returns new object)
     >>> from matsimpy.transformation import translate, rotate, apply_strain
     >>> new_molecule = translate(molecule, [1, 1, 1])
     >>> rotated = rotate(new_molecule, 90, [0, 0, 1])
     >>> strained = apply_strain(crystal, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
 
-    # In-place (modifies existing)
-    >>> translate(molecule, [1, 1, 1], inplace=True)
+    # For in-place modification, use structure methods directly
+    >>> molecule.translate([1, 1, 1], inplace=True)  # Molecule class method
 
     # Lattice operations
     >>> from matsimpy.transformation.lattice import scale_lattice

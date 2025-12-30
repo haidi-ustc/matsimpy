@@ -238,13 +238,13 @@ def from_prototype(
             new_species_list.append(species[element_idx])
         # Substitute all at once for efficiency
         crystal = substitute(
-            crystal, indices_to_substitute, new_species_list, inplace=False
+            crystal, indices_to_substitute, new_species_list
         )
     else:
         # Use dict-based substitution for binary templates (X->species[0], Y->species[1])
         substitution_map = {unique_template[i]: species[i] for i in range(len(species))}
         crystal = substitute(
-            crystal, list(range(len(crystal))), substitution_map, inplace=False
+            crystal, list(range(len(crystal))), substitution_map
         )
 
     # Formula and composition are now properties that automatically update

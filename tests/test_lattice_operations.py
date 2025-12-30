@@ -52,14 +52,17 @@ class TestLatticeStrain(unittest.TestCase):
         
         self.assertIsNotNone(strained)
     
-    def test_apply_strain_inplace(self):
-        """Test in-place strain."""
+    def test_apply_strain_always_returns_new(self):
+        """Test that apply_strain always returns a new object."""
         original_a = self.crystal.lattice.a
         strain = [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]]
-        result = apply_strain(self.crystal, strain, inplace=True)
+        result = apply_strain(self.crystal, strain)
         
-        self.assertIs(result, self.crystal)
-        self.assertGreater(self.crystal.lattice.a, original_a)
+        self.assertIsNot(result, self.crystal)
+        # Original should be unchanged
+        self.assertEqual(self.crystal.lattice.a, original_a)
+        # Result should be strained
+        self.assertGreater(result.lattice.a, original_a)
     
     def test_apply_deformation(self):
         """Test applying deformation."""
@@ -110,13 +113,16 @@ class TestLatticeScaling(unittest.TestCase):
         self.assertAlmostEqual(scaled.lattice.b, self.crystal.lattice.b * 1.0, places=5)
         self.assertAlmostEqual(scaled.lattice.c, self.crystal.lattice.c * 0.9, places=5)
     
-    def test_scale_lattice_inplace(self):
-        """Test in-place scaling."""
+    def test_scale_lattice_always_returns_new(self):
+        """Test that scale_lattice always returns a new object."""
         original_a = self.crystal.lattice.a
-        result = scale_lattice(self.crystal, 1.1, inplace=True)
+        result = scale_lattice(self.crystal, 1.1)
         
-        self.assertIs(result, self.crystal)
-        self.assertAlmostEqual(self.crystal.lattice.a, original_a * 1.1, places=5)
+        self.assertIsNot(result, self.crystal)
+        # Original should be unchanged
+        self.assertEqual(self.crystal.lattice.a, original_a)
+        # Result should be scaled
+        self.assertAlmostEqual(result.lattice.a, original_a * 1.1, places=5)
     
     def test_set_volume(self):
         """Test setting specific volume."""
@@ -247,35 +253,39 @@ class TestLatticeInplace(unittest.TestCase):
         from matsimpy.builders.bulk import from_prototype
         self.crystal = from_prototype('diamond', 'Si', 5.43)
     
-    def test_apply_strain_inplace(self):
-        """Test in-place strain."""
+    def test_apply_strain_always_returns_new(self):
+        """Test that apply_strain always returns a new object."""
         original_id = id(self.crystal)
         strain = [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]]
-        result = apply_strain(self.crystal, strain, inplace=True)
+        result = apply_strain(self.crystal, strain)
         
-        self.assertEqual(id(result), original_id)
+        self.assertNotEqual(id(result), original_id)
+        self.assertIsNot(result, self.crystal)
     
-    def test_scale_lattice_inplace(self):
-        """Test in-place scaling."""
+    def test_scale_lattice_always_returns_new(self):
+        """Test that scale_lattice always returns a new object."""
         original_id = id(self.crystal)
-        result = scale_lattice(self.crystal, 1.1, inplace=True)
+        result = scale_lattice(self.crystal, 1.1)
         
-        self.assertEqual(id(result), original_id)
+        self.assertNotEqual(id(result), original_id)
+        self.assertIsNot(result, self.crystal)
     
-    def test_set_volume_inplace(self):
-        """Test in-place volume setting."""
+    def test_set_volume_always_returns_new(self):
+        """Test that set_volume always returns a new object."""
         original_id = id(self.crystal)
-        result = set_volume(self.crystal, 200.0, inplace=True)
+        result = set_volume(self.crystal, 200.0)
         
-        self.assertEqual(id(result), original_id)
+        self.assertNotEqual(id(result), original_id)
+        self.assertIsNot(result, self.crystal)
     
-    def test_apply_deformation_inplace(self):
-        """Test in-place deformation."""
+    def test_apply_deformation_always_returns_new(self):
+        """Test that apply_deformation always returns a new object."""
         original_id = id(self.crystal)
         deformation = [[1.01, 0, 0], [0, 1, 0], [0, 0, 1]]
-        result = apply_deformation(self.crystal, deformation, inplace=True)
+        result = apply_deformation(self.crystal, deformation)
         
-        self.assertEqual(id(result), original_id)
+        self.assertNotEqual(id(result), original_id)
+        self.assertIsNot(result, self.crystal)
 
 if __name__ == '__main__':
     unittest.main()

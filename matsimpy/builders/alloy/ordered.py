@@ -39,7 +39,7 @@ def generate_ordered_alloy(
             raise ValueError(f"Site index {idx} out of range")
 
     # Use transformation function for substitution
-    return substitute(base_structure, indices, species_list, inplace=False)
+    return substitute(base_structure, indices, species_list)
 
 
 def generate_intermetallic(

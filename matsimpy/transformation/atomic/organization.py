@@ -13,17 +13,18 @@ def sort_atoms(
     structure: Union[Crystal, Molecule],
     key: Union[str, Callable] = "species",
     reverse: bool = False,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Sort atoms by various criteria.
+
+    Always returns a new structure. For in-place modification, use the
+    structure's methods directly.
 
     Args:
         structure: Crystal or Molecule structure
         key: Sort key - 'species', 'z' (atomic number), 'mass',
              'distance' (from origin), or custom function
         reverse: If True, reverse sort order
-        inplace: If True, modify structure in-place
 
     Returns:
         Structure with sorted atoms
@@ -39,8 +40,7 @@ def sort_atoms(
     """
     from ...core import Element
 
-    if not inplace:
-        structure = structure.copy()
+    structure = structure.copy()
 
     # Create list of (index, key_value) tuples
     n_atoms = len(structure.species)
@@ -93,15 +93,16 @@ def sort_atoms(
 def center_structure(
     structure: Union[Crystal, Molecule],
     center: Optional[List[float]] = None,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Center structure at a specific position.
 
+    Always returns a new structure. For in-place modification, use the
+    structure's methods directly.
+
     Args:
         structure: Crystal or Molecule structure
         center: Target center position (default: origin)
-        inplace: If True, modify structure in-place
 
     Returns:
         Centered structure
@@ -113,8 +114,7 @@ def center_structure(
         >>> # Center at specific point
         >>> centered = center_structure(molecule, center=[5, 5, 5])
     """
-    if not inplace:
-        structure = structure.copy()
+    structure = structure.copy()
 
     if center is None:
         center = np.array([0.0, 0.0, 0.0])
@@ -151,17 +151,18 @@ def perturb_positions(
     amplitude: float,
     indices: Optional[List[int]] = None,
     seed: Optional[int] = None,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Add random perturbations to atomic positions.
+
+    Always returns a new structure. For in-place modification, use the
+    structure's methods directly.
 
     Args:
         structure: Crystal or Molecule structure
         amplitude: Maximum perturbation amplitude (Angstroms)
         indices: Atom indices to perturb (default: all atoms)
         seed: Random seed for reproducibility
-        inplace: If True, modify structure in-place
 
     Returns:
         Structure with perturbed positions
@@ -173,8 +174,7 @@ def perturb_positions(
         >>> # Perturb specific atoms
         >>> perturbed = perturb_positions(structure, 0.1, indices=[0, 1, 2])
     """
-    if not inplace:
-        structure = structure.copy()
+    structure = structure.copy()
 
     if seed is not None:
         np.random.seed(seed)

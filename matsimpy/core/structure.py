@@ -826,10 +826,14 @@ class Structure(ABC, MSONable):
             >>> # Using dict mapping (maps old species to new species)
             >>> structure.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
-        # Delegate to transformation module for implementation
+        # Call transformation function and copy result back to self
         from ..transformation.chemical.substitution import substitute
 
-        substitute(self, indices, new_species, inplace=True)
+        result = substitute(self, indices, new_species)
+        # Copy result back to self
+        self.species = result.species
+        if hasattr(self, "_sites"):
+            self._sites = result._sites
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None
@@ -850,10 +854,14 @@ class Structure(ABC, MSONable):
         Examples:
             >>> structure.substitute_all('Si', 'Ge')  # Replace all Si with Ge
         """
-        # Delegate to transformation module for implementation
+        # Call transformation function and copy result back to self
         from ..transformation.chemical.substitution import substitute_all
 
-        substitute_all(self, old_species, new_species, inplace=True)
+        result = substitute_all(self, old_species, new_species)
+        # Copy result back to self
+        self.species = result.species
+        if hasattr(self, "_sites"):
+            self._sites = result._sites
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None

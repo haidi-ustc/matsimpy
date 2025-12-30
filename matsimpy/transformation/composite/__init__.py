@@ -17,15 +17,16 @@ from ..base import _validate_structure
 def chain(
     structure: Union[Crystal, Molecule],
     transformations: List[Callable],
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Apply multiple transformations in sequence.
 
+    Always returns a new structure. For in-place modification, use the
+    structure's methods directly.
+
     Args:
         structure: Crystal or Molecule to transform
         transformations: List of transformation functions to apply in order
-        inplace: If True, apply transformations in-place (default: False)
 
     Returns:
         Transformed structure
@@ -39,8 +40,7 @@ def chain(
     """
     _validate_structure(structure)
 
-    if not inplace:
-        structure = structure.copy()
+    structure = structure.copy()
 
     result = structure
     for transform in transformations:
@@ -52,17 +52,17 @@ def chain(
 def apply_transformations(
     structure: Union[Crystal, Molecule],
     *transformations: Callable,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Apply multiple transformations as separate arguments.
 
     More convenient syntax than chain() for a few transformations.
+    Always returns a new structure. For in-place modification, use the
+    structure's methods directly.
 
     Args:
         structure: Crystal or Molecule to transform
         *transformations: Transformation functions to apply in order
-        inplace: If True, apply transformations in-place (default: False)
 
     Returns:
         Transformed structure
@@ -75,7 +75,7 @@ def apply_transformations(
         ...     lambda s: rotate(s, 90, [0, 0, 1])
         ... )
     """
-    return chain(structure, list(transformations), inplace=inplace)
+    return chain(structure, list(transformations))
 
 
 # Import new pipeline class

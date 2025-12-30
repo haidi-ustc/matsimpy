@@ -15,25 +15,21 @@ def substitute(
     structure: Union[Crystal, Molecule],
     indices: Union[int, List[int], "AtomSelection"],
     new_species: Union[str, List[str], Dict[str, str]],
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Substitute atoms with new species.
 
-    This function provides a functional interface to atom substitution.
-    For direct manipulation, you can use structure methods, but this
-    allows for chaining and functional programming style.
+    Always returns a new structure. For in-place modification, use the
+    structure's substitute method directly.
 
     Args:
         structure: Crystal or Molecule to modify
         indices: Atom index, list of indices, or AtomSelection object to substitute
         new_species: New species symbol, list of symbols, or dict mapping old->new species.
                    If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'})
-        inplace: If True, modify structure in-place (default: False)
 
     Returns:
-        Structure with substituted atoms. If inplace=True, returns the same object.
-        If inplace=False, returns a new structure.
+        New structure with substituted atoms.
 
     Raises:
         TypeError: If structure is not Crystal or Molecule
@@ -114,8 +110,8 @@ def substitute(
                 f"Atom index {idx} is out of range [0, {len(structure)-1}]"
             )
 
-    if not inplace:
-        structure = structure.copy()
+    # Always create a new structure
+    structure = structure.copy()
 
     # Perform substitutions
     species_list = list(structure.species)
@@ -140,19 +136,19 @@ def substitute_all(
     structure: Union[Crystal, Molecule],
     old_species: str,
     new_species: str,
-    inplace: bool = False,
 ) -> Union[Crystal, Molecule]:
     """
     Substitute all atoms of a given species with a new species.
+
+    Always returns a new structure.
 
     Args:
         structure: Crystal or Molecule to modify
         old_species: Species to replace
         new_species: Replacement species
-        inplace: If True, modify structure in-place (default: False)
 
     Returns:
-        Structure with all matching atoms substituted
+        New structure with all matching atoms substituted
 
     Examples:
         >>> from matsimpy.transformation import substitute_all
@@ -165,11 +161,11 @@ def substitute_all(
     indices = [i for i, spec in enumerate(structure.species) if spec == old_species]
 
     if not indices:
-        # No substitution needed
-        return structure if inplace else structure.copy()
+        # No substitution needed, return copy
+        return structure.copy()
 
     # Substitute all at once
-    return substitute(structure, indices, [new_species] * len(indices), inplace=inplace)
+    return substitute(structure, indices, [new_species] * len(indices))
 
 
 __all__ = ["substitute", "substitute_all"]

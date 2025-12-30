@@ -200,7 +200,7 @@ def build_nanotube(
 
         from ...transformation.geometric import translate
 
-        nanotube = translate(nanotube, shift, inplace=False)
+        nanotube = translate(nanotube, shift)
 
     return nanotube
 

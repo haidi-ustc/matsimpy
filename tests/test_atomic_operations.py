@@ -45,11 +45,17 @@ class TestAtomicManipulation(unittest.TestCase):
         np.testing.assert_array_almost_equal(moved.positions[0], [1, 0, 0])
         self.assertIsNot(moved, self.molecule)
     
-    def test_move_atoms_inplace(self):
-        """Test in-place atom movement."""
-        result = move_atoms(self.crystal, 0, [0.1, 0, 0], inplace=True)
+    def test_move_atoms_always_returns_new(self):
+        """Test that move_atoms always returns a new object."""
+        original_pos = self.crystal.positions[0].copy()
+        result = move_atoms(self.crystal, 0, [0.1, 0, 0])
         
-        self.assertIs(result, self.crystal)
+        # Should be different object
+        self.assertIsNot(result, self.crystal)
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.crystal.positions[0], original_pos)
+        # Result should be modified
+        self.assertNotEqual(result.cart_positions[0, 0], self.crystal.cart_positions[0, 0])
     
     def test_swap_atoms_crystal(self):
         """Test swapping atoms in crystal."""
@@ -205,50 +211,71 @@ class TestAtomicOrganization(unittest.TestCase):
         
         np.testing.assert_array_almost_equal(p1.positions, p2.positions)
 
-class TestAtomicInplace(unittest.TestCase):
-    """Tests for in-place atomic operations."""
+class TestAtomicAlwaysReturnsNew(unittest.TestCase):
+    """Tests that atomic transformation functions always return new objects."""
     
     def setUp(self):
         """Set up test structure."""
         self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
     
-    def test_move_atoms_inplace(self):
-        """Test in-place move."""
+    def test_move_atoms_always_new(self):
+        """Test that move_atoms always returns a new object."""
         original_id = id(self.crystal)
-        result = move_atoms(self.crystal, 0, [0.1, 0, 0], inplace=True)
+        original_pos = self.crystal.positions[0].copy()
+        result = move_atoms(self.crystal, 0, [0.1, 0, 0])
         
-        self.assertEqual(id(result), original_id)
+        # Should be different object
+        self.assertNotEqual(id(result), original_id)
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.crystal.positions[0], original_pos)
     
-    def test_swap_atoms_inplace(self):
-        """Test in-place swap."""
+    def test_swap_atoms_always_new(self):
+        """Test that swap_atoms always returns a new object."""
         original_species = list(self.crystal.species)
-        result = swap_atoms(self.crystal, 0, 1, inplace=True)
+        result = swap_atoms(self.crystal, 0, 1)
         
-        self.assertIs(result, self.crystal)
-        self.assertNotEqual(list(self.crystal.species), original_species)
+        # Should be different object
+        self.assertIsNot(result, self.crystal)
+        # Original should be unchanged
+        self.assertEqual(list(self.crystal.species), original_species)
+        # Result should be swapped
+        self.assertNotEqual(list(result.species), original_species)
     
-    def test_sort_atoms_inplace(self):
-        """Test in-place sort."""
+    def test_sort_atoms_always_new(self):
+        """Test that sort_atoms always returns a new object."""
         crystal = Crystal(['O', 'Si'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
-        result = sort_atoms(crystal, key='species', inplace=True)
+        original_species = list(crystal.species)
+        result = sort_atoms(crystal, key='species')
         
-        self.assertIs(result, crystal)
-        self.assertEqual(crystal.species[0], 'O')
+        # Should be different object
+        self.assertIsNot(result, crystal)
+        # Original should be unchanged
+        self.assertEqual(list(crystal.species), original_species)
+        # Result should be sorted
+        self.assertEqual(result.species[0], 'O')
     
-    def test_center_structure_inplace(self):
-        """Test in-place center."""
+    def test_center_structure_always_new(self):
+        """Test that center_structure always returns a new object."""
         mol = Molecule(['C', 'O'], [[5, 5, 5], [6.2, 5, 5]])
-        result = center_structure(mol, inplace=True)
+        original_pos = mol.positions[0].copy()
+        result = center_structure(mol)
         
-        self.assertIs(result, mol)
+        # Should be different object
+        self.assertIsNot(result, mol)
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(mol.positions[0], original_pos)
     
-    def test_perturb_positions_inplace(self):
-        """Test in-place perturb."""
+    def test_perturb_positions_always_new(self):
+        """Test that perturb_positions always returns a new object."""
         original_pos = self.crystal.positions.copy()
-        result = perturb_positions(self.crystal, amplitude=0.1, seed=42, inplace=True)
+        result = perturb_positions(self.crystal, amplitude=0.1, seed=42)
         
-        self.assertIs(result, self.crystal)
-        self.assertFalse(np.allclose(self.crystal.positions, original_pos))
+        # Should be different object
+        self.assertIsNot(result, self.crystal)
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(self.crystal.positions, original_pos)
+        # Result should be perturbed
+        self.assertFalse(np.allclose(result.positions, original_pos))
 
 if __name__ == '__main__':
     unittest.main()

@@ -10,18 +10,18 @@ from ...core import Crystal, Lattice
 def apply_strain(
     crystal: Crystal,
     strain_matrix: Union[List[List[float]], np.ndarray],
-    inplace: bool = False,
 ) -> Crystal:
     """
     Apply strain to crystal structure.
 
+    Always returns a new crystal structure.
+
     Args:
         crystal: Crystal structure to strain
         strain_matrix: 3x3 strain tensor
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Strained crystal structure
+        New strained crystal structure
 
     Examples:
         >>> from matsimpy import Crystal, Lattice
@@ -32,8 +32,8 @@ def apply_strain(
         >>> strain = [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]]
         >>> strained = apply_strain(crystal, strain)
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     strain_matrix = np.array(strain_matrix, dtype=np.float64)
 
@@ -55,19 +55,19 @@ def apply_deformation(
     crystal: Crystal,
     deformation_matrix: Union[List[List[float]], np.ndarray],
     deform_positions: bool = True,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Apply general deformation to crystal structure.
+
+    Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure to deform
         deformation_matrix: 3x3 deformation gradient tensor
         deform_positions: If True, also deform atomic positions
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Deformed crystal structure
+        New deformed crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import apply_deformation
@@ -76,8 +76,8 @@ def apply_deformation(
         >>> shear = [[1, 0.1, 0], [0, 1, 0], [0, 0, 1]]
         >>> deformed = apply_deformation(crystal, shear)
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     deformation_matrix = np.array(deformation_matrix, dtype=np.float64)
 
@@ -109,19 +109,19 @@ def perturb_lattice(
     crystal: Crystal,
     amplitude: float,
     seed: Optional[int] = None,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Add random perturbations to lattice vectors.
+
+    Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure to perturb
         amplitude: Maximum perturbation amplitude (Angstroms) for lattice vectors
         seed: Random seed for reproducibility
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Crystal with perturbed lattice vectors
+        New crystal with perturbed lattice vectors
 
     Examples:
         >>> from matsimpy.transformation.lattice import perturb_lattice
@@ -132,8 +132,8 @@ def perturb_lattice(
         >>> # With random seed for reproducibility
         >>> perturbed = perturb_lattice(crystal, 0.05, seed=42)
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     if seed is not None:
         np.random.seed(seed)

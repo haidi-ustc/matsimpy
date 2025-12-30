@@ -10,18 +10,18 @@ from ...core import Crystal, Lattice
 def scale_lattice(
     crystal: Crystal,
     scale_factor: Union[float, List[float], np.ndarray],
-    inplace: bool = False,
 ) -> Crystal:
     """
     Scale lattice by a factor.
 
+    Always returns a new crystal structure.
+
     Args:
         crystal: Crystal structure to scale
         scale_factor: Uniform scale factor or [a, b, c] for anisotropic scaling
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Scaled crystal structure
+        New scaled crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import scale_lattice
@@ -30,8 +30,8 @@ def scale_lattice(
         >>> # Anisotropic scaling
         >>> scaled = scale_lattice(crystal, [1.1, 1.0, 0.95])
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     if isinstance(scale_factor, (int, float)):
         scale_matrix = np.eye(3) * scale_factor
@@ -51,18 +51,19 @@ def scale_lattice(
 
 
 def set_volume(
-    crystal: Crystal, target_volume: float, inplace: bool = False
+    crystal: Crystal, target_volume: float
 ) -> Crystal:
     """
     Scale crystal to target volume.
 
+    Always returns a new crystal structure.
+
     Args:
         crystal: Crystal structure
         target_volume: Target volume in Angstrom^3
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Scaled crystal structure
+        New scaled crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import set_volume
@@ -72,7 +73,7 @@ def set_volume(
     current_volume = crystal.volume
     scale_factor = (target_volume / current_volume) ** (1.0 / 3.0)
 
-    return scale_lattice(crystal, scale_factor, inplace=inplace)
+    return scale_lattice(crystal, scale_factor)
 
 
 def optimize_lattice(
@@ -80,20 +81,20 @@ def optimize_lattice(
     target_density: Optional[float] = None,
     target_volume: Optional[float] = None,
     preserve_angles: bool = True,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Optimize lattice parameters to match target density or volume.
+
+    Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure
         target_density: Target density in g/cm^3
         target_volume: Target volume in Angstrom^3
         preserve_angles: If True, preserve lattice angles
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Optimized crystal structure
+        New optimized crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import optimize_lattice
@@ -113,7 +114,7 @@ def optimize_lattice(
         mass_g = mass * amu_to_g
         target_volume = mass_g / target_density / angstrom3_to_cm3
 
-    return set_volume(crystal, target_volume, inplace=inplace)
+    return set_volume(crystal, target_volume)
 
 
 __all__ = ["scale_lattice", "set_volume", "optimize_lattice"]

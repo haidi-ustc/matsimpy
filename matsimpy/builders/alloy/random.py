@@ -89,7 +89,7 @@ def generate_random_alloy(
 
     # Use transformation function for substitution
     return substitute(
-        base_structure, sites_to_substitute, substitution_list, inplace=False
+        base_structure, sites_to_substitute, substitution_list
     )
 
 

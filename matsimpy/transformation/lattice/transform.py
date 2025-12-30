@@ -11,19 +11,19 @@ def rotate_lattice(
     crystal: Crystal,
     rotation_matrix: Union[List[List[float]], np.ndarray],
     rotate_atoms: bool = True,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Rotate lattice (and optionally atoms).
+
+    Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure
         rotation_matrix: 3x3 rotation matrix
         rotate_atoms: If True, also rotate atomic positions
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Rotated crystal structure
+        New rotated crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import rotate_lattice
@@ -35,8 +35,8 @@ def rotate_lattice(
         ...      [0, 0, 1]]
         >>> rotated = rotate_lattice(crystal, R)
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     rotation_matrix = np.array(rotation_matrix, dtype=np.float64)
 
@@ -68,19 +68,19 @@ def transform_lattice(
     crystal: Crystal,
     transformation_matrix: Union[List[List[float]], np.ndarray],
     transform_positions: bool = False,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Apply general linear transformation to lattice.
+
+    Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure
         transformation_matrix: 3x3 transformation matrix
         transform_positions: If True, transform atomic positions by same matrix
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Transformed crystal structure
+        New transformed crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import transform_lattice
@@ -91,20 +91,21 @@ def transform_lattice(
     from .strain import apply_deformation
 
     return apply_deformation(
-        crystal, transformation_matrix, transform_positions, inplace
+        crystal, transformation_matrix, transform_positions
     )
 
 
-def get_niggli_reduced(crystal: Crystal, inplace: bool = False) -> Crystal:
+def get_niggli_reduced(crystal: Crystal) -> Crystal:
     """
     Get Niggli-reduced cell.
 
+    Always returns a new crystal structure.
+
     Args:
         crystal: Crystal structure
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Niggli-reduced crystal structure
+        New Niggli-reduced crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import get_niggli_reduced
@@ -113,34 +114,35 @@ def get_niggli_reduced(crystal: Crystal, inplace: bool = False) -> Crystal:
     Note:
         Requires spglib for full implementation.
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     # Placeholder - full implementation would use spglib
     return crystal
 
 
 def standardize_cell(
-    crystal: Crystal, to_primitive: bool = False, inplace: bool = False
+    crystal: Crystal, to_primitive: bool = False
 ) -> Crystal:
     """
     Standardize crystal cell using spglib conventions.
 
+    Always returns a new crystal structure.
+
     Args:
         crystal: Crystal structure
         to_primitive: If True, convert to primitive cell
-        inplace: If True, modify crystal in-place
 
     Returns:
-        Standardized crystal structure
+        New standardized crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import standardize_cell
         >>> standardized = standardize_cell(crystal)
         >>> primitive = standardize_cell(crystal, to_primitive=True)
     """
-    if not inplace:
-        crystal = crystal.copy()
+    # Always create a new crystal
+    crystal = crystal.copy()
 
     # Placeholder - full implementation would use spglib
     try:
