@@ -847,7 +847,7 @@ class Lattice(MSONable):
         reciprocal_vectors = 2 * np.pi * self.inv_matrix.T
         return Lattice(reciprocal_vectors)
 
-    def get_cartesian_coords(self, fractional_coords: np.ndarray) -> np.ndarray:
+    def cartesian_coords(self, fractional_coords: np.ndarray) -> np.ndarray:
         """
         Convert fractional coordinates to Cartesian coordinates.
 
@@ -862,19 +862,19 @@ class Lattice(MSONable):
         Example:
             >>> lat = Lattice.cubic(10.0)
             >>> frac = np.array([0.5, 0.5, 0.5])
-            >>> cart = lat.get_cartesian_coords(frac)
+            >>> cart = lat.cartesian_coords(frac)
             >>> cart
             array([5., 5., 5.])
             >>>
             >>> # Multiple coordinates
             >>> fracs = np.array([[0, 0, 0], [0.5, 0.5, 0.5]])
-            >>> carts = lat.get_cartesian_coords(fracs)
+            >>> carts = lat.cartesian_coords(fracs)
             >>> carts.shape
             (2, 3)
         """
         return np.dot(fractional_coords, self.matrix)
 
-    def get_fractional_coords(self, cartesian_coords: np.ndarray) -> np.ndarray:
+    def fractional_coords(self, cartesian_coords: np.ndarray) -> np.ndarray:
         """
         Convert Cartesian coordinates to fractional coordinates.
 
@@ -889,13 +889,13 @@ class Lattice(MSONable):
         Example:
             >>> lat = Lattice.cubic(10.0)
             >>> cart = np.array([5.0, 5.0, 5.0])
-            >>> frac = lat.get_fractional_coords(cart)
+            >>> frac = lat.fractional_coords(cart)
             >>> frac
             array([0.5, 0.5, 0.5])
             >>>
             >>> # Multiple coordinates
             >>> carts = np.array([[0, 0, 0], [5, 5, 5]])
-            >>> fracs = lat.get_fractional_coords(carts)
+            >>> fracs = lat.fractional_coords(carts)
             >>> fracs.shape
             (2, 3)
         """
