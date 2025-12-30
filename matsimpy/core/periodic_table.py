@@ -36,7 +36,7 @@ Examples:
 
 from pathlib import Path
 from monty.serialization import loadfn, dumpfn
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
 
 fpdt = str(Path(__file__).absolute().parent / "periodic_table.json")
 _pdt = loadfn(fpdt)
@@ -258,6 +258,34 @@ class Element:
 
     def __repr__(self):
         return f"Element : {self.symbol}"
+
+    def __lt__(self, other: "Element") -> bool:
+        """
+        Compare elements by atomic number for sorting.
+
+        This method enables sorting of Element objects by atomic number.
+        Elements can be sorted using built-in sorted() or list.sort().
+
+        Args:
+            other: Another Element instance to compare with.
+
+        Returns:
+            bool: True if this element's atomic number is less than other's.
+
+        Raises:
+            TypeError: If other is not an Element instance.
+
+        Examples:
+            >>> h = Element('H')
+            >>> fe = Element('Fe')
+            >>> o = Element('O')
+            >>> h < o < fe  # True (1 < 8 < 26)
+            >>> sorted([fe, h, o])  # [H, O, Fe] (sorted by atomic number)
+            >>> [h, o, fe].sort()  # In-place sort
+        """
+        if not isinstance(other, Element):
+            return NotImplemented
+        return self._atomic_no < other._atomic_no
 
     @classmethod
     def from_Z(cls, Z: int) -> "Element":
@@ -1183,6 +1211,141 @@ class Element:
 
         # p-block: Groups 13-18 (B, C, N, O, F, Ne, Al, Si, P, S, Cl, Ar, etc.)
         return "p"
+
+    # ========================================================================
+    # Class Methods for Element Selection
+    # ========================================================================
+
+    @classmethod
+    def get_elements_by_period(
+        cls, period: int, exclude: Optional[List[Union[str, "Element"]]] = None
+    ) -> List["Element"]:
+        """
+        Get all elements in a specific period of the periodic table.
+
+        Args:
+            period: Period number (1-7).
+            exclude: Optional list of element symbols or Element instances to exclude
+                    from the results. Can be a mix of strings and Element objects.
+
+        Returns:
+            list[Element]: List of Element instances in the specified period,
+                          sorted by atomic number. Excludes specified elements if provided.
+
+        Raises:
+            ValueError: If period is not in valid range [1, 7].
+
+        Examples:
+            >>> # Get all elements in period 1
+            >>> period1 = Element.get_elements_by_period(1)
+            >>> [e.symbol for e in period1]
+            ['H', 'He']
+            >>>
+            >>> # Get period 2 elements excluding carbon
+            >>> period2_no_c = Element.get_elements_by_period(2, exclude=['C'])
+            >>> [e.symbol for e in period2_no_c]
+            ['Li', 'Be', 'B', 'N', 'O', 'F', 'Ne']
+            >>>
+            >>> # Exclude using Element instances
+            >>> o = Element('O')
+            >>> period2_no_o = Element.get_elements_by_period(2, exclude=[o])
+            >>> 'O' not in [e.symbol for e in period2_no_o]
+            True
+        """
+        if not (1 <= period <= 7):
+            raise ValueError(f"Period must be between 1 and 7, got {period}")
+
+        # Convert exclude list to set of symbols for fast lookup
+        exclude_symbols = set()
+        if exclude:
+            for item in exclude:
+                if isinstance(item, Element):
+                    exclude_symbols.add(item.symbol)
+                elif isinstance(item, str):
+                    exclude_symbols.add(item.capitalize())
+                else:
+                    raise TypeError(
+                        f"exclude items must be Element instances or strings, "
+                        f"got {type(item)}"
+                    )
+
+        # Get all elements in the period
+        elements = []
+        for symbol in ELEMENTS:
+            element = cls.get_element(symbol)
+            if element.period == period and element.symbol not in exclude_symbols:
+                elements.append(element)
+
+        # Sort by atomic number
+        elements.sort()
+        return elements
+
+    @classmethod
+    def get_elements_by_group(
+        cls, group: int, exclude: Optional[List[Union[str, "Element"]]] = None
+    ) -> List["Element"]:
+        """
+        Get all elements in a specific group of the periodic table.
+
+        Args:
+            group: Group number (1-18). Note that lanthanides and actinides
+                  (f-block elements) have group=None and won't be included.
+            exclude: Optional list of element symbols or Element instances to exclude
+                    from the results. Can be a mix of strings and Element objects.
+
+        Returns:
+            list[Element]: List of Element instances in the specified group,
+                          sorted by atomic number. Excludes specified elements if provided.
+                          Returns empty list if group is None for all elements
+                          (e.g., lanthanides/actinides).
+
+        Raises:
+            ValueError: If group is not in valid range [1, 18].
+
+        Examples:
+            >>> # Get all elements in group 1 (alkali metals + H)
+            >>> group1 = Element.get_elements_by_group(1)
+            >>> [e.symbol for e in group1]
+            ['H', 'Li', 'Na', 'K', 'Rb', 'Cs', 'Fr']
+            >>>
+            >>> # Get group 18 (noble gases) excluding helium
+            >>> group18_no_he = Element.get_elements_by_group(18, exclude=['He'])
+            >>> [e.symbol for e in group18_no_he]
+            ['Ne', 'Ar', 'Kr', 'Xe', 'Rn', 'Og']
+            >>>
+            >>> # Exclude using Element instances
+            >>> na = Element('Na')
+            >>> group1_no_na = Element.get_elements_by_group(1, exclude=[na])
+            >>> 'Na' not in [e.symbol for e in group1_no_na]
+            True
+        """
+        if not (1 <= group <= 18):
+            raise ValueError(f"Group must be between 1 and 18, got {group}")
+
+        # Convert exclude list to set of symbols for fast lookup
+        exclude_symbols = set()
+        if exclude:
+            for item in exclude:
+                if isinstance(item, Element):
+                    exclude_symbols.add(item.symbol)
+                elif isinstance(item, str):
+                    exclude_symbols.add(item.capitalize())
+                else:
+                    raise TypeError(
+                        f"exclude items must be Element instances or strings, "
+                        f"got {type(item)}"
+                    )
+
+        # Get all elements in the group
+        elements = []
+        for symbol in ELEMENTS:
+            element = cls.get_element(symbol)
+            if element.group == group and element.symbol not in exclude_symbols:
+                elements.append(element)
+
+        # Sort by atomic number
+        elements.sort()
+        return elements
 
     # ========================================================================
     # Element Classification Properties
