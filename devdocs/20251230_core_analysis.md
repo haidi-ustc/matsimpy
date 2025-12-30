@@ -1,6 +1,6 @@
 # MatSimPy Core Module - Detailed Analysis
 
-**Date:** 2024-12-30  
+**Date:** 2025-12-30  
 **Module:** `matsimpy/core/`  
 **Status:** ✅ MATURE (95% Complete)  
 
@@ -601,6 +601,6 @@ Areas for enhancement:
 
 ---
 
-*Document generated: 2024-12-30*  
+*Document generated: 2025-12-30*  
 *Module version: 0.1.0*
 
