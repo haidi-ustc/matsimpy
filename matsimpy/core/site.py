@@ -848,6 +848,40 @@ class CrystalSite(Site):
         """
         return np.dot(self._frac_position, self.lattice.matrix)
 
+    def wrap(self) -> "CrystalSite":
+        """
+        Wrap fractional coordinates to the unit cell [0, 1) range.
+
+        Wraps the fractional coordinates to the standard unit cell range [0, 1)
+        using modulo operation. This ensures that coordinates outside the unit
+        cell are mapped back into the primary unit cell. Both fractional and
+        Cartesian coordinates are updated accordingly.
+
+        Returns:
+            CrystalSite: Returns self for method chaining.
+
+        Example:
+            >>> from matsimpy.core import Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> site = CrystalSite([1.5, -0.3, 0.5], 'Fe', lattice)
+            >>> site.wrap()
+            >>> site.frac_position.tolist()
+            [0.5, 0.7, 0.5]
+            >>>
+            >>> # Method chaining
+            >>> site = CrystalSite([2.1, 0.5, 0.5], 'Fe', lattice).wrap()
+            >>> site.frac_position.tolist()
+            [0.1, 0.5, 0.5]
+        """
+        # Wrap fractional coordinates to [0, 1) range
+        # Use modulo operation which correctly handles both positive and negative
+        self._frac_position = self._frac_position % 1.0
+        # Recalculate Cartesian coordinates
+        self._cart_position = self._convert_to_cartesian()
+        # Update parent Site's position (always Cartesian)
+        self._position = self._cart_position
+        return self
+
     def __repr__(self) -> str:
         """
         Unambiguous string representation for debugging.

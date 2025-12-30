@@ -1175,6 +1175,44 @@ class Crystal(Structure):
         # Use cached inverse matrix
         return np.dot(self.cart_positions, self.lattice.inv_matrix)
 
+    def wrap(self) -> "Crystal":
+        """
+        Wrap all fractional coordinates to the unit cell [0, 1) range.
+
+        Wraps all fractional coordinates to the standard unit cell range [0, 1)
+        using modulo operation. This ensures that coordinates outside the unit
+        cell are mapped back into the primary unit cell. Both fractional and
+        Cartesian coordinates are updated accordingly, and all sites are refreshed.
+
+        Returns:
+            Crystal: Returns self for method chaining.
+
+        Example:
+            >>> from matsimpy.core import Crystal, Lattice
+            >>> lattice = Lattice.cubic(10.0)
+            >>> crystal = Crystal(['Fe', 'O'], [[1.5, -0.3, 0.5], [0.2, 0.2, 0.2]], lattice)
+            >>> crystal.wrap()
+            >>> crystal.frac_positions[0].tolist()
+            [0.5, 0.7, 0.5]
+            >>>
+            >>> # Method chaining
+            >>> crystal = Crystal(['Fe'], [[2.1, 0.5, 0.5]], lattice).wrap()
+            >>> crystal.frac_positions[0].tolist()
+            [0.1, 0.5, 0.5]
+        """
+        # Wrap each site using the CrystalSite.wrap() method
+        for site in self._sites:
+            site.wrap()
+        
+        # Update crystal's positions from the wrapped sites
+        self.frac_positions = np.array([site.frac_position for site in self._sites])
+        self.cart_positions = np.array([site.cart_position for site in self._sites])
+        self.positions = self.frac_positions
+        
+        # Invalidate neighbor tree cache
+        self._invalidate_neighbor_tree()
+        return self
+
     def _get_periodic_images(self, cutoff: float) -> np.ndarray:
         """
         Get all periodic images within cutoff using vectorized operations.
