@@ -203,12 +203,12 @@ print(f"Original H2O:")
 print(f"  Center of mass: {h2o.get_center_of_mass()}")
 
 # Translate molecule
-h2o.translate([1.0, 2.0, 3.0])
+h2o.translate([1.0, 2.0, 3.0], inplace=True)
 print(f"\nAfter translation by [1, 2, 3]:")
 print(f"  Center of mass: {h2o.get_center_of_mass()}")
 
 # Rotate molecule (90 degrees around z-axis)
-h2o.rotate(90, [0, 0, 1])
+h2o.rotate(90, [0, 0, 1], inplace=True)
 print(f"\nAfter rotation (90° around z-axis):")
 print(f"  O position: {h2o.positions[0]}")
 print(f"  H1 position: {h2o.positions[1]}")

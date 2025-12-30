@@ -73,9 +73,9 @@ def rotate(
         # Use in-place method if available (for molecules)
         if isinstance(structure, Molecule):
             # Translate to origin, rotate, translate back
-            structure.translate((-center).tolist())
-            structure.rotate(angle, axis.tolist())
-            structure.translate(center.tolist())
+            structure.translate((-center).tolist(), inplace=True)
+            structure.rotate(angle, axis.tolist(), inplace=True)
+            structure.translate(center.tolist(), inplace=True)
             return structure
         else:
             # For crystals, rotate Cartesian positions

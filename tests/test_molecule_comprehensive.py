@@ -62,35 +62,69 @@ class TestMoleculeComprehensive(unittest.TestCase):
         molecule = Molecule(species, positions)
         
         com1 = molecule.get_center_of_mass()
-        molecule.translate([1, 1, 1])
+        molecule.translate([1, 1, 1], inplace=True)
         com2 = molecule.get_center_of_mass()
         # Should be different (not cached)
         self.assertNotEqual(com1[0], com2[0])
     
-    def test_molecule_translate(self):
-        """Test translation."""
+    def test_molecule_translate_inplace(self):
+        """Test translation in-place."""
         species = ['C', 'O']
         positions = [[0, 0, 0], [1.4, 0, 0]]
         molecule = Molecule(species, positions)
         
         original_pos = molecule.positions.copy()
-        molecule.translate([1, 1, 1])
+        result = molecule.translate([1, 1, 1], inplace=True)
         new_pos = molecule.positions
         
+        # Should return self
+        self.assertIs(result, molecule)
         np.testing.assert_array_almost_equal(new_pos, original_pos + [1, 1, 1])
     
-    def test_molecule_rotate(self):
-        """Test rotation."""
+    def test_molecule_translate_return_new(self):
+        """Test translation returning new molecule (default)."""
         species = ['C', 'O']
         positions = [[0, 0, 0], [1.4, 0, 0]]
         molecule = Molecule(species, positions)
         
         original_pos = molecule.positions.copy()
-        molecule.rotate(90, [0, 0, 1])  # Rotate 90 degrees around z-axis
+        new_molecule = molecule.translate([1, 1, 1])
+        
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(molecule.positions, original_pos)
+        # New should be translated
+        self.assertIsNot(new_molecule, molecule)
+        np.testing.assert_array_almost_equal(new_molecule.positions, original_pos + [1, 1, 1])
+    
+    def test_molecule_rotate_inplace(self):
+        """Test rotation in-place."""
+        species = ['C', 'O']
+        positions = [[0, 0, 0], [1.4, 0, 0]]
+        molecule = Molecule(species, positions)
+        
+        original_pos = molecule.positions.copy()
+        result = molecule.rotate(90, [0, 0, 1], inplace=True)  # Rotate 90 degrees around z-axis
         new_pos = molecule.positions
         
+        # Should return self
+        self.assertIs(result, molecule)
         # Positions should change after rotation
         self.assertFalse(np.allclose(original_pos, new_pos))
+    
+    def test_molecule_rotate_return_new(self):
+        """Test rotation returning new molecule (default)."""
+        species = ['C', 'O']
+        positions = [[0, 0, 0], [1.4, 0, 0]]
+        molecule = Molecule(species, positions)
+        
+        original_pos = molecule.positions.copy()
+        new_molecule = molecule.rotate(90, [0, 0, 1])  # Rotate 90 degrees around z-axis
+        
+        # Original should be unchanged
+        np.testing.assert_array_almost_equal(molecule.positions, original_pos)
+        # New should be rotated
+        self.assertIsNot(new_molecule, molecule)
+        self.assertFalse(np.allclose(original_pos, new_molecule.positions))
     
     def test_molecule_rotate_cache_invalidation(self):
         """Test that rotation invalidates center of mass cache."""
@@ -101,7 +135,7 @@ class TestMoleculeComprehensive(unittest.TestCase):
         com1 = molecule.get_center_of_mass()
         # Verify cache exists
         self.assertTrue(hasattr(molecule, '_cached_com'))
-        molecule.rotate(90, [0, 0, 1])
+        molecule.rotate(90, [0, 0, 1], inplace=True)
         # Cache should be invalidated (set to None instead of deleted)
         self.assertIsNone(getattr(molecule, '_cached_com', None))
         com2 = molecule.get_center_of_mass()

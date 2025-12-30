@@ -51,7 +51,7 @@ def translate(
     if inplace:
         # Use in-place method if available (for molecules)
         if isinstance(structure, Molecule):
-            structure.translate(vector.tolist())
+            structure.translate(vector.tolist(), inplace=True)
             return structure
         else:
             # For crystals, modify positions directly

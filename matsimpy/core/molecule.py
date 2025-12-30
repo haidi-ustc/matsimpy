@@ -241,67 +241,105 @@ class Molecule(Structure):
             self._cached_com = center_of_mass.tolist()
         return self._cached_com
 
-    def translate(self, vector: List[float]) -> None:
+    def translate(self, vector: List[float], inplace: bool = False) -> "Molecule":
         """
-        Translate the molecule by a given vector (in-place).
+        Translate the molecule by a given vector.
 
-        Moves all atoms by the specified translation vector. The operation
-        modifies the molecule in-place and invalidates cached properties
-        (center of mass).
+        Moves all atoms by the specified translation vector. By default,
+        returns a new molecule. Set inplace=True to modify in-place.
 
         Args:
             vector: Translation vector [dx, dy, dz] in Angstroms.
+            inplace: If True, modify this molecule in-place (default: False).
+                    If False, return a new Molecule object.
 
-        Note:
-            This method modifies the molecule in-place. Cached properties
-            (center of mass) are invalidated and will be recalculated on
-            next access.
+        Returns:
+            Molecule: Translated molecule. If inplace=True, returns self.
+                    If inplace=False, returns a new Molecule object.
 
         Example:
             >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-            >>> molecule.translate([1.0, 0.0, 0.0])  # Move 1 Å along x-axis
+            >>> # Return new molecule (default)
+            >>> translated = molecule.translate([1.0, 0.0, 0.0])
+            >>> translated.positions[0]
+            array([1., 0., 0.])
+            >>> # Modify in-place
+            >>> molecule.translate([1.0, 0.0, 0.0], inplace=True)
             >>> molecule.positions[0]
             array([1., 0., 0.])
         """
-        self.positions += np.array(vector)
-        # Invalidate center of mass cache
-        if hasattr(self, "_cached_com"):
-            self._cached_com = None
-        # Update sites
-        self._sites = self._initialize_sites()
+        if inplace:
+            self.positions += np.array(vector)
+            # Invalidate center of mass cache
+            if hasattr(self, "_cached_com"):
+                self._cached_com = None
+            # Update sites
+            self._sites = self._initialize_sites()
+            return self
+        else:
+            # Create new molecule with translated positions
+            new_molecule = self.copy()
+            new_molecule.positions += np.array(vector)
+            # Invalidate center of mass cache
+            if hasattr(new_molecule, "_cached_com"):
+                new_molecule._cached_com = None
+            # Update sites
+            new_molecule._sites = new_molecule._initialize_sites()
+            return new_molecule
 
-    def rotate(self, angle: float, axis: List[float]) -> None:
+    def rotate(self, angle: float, axis: List[float], inplace: bool = False) -> "Molecule":
         """
-        Rotate the molecule around an axis (in-place).
+        Rotate the molecule around an axis.
 
         Rotates all atoms around the specified axis by the given angle.
-        The rotation axis is automatically normalized. The operation modifies
-        the molecule in-place and invalidates cached properties (center of mass).
+        The rotation axis is automatically normalized. By default,
+        returns a new molecule. Set inplace=True to modify in-place.
 
         Args:
             angle: Rotation angle in degrees.
             axis: Rotation axis vector [x, y, z] (will be normalized automatically).
+            inplace: If True, modify this molecule in-place (default: False).
+                    If False, return a new Molecule object.
+
+        Returns:
+            Molecule: Rotated molecule. If inplace=True, returns self.
+                    If inplace=False, returns a new Molecule object.
 
         Note:
-            This method modifies the molecule in-place. Cached properties
-            (center of mass) are invalidated and will be recalculated on
-            next access. Uses scipy.spatial.transform.Rotation for rotation.
+            Uses scipy.spatial.transform.Rotation for rotation.
 
         Example:
             >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-            >>> molecule.rotate(90, [0, 0, 1])  # 90° rotation around z-axis
-            >>> molecule.positions[1]  # H atom rotated
+            >>> # Return new molecule (default)
+            >>> rotated = molecule.rotate(90, [0, 0, 1])  # 90° rotation around z-axis
+            >>> rotated.positions[1]  # H atom rotated
+            array([0., 0.96, 0.])
+            >>> # Modify in-place
+            >>> molecule.rotate(90, [0, 0, 1], inplace=True)
+            >>> molecule.positions[1]
             array([0., 0.96, 0.])
         """
         from scipy.spatial.transform import Rotation
 
         rotation = Rotation.from_rotvec(np.radians(angle) * np.array(axis))
-        self.positions = rotation.apply(self.positions)
-        # Invalidate center of mass cache
-        if hasattr(self, "_cached_com"):
-            self._cached_com = None
-        # Update sites
-        self._sites = self._initialize_sites()
+        if inplace:
+            self.positions = rotation.apply(self.positions)
+            # Invalidate center of mass cache
+            if hasattr(self, "_cached_com"):
+                self._cached_com = None
+            # Update sites
+            self._sites = self._initialize_sites()
+            return self
+        else:
+            # Create new molecule with rotated positions
+            new_molecule = self.copy()
+            new_molecule.positions = rotation.apply(new_molecule.positions)
+            # Invalidate center of mass cache
+            if hasattr(new_molecule, "_cached_com"):
+                new_molecule._cached_com = None
+            # Update sites
+            new_molecule._sites = new_molecule._initialize_sites()
+            return new_molecule
 
     def add_atom(
         self,

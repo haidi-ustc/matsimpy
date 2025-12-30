@@ -17,12 +17,12 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         self.crystal = from_prototype('diamond', 'Si', 5.43)
     
     def test_make_supercell_inplace(self):
-        """Test make_supercell with inplace=True (default)."""
+        """Test make_supercell with inplace=True."""
         original_len = len(self.crystal)
         original_lattice_a = self.crystal.lattice.a
         
         # Create 2x2x2 supercell
-        result = self.crystal.make_supercell([2, 2, 2])
+        result = self.crystal.make_supercell([2, 2, 2], inplace=True)
         
         # Should modify in-place
         self.assertIs(result, self.crystal)
@@ -30,12 +30,12 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         self.assertAlmostEqual(self.crystal.lattice.a, original_lattice_a * 2, places=5)
     
     def test_make_supercell_not_inplace(self):
-        """Test make_supercell with inplace=False."""
+        """Test make_supercell with inplace=False (default)."""
         original_len = len(self.crystal)
         original_lattice_a = self.crystal.lattice.a
         
-        # Create 2x2x2 supercell without modifying original
-        new_crystal = self.crystal.make_supercell([2, 2, 2], inplace=False)
+        # Create 2x2x2 supercell without modifying original (default behavior)
+        new_crystal = self.crystal.make_supercell([2, 2, 2])
         
         # Original should be unchanged
         self.assertEqual(len(self.crystal), original_len)
@@ -52,7 +52,7 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         
         # Use matrix form
         scaling_matrix = [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
-        self.crystal.make_supercell(scaling_matrix)
+        self.crystal.make_supercell(scaling_matrix, inplace=True)
         
         self.assertEqual(len(self.crystal), original_len * 8)
     

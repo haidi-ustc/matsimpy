@@ -1909,20 +1909,20 @@ class Crystal(Structure):
     def make_supercell(
         self,
         scaling_matrix: Union[List[int], List[List[int]], np.ndarray],
-        inplace: bool = True,
+        inplace: bool = False,
     ) -> "Crystal":
         """
         Create a supercell from this crystal structure.
 
         Convenience method that calls the transformation module's make_supercell function.
-        By default, modifies the structure in-place.
+        By default, returns a new crystal. Set inplace=True to modify in-place.
 
         Args:
             scaling_matrix: Scaling matrix for supercell generation.
                            Can be:
                            - Simple: [a, b, c] - repeats a times in a, b times in b, c times in c
                            - Matrix: [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]] - general transformation
-            inplace: If True, modify this crystal in-place (default: True).
+            inplace: If True, modify this crystal in-place (default: False).
                     If False, return a new Crystal object.
 
         Returns:
@@ -1931,12 +1931,14 @@ class Crystal(Structure):
         Examples:
             >>> from matsimpy.builders.bulk import from_prototype
             >>> crystal = from_prototype('diamond', 'Si', 5.43)
-            >>> # Create 2x2x2 supercell in-place
-            >>> crystal.make_supercell([2, 2, 2])
-            >>> print(len(crystal))  # 16 atoms (2*2*2*2)
+            >>> # Create 2x2x2 supercell (returns new)
+            >>> new_crystal = crystal.make_supercell([2, 2, 2])
+            >>> print(len(new_crystal))  # 16 atoms (2*2*2*2)
             16
-            >>> # Create supercell without modifying original
-            >>> new_crystal = crystal.make_supercell([2, 2, 2], inplace=False)
+            >>> # Create supercell in-place
+            >>> crystal.make_supercell([2, 2, 2], inplace=True)
+            >>> print(len(crystal))  # 16 atoms
+            16
         """
         from ..transformation.structural import make_supercell
 
