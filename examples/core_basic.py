@@ -84,7 +84,7 @@ monoclinic = Lattice.from_parameters(
     alpha=90.0, beta=120.0, gamma=90.0
 )
 
-print(f"Cubic lattice: a={cubic.a:.2f} Å, volume={cubic.volume():.2f} Å³")
+print(f"Cubic lattice: a={cubic.a:.2f} Å, volume={cubic.volume:.2f} Å³")
 print(f"Tetragonal: a={tetragonal.a:.2f}, c={tetragonal.c:.2f} Å")
 print(f"Orthorhombic: a={orthorhombic.a:.2f}, b={orthorhombic.b:.2f}, c={orthorhombic.c:.2f} Å")
 print(f"Monoclinic: α={monoclinic.alpha:.1f}°, β={monoclinic.beta:.1f}°, γ={monoclinic.gamma:.1f}°")
@@ -145,12 +145,12 @@ print("-" * 70)
 # Hexagonal lattice
 hex_lattice = Lattice.hexagonal(3.0, 5.0)
 print(f"Hexagonal: a={hex_lattice.a:.2f} Å, c={hex_lattice.c:.2f} Å")
-print(f"  Volume: {hex_lattice.volume():.2f} Å³")
+print(f"  Volume: {hex_lattice.volume:.2f} Å³")
 
 # Rhombohedral lattice
 rhomb_lattice = Lattice.rhombohedral(5.0, 60.0)
 print(f"\nRhombohedral: a={rhomb_lattice.a:.2f} Å, α={rhomb_lattice.alpha:.1f}°")
-print(f"  Volume: {rhomb_lattice.volume():.2f} Å³")
+print(f"  Volume: {rhomb_lattice.volume:.2f} Å³")
 
 # Triclinic lattice
 triclinic_lattice = Lattice.from_parameters(

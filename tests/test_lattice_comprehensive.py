@@ -61,7 +61,7 @@ class TestLatticeComprehensive(unittest.TestCase):
         """Test volume calculation."""
         vectors = [[2, 0, 0], [0, 3, 0], [0, 0, 4]]
         lattice = Lattice(vectors)
-        self.assertAlmostEqual(lattice.volume(), 24.0, places=10)
+        self.assertAlmostEqual(lattice.volume, 24.0, places=10)
     
     def test_lattice_from_parameters(self):
         """Test creation from parameters."""

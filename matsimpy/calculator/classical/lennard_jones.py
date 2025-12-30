@@ -325,7 +325,7 @@ class LennardJones(Calculator):
         # Forces are already in Cartesian
 
         # Stress in eV/Å³ (volume is in Å³)
-        volume = lattice.volume()  # volume is a method
+        volume = lattice.volume  # volume is a property
         if volume > 0:
             stress = stress / volume
 

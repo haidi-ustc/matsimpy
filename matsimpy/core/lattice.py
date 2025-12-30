@@ -81,7 +81,7 @@ class Lattice(MSONable):
         >>>
         >>> # Full lattice vectors
         >>> lat = Lattice([[5, 0, 0], [0, 5, 0], [0, 0, 5]])
-        >>> lat.volume()
+        >>> lat.volume
         125.0
         >>>
         >>> # Use class methods
@@ -190,7 +190,7 @@ class Lattice(MSONable):
             raise ValueError("Lattice vectors must be linearly independent.")
 
         # Check volume is reasonable
-        volume = self.volume()
+        volume = self.volume
         if volume <= 1e-10:  # Very small volume
             raise ValueError(f"Lattice volume is too small: {volume}")
 
@@ -402,6 +402,7 @@ class Lattice(MSONable):
             )
         )
 
+    @property
     def volume(self) -> float:
         """
         Calculate the volume of the unit cell.
@@ -414,10 +415,10 @@ class Lattice(MSONable):
 
         Example:
             >>> lat = Lattice.cubic(5.0)
-            >>> lat.volume()
+            >>> lat.volume
             125.0
             >>> lat = Lattice([3, 4, 5])
-            >>> lat.volume()
+            >>> lat.volume
             60.0
         """
         return abs(np.linalg.det(self.matrix))
@@ -957,5 +958,5 @@ class Lattice(MSONable):
             "alpha": self.alpha,
             "beta": self.beta,
             "gamma": self.gamma,
-            "volume": self.volume(),
+            "volume": self.volume,
         }
