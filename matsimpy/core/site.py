@@ -310,21 +310,6 @@ class Site(MSONable):
         return True
 
     @property
-    def coords_type(self) -> str:
-        """
-        Get coordinate type as string.
-
-        Returns:
-            str: Always 'cartesian' for Site objects.
-
-        Example:
-            >>> site = Site([0, 0, 0], 'Fe')
-            >>> site.coords_type
-            'cartesian'
-        """
-        return "cartesian"
-
-    @property
     def properties(self) -> Dict[str, Any]:
         """
         Get site properties dictionary.
