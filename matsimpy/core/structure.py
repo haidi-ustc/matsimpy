@@ -996,3 +996,65 @@ class Structure(ABC, MSONable):
             2
         """
         return len(self.species)
+
+    def __contains__(self, item: str) -> bool:
+        """
+        Check if an element is present in the structure.
+
+        Enables the use of 'in' operator to check for element presence.
+
+        Args:
+            item: Element symbol to check for (e.g., 'Si', 'O', 'Fe').
+
+        Returns:
+            bool: True if the element is present in the structure, False otherwise.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
+            >>> 'Na' in crystal
+            True
+            >>> 'Si' in crystal
+            False
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
+            >>> 'H' in molecule
+            True
+            >>> 'C' in molecule
+            False
+        """
+        return item in self.species
+
+    def __iter__(self):
+        """
+        Iterate over sites in the structure.
+
+        Yields site objects (Site for Molecule, CrystalSite for Crystal)
+        for each atom in the structure. This enables using the structure
+        directly in for loops.
+
+        Yields:
+            Site or CrystalSite: Site object for each atom in the structure.
+
+        Note:
+            The sites property must be implemented by subclasses (Crystal, Molecule).
+            Each site contains the species, position, and any additional properties.
+
+        Example:
+            >>> crystal = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
+            >>> for site in crystal:
+            ...     print(f"{site.species} at {site.frac_position}")
+            Na at [0. 0. 0.]
+            Cl at [0.5 0.5 0.5]
+            >>>
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
+            >>> for site in molecule:
+            ...     print(f"{site.species} at {site.position}")
+            O at [0. 0. 0.]
+            H at [0.96 0.   0.  ]
+            H at [-0.24  0.93  0.  ]
+            >>>
+            >>> # Can also convert to list
+            >>> sites_list = list(crystal)
+            >>> len(sites_list)
+            2
+        """
+        return iter(self.sites)
