@@ -39,6 +39,8 @@ dev = [
     "pytest>=6.0",
     "pytest-cov>=2.12",
     "pytest-xdist",
+    "pyyaml",
+    "prompt-toolkit",
 ]
 storage = [
     "maggma>=0.70.0",

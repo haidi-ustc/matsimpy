@@ -46,9 +46,12 @@ def translate(
     # Always create a new structure
     new_structure = structure.copy()
     
-    # Use structure's translate method if available (for molecules)
+    # Apply translation
     if isinstance(new_structure, Molecule):
-        return new_structure.translate(vector.tolist(), inplace=False)
+        new_structure.positions += vector
+        if hasattr(new_structure, "_cached_com"):
+            new_structure._cached_com = None
+        new_structure._sites = new_structure._initialize_sites()
     else:
         # For crystals, modify positions directly
         new_structure.cart_positions += vector
@@ -58,7 +61,8 @@ def translate(
         new_structure._neighbor_tree_positions = None
         if hasattr(new_structure, "_sites"):
             new_structure._sites = new_structure._initialize_sites()
-        return new_structure
+    
+    return new_structure
 
 
 def translate_to_origin(

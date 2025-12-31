@@ -66,12 +66,18 @@ def rotate(
     # Always create a new structure
     new_structure = structure.copy()
     
-    # Use structure's rotate method if available (for molecules)
+    # Apply rotation
     if isinstance(new_structure, Molecule):
+        from scipy.spatial.transform import Rotation
+        rotation = Rotation.from_rotvec(np.radians(angle) * axis)
         # Translate to origin, rotate, translate back
-        new_structure = new_structure.translate((-center).tolist(), inplace=False)
-        new_structure = new_structure.rotate(angle, axis.tolist(), inplace=False)
-        return new_structure.translate(center.tolist(), inplace=False)
+        new_structure.positions -= center
+        new_structure.positions = rotation.apply(new_structure.positions)
+        new_structure.positions += center
+        if hasattr(new_structure, "_cached_com"):
+            new_structure._cached_com = None
+        new_structure._sites = new_structure._initialize_sites()
+        return new_structure
     else:
         # For crystals, rotate Cartesian positions
         from scipy.spatial.transform import Rotation

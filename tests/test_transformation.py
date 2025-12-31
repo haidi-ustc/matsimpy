@@ -52,7 +52,7 @@ class TestTranslation(unittest.TestCase):
     def test_translate_to_origin(self):
         """Test translate to origin."""
         # Move molecule away from origin
-        self.molecule = self.molecule.translate([5, 5, 5], inplace=False)
+        self.molecule = self.molecule.translate([5, 5, 5])
         centered = translate_to_origin(self.molecule)
         
         com = centered.get_center_of_mass()
@@ -98,7 +98,7 @@ class TestRotation(unittest.TestCase):
     def test_rotate_around_center(self):
         """Test rotation around custom center."""
         # Molecule at [1, 1, 1], rotate around origin
-        self.molecule = self.molecule.translate([1, 1, 1], inplace=False)
+        self.molecule = self.molecule.translate([1, 1, 1])
         rotated = rotate(self.molecule, angle=180, axis=[0, 0, 1], center=[0, 0, 0])
         
         # Should be rotated around origin
