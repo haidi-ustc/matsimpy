@@ -91,6 +91,20 @@ class TestIOConverters(unittest.TestCase):
         # Verify structure matches
         self.assertEqual(molecule2.species, self.molecule.species)
         self.assertEqual(len(molecule2), len(self.molecule))
+
+    @unittest.skipUnless(has_pymatgen(), "pymatgen not installed")
+    def test_pymatgen_structure_methods(self):
+        """Test Crystal/Molecule pymatgen convenience methods."""
+        from pymatgen.core import Molecule as PymatgenMolecule
+        from pymatgen.core import Structure as PymatgenStructure
+
+        pymatgen_struct = self.crystal.to_pymatgen()
+        self.assertIsInstance(pymatgen_struct, PymatgenStructure)
+        self.assertIsInstance(Crystal.from_pymatgen(pymatgen_struct), Crystal)
+
+        pymatgen_mol = self.molecule.to_pymatgen()
+        self.assertIsInstance(pymatgen_mol, PymatgenMolecule)
+        self.assertIsInstance(Molecule.from_pymatgen(pymatgen_mol), Molecule)
     
     @unittest.skipUnless(has_pymatgen(), "pymatgen not installed")
     def test_to_pymatgen_invalid_input(self):
@@ -138,6 +152,17 @@ class TestIOConverters(unittest.TestCase):
         
         # Verify species match
         self.assertEqual(len(ase_atoms), len(self.molecule))
+
+    @unittest.skipUnless(has_ase(), "ASE not installed")
+    def test_from_ase_molecule(self):
+        """Test converting non-periodic ASE Atoms to Molecule."""
+        from ase import Atoms
+
+        ase_atoms = Atoms('CO', positions=[[0, 0, 0], [1.2, 0, 0]])
+        molecule = from_ase(ase_atoms)
+
+        self.assertIsInstance(molecule, Molecule)
+        self.assertEqual(len(molecule), 2)
     
     @unittest.skipUnless(has_ase(), "ASE not installed")
     def test_ase_roundtrip_crystal(self):
@@ -160,6 +185,19 @@ class TestIOConverters(unittest.TestCase):
         # Verify structure matches
         self.assertEqual(molecule2.species, self.molecule.species)
         self.assertEqual(len(molecule2), len(self.molecule))
+
+    @unittest.skipUnless(has_ase(), "ASE not installed")
+    def test_ase_structure_methods(self):
+        """Test Crystal/Molecule ASE convenience methods."""
+        from ase import Atoms
+
+        ase_crystal = self.crystal.to_ase()
+        self.assertIsInstance(ase_crystal, Atoms)
+        self.assertIsInstance(Crystal.from_ase(ase_crystal), Crystal)
+
+        ase_molecule = self.molecule.to_ase()
+        self.assertIsInstance(ase_molecule, Atoms)
+        self.assertIsInstance(Molecule.from_ase(ase_molecule), Molecule)
     
     @unittest.skipUnless(has_ase(), "ASE not installed")
     def test_to_ase_invalid_input(self):
@@ -177,4 +215,3 @@ class TestIOConverters(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

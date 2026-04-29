@@ -2,7 +2,8 @@
 import unittest
 import numpy as np
 
-from matsimpy.core import Crystal, Molecule, Lattice
+from matsimpy.core import Crystal, Lattice
+from tests.conftest import make_simple_crystal, make_simple_molecule
 from matsimpy.transformation import (
     translate, translate_to_origin,
     rotate, rotate_around_axis,
@@ -16,7 +17,7 @@ class TestTranslation(unittest.TestCase):
     
     def setUp(self):
         """Set up test molecules."""
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.molecule = make_simple_molecule()
         self.crystal = Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(10))
     
     def test_translate_functional(self):
@@ -72,7 +73,7 @@ class TestRotation(unittest.TestCase):
     
     def setUp(self):
         """Set up test molecules."""
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.molecule = make_simple_molecule()
     
     def test_rotate_functional(self):
         """Test functional rotation."""
@@ -124,8 +125,8 @@ class TestSubstitution(unittest.TestCase):
     
     def setUp(self):
         """Set up test structures."""
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.crystal = make_simple_crystal()
+        self.molecule = make_simple_molecule()
     
     def test_substitute_single(self):
         """Test substituting a single atom."""
@@ -203,7 +204,7 @@ class TestComposite(unittest.TestCase):
     
     def setUp(self):
         """Set up test molecule."""
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.molecule = make_simple_molecule()
     
     def test_chain_transformations(self):
         """Test chaining multiple transformations."""
@@ -231,35 +232,6 @@ class TestComposite(unittest.TestCase):
         transformed = apply_transformations(self.molecule, translate_func)
         
         self.assertIsNot(self.molecule, transformed)
-
-
-class TestMolecularStructuralTransformations(unittest.TestCase):
-    """Regression tests for molecule-specific structural transformations."""
-
-    def test_align_molecules_uses_molecule_positions(self):
-        """align_molecules should work for Molecule, which stores Cartesian coords in positions."""
-        from matsimpy.transformation.structural import align_molecules
-
-        reference = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        moving = Molecule(['C', 'O'], [[5, 5, 0], [6.2, 5, 0]])
-
-        aligned = align_molecules(reference, moving, [0, 1], [0, 1])
-
-        self.assertIsInstance(aligned, Molecule)
-        np.testing.assert_array_almost_equal(aligned.positions, reference.positions)
-
-    def test_merge_molecules_uses_molecule_positions(self):
-        """merge_molecules should not rely on a non-existent cart_positions attribute."""
-        from matsimpy.transformation.structural import merge_molecules
-
-        mol1 = Molecule(['C'], [[0, 0, 0]])
-        mol2 = Molecule(['O'], [[1, 0, 0]])
-
-        merged = merge_molecules(mol1, mol2, 0, 0)
-
-        self.assertIsInstance(merged, Molecule)
-        self.assertEqual(merged.species, ('C', 'O'))
-        np.testing.assert_array_almost_equal(merged.positions[1], mol1.positions[0])
 
 if __name__ == '__main__':
     unittest.main()

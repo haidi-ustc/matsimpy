@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from matsimpy.core import Molecule, Crystal, Lattice
+from tests.conftest import make_simple_crystal, make_simple_molecule
 from matsimpy.core.graph import (
     get_adjacency_matrix,
     get_distance_matrix,
@@ -23,7 +24,7 @@ class TestAdjacencyMatrix(unittest.TestCase):
     
     def test_molecule_adjacency_basic(self):
         """Test basic adjacency matrix for molecule."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         adj = get_adjacency_matrix(mol, cutoff=2.0)
         
         self.assertEqual(adj.shape, (2, 2))
@@ -53,7 +54,7 @@ class TestDistanceMatrix(unittest.TestCase):
     
     def test_molecule_distance_matrix(self):
         """Test distance matrix for molecule."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         dist = get_distance_matrix(mol)
         
         self.assertEqual(dist.shape, (2, 2))
@@ -73,7 +74,7 @@ class TestEdgeList(unittest.TestCase):
     
     def test_edge_list_basic(self):
         """Test basic edge list."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         edges = get_edge_list(mol, cutoff=2.0)
         
         self.assertEqual(len(edges), 1)
@@ -81,7 +82,7 @@ class TestEdgeList(unittest.TestCase):
     
     def test_edge_list_with_distances(self):
         """Test edge list with distances."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         edges = get_edge_list(mol, cutoff=2.0, include_distances=True)
         
         self.assertEqual(len(edges), 1)
@@ -102,7 +103,7 @@ class TestCoordinationNumbers(unittest.TestCase):
     
     def test_coordination_single_bond(self):
         """Test coordination for simple bond."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         coord = get_coordination_numbers(mol, cutoff=2.0)
         
         self.assertEqual(coord[0], 1)
@@ -134,7 +135,7 @@ class TestConnectivity(unittest.TestCase):
     
     def test_is_connected_true(self):
         """Test connected graph."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         self.assertTrue(is_connected(mol, cutoff=2.0))
     
     def test_is_connected_false(self):
@@ -149,7 +150,7 @@ class TestConnectivity(unittest.TestCase):
     
     def test_connected_components_single(self):
         """Test connected components for connected graph."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         components = get_connected_components(mol, cutoff=2.0)
         
         self.assertEqual(len(components), 1)
@@ -168,7 +169,7 @@ class TestShortestPath(unittest.TestCase):
     
     def test_shortest_path_direct(self):
         """Test shortest path for directly connected atoms."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         path = get_shortest_path(mol, 0, 1, cutoff=2.0)
         
         self.assertEqual(path, [0, 1])
@@ -196,7 +197,7 @@ class TestShortestPath(unittest.TestCase):
     
     def test_shortest_path_index_validation(self):
         """Test index validation."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         
         with self.assertRaises(IndexError):
             get_shortest_path(mol, 0, 10, cutoff=2.0)
@@ -230,7 +231,7 @@ class TestNodeFeatures(unittest.TestCase):
     
     def test_node_features_basic(self):
         """Test basic node features."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         features = get_node_features(mol)
         
         self.assertEqual(features.shape, (2, 1))
@@ -242,7 +243,7 @@ class TestGraphStatistics(unittest.TestCase):
     
     def test_statistics_basic(self):
         """Test basic graph statistics."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         stats = get_graph_statistics(mol, cutoff=2.0)
         
         self.assertEqual(stats['num_nodes'], 2)
@@ -269,7 +270,7 @@ class TestGraphLaplacian(unittest.TestCase):
     
     def test_laplacian_basic(self):
         """Test basic Laplacian."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         L = get_graph_laplacian(mol, cutoff=2.0)
         
         self.assertEqual(L.shape, (2, 2))
@@ -278,7 +279,7 @@ class TestGraphLaplacian(unittest.TestCase):
     
     def test_laplacian_normalized(self):
         """Test normalized Laplacian."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         L = get_graph_laplacian(mol, cutoff=2.0, normalized=True)
         
         self.assertEqual(L.shape, (2, 2))
@@ -362,7 +363,7 @@ class TestGraphIntegration(unittest.TestCase):
     def test_crystal_full_workflow(self):
         """Test complete workflow with crystal."""
         lat = Lattice(10)
-        crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], lat)
+        crystal = make_simple_crystal(lat)
         
         adj = get_adjacency_matrix(crystal, cutoff=8.0)
         edges = get_edge_list(crystal, cutoff=8.0)
@@ -374,4 +375,3 @@ class TestGraphIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

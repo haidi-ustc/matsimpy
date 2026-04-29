@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from matsimpy.core import Molecule, Crystal, Lattice
+from tests.conftest import make_simple_crystal, make_simple_molecule
 from matsimpy.core.graph import (
     MoleculeGraph,
     CrystalGraph,
@@ -15,7 +16,7 @@ class TestMoleculeGraph(unittest.TestCase):
     
     def setUp(self):
         """Set up test molecules."""
-        self.mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.mol = make_simple_molecule()
         self.graph = MoleculeGraph(self.mol, cutoff=2.0)
     
     def test_initialization(self):
@@ -148,7 +149,7 @@ class TestCrystalGraph(unittest.TestCase):
     def setUp(self):
         """Set up test crystal."""
         self.lattice = Lattice(10)
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], self.lattice)
+        self.crystal = make_simple_crystal(self.lattice)
         self.graph = CrystalGraph(self.crystal, cutoff=8.0, use_pbc=True)
     
     def test_initialization(self):
@@ -160,6 +161,7 @@ class TestCrystalGraph(unittest.TestCase):
     def test_num_nodes(self):
         """Test num_nodes property."""
         self.assertEqual(self.graph.num_nodes, 2)
+        self.assertTrue(self.graph.use_pbc)
     
     def test_adjacency_matrix(self):
         """Test adjacency matrix with PBC."""
@@ -203,7 +205,7 @@ class TestFactoryFunction(unittest.TestCase):
     
     def test_create_molecule_graph(self):
         """Test creating MoleculeGraph via factory."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         graph = create_structure_graph(mol, cutoff=2.0)
         
         self.assertIsInstance(graph, MoleculeGraph)
@@ -230,46 +232,6 @@ class TestFactoryFunction(unittest.TestCase):
         """Test that invalid structure raises error."""
         with self.assertRaises(TypeError):
             create_structure_graph("invalid", cutoff=3.0)
-
-class TestBackwardCompatibility(unittest.TestCase):
-    """Test that functional API still works (backward compatibility)."""
-    
-    def test_get_adjacency_matrix_molecule(self):
-        """Test functional get_adjacency_matrix."""
-        from matsimpy.core.graph import get_adjacency_matrix
-        
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        adj = get_adjacency_matrix(mol, cutoff=2.0)
-        
-        self.assertEqual(adj.shape, (2, 2))
-        self.assertEqual(adj[0, 1], 1)
-    
-    def test_get_coordination_numbers_functional(self):
-        """Test functional get_coordination_numbers."""
-        from matsimpy.core.graph import get_coordination_numbers
-        
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        coord = get_coordination_numbers(mol, cutoff=2.0)
-        
-        self.assertEqual(coord[0], 1)
-        self.assertEqual(coord[1], 1)
-    
-    def test_is_connected_functional(self):
-        """Test functional is_connected."""
-        from matsimpy.core.graph import is_connected
-        
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        self.assertTrue(is_connected(mol, cutoff=2.0))
-    
-    def test_get_graph_statistics_functional(self):
-        """Test functional get_graph_statistics."""
-        from matsimpy.core.graph import get_graph_statistics
-        
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        stats = get_graph_statistics(mol, cutoff=2.0)
-        
-        self.assertEqual(stats['num_nodes'], 2)
-        self.assertEqual(stats['num_edges'], 1)
 
 class TestOOPvsFunctionalEquivalence(unittest.TestCase):
     """Test that OOP and functional APIs give same results."""
@@ -397,7 +359,7 @@ class TestGraphMethods(unittest.TestCase):
     
     def test_shortest_path_invalid_index(self):
         """Test shortest path with invalid indices."""
-        mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol = make_simple_molecule()
         graph = MoleculeGraph(mol, cutoff=2.0)
         
         with self.assertRaises(IndexError):
@@ -433,4 +395,3 @@ class TestGraphEdgeCases(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

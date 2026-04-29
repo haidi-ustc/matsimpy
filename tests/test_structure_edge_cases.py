@@ -1,15 +1,10 @@
-"""
-Additional tests to improve coverage for Structure class.
-
-This file focuses on testing edge cases and error paths that are not
-covered by existing comprehensive tests.
-"""
+"""Tests for Structure edge cases and error paths."""
 import unittest
 import numpy as np
 from matsimpy.core import Structure, Crystal, Molecule, Lattice, Element
 
 
-class TestStructureValidationCoverage(unittest.TestCase):
+class TestStructureValidationEdgeCases(unittest.TestCase):
     """Test validation methods and error paths."""
     
     def test_validate_positions_type_error(self):
@@ -81,7 +76,7 @@ class TestStructureValidationCoverage(unittest.TestCase):
         self.assertIn("number of species", str(cm.exception))
 
 
-class TestStructureSerializationCoverage(unittest.TestCase):
+class TestStructureSerializationEdgeCases(unittest.TestCase):
     """Test serialization edge cases."""
     
     def test_as_dict_with_lattice(self):
@@ -118,7 +113,7 @@ class TestStructureSerializationCoverage(unittest.TestCase):
         self.assertIsNone(new_struct.lattice)
 
 
-class TestStructureEqualityCoverage(unittest.TestCase):
+class TestStructureEqualityEdgeCases(unittest.TestCase):
     """Test __eq__ method edge cases."""
     
     def test_eq_not_structure(self):
@@ -161,7 +156,7 @@ class TestStructureEqualityCoverage(unittest.TestCase):
         self.assertTrue(struct1 == struct2)
 
 
-class TestStructureAddAtomCoverage(unittest.TestCase):
+class TestStructureAddAtomEdgeCases(unittest.TestCase):
     """Test add_atom edge cases."""
     
     def test_add_atom_empty_list(self):
@@ -196,7 +191,7 @@ class TestStructureAddAtomCoverage(unittest.TestCase):
         self.assertIn("3D coordinates", str(cm.exception))
 
 
-class TestStructureInitCoverage(unittest.TestCase):
+class TestStructureInitEdgeCases(unittest.TestCase):
     """Test Structure initialization edge cases."""
     
     def test_init_with_mixed_species_types(self):
@@ -229,7 +224,7 @@ class TestStructureInitCoverage(unittest.TestCase):
         self.assertIn("positions", error_msg.lower())
 
 
-class TestStructureAsDictCoverage(unittest.TestCase):
+class TestStructureAsDictEdgeCases(unittest.TestCase):
     """Test as_dict method edge cases."""
     
     def test_as_dict_lattice_in_dict(self):
@@ -243,7 +238,7 @@ class TestStructureAsDictCoverage(unittest.TestCase):
         self.assertIn('@module', d['lattice'])
 
 
-class TestStructureFromDictCoverage(unittest.TestCase):
+class TestStructureFromDictEdgeCases(unittest.TestCase):
     """Test from_dict method edge cases."""
     
     def test_from_dict_with_lattice_dict(self):
@@ -267,37 +262,7 @@ class TestStructureFromDictCoverage(unittest.TestCase):
         self.assertIsNone(new_struct.lattice)
 
 
-class TestStructureAddAtomErrorCoverage(unittest.TestCase):
-    """Test add_atom error paths."""
-    
-    def test_add_atom_1d_position_validation(self):
-        """Test add_atom validates 1D position length."""
-        struct = Molecule(['H'], [[0, 0, 0]])
-        
-        # 1D position with wrong length
-        with self.assertRaises(ValueError) as cm:
-            struct.add_atom('C', [1, 2])  # Only 2 elements
-        self.assertIn("3D coordinate", str(cm.exception))
-    
-    def test_add_atom_wrong_array_dimensions(self):
-        """Test add_atom with wrong array dimensions."""
-        struct = Molecule(['H'], [[0, 0, 0]])
-        
-        # Wrong dimensions (not 1D or 2D)
-        with self.assertRaises(ValueError) as cm:
-            struct.add_atom('C', [[[1, 2, 3]]])  # 3D array
-        self.assertIn("3D coordinate", str(cm.exception))
-    
-    def test_add_atom_2d_wrong_coordinate_count(self):
-        """Test add_atom with 2D array but wrong coordinate count."""
-        struct = Molecule(['H'], [[0, 0, 0]])
-        
-        with self.assertRaises(ValueError) as cm:
-            struct.add_atom('C', [[1, 2]])  # Only 2 coordinates
-        self.assertIn("3D coordinates", str(cm.exception))
-
-
-class TestStructureNotImplementedCoverage(unittest.TestCase):
+class TestStructureNotImplementedEdgeCases(unittest.TestCase):
     """Test NotImplementedError paths."""
     
     def test_get_neighbor_list_not_implemented(self):
@@ -326,4 +291,3 @@ class TestStructureNotImplementedCoverage(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

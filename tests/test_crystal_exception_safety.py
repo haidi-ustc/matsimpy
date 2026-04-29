@@ -90,7 +90,8 @@ class TestCrystalExceptionSafety(unittest.TestCase):
         """Test that single-atom query optimization works correctly."""
         lattice = Lattice.cubic(5.0)
         # Small structure (< 1000 atoms) without PBC
-        crystal = Crystal(['Si'] * 100, np.random.rand(100, 3).tolist(), lattice, pbc=[False, False, False])
+        positions = [[(i % 10) * 0.1, (i // 10) * 0.1, 0.0] for i in range(100)]
+        crystal = Crystal(['Si'] * 100, positions, lattice, pbc=[False, False, False])
 
         # Single atom query should work
         neighbors = crystal.get_neighbor_list(5.0, atom_index=0, use_pbc=False)
@@ -105,4 +106,3 @@ class TestCrystalExceptionSafety(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

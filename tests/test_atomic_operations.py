@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 from matsimpy.core import Crystal, Molecule, Lattice
+from tests.conftest import make_simple_crystal, make_simple_molecule
 from matsimpy.transformation.atomic import (
     move_atoms,
     swap_atoms,
@@ -17,8 +18,8 @@ class TestAtomicManipulation(unittest.TestCase):
     
     def setUp(self):
         """Set up test structures."""
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.crystal = make_simple_crystal()
+        self.molecule = make_simple_molecule()
     
     def test_move_atoms_crystal_single(self):
         """Test moving single atom in crystal."""
@@ -216,7 +217,7 @@ class TestAtomicAlwaysReturnsNew(unittest.TestCase):
     
     def setUp(self):
         """Set up test structure."""
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
+        self.crystal = make_simple_crystal()
     
     def test_move_atoms_always_new(self):
         """Test that move_atoms always returns a new object."""
@@ -279,4 +280,3 @@ class TestAtomicAlwaysReturnsNew(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

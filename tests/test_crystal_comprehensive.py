@@ -39,6 +39,26 @@ class TestCrystalComprehensive(unittest.TestCase):
         frac_back = crystal._convert_to_fractional()
         
         np.testing.assert_array_almost_equal(positions, frac_back, decimal=6)
+
+    def test_crystal_cartesian_coordinate_conversion_roundtrip(self):
+        """Test fractional/cartesian conversion helpers with matching structures."""
+        species = ['H', 'He']
+        positions = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+        lattice = Lattice.cubic(1.0)
+
+        crystal_frac = Crystal(species, positions, lattice)
+        crystal_cart = Crystal(species, positions, lattice, coords_are_cartesian=True)
+
+        np.testing.assert_array_almost_equal(crystal_frac._convert_to_fractional(), positions)
+        np.testing.assert_array_almost_equal(
+            crystal_frac._convert_to_cartesian(),
+            crystal_cart.cart_positions,
+        )
+        np.testing.assert_array_almost_equal(crystal_cart._convert_to_cartesian(), positions)
+        np.testing.assert_array_almost_equal(
+            crystal_cart._convert_to_fractional(),
+            crystal_frac.frac_positions,
+        )
     
     def test_crystal_volume(self):
         """Test volume calculation."""
@@ -48,6 +68,16 @@ class TestCrystalComprehensive(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         
         self.assertEqual(crystal.volume, 1000.0)
+
+    def test_crystal_volume_orthorhombic_lattice(self):
+        """Test volume calculation for non-cubic orthogonal lattice."""
+        crystal = Crystal(
+            ['H', 'He'],
+            [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+            Lattice.from_parameters(a=2.0, b=3.0, c=4.0, alpha=90, beta=90, gamma=90),
+        )
+
+        self.assertAlmostEqual(crystal.volume, 24.0, places=6)
     
     def test_crystal_density(self):
         """Test density calculation."""
@@ -436,4 +466,3 @@ class TestCrystalComprehensive(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

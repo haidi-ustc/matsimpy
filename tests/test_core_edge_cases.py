@@ -1,4 +1,4 @@
-"""Edge case tests for core modules to improve coverage."""
+"""Edge case tests for core modules."""
 import unittest
 import numpy as np
 

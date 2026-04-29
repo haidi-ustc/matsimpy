@@ -1,4 +1,4 @@
-"""Tests for Composition refactoring: caching, error handling, type hints."""
+"""Tests for Composition cache behavior and error handling."""
 import unittest
 
 from matsimpy.core.composition import Composition
@@ -91,20 +91,15 @@ class TestCompositionCaching(unittest.TestCase):
         # Should be same object
         self.assertIs(elem_h1, elem_h2)
     
-    def test_cache_improves_performance(self):
-        """Test that caching improves repeated calculations."""
-        import time
-        
+    def test_mass_uses_cache_after_first_calculation(self):
+        """Test that repeated mass calculations use the cached value."""
         comp = Composition('Fe2O3')
-        
-        # First call (uncached)
-        start = time.time()
+
+        mass = comp.mass
         for _ in range(100):
-            _ = comp.mass
-        cached_time = time.time() - start
-        
-        # Should be fast due to caching
-        self.assertLess(cached_time, 0.1)
+            self.assertEqual(comp.mass, mass)
+
+        self.assertEqual(comp._cached_mass, mass)
 
 class TestCompositionHelperMethod(unittest.TestCase):
     """Test _get_sorted_element_counts helper method."""
@@ -189,7 +184,7 @@ class TestCompositionTypeHints(unittest.TestCase):
                                f"{method_name} should have annotations")
 
 class TestCompositionBackwardCompatibility(unittest.TestCase):
-    """Test that refactoring maintains backward compatibility."""
+    """Test backward-compatible Composition behavior."""
     
     def test_basic_composition_still_works(self):
         """Test basic composition functionality."""
@@ -225,7 +220,7 @@ class TestCompositionBackwardCompatibility(unittest.TestCase):
         self.assertEqual(comp.composition, comp2.composition)
 
 class TestCompositionIntegration(unittest.TestCase):
-    """Integration tests for refactored Composition."""
+    """Integration tests for Composition behavior."""
     
     def test_multiple_calculations_use_cache(self):
         """Test that multiple calculations benefit from caching."""
@@ -261,4 +256,3 @@ class TestCompositionIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

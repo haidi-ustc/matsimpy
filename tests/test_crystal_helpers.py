@@ -1,4 +1,4 @@
-"""Tests for Crystal refactoring: helper methods and code deduplication."""
+"""Tests for Crystal helper methods and internal consistency."""
 import unittest
 import numpy as np
 
@@ -186,7 +186,7 @@ class TestCrystalTypeHints(unittest.TestCase):
         self.assertTrue(hasattr(crystal._convert_to_fractional, '__annotations__'))
 
 class TestCrystalIntegration(unittest.TestCase):
-    """Integration tests for refactored Crystal."""
+    """Integration tests for Crystal helper behavior."""
     
     def test_multiple_modifications_work_together(self):
         """Test that multiple modifications work correctly."""
@@ -213,4 +213,3 @@ class TestCrystalIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

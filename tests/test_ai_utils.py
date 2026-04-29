@@ -1,6 +1,5 @@
 """Tests for AI utilities (prompts, formatting, cache)."""
 import unittest
-import time
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.ai.utils import prompts, formatting
 from matsimpy.ai.models.cache import ResponseCache, cached
@@ -201,9 +200,8 @@ class TestResponseCache(unittest.TestCase):
     def test_cache_expiration(self):
         """Test cache expiration."""
         self.cache.set("operation1", {"input": "data"}, {"result": "value"})
-        
-        # Wait for expiration
-        time.sleep(1.1)
+        key = self.cache._generate_key("operation1", {"input": "data"})
+        self.cache._cache[key]["timestamp"] -= 2
         
         result = self.cache.get("operation1", {"input": "data"})
         
@@ -241,13 +239,11 @@ class TestResponseCache(unittest.TestCase):
         """Test cache without TTL."""
         cache = ResponseCache(max_size=10, ttl=None)
         cache.set("operation1", {"input": "data"}, {"result": "value"})
-        
-        # Wait and check it's still there
-        time.sleep(0.5)
+        key = cache._generate_key("operation1", {"input": "data"})
+        cache._cache[key]["timestamp"] -= 10_000
         result = cache.get("operation1", {"input": "data"})
         
         self.assertIsNotNone(result)
 
 if __name__ == '__main__':
     unittest.main()
-

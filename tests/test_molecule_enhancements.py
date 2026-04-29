@@ -168,23 +168,18 @@ class TestMoleculeNeighborListOptimization(unittest.TestCase):
         self.assertEqual(len(neighbors[1]), 2)
         self.assertEqual(len(neighbors[2]), 2)
     
-    def test_get_all_neighbor_lists_performance(self):
-        """Test that vectorized version works with larger molecules."""
-        import time
-        
+    def test_get_all_neighbor_lists_larger_molecule(self):
+        """Test neighbor list generation with a larger molecule."""
         # Create a moderately sized molecule
         n = 50
         positions = [[i * 0.5, 0, 0] for i in range(n)]
         species = ['C'] * n
         mol = Molecule(species, positions)
-        
-        # Should complete quickly (< 1 second for 50 atoms)
-        start = time.time()
+
         neighbors = mol.get_all_neighbor_lists(2.0)
-        elapsed = time.time() - start
-        
-        self.assertLess(elapsed, 1.0)
+
         self.assertEqual(len(neighbors), n)
+        self.assertGreater(len(neighbors[10]), 0)
 
 class TestMoleculeNeighborListSingle(unittest.TestCase):
     """Test get_neighbor_list improvements."""
@@ -293,4 +288,3 @@ class TestMoleculeDocstringsAndTypes(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

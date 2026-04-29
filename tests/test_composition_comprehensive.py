@@ -1,6 +1,8 @@
 """Comprehensive tests for Composition class."""
 import unittest
 
+from monty.serialization import dumpfn, loadfn
+
 from matsimpy.core import Composition
 
 class TestCompositionComprehensive(unittest.TestCase):
@@ -142,6 +144,20 @@ class TestCompositionComprehensive(unittest.TestCase):
         d = {'formula': 'H2O'}
         comp = Composition.from_dict(d)
         self.assertEqual(comp.formula, 'H2O')
+
+    def test_composition_monty_serialization(self):
+        """Test serialization through monty helpers without writing to repo cwd."""
+        import tempfile
+        from pathlib import Path
+
+        comp = Composition('H2O')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = Path(tmpdir) / "composition.json"
+            dumpfn(comp.as_dict(), filename)
+            restored = loadfn(filename)
+
+        self.assertEqual(comp.composition, restored.composition)
     
     def test_composition_single_element(self):
         """Test single element composition."""
@@ -162,4 +178,3 @@ class TestCompositionComprehensive(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

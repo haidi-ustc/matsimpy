@@ -32,6 +32,16 @@ class TestSiteComprehensive(unittest.TestCase):
         """Test site with properties."""
         site = Site([0, 0, 0], specie='Fe', properties={'magmom': 2.5})
         self.assertEqual(site.properties['magmom'], 2.5)
+
+    def test_site_init_rejects_invalid_specie(self):
+        """Test site initialization rejects invalid atomic numbers."""
+        with self.assertRaises(ValueError):
+            Site([0, 0, 0], specie=123)
+
+    def test_site_init_rejects_invalid_properties(self):
+        """Test site initialization rejects non-dict properties."""
+        with self.assertRaises(TypeError):
+            Site([0, 0, 0], properties="not_a_dict")
     
     def test_site_position_setter(self):
         """Test position setter."""
@@ -87,6 +97,12 @@ class TestSiteComprehensive(unittest.TestCase):
         site = Site.from_dict(d)
         self.assertEqual(site.specie, 'Fe')
         self.assertEqual(site.properties['magmom'], 2.5)
+
+    def test_site_from_dict_minimal(self):
+        """Test creation from a minimal dictionary."""
+        site = Site.from_dict({'position': [0, 0, 0]})
+        self.assertEqual(site.specie, 'X')
+        np.testing.assert_array_equal(site.position, [0, 0, 0])
     
     def test_site_repr(self):
         """Test representation (concise format)."""
@@ -182,6 +198,18 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         }
         site = CrystalSite.from_dict(d)
         self.assertEqual(site.specie, 'Fe')
+        self.assertIsInstance(site.lattice, Lattice)
+
+    def test_crystalsite_from_dict_minimal(self):
+        """Test CrystalSite creation from a minimal dictionary."""
+        site = CrystalSite.from_dict({
+            'position': [0.5, 0.5, 0.5],
+            'lattice': {
+                'lattice_vectors': [[10, 0, 0], [0, 10, 0], [0, 0, 10]]
+            },
+        })
+
+        self.assertEqual(site.specie, 'X')
         self.assertIsInstance(site.lattice, Lattice)
     
     def test_crystalsite_repr(self):
@@ -299,4 +327,3 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

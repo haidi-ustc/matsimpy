@@ -2,13 +2,14 @@
 import unittest
 
 from matsimpy.core import Crystal, Molecule, Lattice
+from tests.conftest import make_simple_crystal, make_simple_molecule
 
 class TestMoleculeSubstitution(unittest.TestCase):
     """Tests for substitution methods in Molecule class."""
     
     def setUp(self):
         """Set up test molecules."""
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.molecule = make_simple_molecule()
     
     def test_substitute_single(self):
         """Test substituting a single atom."""
@@ -72,7 +73,7 @@ class TestCrystalSubstitution(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystals."""
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
+        self.crystal = make_simple_crystal()
     
     def test_substitute_single(self):
         """Test substituting a single atom."""
@@ -145,11 +146,11 @@ class TestSubstitutionConsistency(unittest.TestCase):
         from matsimpy.transformation import substitute
         
         # Test with class method
-        mol1 = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol1 = make_simple_molecule()
         mol1.substitute(0, 'N')
         
         # Test with transformation module (inplace)
-        mol2 = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        mol2 = make_simple_molecule()
         # Transformation functions always return new objects
         mol2 = substitute(mol2, 0, 'N')
         
@@ -175,4 +176,3 @@ class TestSubstitutionConsistency(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

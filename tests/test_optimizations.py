@@ -1,6 +1,5 @@
 """Comprehensive tests for optimization updates."""
 import unittest
-import time
 import numpy as np
 
 from matsimpy.core import Crystal, Lattice, Molecule, Structure
@@ -59,13 +58,11 @@ class TestPropertyCaching(unittest.TestCase):
         formula1 = crystal.formula
         self.assertIsNotNone(formula1)
         
-        # Second call should use cache (much faster)
-        start = time.time()
+        # Second call should use cache
         formula2 = crystal.formula
-        elapsed = time.time() - start
         
         self.assertEqual(formula1, formula2)
-        self.assertLess(elapsed, 0.001)  # Should be very fast
+        self.assertEqual(crystal._cached_formula, formula2)
     
     def test_composition_caching(self):
         """Test that composition is cached."""
@@ -166,12 +163,10 @@ class TestLatticeOptimizations(unittest.TestCase):
         self.assertIsNotNone(lattice._inv_matrix)
         
         # Second call should use cache
-        start = time.time()
         inv2 = lattice.inv_matrix
-        elapsed = time.time() - start
         
         np.testing.assert_array_almost_equal(inv1, inv2)
-        self.assertLess(elapsed, 0.0001)  # Should be very fast
+        self.assertIs(lattice._inv_matrix, inv2)
     
     def test_inverse_matrix_correctness(self):
         """Test that cached inverse is correct."""
@@ -224,27 +219,24 @@ class TestNeighborFinding(unittest.TestCase):
                 self.assertIsInstance(distance, float)
                 self.assertGreaterEqual(distance, 0)
     
-    def test_neighbor_list_performance(self):
-        """Test that neighbor finding is fast."""
+    def test_neighbor_list_larger_structure(self):
+        """Test neighbor finding with a larger deterministic structure."""
         # Create larger structure
         size = 100
         species = ['Si'] * size
-        positions = np.random.rand(size, 3) * 10
+        positions = [[i % 10, (i // 10) % 10, i // 100] for i in range(size)]
         lattice = Lattice.cubic(20.0)
         crystal = Crystal(species, positions, lattice)
         
-        start = time.time()
         neighbors = crystal.get_neighbor_list(5.0)
-        elapsed = time.time() - start
         
-        # Should be fast (< 1 second for 100 atoms)
-        self.assertLess(elapsed, 1.0)
         self.assertIsInstance(neighbors, dict)
+        self.assertEqual(len(neighbors), size)
     
     def test_neighbor_list_caching(self):
         """Test that neighbor tree is cached."""
         species = ['Si'] * 10
-        positions = np.random.rand(10, 3) * 5
+        positions = [[i * 0.3, 0, 0] for i in range(10)]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
         
@@ -254,12 +246,9 @@ class TestNeighborFinding(unittest.TestCase):
         self.assertEqual(crystal._neighbor_tree_cutoff, 3.0)
         
         # Second call with same cutoff should use cache
-        start = time.time()
         neighbors2 = crystal.get_neighbor_list(3.0)
-        elapsed = time.time() - start
         
-        # Should be fast (using cached tree)
-        self.assertLess(elapsed, 0.1)
+        self.assertIsNotNone(crystal._neighbor_tree)
         self.assertEqual(len(neighbors1), len(neighbors2))
     
     def test_neighbor_list_with_pbc(self):
@@ -339,4 +328,3 @@ class TestIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

@@ -2,17 +2,55 @@
 import unittest
 import warnings
 import numpy as np
+import pytest
 
-from matsimpy.core import Crystal, Molecule, Lattice
+from matsimpy.core import Crystal, Molecule
+from tests.conftest import make_cubic_lattice, make_simple_crystal, make_simple_molecule
+
+
+@pytest.mark.parametrize(
+    ("species", "positions", "message"),
+    [
+        (['H', 'N'], [[2.0, 0, 0]], "must match"),
+        (['H', 'N', 'O'], [[2.0, 0, 0], [3.0, 0, 0]], "must match"),
+    ],
+)
+def test_add_atom_rejects_mismatched_batch_lengths(species, positions, message):
+    molecule = make_simple_molecule()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        with pytest.raises(ValueError, match=message):
+            molecule.add_atom(species, positions)
+
+
+@pytest.mark.parametrize(
+    ("species", "positions", "message"),
+    [
+        ('H', [0, 0], "3D coordinate"),
+        (['H', 'O'], [[0, 0, 0], [1, 2]], None),
+    ],
+)
+def test_add_atom_rejects_non_3d_coordinates(species, positions, message):
+    molecule = make_simple_molecule()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        if message is None:
+            with pytest.raises(ValueError):
+                molecule.add_atom(species, positions)
+        else:
+            with pytest.raises(ValueError, match=message):
+                molecule.add_atom(species, positions)
 
 class TestStructureAddMultipleAtoms(unittest.TestCase):
     """Test adding multiple atoms to base Structure class."""
     
     def setUp(self):
         """Set up test structures."""
-        self.lattice = Lattice.cubic(10.0)
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], self.lattice)
-        self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        self.lattice = make_cubic_lattice(10.0)
+        self.crystal = make_simple_crystal(self.lattice)
+        self.molecule = make_simple_molecule()
     
     def test_add_single_atom_string_syntax(self):
         """Test adding single atom with string species (backward compatible)."""
@@ -53,26 +91,6 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
         self.assertEqual(len(self.molecule), original_len)
         self.assertEqual(self.molecule.species, original_species)
     
-    def test_add_atoms_validates_length_mismatch(self):
-        """Test that mismatched species/position lengths raise error."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            with self.assertRaises(ValueError) as context:
-                # Use position that doesn't conflict with existing atoms
-                self.molecule.add_atom(['H', 'N'], [[2.0, 0, 0]])
-            
-            self.assertIn("must match", str(context.exception))
-    
-    def test_add_atoms_validates_3d_coordinates(self):
-        """Test that non-3D coordinates raise error."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            with self.assertRaises(ValueError):
-                self.molecule.add_atom('H', [0, 0])  # 2D
-            
-            with self.assertRaises(ValueError):
-                self.molecule.add_atom(['H', 'O'], [[0, 0, 0], [1, 2]])  # One 2D
-    
     def test_formula_updated_after_adding_multiple(self):
         """Test that formula is correctly updated after adding atoms."""
         original_formula = self.molecule.formula
@@ -100,7 +118,7 @@ class TestCrystalAddMultipleAtoms(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.lattice = Lattice.cubic(10.0)
+        self.lattice = make_cubic_lattice(10.0)
         self.crystal = Crystal(['Si'], [[0, 0, 0]], self.lattice)
     
     def test_add_multiple_fractional_coords(self):
@@ -146,7 +164,7 @@ class TestCrystalAddAtomsWithSiteProperties(unittest.TestCase):
     
     def setUp(self):
         """Set up test crystal."""
-        self.lattice = Lattice.cubic(10.0)
+        self.lattice = make_cubic_lattice(10.0)
         self.crystal = Crystal(['Si'], [[0, 0, 0]], self.lattice)
     
     def test_add_single_with_site_properties(self):
@@ -258,7 +276,7 @@ class TestEdgeCases(unittest.TestCase):
     def setUp(self):
         """Set up test structures."""
         self.molecule = Molecule(['C'], [[0, 0, 0]])
-        self.lattice = Lattice.cubic(10.0)
+        self.lattice = make_cubic_lattice(10.0)
         self.crystal = Crystal(['O'], [[0.5, 0.5, 0.5]], self.lattice)
     
     def test_large_batch_add(self):
@@ -361,7 +379,7 @@ class TestIntegrationWithOtherMethods(unittest.TestCase):
     
     def test_add_then_get_neighbor_list(self):
         """Test neighbor list after adding atoms."""
-        lattice = Lattice.cubic(10.0)
+        lattice = make_cubic_lattice(10.0)
         crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
         crystal.add_atom(['O', 'O'], [[0.1, 0, 0], [0.2, 0, 0]])
         
@@ -373,4 +391,3 @@ class TestIntegrationWithOtherMethods(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
