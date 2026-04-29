@@ -128,6 +128,9 @@ def center_structure(
 
         # Move all atoms
         structure.positions += displacement
+        if hasattr(structure, "_cached_com"):
+            structure._cached_com = None
+        structure._sites = structure._initialize_sites()
 
     else:
         # For crystals, center in fractional coordinates
@@ -206,10 +209,15 @@ def perturb_positions(
             new_positions[idx] += perturbations[i]
 
         structure.positions = new_positions
+        structure._sites = structure._initialize_sites()
+        if hasattr(structure, "_cached_com"):
+            structure._cached_com = None
 
     # Invalidate caches
-    structure._neighbor_tree = None
-    structure._neighbor_tree_positions = None
+    if hasattr(structure, "_neighbor_tree"):
+        structure._neighbor_tree = None
+    if hasattr(structure, "_neighbor_tree_positions"):
+        structure._neighbor_tree_positions = None
 
     return structure
 

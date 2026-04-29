@@ -59,8 +59,8 @@ def align_molecules(
         raise ValueError("Must have same number of indices")
 
     # Get coordinates
-    coords1 = molecule1.cart_positions[indices1]
-    coords2 = molecule2.cart_positions[indices2]
+    coords1 = molecule1.positions[indices1]
+    coords2 = molecule2.positions[indices2]
 
     # Center both sets
     center1 = np.mean(coords1, axis=0)
@@ -79,9 +79,9 @@ def align_molecules(
         R = np.dot(Vt.T, U.T)
 
     # Apply transformation to molecule2
-    aligned_coords = np.dot(molecule2.cart_positions - center2, R) + center1
+    aligned_coords = np.dot(molecule2.positions - center2, R) + center1
 
-    return Molecule(molecule2.species, aligned_coords, coords_are_cartesian=True)
+    return Molecule(list(molecule2.species), aligned_coords.tolist())
 
 
 def generate_conformers(
@@ -143,16 +143,16 @@ def merge_molecules(
         >>> merged = merge_molecules(mol1, mol2, 5, 0)
     """
     # Align molecule2 so bond_atom2 is near bond_atom1
-    bond_pos1 = molecule1.cart_positions[bond_atom1]
-    bond_pos2 = molecule2.cart_positions[bond_atom2]
+    bond_pos1 = molecule1.positions[bond_atom1]
+    bond_pos2 = molecule2.positions[bond_atom2]
 
     # Translate molecule2
     offset = bond_pos1 - bond_pos2
-    new_positions2 = molecule2.cart_positions + offset
+    new_positions2 = molecule2.positions + offset
 
     # Combine
     all_species = list(molecule1.species) + list(molecule2.species)
-    all_positions = np.vstack([molecule1.cart_positions, new_positions2])
+    all_positions = np.vstack([molecule1.positions, new_positions2])
 
     # Remove specified atoms
     if remove_atoms is not None:
@@ -161,7 +161,7 @@ def merge_molecules(
         all_species = [s for i, s in enumerate(all_species) if mask[i]]
         all_positions = all_positions[mask]
 
-    return Molecule(all_species, all_positions, coords_are_cartesian=True)
+    return Molecule(all_species, all_positions.tolist())
 
 
 __all__ = [

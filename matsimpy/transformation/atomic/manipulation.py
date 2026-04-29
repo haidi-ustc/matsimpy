@@ -77,10 +77,15 @@ def move_atoms(
             new_positions[idx] += displacement
 
         structure.positions = new_positions
+        structure._sites = structure._initialize_sites()
+        if hasattr(structure, "_cached_com"):
+            structure._cached_com = None
 
     # Invalidate caches
-    structure._neighbor_tree = None
-    structure._neighbor_tree_positions = None
+    if hasattr(structure, "_neighbor_tree"):
+        structure._neighbor_tree = None
+    if hasattr(structure, "_neighbor_tree_positions"):
+        structure._neighbor_tree_positions = None
     if isinstance(structure, Crystal):
         structure._sites = structure._initialize_sites()
 
@@ -128,11 +133,15 @@ def swap_atoms(
         structure.cart_positions = structure._convert_to_cartesian()
         structure._sites = structure._initialize_sites()
     else:
-        structure.cart_positions = positions
+        structure._sites = structure._initialize_sites()
+        if hasattr(structure, "_cached_com"):
+            structure._cached_com = None
 
     # Invalidate caches
-    structure._neighbor_tree = None
-    structure._neighbor_tree_positions = None
+    if hasattr(structure, "_neighbor_tree"):
+        structure._neighbor_tree = None
+    if hasattr(structure, "_neighbor_tree_positions"):
+        structure._neighbor_tree_positions = None
     structure._formula_dirty = True
     structure._cached_composition = None
 

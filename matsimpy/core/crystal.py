@@ -208,6 +208,8 @@ class Crystal(Structure):
         self._neighbor_tree: Optional[cKDTree] = None
         self._neighbor_tree_cutoff: Optional[float] = None
         self._neighbor_tree_positions: Optional[np.ndarray] = None
+        self._neighbor_tree_use_pbc: Optional[bool] = None
+        self._neighbor_tree_pbc: Optional[Tuple[bool, bool, bool]] = None
 
     # ========================================================================
     # Helper Methods - Reduce Code Duplication
@@ -222,6 +224,8 @@ class Crystal(Structure):
         self._neighbor_tree = None
         self._neighbor_tree_positions = None
         self._neighbor_tree_cutoff = None
+        self._neighbor_tree_use_pbc = None
+        self._neighbor_tree_pbc = None
 
     def set_pbc(self, pbc: Union[List[bool], Tuple[bool, bool, bool]]) -> None:
         """
@@ -1228,12 +1232,19 @@ class Crystal(Structure):
             arrays. Consider using a smaller cutoff or disabling PBC if memory
             is a concern.
         """
-        # Calculate number of images needed
-        max_dist = np.max(np.linalg.norm(self.lattice.lattice_vectors, axis=1))
-        n_images = int(np.ceil(cutoff / max_dist)) + 1
+        pbc_mask = np.array(self.pbc, dtype=bool)
+        if not np.any(pbc_mask):
+            return self.cart_positions.copy()
+
+        # Calculate number of images needed along periodic directions.  Use the
+        # shortest periodic vector as a conservative bound.
+        periodic_lengths = np.linalg.norm(self.lattice.lattice_vectors[pbc_mask], axis=1)
+        min_dist = np.min(periodic_lengths)
+        n_images = int(np.ceil(cutoff / min_dist)) + 1
 
         n_atoms = len(self.cart_positions)
-        n_total_images = (2 * n_images + 1) ** 3 - 1  # Exclude (0,0,0)
+        n_periodic_dims = int(np.sum(pbc_mask))
+        n_total_images = (2 * n_images + 1) ** n_periodic_dims - 1  # Exclude origin
 
         # Check for excessive memory usage
         max_cache_atoms = 1_000_000  # Limit to ~1M atoms in cache
@@ -1247,9 +1258,9 @@ class Crystal(Structure):
             )
 
         # Generate all translation vectors at once using meshgrid
-        i_range = np.arange(-n_images, n_images + 1)
-        j_range = np.arange(-n_images, n_images + 1)
-        k_range = np.arange(-n_images, n_images + 1)
+        i_range = np.arange(-n_images, n_images + 1) if self.pbc[0] else np.array([0])
+        j_range = np.arange(-n_images, n_images + 1) if self.pbc[1] else np.array([0])
+        k_range = np.arange(-n_images, n_images + 1) if self.pbc[2] else np.array([0])
         i_grid, j_grid, k_grid = np.meshgrid(i_range, j_range, k_range, indexing="ij")
 
         # Flatten and remove (0,0,0)
@@ -1331,6 +1342,8 @@ class Crystal(Structure):
         rebuild_tree = (
             self._neighbor_tree is None
             or self._neighbor_tree_cutoff != cutoff
+            or self._neighbor_tree_use_pbc != use_pbc
+            or self._neighbor_tree_pbc != tuple(self.pbc)
             or (use_pbc and self._neighbor_tree_positions is None)
             or (
                 self._neighbor_tree_positions is not None
@@ -1347,6 +1360,8 @@ class Crystal(Structure):
             self._neighbor_tree = cKDTree(positions)
             self._neighbor_tree_cutoff = cutoff
             self._neighbor_tree_positions = positions
+            self._neighbor_tree_use_pbc = use_pbc
+            self._neighbor_tree_pbc = tuple(self.pbc)
 
         # Validate atom_index if provided
         n_atoms = len(self.cart_positions)
@@ -1376,21 +1391,26 @@ class Crystal(Structure):
         for i in atoms_to_query:
             pos = self.cart_positions[i]
             indices = self._neighbor_tree.query_ball_point(pos, cutoff)
-            neighbors = []
+            neighbors_by_index: Dict[int, float] = {}
             for idx in indices:
                 if idx < n_atoms:
                     # Original atom
                     if idx != i:
                         dist = np.linalg.norm(pos - self._neighbor_tree_positions[idx])
-                        neighbors.append((idx, dist))
+                        if idx not in neighbors_by_index or dist < neighbors_by_index[idx]:
+                            neighbors_by_index[idx] = float(dist)
                 else:
                     # Periodic image
                     image_idx = idx % n_atoms
                     if image_idx != i:
                         dist = np.linalg.norm(pos - self._neighbor_tree_positions[idx])
-                        neighbors.append((image_idx, dist))
+                        if (
+                            image_idx not in neighbors_by_index
+                            or dist < neighbors_by_index[image_idx]
+                        ):
+                            neighbors_by_index[image_idx] = float(dist)
 
-            neighbors_dict[i] = neighbors
+            neighbors_dict[i] = sorted(neighbors_by_index.items())
 
         return neighbors_dict
 

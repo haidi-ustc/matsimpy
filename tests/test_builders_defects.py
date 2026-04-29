@@ -213,6 +213,8 @@ class TestAntisite(unittest.TestCase):
         # Check that species were swapped
         self.assertEqual(with_antisite.species[0], self.gan.species[1])
         self.assertEqual(with_antisite.species[1], self.gan.species[0])
+        # Antisite swaps occupancy on fixed sites; coordinates should not move.
+        np.testing.assert_array_almost_equal(with_antisite.positions, self.gan.positions)
     
     def test_create_antisite_same_index(self):
         """Test creating antisite defect with same index."""
@@ -226,4 +228,3 @@ class TestAntisite(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

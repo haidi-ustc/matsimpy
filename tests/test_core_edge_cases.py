@@ -66,6 +66,33 @@ class TestCrystalEdgeCases(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             Crystal.from_file('nonexistent.vasp')
 
+    def test_crystal_neighbor_cache_distinguishes_pbc_mode(self):
+        """Calling PBC and non-PBC neighbor queries in sequence should not reuse wrong trees."""
+        crystal = Crystal(
+            ['H', 'H'],
+            [[0.01, 0.5, 0.5], [0.99, 0.5, 0.5]],
+            Lattice.cubic(10),
+            pbc=[True, True, True],
+        )
+
+        with_pbc = crystal.get_neighbor_list(0.5, atom_index=0, use_pbc=True)
+        without_pbc = crystal.get_neighbor_list(0.5, atom_index=0, use_pbc=False)
+
+        self.assertEqual(len(with_pbc[0]), 1)
+        self.assertEqual(without_pbc[0], [])
+
+    def test_crystal_neighbor_respects_partial_pbc(self):
+        """2D slabs should not see periodic neighbors across the non-periodic axis."""
+        slab = Crystal(
+            ['H', 'H'],
+            [[0.5, 0.5, 0.01], [0.5, 0.5, 0.99]],
+            Lattice.cubic(10),
+            pbc=[True, True, False],
+        )
+
+        neighbors = slab.get_neighbor_list(0.5, atom_index=0, use_pbc=True)
+        self.assertEqual(neighbors[0], [])
+
 class TestElementEdgeCases(unittest.TestCase):
     """Edge cases for Element."""
     
@@ -126,6 +153,33 @@ class TestMoleculeEdgeCases(unittest.TestCase):
         # Single atom should still create a box with minimum size
         self.assertGreaterEqual(crystal.lattice.a, 30.0)  # 2 * vacuum (15.0)
 
+    def test_molecule_center_of_mass_invalidated_after_remove_and_substitute(self):
+        """Cached COM must be invalidated by mutations."""
+        molecule = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
+        original_com = molecule.get_center_of_mass()
+        molecule.remove_atom(1)
+        removed_com = molecule.get_center_of_mass()
+        self.assertNotEqual(original_com, removed_com)
+        np.testing.assert_array_almost_equal(removed_com, [0, 0, 0])
+
+        molecule = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
+        original_com = molecule.get_center_of_mass()
+        molecule.substitute(1, 'H')
+        substituted_com = molecule.get_center_of_mass()
+        self.assertNotEqual(original_com, substituted_com)
+
+    def test_molecule_add_atom_rolls_back_on_site_property_error(self):
+        """A failed add_atom should not partially mutate the molecule."""
+        molecule = Molecule(['C'], [[0, 0, 0]])
+        old_species = molecule.species
+        old_positions = molecule.positions.copy()
+
+        with self.assertRaises(ValueError):
+            molecule.add_atom(['H', 'H'], [[1, 0, 0], [2, 0, 0]], site_properties=[{}])
+
+        self.assertEqual(molecule.species, old_species)
+        np.testing.assert_array_almost_equal(molecule.positions, old_positions)
+        self.assertEqual(len(molecule.sites), 1)
+
 if __name__ == '__main__':
     unittest.main()
-

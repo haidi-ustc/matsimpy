@@ -91,6 +91,9 @@ def rotate(
 
         # Update fractional positions
         new_structure.frac_positions = new_structure._convert_to_fractional()
+        # Keep canonical fractional positions synchronized with the rotated
+        # Cartesian coordinates.
+        new_structure.positions = new_structure.frac_positions
         # Invalidate caches
         new_structure._neighbor_tree = None
         new_structure._neighbor_tree_positions = None

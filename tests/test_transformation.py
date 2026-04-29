@@ -48,6 +48,10 @@ class TestTranslation(unittest.TestCase):
         new_crystal = translate(self.crystal, [1, 1, 1])
         
         np.testing.assert_array_almost_equal(new_crystal.cart_positions[0], original_cart + [1, 1, 1])
+        np.testing.assert_array_almost_equal(new_crystal.positions, new_crystal.frac_positions)
+        np.testing.assert_array_almost_equal(
+            new_crystal.sites[0].frac_position, new_crystal.positions[0]
+        )
     
     def test_translate_to_origin(self):
         """Test translate to origin."""
@@ -103,6 +107,17 @@ class TestRotation(unittest.TestCase):
         
         # Should be rotated around origin
         self.assertIsNotNone(rotated)
+
+    def test_rotate_crystal_keeps_canonical_positions_in_sync(self):
+        """Crystal rotation must update positions, frac_positions, and sites together."""
+        crystal = Crystal(['Si'], [[0.1, 0.0, 0.0]], Lattice.cubic(10))
+        rotated = rotate(crystal, angle=90, axis=[0, 0, 1], center=[0, 0, 0])
+
+        np.testing.assert_array_almost_equal(rotated.positions, rotated.frac_positions)
+        np.testing.assert_array_almost_equal(
+            rotated.sites[0].frac_position, rotated.positions[0]
+        )
+        np.testing.assert_array_almost_equal(rotated.positions[0], [0.0, 0.1, 0.0])
 
 class TestSubstitution(unittest.TestCase):
     """Tests for substitution transformations."""
@@ -217,6 +232,34 @@ class TestComposite(unittest.TestCase):
         
         self.assertIsNot(self.molecule, transformed)
 
+
+class TestMolecularStructuralTransformations(unittest.TestCase):
+    """Regression tests for molecule-specific structural transformations."""
+
+    def test_align_molecules_uses_molecule_positions(self):
+        """align_molecules should work for Molecule, which stores Cartesian coords in positions."""
+        from matsimpy.transformation.structural import align_molecules
+
+        reference = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        moving = Molecule(['C', 'O'], [[5, 5, 0], [6.2, 5, 0]])
+
+        aligned = align_molecules(reference, moving, [0, 1], [0, 1])
+
+        self.assertIsInstance(aligned, Molecule)
+        np.testing.assert_array_almost_equal(aligned.positions, reference.positions)
+
+    def test_merge_molecules_uses_molecule_positions(self):
+        """merge_molecules should not rely on a non-existent cart_positions attribute."""
+        from matsimpy.transformation.structural import merge_molecules
+
+        mol1 = Molecule(['C'], [[0, 0, 0]])
+        mol2 = Molecule(['O'], [[1, 0, 0]])
+
+        merged = merge_molecules(mol1, mol2, 0, 0)
+
+        self.assertIsInstance(merged, Molecule)
+        self.assertEqual(merged.species, ('C', 'O'))
+        np.testing.assert_array_almost_equal(merged.positions[1], mol1.positions[0])
+
 if __name__ == '__main__':
     unittest.main()
-

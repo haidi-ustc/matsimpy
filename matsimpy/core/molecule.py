@@ -427,44 +427,66 @@ class Molecule(Structure):
                             f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
-        # Determine number of atoms being added
+        # Determine number of atoms being added.  From this point on we may
+        # mutate state, so keep a rollback snapshot in case validation of
+        # site_properties fails after the parent mutation.
         n_atoms_before = len(self.species)
+        old_species = self.species
+        old_positions = self.positions.copy()
+        old_sites = self._sites.copy()
+        old_site_properties = self.site_properties.copy() if self.site_properties else []
+        old_formula_dirty = self._formula_dirty
+        old_cached_composition = self._cached_composition
+        old_cached_formula = self._cached_formula
+        old_cached_com = getattr(self, "_cached_com", None)
 
-        # Call parent to add atoms
-        super().add_atom(species, position)
+        try:
+            # Call parent to add atoms
+            super().add_atom(species, position)
 
-        n_atoms_added = len(self.species) - n_atoms_before
+            n_atoms_added = len(self.species) - n_atoms_before
 
-        # Invalidate center of mass cache
-        if hasattr(self, "_cached_com"):
-            self._cached_com = None
+            # Invalidate center of mass cache
+            if hasattr(self, "_cached_com"):
+                self._cached_com = None
 
-        # Update site properties
-        if site_properties is not None:
-            # Normalize to list
-            if isinstance(site_properties, dict):
-                site_properties_list = [site_properties] * n_atoms_added
-            else:
-                site_properties_list = site_properties
+            # Update site properties
+            if site_properties is not None:
+                # Normalize to list
+                if isinstance(site_properties, dict):
+                    site_properties_list = [site_properties] * n_atoms_added
+                else:
+                    site_properties_list = site_properties
 
-            # Validate length
-            if len(site_properties_list) != n_atoms_added:
-                raise ValueError(
-                    f"Number of site_properties ({len(site_properties_list)}) "
-                    f"must match number of atoms added ({n_atoms_added})"
-                )
+                # Validate length
+                if len(site_properties_list) != n_atoms_added:
+                    raise ValueError(
+                        f"Number of site_properties ({len(site_properties_list)}) "
+                        f"must match number of atoms added ({n_atoms_added})"
+                    )
 
-            # Initialize site_properties if needed
-            if not self.site_properties:
-                self.site_properties = [{}] * n_atoms_before
+                # Initialize site_properties if needed
+                if not self.site_properties:
+                    self.site_properties = [{}] * n_atoms_before
 
-            self.site_properties.extend(site_properties_list)
-        elif self.site_properties:
-            # Maintain existing site_properties with empty dicts
-            self.site_properties.extend([{}] * n_atoms_added)
+                self.site_properties.extend(site_properties_list)
+            elif self.site_properties:
+                # Maintain existing site_properties with empty dicts
+                self.site_properties.extend([{}] * n_atoms_added)
 
-        # Reinitialize sites
-        self._sites = self._initialize_sites()
+            # Reinitialize sites
+            self._sites = self._initialize_sites()
+        except Exception:
+            self.species = old_species
+            self.positions = old_positions
+            self._sites = old_sites
+            self.site_properties = old_site_properties
+            self._formula_dirty = old_formula_dirty
+            self._cached_composition = old_cached_composition
+            self._cached_formula = old_cached_formula
+            if hasattr(self, "_cached_com"):
+                self._cached_com = old_cached_com
+            raise
 
     def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:
         """
@@ -537,6 +559,8 @@ class Molecule(Structure):
 
         # Reinitialize sites (only once after all removals)
         self._sites = self._initialize_sites()
+        if hasattr(self, "_cached_com"):
+            self._cached_com = None
 
     def substitute(
         self,
@@ -574,6 +598,8 @@ class Molecule(Structure):
 
         # Molecule-specific updates: reinitialize sites with updated species
         self._sites = self._initialize_sites()
+        if hasattr(self, "_cached_com"):
+            self._cached_com = None
 
     def as_dict(self) -> Dict[str, Any]:
         """

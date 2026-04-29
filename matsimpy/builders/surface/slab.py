@@ -43,6 +43,8 @@ def generate_slab(
         >>> slab = generate_slab(bulk, (1,1,1), layers=5, min_vacuum_size=15)
     """
     h, k, l = miller_index
+    if h == 0 and k == 0 and l == 0:
+        raise ValueError("Miller index cannot be (0, 0, 0)")
 
     # Get the surface normal vector in Cartesian coordinates
     lattice_matrix = bulk.lattice.lattice_vectors
@@ -61,21 +63,21 @@ def generate_slab(
     # Determine number of layers if not specified
     if layers is None:
         layers = max(2, int(np.ceil(min_slab_size / d_spacing)))
+    if layers <= 0:
+        raise ValueError("layers must be positive")
 
     # Create new lattice for slab
-    # Simplified: for (hkl) surface, extend the corresponding lattice direction
-    slab_thickness = layers * d_spacing
+    # Simplified implementation: repeat the input cell along the third lattice
+    # direction and add vacuum.  The requested Miller index currently affects
+    # the layer-count estimate only; full surface reorientation should be added
+    # in a dedicated crystallographic slab builder.
+    c_len = np.linalg.norm(lattice_matrix[2])
+    slab_thickness = max(layers * c_len, min_slab_size)
     total_c = slab_thickness + min_vacuum_size
 
-    # Use original lattice vectors but extend the one perpendicular to surface
     new_lattice_vectors = lattice_matrix.copy()
-
-    # Determine which direction to extend based on Miller indices
-    # For simplicity, extend z-direction and keep a, b
-    # This is a simplified approach - full implementation would properly orient the surface
-    new_lattice_vectors[2] = new_lattice_vectors[2] * (
-        total_c / np.linalg.norm(new_lattice_vectors[2])
-    )
+    c_direction = new_lattice_vectors[2] / c_len
+    new_lattice_vectors[2] = c_direction * total_c
 
     new_lattice = Lattice(new_lattice_vectors)
 
@@ -83,30 +85,23 @@ def generate_slab(
     new_species = []
     new_positions = []
 
-    for spec, pos in zip(bulk.species, bulk.positions):
-        # Convert to Cartesian
-        cart_pos = np.dot(pos, lattice_matrix)
+    slab_fraction = slab_thickness / total_c
+    z_offset = (min_vacuum_size / total_c / 2.0) if center_slab else 0.0
 
-        # Project onto new coordinate system
-        new_frac = np.dot(cart_pos, np.linalg.inv(new_lattice_vectors))
+    for layer in range(layers):
+        for spec, pos in zip(bulk.species, bulk.positions):
+            pos = np.array(pos, dtype=np.float64)
+            new_frac = pos.copy()
+            new_frac[0] = new_frac[0] % 1.0
+            new_frac[1] = new_frac[1] % 1.0
+            # Repeat along the slab direction, compressing the repeated slab
+            # into the non-vacuum portion of the new cell.
+            new_frac[2] = ((pos[2] % 1.0) + layer) / layers
+            new_frac[2] = new_frac[2] * slab_fraction + z_offset
+            new_species.append(spec)
+            new_positions.append(new_frac.tolist())
 
-        # Adjust z coordinate
-        if center_slab:
-            z_center = (1.0 - min_vacuum_size / total_c) / 2.0
-            new_frac[2] = (new_frac[2] % 1.0) * (slab_thickness / total_c) + (
-                min_vacuum_size / total_c / 2.0
-            )
-        else:
-            new_frac[2] = (new_frac[2] % 1.0) * (slab_thickness / total_c)
-
-        # Wrap fractional coordinates
-        new_frac[0] = new_frac[0] % 1.0
-        new_frac[1] = new_frac[1] % 1.0
-
-        new_species.append(spec)
-        new_positions.append(new_frac)
-
-    return Crystal(new_species, new_positions, new_lattice)
+    return Crystal(new_species, new_positions, new_lattice, pbc=[True, True, False])
 
 
 def generate_symmetric_slab(

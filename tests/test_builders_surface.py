@@ -25,13 +25,19 @@ class TestSlabGeneration(unittest.TestCase):
         self.assertIsInstance(slab, Crystal)
         # Should have vacuum (larger c)
         self.assertGreater(slab.lattice.c, self.si_bulk.lattice.c)
+        self.assertEqual(slab.pbc, [True, True, False])
     
     def test_generate_slab_111(self):
         """Test (111) slab generation."""
         slab = generate_slab(self.si_bulk, (1, 1, 1), min_slab_size=10, min_vacuum_size=15)
         
         self.assertGreater(len(slab.species), 0)
-        self.assertIsInstance(slab, Crystal)
+        self.assertEqual(slab.pbc, [True, True, False])
+
+    def test_generate_slab_rejects_zero_miller_index(self):
+        """The zero Miller index is invalid."""
+        with self.assertRaises(ValueError):
+            generate_slab(self.si_bulk, (0, 0, 0), 10, 15)
     
     def test_generate_slab_with_layers(self):
         """Test slab generation with specific number of layers."""
@@ -42,6 +48,8 @@ class TestSlabGeneration(unittest.TestCase):
         )
         
         self.assertGreater(len(slab.species), 0)
+        self.assertEqual(len(slab.species), len(self.si_bulk.species) * 5)
+        self.assertEqual(slab.pbc, [True, True, False])
     
     def test_generate_slab_centered(self):
         """Test centered slab generation."""
@@ -125,4 +133,3 @@ class TestAdsorbate(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

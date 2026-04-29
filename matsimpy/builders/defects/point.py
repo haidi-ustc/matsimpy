@@ -9,7 +9,6 @@ import numpy as np
 from copy import deepcopy
 from ...core import Crystal, Molecule, Lattice
 from ...transformation.chemical.substitution import substitute
-from ...transformation.atomic.manipulation import swap_atoms
 
 
 def create_vacancy(
@@ -327,8 +326,18 @@ def create_antisite(
     if index1 == index2:
         raise ValueError("Cannot swap atom with itself")
 
-    # Use transformation function for swapping atoms (always returns new structure)
-    result = swap_atoms(structure, index1, index2)
+    # Antisite defects exchange species on fixed lattice sites.  Do not swap
+    # positions, otherwise the operation only reorders atoms rather than placing
+    # each species on the other species' site.
+    result = deepcopy(structure)
+    species_list = list(result.species)
+    species_list[index1], species_list[index2] = species_list[index2], species_list[index1]
+    result.species = tuple(species_list)
+    result._formula_dirty = True
+    result._cached_composition = None
+    result._cached_formula = None
+    if hasattr(result, "_sites"):
+        result._sites = result._initialize_sites()
     if inplace:
         # Copy result back to original structure
         structure.species = result.species

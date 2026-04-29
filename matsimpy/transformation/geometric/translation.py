@@ -56,6 +56,10 @@ def translate(
         # For crystals, modify positions directly
         new_structure.cart_positions += vector
         new_structure.frac_positions = new_structure._convert_to_fractional()
+        # Keep canonical fractional positions in sync. Many downstream APIs
+        # (sites, serialization, equality, further transformations) read
+        # ``positions`` rather than ``frac_positions``.
+        new_structure.positions = new_structure.frac_positions
         # Invalidate caches
         new_structure._neighbor_tree = None
         new_structure._neighbor_tree_positions = None
