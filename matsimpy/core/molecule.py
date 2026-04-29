@@ -480,15 +480,16 @@ class Molecule(Structure):
             # Reinitialize sites
             self._sites = self._initialize_sites()
         except Exception:
-            self.species = old_species
-            self.positions = old_positions
+            # Roll back using backing fields to bypass strict setters
+            self._species = old_species
+            self._positions = old_positions
             self._sites = old_sites
             self.site_properties = old_site_properties
             self._formula_dirty = old_formula_dirty
             self._cached_composition = old_cached_composition
             self._cached_formula = old_cached_formula
             if hasattr(self, "_cached_com"):
-                self._cached_com = old_cached_com
+                self._cached_com = None
             raise
 
     def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:

@@ -25,7 +25,8 @@ class TestSpeciesSetter(unittest.TestCase):
     def test_species_setter_invalidates_composition(self):
         crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
         old_mass = crystal.composition.mass
-        crystal.species = ['Cl', 'Na']
+        # Change species to cause composition change (different elements = different mass)
+        crystal.species = ['K', 'Cl']
         new_mass = crystal.composition.mass
         self.assertNotEqual(old_mass, new_mass)
 

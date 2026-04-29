@@ -639,10 +639,10 @@ class Crystal(Structure):
             # Reinitialize sites
             self._sites = self._initialize_sites()
 
-        except Exception as e:
-            # Complete rollback to restore all state
-            self.species = old_species
-            self.positions = old_positions
+        except Exception:
+            # Complete rollback to restore all state using backing fields
+            self._species = old_species
+            self._positions = old_positions
             self.frac_positions = old_frac_positions
             self.cart_positions = old_cart_positions
             self._sites = old_sites
@@ -1970,9 +1970,10 @@ class Crystal(Structure):
         new_crystal = make_supercell(self, scaling_matrix)
 
         if inplace:
-            # Copy data from new_crystal to self
-            self.species = new_crystal.species
-            self.positions = new_crystal.positions
+            # Copy data from new_crystal to self using backing fields to bypass
+            # the strict setters that require parity between species and positions.
+            self._species = new_crystal.species
+            self._positions = new_crystal.positions
             self.frac_positions = new_crystal.frac_positions
             self.cart_positions = new_crystal.cart_positions
             self.lattice = new_crystal.lattice
