@@ -12,10 +12,8 @@ class TestSpeciesSetter(unittest.TestCase):
 
     def test_species_setter_validates_length(self):
         crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
-        # Current implementation does not strictly enforce length parity on the setter
-        # so this should not raise an exception even if lengths differ.
-        crystal.species = ['Na', 'Cl', 'Na']
-        self.assertEqual(len(crystal.species), 3)
+        with self.assertRaises(ValueError):
+            crystal.species = ['Na', 'Cl', 'Na']
 
     def test_species_setter_invalidates_formula(self):
         crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))

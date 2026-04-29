@@ -233,19 +233,21 @@ class Structure(ABC, MSONable):
             raise TypeError("All species must be strings.")
         value_tuple = tuple(value)
 
-        # Length validation: if positions exist, ensure the lengths match.
-        # Be permissive in cases where mutations update both sides in sequence.
+        # Length validation: enforce species/positions parity strictly
         if hasattr(self, '_positions') and len(value_tuple) != len(self._positions):
-            # Do not raise to allow multi-step mutations where positions will be updated
-            # subsequently (e.g., add_atom). This preserves previous behavior
-            # without breaking existing mutation patterns.
-            pass
+            raise ValueError(
+                f"Cannot set species: number of species ({len(value_tuple)}) "
+                f"must match number of positions ({len(self._positions)})."
+            )
         self._species = value_tuple
 
         # Invalidate caches
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None
+        # Also clear cached center-of-mass if present (COM cache)
+        if hasattr(self, '_cached_com'):
+            self._cached_com = None
 
     def _validate_positions(self, positions: Union[List, np.ndarray]) -> np.ndarray:
         """
@@ -809,8 +811,9 @@ class Structure(ABC, MSONable):
         # Add atoms
         species_list = list(self.species)
         species_list.extend(species)
-        self.species = tuple(species_list)
-        self.positions = np.vstack([self.positions, positions_array])
+        # Bypass species/positions setters to avoid strict length check during multi-step mutation
+        self._species = tuple(species_list)
+        self._positions = np.vstack([self.positions, positions_array])
 
         # Invalidate caches
         self._formula_dirty = True
@@ -856,8 +859,9 @@ class Structure(ABC, MSONable):
         # Maintain tuple immutability
         species_list = list(self.species)
         species_list.pop(index)
-        self.species = tuple(species_list)
-        self.positions = np.delete(self.positions, index, axis=0)
+        # Bypass setters to avoid triggering length checks
+        self._species = tuple(species_list)
+        self._positions = np.delete(self.positions, index, axis=0)
         self._formula_dirty = True
         self._cached_composition = None
         # Properties computed lazily on access
@@ -1029,8 +1033,8 @@ class Structure(ABC, MSONable):
         sorted_positions = np.array([a[2] for a in sorted_atoms])
 
         # Update internal data
-        self.species = tuple(sorted_species)
-        self.positions = sorted_positions
+        self._species = tuple(sorted_species)
+        self._positions = sorted_positions
 
         # Invalidate caches
         self._formula_dirty = True

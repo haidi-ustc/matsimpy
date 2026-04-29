@@ -441,8 +441,9 @@ class Molecule(Structure):
         old_cached_composition = self._cached_composition
         old_cached_formula = self._cached_formula
         old_cached_com = getattr(self, "_cached_com", None)
+        # Ensure we respect frozen state at the very start of mutation
+        self._check_frozen()
         try:
-            self._check_frozen()
             # Call parent to add atoms
             super().add_atom(species, position)
 
