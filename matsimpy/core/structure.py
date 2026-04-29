@@ -349,6 +349,11 @@ class Structure(ABC, MSONable):
             >>> structure.positions.shape
             (2, 3)
         """
+        if self.is_frozen:
+            # Return read-only view to prevent bypassing freeze via array mutation
+            view = self._positions.view()
+            view.flags.writeable = False
+            return view
         return self._positions
 
     @positions.setter
