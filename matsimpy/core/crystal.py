@@ -408,6 +408,8 @@ class Crystal(Structure):
             >>> # This will raise ValueError if atom is too close to existing atoms
             >>> # crystal.add_atom('Si', [1.0, 0.0, 0.0])  # Would be duplicate with [0,0,0] due to PBC
         """
+        # Guard for frozen state before mutation
+        self._check_frozen()
         # Parse and normalize position input
         if isinstance(position, list):
             if len(position) == 0:
@@ -681,6 +683,8 @@ class Crystal(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
+        # Guard for frozen state before mutation
+        self._check_frozen()
         # Normalize to list
         if isinstance(indices, int):
             indices = [indices]

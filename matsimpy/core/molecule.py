@@ -269,6 +269,7 @@ class Molecule(Structure):
             array([1., 0., 0.])
         """
         if inplace:
+            self._check_frozen()
             self.positions += np.array(vector)
             # Invalidate center of mass cache
             if hasattr(self, "_cached_com"):
@@ -323,6 +324,7 @@ class Molecule(Structure):
 
         rotation = Rotation.from_rotvec(np.radians(angle) * np.array(axis))
         if inplace:
+            self._check_frozen()
             self.positions = rotation.apply(self.positions)
             # Invalidate center of mass cache
             if hasattr(self, "_cached_com"):
@@ -439,8 +441,8 @@ class Molecule(Structure):
         old_cached_composition = self._cached_composition
         old_cached_formula = self._cached_formula
         old_cached_com = getattr(self, "_cached_com", None)
-
         try:
+            self._check_frozen()
             # Call parent to add atoms
             super().add_atom(species, position)
 
@@ -532,6 +534,8 @@ class Molecule(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
+        # Guard for frozen state before mutation
+        self._check_frozen()
         # Normalize to list
         if isinstance(indices, int):
             indices = [indices]
