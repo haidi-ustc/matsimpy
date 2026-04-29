@@ -372,6 +372,8 @@ class Molecule(Structure):
             >>> molecule.add_atom(['H', 'O'], [[0, 0, 0], [1.2, 0, 0]],
             ...                   [{'charge': 1}, {'charge': -2}])  # With properties
         """
+        # Enforce frozen state before ANY validation
+        self._check_frozen()
         # Chemical reasonableness check - validate interatomic distances
         # Convert to array for processing
         if isinstance(position, list):
@@ -441,8 +443,6 @@ class Molecule(Structure):
         old_cached_composition = self._cached_composition
         old_cached_formula = self._cached_formula
         old_cached_com = getattr(self, "_cached_com", None)
-        # Ensure we respect frozen state at the very start of mutation
-        self._check_frozen()
         try:
             # Call parent to add atoms
             super().add_atom(species, position)
