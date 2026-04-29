@@ -13,7 +13,7 @@ class TestMutabilityMutability(unittest.TestCase):
 
     def setUp(self):
         self.crystal = Crystal(["Na", "Cl"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
-        self mol = Molecule(["O", "H", "H"], [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]])
+        self.mol = Molecule(["O", "H", "H"], [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]])
 
     def test_freeze_blocks_add_atom(self):
         crystal = self.crystal
@@ -118,6 +118,47 @@ class TestMutabilityMutability(unittest.TestCase):
         crystal.freeze()
         crystal_copy = crystal.copy()
         self.assertFalse(crystal_copy.is_frozen)
+ 
+    def test_freeze_then_copy_not_frozen(self):
+        # After freezing a crystal, a copy should not be frozen
+        self.crystal.freeze()
+        copy = self.crystal.copy()
+        self.assertFalse(copy.is_frozen)
+
+    def test_freeze_then_serialize_roundtrip(self):
+        # as_dict/from_dict roundtrip should not preserve frozen state
+        self.crystal.freeze()
+        d = self.crystal.as_dict()
+        c2 = Crystal.from_dict(d)
+        self.assertFalse(c2.is_frozen)
+
+    def test_substitute_empty_indices(self):
+        # substitute with empty list should be a no-op and not raise
+        original = self.crystal.species
+        self.crystal.substitute([], 'K')
+        self.assertEqual(self.crystal.species, original)
+
+    def test_species_setter_with_none(self):
+        with self.assertRaises(TypeError):
+            self.crystal.species = None
+
+    def test_freeze_during_iteration(self):
+        sites = []
+        for site in self.crystal:
+            sites.append(site)
+            if len(sites) == 1:
+                self.crystal.freeze()
+        self.assertEqual(len(sites), len(self.crystal))
+
+    def test_freeze_with_molecule_chain(self):
+        mol = self.mol
+        mol.freeze()
+        # Cannot mutate when frozen
+        with self.assertRaises(FrozenStructureError):
+            mol.add_atom('H', [2.0, 0.0, 0.0])
+        mol.unfreeze()
+        mol.add_atom('H', [2.0, 0.0, 0.0])
+        self.assertEqual(len(mol), 4)
 
 
 if __name__ == '__main__':
