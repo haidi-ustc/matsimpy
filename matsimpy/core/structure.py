@@ -374,6 +374,7 @@ class Structure(ABC, MSONable):
             >>> structure.positions = [[0, 0, 0], [1, 1, 1]]
             >>> structure.positions = np.array([[0, 0, 0], [1, 1, 1]])
         """
+        self._check_frozen()
         validated_positions = self._validate_positions(positions)
 
         # Check that number of positions matches number of species
@@ -773,6 +774,7 @@ class Structure(ABC, MSONable):
             >>> # Formula is recalculated
             >>> structure.formula  # Cache invalidated, recalculated
         """
+        self._check_frozen()
         # Handle single atom case
         if isinstance(species, str):
             species = [species]
@@ -847,6 +849,7 @@ class Structure(ABC, MSONable):
             >>> structure.formula  # Cache invalidated, recalculated
             'H2'
         """
+        self._check_frozen()
         if not (0 <= index < len(self.species)):
             raise IndexError("Invalid atom index.")
 
@@ -893,14 +896,45 @@ class Structure(ABC, MSONable):
             >>> # Using dict mapping (maps old species to new species)
             >>> structure.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
-        # Call transformation function and copy result back to self
-        from ..transformation.chemical.substitution import substitute
+        self._check_frozen()
 
-        result = substitute(self, indices, new_species)
-        # Copy result back to self
-        self.species = result.species
-        if hasattr(self, "_sites"):
-            self._sites = result._sites
+        # Handle AtomSelection
+        from ..utils.selection import AtomSelection
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
+
+        # Normalize indices
+        if isinstance(indices, int):
+            indices = [indices]
+
+        # Handle dict-based species mapping
+        if isinstance(new_species, dict):
+            new_species_list = []
+            for idx in indices:
+                old_spec = self.species[idx]
+                if old_spec not in new_species:
+                    raise KeyError(f"Species '{old_spec}' at index {idx} not found in substitution mapping")
+                new_species_list.append(new_species[old_spec])
+            new_species = new_species_list
+
+        # Normalize new_species
+        if isinstance(new_species, str):
+            new_species = [new_species] * len(indices)
+
+        if len(indices) != len(new_species):
+            raise ValueError(
+                f"Number of indices ({len(indices)}) must match number of new species ({len(new_species)})"
+            )
+
+        # In-place modification of species tuple
+        species_list = list(self.species)
+        for idx, new_spec in zip(indices, new_species):
+            species_list[idx] = new_spec
+        self.species = tuple(species_list)
+
+        # Invalidate caches
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None
@@ -921,14 +955,13 @@ class Structure(ABC, MSONable):
         Examples:
             >>> structure.substitute_all('Si', 'Ge')  # Replace all Si with Ge
         """
-        # Call transformation function and copy result back to self
-        from ..transformation.chemical.substitution import substitute_all
-
-        result = substitute_all(self, old_species, new_species)
-        # Copy result back to self
-        self.species = result.species
-        if hasattr(self, "_sites"):
-            self._sites = result._sites
+        self._check_frozen()
+        # In-place substitution of all occurrences of old_species
+        species_list = list(self.species)
+        for i, s in enumerate(species_list):
+            if s == old_species:
+                species_list[i] = new_species
+        self.species = tuple(species_list)
         self._formula_dirty = True
         self._cached_composition = None
         self._cached_formula = None
@@ -965,6 +998,7 @@ class Structure(ABC, MSONable):
             >>> structure.symbol_set
             ('Cl', 'Na')
         """
+        self._check_frozen()
         # Create list of (index, specie, position) tuples
         atoms = list(zip(range(len(self.species)), self.species, self.positions))
 
