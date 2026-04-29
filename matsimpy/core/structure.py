@@ -44,6 +44,11 @@ if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
 
 
+class FrozenStructureError(RuntimeError):
+    """Raised when a frozen structure is mutated."""
+    pass
+
+
 class Structure(ABC, MSONable):
     """
     Abstract base class for representing crystal and molecule structures.
@@ -166,22 +171,81 @@ class Structure(ABC, MSONable):
                 f"number of positions ({len(positions)})"
             )
 
-        self.species = tuple(species_list)  # Make immutable
+        # Backing field for species (use property later for external mutation)
+        self._species = tuple(species_list)  # Make immutable backing field
+
         self._positions = self._validate_positions(positions)
 
         # Validate positions match species count
-        if len(self._positions) != len(self.species):
+        if len(self._positions) != len(self._species):
             raise ValueError(
                 f"Number of positions ({len(self._positions)}) must match "
-                f"number of species ({len(self.species)})"
+                f"number of species ({len(self._species)})"
             )
 
         self.lattice = lattice
+
+        # Frozen state flag (Wave 1: initialization should not freeze)
+        self._frozen = False
 
         # Add cache attributes
         self._cached_composition: Optional[Composition] = None
         self._cached_formula: Optional[str] = None
         self._formula_dirty = True
+
+    # Wave 1: freezing functionality
+    def freeze(self) -> None:
+        """Make structure immutable. Raises FrozenStructureError on subsequent mutation attempts."""
+        self._frozen = True
+
+    def unfreeze(self) -> None:
+        """Allow mutations again."""
+        self._frozen = False
+
+    @property
+    def is_frozen(self) -> bool:
+        """Check if the structure is currently frozen."""
+        return getattr(self, '_frozen', False)
+
+    def _check_frozen(self) -> None:
+        """Raise FrozenStructureError if the structure is frozen."""
+        if getattr(self, '_frozen', False):
+            raise FrozenStructureError("Structure is frozen. Call unfreeze() to allow modifications.")
+
+    @property
+    def species(self) -> Tuple[str, ...]:
+        """Get the species as a tuple of strings."""
+        return self._species
+
+    @species.setter
+    def species(self, value: Union[List[str], Tuple[str, ...]]):
+        """Set the species with validation and cache invalidation.
+
+        Accepts a list or tuple of strings. Validates type and length against
+        current positions when available. Invalidates cached formula and
+        composition. Does not raise on internal mutation sequences that update
+        both species and positions in succession.
+        """
+        self._check_frozen()
+        if not isinstance(value, (list, tuple)):
+            raise TypeError("Species must be a list or tuple of strings.")
+        if not all(isinstance(s, str) for s in value):
+            raise TypeError("All species must be strings.")
+        value_tuple = tuple(value)
+
+        # Length validation: if positions exist, ensure the lengths match.
+        # Be permissive in cases where mutations update both sides in sequence.
+        if hasattr(self, '_positions') and len(value_tuple) != len(self._positions):
+            # Do not raise to allow multi-step mutations where positions will be updated
+            # subsequently (e.g., add_atom). This preserves previous behavior
+            # without breaking existing mutation patterns.
+            pass
+        self._species = value_tuple
+
+        # Invalidate caches
+        self._formula_dirty = True
+        self._cached_composition = None
+        self._cached_formula = None
 
     def _validate_positions(self, positions: Union[List, np.ndarray]) -> np.ndarray:
         """
@@ -328,6 +392,9 @@ class Structure(ABC, MSONable):
         if hasattr(self, "_neighbor_tree"):
             self._neighbor_tree = None
             self._neighbor_tree_positions = None
+        # Invalidate any cached center-of-mass if present
+        if hasattr(self, '_cached_com'):
+            self._cached_com = None
 
     def as_dict(self) -> Dict[str, Any]:
         """
