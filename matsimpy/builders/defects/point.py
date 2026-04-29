@@ -169,8 +169,8 @@ def create_substitution(
     if inplace:
         # Copy result back to original structure - set positions first to
         # avoid mismatches during validation when updating species.
-        structure.positions = result.positions
-        structure.species = result.species
+        structure._positions = result.positions
+        structure._species = result.species
         if isinstance(structure, Crystal):
             structure.frac_positions = result.frac_positions
             structure.cart_positions = result.cart_positions
@@ -342,8 +342,8 @@ def create_antisite(
     if inplace:
         # Copy result back to original structure - set positions first to
         # avoid validation issues when updating species
-        structure.positions = result.positions
-        structure.species = result.species
+        structure._positions = result.positions
+        structure._species = result.species
         if isinstance(structure, Crystal):
             structure.frac_positions = result.frac_positions
             structure.cart_positions = result.cart_positions

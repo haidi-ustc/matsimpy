@@ -71,15 +71,15 @@ def sort_atoms(
     new_species = tuple(structure.species[i] for i in sorted_indices)
     new_positions = structure.positions[sorted_indices]
 
-    structure.positions = new_positions
-    structure.species = new_species
+    structure._positions = new_positions
+    structure._species = new_species
 
     if isinstance(structure, Crystal):
         structure.frac_positions = new_positions
         structure.cart_positions = structure._convert_to_cartesian()
         structure._sites = structure._initialize_sites()
     else:
-        structure.positions = new_positions
+        structure._positions = new_positions
 
     # Invalidate caches
     structure._neighbor_tree = None

@@ -160,16 +160,22 @@ def standardize_cell(
                 lattice, positions, numbers = prim_cell
                 species = [crystal.species[n - 1] for n in numbers]
                 crystal.lattice = Lattice(lattice)
-                crystal.positions = positions       # Then set positions first
-                crystal.species = tuple(species)     # Then species
+                crystal._positions = positions       # Then set positions first
+                crystal._species = tuple(species)     # Then species
+                crystal._formula_dirty = True
+                crystal._cached_composition = None
+                crystal._cached_formula = None
         else:
             std_cell = spglib.standardize_cell(cell)
             if std_cell is not None:
                 lattice, positions, numbers = std_cell
                 species = [crystal.species[n - 1] for n in numbers]
                 crystal.lattice = Lattice(lattice)
-                crystal.positions = positions       # Then set positions first
-                crystal.species = tuple(species)     # Then species
+                crystal._positions = positions       # Then set positions first
+                crystal._species = tuple(species)     # Then species
+                crystal._formula_dirty = True
+                crystal._cached_composition = None
+                crystal._cached_formula = None
 
         # Update derived properties
         crystal.frac_positions = crystal.positions
