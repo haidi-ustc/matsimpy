@@ -167,9 +167,10 @@ def create_substitution(
     # Use transformation function for substitution (always returns new structure)
     result = substitute(structure, indices, new_species)
     if inplace:
-        # Copy result back to original structure
-        structure.species = result.species
+        # Copy result back to original structure - set positions first to
+        # avoid mismatches during validation when updating species.
         structure.positions = result.positions
+        structure.species = result.species
         if isinstance(structure, Crystal):
             structure.frac_positions = result.frac_positions
             structure.cart_positions = result.cart_positions
@@ -339,9 +340,10 @@ def create_antisite(
     if hasattr(result, "_sites"):
         result._sites = result._initialize_sites()
     if inplace:
-        # Copy result back to original structure
-        structure.species = result.species
+        # Copy result back to original structure - set positions first to
+        # avoid validation issues when updating species
         structure.positions = result.positions
+        structure.species = result.species
         if isinstance(structure, Crystal):
             structure.frac_positions = result.frac_positions
             structure.cart_positions = result.cart_positions

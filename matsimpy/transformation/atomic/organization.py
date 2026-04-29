@@ -67,12 +67,12 @@ def sort_atoms(
         idx for idx, _ in sorted(keys, key=lambda x: x[1], reverse=reverse)
     ]
 
-    # Reorder species and positions
+    # Reorder positions first, then species to avoid validation issues
     new_species = tuple(structure.species[i] for i in sorted_indices)
     new_positions = structure.positions[sorted_indices]
 
-    structure.species = new_species
     structure.positions = new_positions
+    structure.species = new_species
 
     if isinstance(structure, Crystal):
         structure.frac_positions = new_positions
