@@ -7,6 +7,9 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 import os
 import json
 
+# Suppress spglib deprecation warning for old error handling API
+os.environ.setdefault("SPGLIB_OLD_ERROR_HANDLING", "0")
+
 try:
     import spglib
 

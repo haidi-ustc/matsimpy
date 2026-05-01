@@ -8,7 +8,10 @@ using native MatSimPy capabilities. No ASE dependency required.
 import numpy as np
 import torch
 import warnings
+import logging
 from typing import List, Optional, Union, Tuple, Dict, Any
+
+logger = logging.getLogger(__name__)
 from torch_geometric.loader import DataLoader as DataLoader_pyg
 from torch_geometric.data import Data
 
@@ -34,6 +37,8 @@ class MatSimPyGraphConvertor:
         >>> convertor = MatSimPyGraphConvertor('m3gnet', cutoff=5.0)
         >>> graph = convertor.convert(crystal, energy=-10.5)
     """
+
+    _no_pbc_warned = False
 
     def __init__(
         self,
@@ -102,11 +107,11 @@ class MatSimPyGraphConvertor:
             cell = np.diag(box_size)
             pbc = np.array([True, True, True], dtype=bool)  # Use PBC with large cell
 
-            warnings.warn(
-                f"No PBC detected, using a large supercell with size "
-                f"{box_size[0]:.2f}x{box_size[1]:.2f}x{box_size[2]:.2f} Angstrom**3",
-                UserWarning,
-            )
+            if not MatSimPyGraphConvertor._no_pbc_warned:
+                MatSimPyGraphConvertor._no_pbc_warned = True
+                logger.info(
+                    "No PBC detected, using a large supercell (molecule mode)"
+                )
 
         return positions, cell, pbc
 

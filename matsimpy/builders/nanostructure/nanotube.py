@@ -120,8 +120,8 @@ def build_nanotube(
 
     # Determine how many 2D unit cells we need to cover the nanotube unit cell
     # The nanotube unit cell in 2D sheet coords is the parallelogram defined by C and T
-    sheet_area = abs(np.cross(a1, a2))
-    nanotube_area = abs(np.cross(chiral_vec, translation_vec))
+    sheet_area = abs(a1[0] * a2[1] - a1[1] * a2[0])
+    nanotube_area = abs(chiral_vec[0] * translation_vec[1] - chiral_vec[1] * translation_vec[0])
     num_unit_cells = int(np.round(nanotube_area / sheet_area))
 
     # Generate atoms by tiling the 2D structure
