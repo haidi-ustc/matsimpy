@@ -139,7 +139,7 @@ class TestMoleculeComprehensive(unittest.TestCase):
         # Check that vacuum padding was applied (box should be larger than molecule)
         self.assertGreater(crystal.lattice.a, 1.4 + 15.0)  # molecule size + vacuum
         # Check that PBC is set to [False, False, False] for non-periodic molecules
-        self.assertEqual(crystal.pbc, [False, False, False])
+        self.assertEqual(crystal.pbc, (False, False, False))
     
     def test_molecule_to_crystal_with_vacuum(self):
         """Test conversion to crystal with specified vacuum padding."""
@@ -152,7 +152,7 @@ class TestMoleculeComprehensive(unittest.TestCase):
         # Check that custom vacuum was applied
         self.assertGreater(crystal.lattice.a, 1.4 + 20.0)  # molecule size + vacuum
         # Check that PBC is set to [False, False, False] for non-periodic molecules
-        self.assertEqual(crystal.pbc, [False, False, False])
+        self.assertEqual(crystal.pbc, (False, False, False))
     
     def test_molecule_moment_of_inertia(self):
         """Test moment of inertia calculation."""

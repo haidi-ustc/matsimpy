@@ -134,18 +134,18 @@ class TestCrystalAddMultipleAtoms(unittest.TestCase):
         self.assertTrue(np.allclose(result.cart_positions[-2:], expected_cart))
 
     def test_neighbor_tree_invalidated(self):
-        """Test that neighbor tree is not present on new result."""
-        # Build neighbor tree
+        """Test that neighbor cache is not present on new result."""
+        # Build neighbor tree (populates _neighbor_cache)
         self.crystal.get_neighbor_list(5.0)
-        self.assertIsNotNone(self.crystal._neighbor_tree)
+        self.assertIsNotNone(self.crystal._neighbor_cache)
 
         # Add atoms (returns new object)
         result = self.crystal.add_atom(['O', 'O'], [[0.1, 0, 0], [0.2, 0, 0]])
 
-        # Original should still have neighbor tree
-        self.assertIsNotNone(self.crystal._neighbor_tree)
-        # Result should have no neighbor tree (freshly created)
-        self.assertIsNone(result._neighbor_tree)
+        # Original should still have neighbor cache
+        self.assertIsNotNone(self.crystal._neighbor_cache)
+        # Result should have no neighbor cache (freshly created)
+        self.assertIsNone(result._neighbor_cache)
 
     def test_sites_updated_after_adding_multiple(self):
         """Test that sites are correctly updated."""

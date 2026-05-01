@@ -244,13 +244,13 @@ class TestNeighborFinding(unittest.TestCase):
         
         # First call builds tree
         neighbors1 = crystal.get_neighbor_list(3.0)
-        self.assertIsNotNone(crystal._neighbor_tree)
-        self.assertEqual(crystal._neighbor_tree_cutoff, 3.0)
+        self.assertIsNotNone(crystal._neighbor_cache)
+        self.assertEqual(crystal._neighbor_cache.cutoff, 3.0)
         
         # Second call with same cutoff should use cache
         neighbors2 = crystal.get_neighbor_list(3.0)
         
-        self.assertIsNotNone(crystal._neighbor_tree)
+        self.assertIsNotNone(crystal._neighbor_cache)
         self.assertEqual(len(neighbors1), len(neighbors2))
     
     def test_neighbor_list_with_pbc(self):

@@ -96,7 +96,7 @@ class TestCrystalComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice, pbc=[True, False, True])
         
-        self.assertEqual(crystal.pbc, [True, False, True])
+        self.assertEqual(crystal.pbc, (True, False, True))
     
     def test_crystal_pbc_default(self):
         """Test default PBC."""
@@ -105,7 +105,7 @@ class TestCrystalComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
         
-        self.assertEqual(crystal.pbc, [True, True, True])
+        self.assertEqual(crystal.pbc, (True, True, True))
     
     def test_crystal_site_properties(self):
         """Test site properties."""

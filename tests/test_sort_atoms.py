@@ -86,9 +86,9 @@ class TestSortAtoms(unittest.TestCase):
         result = crystal.sort_atoms('element')
 
         # Check that neighbor tree is not present on new object
-        self.assertIsNone(result._neighbor_tree)
+        self.assertIsNone(result._neighbor_cache)
 
-    def test_crystal_sort_invalidates_neighbor_tree(self):
+    def test_crystal_sort_invalidates_neighbor_cache(self):
         """Test that sorting returns a fresh object with no neighbor tree."""
         crystal = Crystal(['O', 'Si', 'O', 'C'],
                          [[0.5,0.5,0.5], [0.5,0,0], [0,0.5,0], [0.25,0.25,0.25]],
@@ -96,14 +96,14 @@ class TestSortAtoms(unittest.TestCase):
 
         # Build neighbor tree on original
         crystal.get_neighbor_list(5.0)
-        self.assertIsNotNone(crystal._neighbor_tree)
+        self.assertIsNotNone(crystal._neighbor_cache)
 
         result = crystal.sort_atoms('element')
 
         # Result should have no neighbor tree (fresh copy)
-        self.assertIsNone(result._neighbor_tree)
+        self.assertIsNone(result._neighbor_cache)
         # Original should still have neighbor tree
-        self.assertIsNotNone(crystal._neighbor_tree)
+        self.assertIsNotNone(crystal._neighbor_cache)
     
     def test_sort_atoms_invalid_sort_by(self):
         """Test that invalid sort_by raises ValueError."""

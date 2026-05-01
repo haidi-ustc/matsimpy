@@ -118,15 +118,15 @@ class TestCrystalSubstitution(unittest.TestCase):
         """Test that substitution on the returned object has no neighbor tree."""
         # Build neighbor tree on original
         self.crystal.get_neighbor_list(5.0)
-        self.assertIsNotNone(self.crystal._neighbor_tree)
+        self.assertIsNotNone(self.crystal._neighbor_cache)
 
         # Substitute returns a new object without neighbor tree (immutable)
         result = self.crystal.substitute(0, 'Ge')
 
         # Original should still have neighbor tree
-        self.assertIsNotNone(self.crystal._neighbor_tree)
+        self.assertIsNotNone(self.crystal._neighbor_cache)
         # Result should have no neighbor tree (freshly created)
-        self.assertIsNone(result._neighbor_tree)
+        self.assertIsNone(result._neighbor_cache)
 
     def test_substitute_cache_invalidation(self):
         """Test that substitution invalidates formula cache."""

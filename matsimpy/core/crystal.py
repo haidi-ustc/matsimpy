@@ -42,7 +42,7 @@ import copy
 import numpy as np
 import warnings
 from tabulate import tabulate
-from typing import List, Optional, Union, Dict, Tuple, Any, Callable, TYPE_CHECKING
+from typing import List, Optional, Union, Dict, Tuple, Any, Callable, TYPE_CHECKING, NamedTuple
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import pdist, cdist, squareform
 from collections import Counter
@@ -55,6 +55,15 @@ from .composition import Composition
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
     from ..calculator.base import Calculator
+
+
+class _NeighborCache(NamedTuple):
+    """Bundled KD-tree cache stored as a single atomic attribute on Crystal."""
+    tree: cKDTree
+    cutoff: float
+    positions: np.ndarray
+    use_pbc: bool
+    pbc: Tuple[bool, bool, bool]
 
 
 class Crystal(Structure):
@@ -207,16 +216,17 @@ class Crystal(Structure):
             self._frac_positions = self._positions.copy()
             self._cart_positions = self._convert_to_cartesian()
 
-        self.site_properties = site_properties or []
+        self.site_properties: Tuple[Dict[str, Any], ...] = (
+            tuple(site_properties) if site_properties else ()
+        )
         self._sites = self._initialize_sites()
-        self.pbc = pbc if pbc is not None else [True, True, True]
+        self.pbc: Tuple[bool, bool, bool] = (
+            tuple(pbc) if pbc is not None else (True, True, True)
+        )
 
-        # Add neighbor tree cache for optimized neighbor finding
-        self._neighbor_tree: Optional[cKDTree] = None
-        self._neighbor_tree_cutoff: Optional[float] = None
-        self._neighbor_tree_positions: Optional[np.ndarray] = None
-        self._neighbor_tree_use_pbc: Optional[bool] = None
-        self._neighbor_tree_pbc: Optional[Tuple[bool, bool, bool]] = None
+        # Bundled KD-tree cache — replaced as one atomic write to avoid
+        # partially-initialised state under concurrent reads.
+        self._neighbor_cache: Optional[_NeighborCache] = None
 
     # ======================================================================
     # Subclass extension hooks / extra serialisation fields
@@ -1398,20 +1408,21 @@ class Crystal(Structure):
         """
         # Check if we need to rebuild tree
         n_atoms = len(self.cart_positions)
+        cache = self._neighbor_cache
         rebuild_tree = (
-            self._neighbor_tree is None
-            or self._neighbor_tree_cutoff != cutoff
-            or self._neighbor_tree_use_pbc != use_pbc
-            or self._neighbor_tree_pbc != tuple(self.pbc)
-            or (use_pbc and self._neighbor_tree_positions is None)
+            cache is None
+            or cache.cutoff != cutoff
+            or cache.use_pbc != use_pbc
+            or cache.pbc != tuple(self.pbc)
+            or (use_pbc and cache.positions is None)
             or (
-                self._neighbor_tree_positions is not None
+                cache.positions is not None
                 # NOTE: this only catches the case where MORE atoms are present than
                 # in the cached tree (atom count grew).  It does NOT detect position
                 # changes or atom removals.  Because Crystal is immutable every
-                # mutation returns a new object whose _neighbor_tree starts as None,
+                # mutation returns a new object whose _neighbor_cache starts as None,
                 # so stale-tree reads on a live Crystal are not possible in practice.
-                and len(self._neighbor_tree_positions) < n_atoms
+                and len(cache.positions) < n_atoms
             )
         )
 
@@ -1421,11 +1432,15 @@ class Crystal(Structure):
             else:
                 positions = self.cart_positions
 
-            self._neighbor_tree = cKDTree(positions)
-            self._neighbor_tree_cutoff = cutoff
-            self._neighbor_tree_positions = positions
-            self._neighbor_tree_use_pbc = use_pbc
-            self._neighbor_tree_pbc = tuple(self.pbc)
+            # All five fields are written in a single attribute assignment,
+            # reducing the inconsistency window compared to five separate writes.
+            self._neighbor_cache = _NeighborCache(
+                tree=cKDTree(positions),
+                cutoff=cutoff,
+                positions=positions,
+                use_pbc=use_pbc,
+                pbc=tuple(self.pbc),
+            )
 
         # Validate atom_index if provided
         n_atoms = len(self.cart_positions)
@@ -1452,22 +1467,23 @@ class Crystal(Structure):
         # Determine which atoms to query
         atoms_to_query = [atom_index] if atom_index is not None else range(n_atoms)
 
+        cache = self._neighbor_cache  # single local reference; safe under GIL
         for i in atoms_to_query:
             pos = self.cart_positions[i]
-            indices = self._neighbor_tree.query_ball_point(pos, cutoff)
+            indices = cache.tree.query_ball_point(pos, cutoff)
             neighbors_by_index: Dict[int, float] = {}
             for idx in indices:
                 if idx < n_atoms:
                     # Original atom
                     if idx != i:
-                        dist = np.linalg.norm(pos - self._neighbor_tree_positions[idx])
+                        dist = np.linalg.norm(pos - cache.positions[idx])
                         if idx not in neighbors_by_index or dist < neighbors_by_index[idx]:
                             neighbors_by_index[idx] = float(dist)
                 else:
                     # Periodic image
                     image_idx = idx % n_atoms
                     if image_idx != i:
-                        dist = np.linalg.norm(pos - self._neighbor_tree_positions[idx])
+                        dist = np.linalg.norm(pos - cache.positions[idx])
                         if (
                             image_idx not in neighbors_by_index
                             or dist < neighbors_by_index[image_idx]

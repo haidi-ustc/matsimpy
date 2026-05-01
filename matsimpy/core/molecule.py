@@ -157,8 +157,11 @@ class Molecule(Structure):
             ...                     site_properties=[{'charge': 0}, {'charge': -2}])
         """
         super().__init__(species, positions, None)
-        self.site_properties = site_properties or []  # Make public for consistency
+        self.site_properties: Tuple[Dict[str, Any], ...] = (
+            tuple(site_properties) if site_properties else ()
+        )
         self._sites = self._initialize_sites()
+        self._cached_com: Optional[List[float]] = None
 
     def _initialize_sites(self) -> List[Site]:
         """
@@ -272,7 +275,7 @@ class Molecule(Structure):
             >>> com = molecule.get_center_of_mass()
             >>> print(com)  # Weighted average based on C and O masses
         """
-        if not hasattr(self, "_cached_com") or self._cached_com is None:
+        if self._cached_com is None:
             # Use .elements for better performance
             masses = np.array([elem.atomic_mass for elem in self.elements])
             center_of_mass = np.average(self.positions, weights=masses, axis=0)

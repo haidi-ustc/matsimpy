@@ -13,8 +13,8 @@ class TestCrystalHelperMethods(unittest.TestCase):
         self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], self.lattice)
 
     def test_neighbor_tree_not_present_on_new_crystal(self):
-        """Test that new crystals don't have a neighbor tree."""
-        self.assertIsNone(self.crystal._neighbor_tree)
+        """Test that new crystals don't have a neighbor cache."""
+        self.assertIsNone(self.crystal._neighbor_cache)
 
     def test_cart_positions_are_always_accessible(self):
         """Test that Cartesian positions are accessible."""
@@ -112,7 +112,7 @@ class TestCrystalCodeDeduplication(unittest.TestCase):
     def test_add_atom_returns_new_object(self):
         """Test that add_atom returns a new object."""
         # Original should have no neighbor tree
-        self.assertIsNone(self.crystal._neighbor_tree)
+        self.assertIsNone(self.crystal._neighbor_cache)
 
         # Add atom - returns new object
         result = self.crystal.add_atom('O', [0.5, 0, 0])
