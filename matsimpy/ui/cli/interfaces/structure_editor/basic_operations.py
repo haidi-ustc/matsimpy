@@ -241,10 +241,10 @@ def add_atoms(style: Optional[str] = None) -> None:
                     frac_coords = np.dot(
                         coords, working_structure.lattice.inv_matrix
                     ).tolist()
-                    working_structure.add_atom(element, frac_coords)
+                    working_structure = working_structure.add_atom(element, frac_coords)
                 else:
                     # For Molecule, use Cartesian directly
-                    working_structure.add_atom(element, coords)
+                    working_structure = working_structure.add_atom(element, coords)
                 print(f"Added {element} atom {i+1} at coordinates {coords}")
 
         elif position_type == "relative":
@@ -272,10 +272,10 @@ def add_atoms(style: Optional[str] = None) -> None:
                         )
                     else:
                         frac_coords = coords
-                    working_structure.add_atom(element, frac_coords)
+                    working_structure = working_structure.add_atom(element, frac_coords)
                 else:
                     # For Molecule, use Cartesian
-                    working_structure.add_atom(element, coords)
+                    working_structure = working_structure.add_atom(element, coords)
                 print(f"Added {element} atom {i+1} at coordinates {coords}")
 
         elif position_type == "random":
@@ -286,7 +286,7 @@ def add_atoms(style: Optional[str] = None) -> None:
                 if isinstance(working_structure, Crystal):
                     # Generate random fractional coordinates
                     frac_coords = np.random.random(3).tolist()
-                    working_structure.add_atom(element, frac_coords)
+                    working_structure = working_structure.add_atom(element, frac_coords)
                     # Convert to cartesian for display
                     cart_coords = np.dot(frac_coords, working_structure.lattice.matrix)
                     print(
@@ -295,7 +295,7 @@ def add_atoms(style: Optional[str] = None) -> None:
                 else:
                     # Generate random Cartesian coordinates
                     cart_coords = (np.random.random(3) * 10.0).tolist()
-                    working_structure.add_atom(element, cart_coords)
+                    working_structure = working_structure.add_atom(element, cart_coords)
                     print(
                         f"Added {element} atom {i+1} at random position: {cart_coords}"
                     )
@@ -651,12 +651,12 @@ def delete_atoms(style: Optional[str] = None) -> None:
 
         # Delete atoms (in reverse order to maintain indices)
         print(f"\n=== Deleting Atoms ===")
-        working_structure = input_structure.copy()
+        working_structure = input_structure
 
         deleted_count = 0
         for idx in selected_indices:
             try:
-                working_structure.remove_atom(idx)
+                working_structure = working_structure.remove_atom(idx)
                 deleted_count += 1
                 print(f"Deleted atom {idx+1}")
             except IndexError:

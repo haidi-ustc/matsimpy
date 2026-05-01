@@ -41,8 +41,6 @@ def move_atoms(
         >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
         >>> moved = move_atoms(mol, [0, 1], [0.1, 0.1, 0])
     """
-    structure = structure.copy()
-
     # Ensure indices is a list
     if isinstance(indices, int):
         indices = [indices]
@@ -63,11 +61,14 @@ def move_atoms(
         for idx in indices:
             new_positions[idx] += frac_displacement
 
-        structure.positions = new_positions
-        structure.frac_positions = new_positions
-        structure.cart_positions = structure._convert_to_cartesian()
-
-    elif isinstance(structure, Molecule):
+        return Crystal(
+            list(structure.species), new_positions.tolist(),
+            lattice=structure.lattice,
+            coords_are_cartesian=False,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
+    else:
         if not cartesian:
             raise ValueError("Molecule positions are always Cartesian")
 
@@ -76,20 +77,10 @@ def move_atoms(
         for idx in indices:
             new_positions[idx] += displacement
 
-        structure.positions = new_positions
-        structure._sites = structure._initialize_sites()
-        if hasattr(structure, "_cached_com"):
-            structure._cached_com = None
-
-    # Invalidate caches
-    if hasattr(structure, "_neighbor_tree"):
-        structure._neighbor_tree = None
-    if hasattr(structure, "_neighbor_tree_positions"):
-        structure._neighbor_tree_positions = None
-    if isinstance(structure, Crystal):
-        structure._sites = structure._initialize_sites()
-
-    return structure
+        return Molecule(
+            list(structure.species), new_positions.tolist(),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def swap_atoms(
@@ -113,39 +104,30 @@ def swap_atoms(
         >>> from matsimpy.transformation.atomic import swap_atoms
         >>> swapped = swap_atoms(structure, 0, 1)
     """
-    structure = structure.copy()
-
     # Swap species
     species_list = list(structure.species)
     species_list[index1], species_list[index2] = (
         species_list[index2],
         species_list[index1],
     )
-    structure.species = tuple(species_list)
 
-    # Swap positions
+    # Swap positions (in fractional for Crystal, Cartesian for Molecule)
     positions = structure.positions.copy()
     positions[[index1, index2]] = positions[[index2, index1]]
-    structure.positions = positions
 
     if isinstance(structure, Crystal):
-        structure.frac_positions = positions
-        structure.cart_positions = structure._convert_to_cartesian()
-        structure._sites = structure._initialize_sites()
+        return Crystal(
+            species_list, positions.tolist(),
+            lattice=structure.lattice,
+            coords_are_cartesian=False,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
     else:
-        structure._sites = structure._initialize_sites()
-        if hasattr(structure, "_cached_com"):
-            structure._cached_com = None
-
-    # Invalidate caches
-    if hasattr(structure, "_neighbor_tree"):
-        structure._neighbor_tree = None
-    if hasattr(structure, "_neighbor_tree_positions"):
-        structure._neighbor_tree_positions = None
-    structure._formula_dirty = True
-    structure._cached_composition = None
-
-    return structure
+        return Molecule(
+            species_list, positions.tolist(),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def merge_atoms(
@@ -179,8 +161,6 @@ def merge_atoms(
         >>> merged = merge_atoms(structure, 0, 1, species='C',
         ...                      position=[0.25, 0.25, 0.25])
     """
-    structure = structure.copy()
-
     # Determine merged species
     if species is None:
         species = structure.species[index1]
@@ -192,19 +172,30 @@ def merge_atoms(
     else:
         position = np.array(position, dtype=np.float64)
 
-    # Remove both atoms and add merged one
-    # Keep the lower index
+    # Build new species and positions lists
     keep_idx = min(index1, index2)
     remove_idx = max(index1, index2)
 
-    # Remove second atom
-    structure.remove_atom(remove_idx)
-    # Remove first atom
-    structure.remove_atom(keep_idx)
-    # Add merged atom at kept position
-    structure.add_atom(species, position)
+    new_species = [s for i, s in enumerate(structure.species) if i != keep_idx and i != remove_idx]
+    new_positions = [p for i, p in enumerate(structure.positions) if i != keep_idx and i != remove_idx]
 
-    return structure
+    # Add merged atom at the keep position
+    new_species.insert(keep_idx, species)
+    new_positions.insert(keep_idx, position.tolist())
+
+    if isinstance(structure, Crystal):
+        return Crystal(
+            new_species, new_positions,
+            lattice=structure.lattice,
+            coords_are_cartesian=not isinstance(structure, Crystal),  # use frac by default
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
+    else:
+        return Molecule(
+            new_species, new_positions,
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def split_atom(
@@ -234,16 +225,28 @@ def split_atom(
         >>> split = split_atom(structure, 0, ['H', 'H'],
         ...                    [[0, 0, 0], [0.1, 0, 0]])
     """
-    structure = structure.copy()
+    # Build new species and positions lists
+    new_species = [s for i, s in enumerate(structure.species) if i != index]
+    new_positions = [p for i, p in enumerate(structure.positions) if i != index]
 
-    # Remove original atom
-    structure.remove_atom(index)
-
-    # Add new atoms
+    # Add new atoms at the split position
     for spec, pos in zip(species, positions):
-        structure.add_atom(spec, pos)
+        new_species.append(spec)
+        new_positions.append(pos)
 
-    return structure
+    if isinstance(structure, Crystal):
+        return Crystal(
+            new_species, new_positions,
+            lattice=structure.lattice,
+            coords_are_cartesian=False,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
+    else:
+        return Molecule(
+            new_species, new_positions,
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 __all__ = ["move_atoms", "swap_atoms", "merge_atoms", "split_atom"]

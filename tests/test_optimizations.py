@@ -53,65 +53,63 @@ class TestPropertyCaching(unittest.TestCase):
         positions = [[0, 0, 0], [1.5, 1.5, 1.5], [2.0, 2.0, 2.0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         # First call computes
         formula1 = crystal.formula
         self.assertIsNotNone(formula1)
-        
+
         # Second call should use cache
         formula2 = crystal.formula
-        
+
         self.assertEqual(formula1, formula2)
-        self.assertEqual(crystal._cached_formula, formula2)
-    
+
     def test_composition_caching(self):
         """Test that composition is cached."""
         species = ['Si', 'O', 'O']
         positions = [[0, 0, 0], [1.5, 1.5, 1.5], [2.0, 2.0, 2.0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         # First call computes
         comp1 = crystal.composition
-        
+
         # Second call should use cache
         comp2 = crystal.composition
-        
+
         self.assertEqual(comp1, comp2)
-        self.assertIs(crystal._cached_composition, comp2)  # Should be same object
     
     def test_cache_invalidation_on_add_atom(self):
-        """Test that cache is invalidated when adding atom."""
+        """Test that cache is different on returned object after adding atom."""
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         # Get formula and composition
         formula1 = crystal.formula
         comp1 = crystal.composition
-        
-        # Add atom at a position that doesn't conflict (use fractional coords that don't map to existing positions)
-        crystal.add_atom('O', [0.3, 0.3, 0.3])
-        
-        # Formula and composition should be different
-        formula2 = crystal.formula
-        comp2 = crystal.composition
-        
+
+        # Add atom (returns new object)
+        result = crystal.add_atom('O', [0.3, 0.3, 0.3])
+
+        # Formula and composition should be different on the result
+        formula2 = result.formula
+        comp2 = result.composition
+
         self.assertNotEqual(formula1, formula2)
         self.assertNotEqual(comp1.formula, comp2.formula)
-    
+
     def test_cache_invalidation_on_remove_atom(self):
-        """Test that cache is invalidated when removing atom."""
+        """Test that cache is different on returned object after removing atom."""
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1.0, 1.0, 1.0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         formula1 = crystal.formula
-        crystal.remove_atom(0)
-        formula2 = crystal.formula
-        
+        result = crystal.remove_atom(0)
+        formula2 = result.formula
+
         self.assertNotEqual(formula1, formula2)
 
 class TestSpeciesImmutability(unittest.TestCase):
@@ -128,28 +126,32 @@ class TestSpeciesImmutability(unittest.TestCase):
         self.assertEqual(crystal.species, ('Si', 'O'))
     
     def test_species_immutability_after_add(self):
-        """Test that species remains tuple after adding atom."""
+        """Test that species remains tuple after adding atom (on the returned object)."""
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         self.assertIsInstance(crystal.species, tuple)
-        crystal.add_atom('O', [0.3, 0.3, 0.3])
-        self.assertIsInstance(crystal.species, tuple)
-        self.assertEqual(crystal.species, ('Si', 'O'))
-    
+        result = crystal.add_atom('O', [0.3, 0.3, 0.3])
+        self.assertIsInstance(result.species, tuple)
+        self.assertEqual(result.species, ('Si', 'O'))
+        # Original unchanged
+        self.assertEqual(crystal.species, ('Si',))
+
     def test_species_immutability_after_remove(self):
-        """Test that species remains tuple after removing atom."""
+        """Test that species remains tuple after removing atom (on the returned object)."""
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1.0, 1.0, 1.0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         self.assertIsInstance(crystal.species, tuple)
-        crystal.remove_atom(0)
-        self.assertIsInstance(crystal.species, tuple)
-        self.assertEqual(crystal.species, ('O',))
+        result = crystal.remove_atom(0)
+        self.assertIsInstance(result.species, tuple)
+        self.assertEqual(result.species, ('O',))
+        # Original unchanged
+        self.assertEqual(crystal.species, ('Si', 'O'))
 
 class TestLatticeOptimizations(unittest.TestCase):
     """Test lattice optimizations."""
@@ -285,24 +287,23 @@ class TestIntegration(unittest.TestCase):
         positions = [[0, 0, 0], [1.5, 1.5, 1.5], [2.0, 2.0, 2.0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         # Test caching
         formula1 = crystal.formula
         formula2 = crystal.formula
         self.assertEqual(formula1, formula2)
-        
+
         # Test neighbor finding
         neighbors = crystal.get_neighbor_list(5.0)
         self.assertIsInstance(neighbors, dict)
-        
-        # Test adding atom (invalidates cache)
-        # Use fractional coords that don't conflict (3.0 maps to 0.0 with PBC, so use 0.3 instead)
-        crystal.add_atom('N', [0.3, 0.3, 0.3])
-        formula3 = crystal.formula
+
+        # Test adding atom (returns new object)
+        crystal2 = crystal.add_atom('N', [0.3, 0.3, 0.3])
+        formula3 = crystal2.formula
         self.assertNotEqual(formula1, formula3)
-        
-        # Test neighbor finding again (should rebuild tree)
-        neighbors2 = crystal.get_neighbor_list(5.0)
+
+        # Test neighbor finding again on the new object (should build tree)
+        neighbors2 = crystal2.get_neighbor_list(5.0)
         self.assertEqual(len(neighbors2), 4)
     
     def test_molecule_to_crystal_workflow(self):

@@ -144,21 +144,21 @@ class TestCrystalComprehensive(unittest.TestCase):
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.add_atom('O', [0.5, 0.5, 0.5])
-        self.assertEqual(len(crystal), 2)
-        self.assertEqual(len(crystal.sites), 2)
-    
+
+        result = crystal.add_atom('O', [0.5, 0.5, 0.5])
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result.sites), 2)
+
     def test_crystal_remove_atom(self):
         """Test removing atom."""
         species = ['Si', 'O']
         positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.remove_atom(0)
-        self.assertEqual(len(crystal), 1)
-        self.assertEqual(crystal.species[0], 'O')
+
+        result = crystal.remove_atom(0)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.species[0], 'O')
     
     def test_crystal_from_file_poscar(self):
         """Test reading POSCAR file using from_file."""

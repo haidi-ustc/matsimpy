@@ -35,12 +35,15 @@ class TestVacancy(unittest.TestCase):
         self.assertIsInstance(with_vacancies, Crystal)
         self.assertEqual(len(with_vacancies.species), len(self.fcc.species) - 2)
     
-    def test_create_vacancy_inplace(self):
-        """Test creating vacancy in-place."""
+    def test_create_vacancy_returns_new_object(self):
+        """Test that create_vacancy returns a new object."""
         original_count = len(self.fcc.species)
-        create_vacancy(self.fcc, 0, inplace=True)
-        
-        self.assertEqual(len(self.fcc.species), original_count - 1)
+        result = create_vacancy(self.fcc, 0)
+
+        # Original unchanged
+        self.assertEqual(len(self.fcc.species), original_count)
+        # Result has one fewer atom
+        self.assertEqual(len(result.species), original_count - 1)
     
     def test_create_vacancy_invalid_index(self):
         """Test creating vacancy with invalid index."""

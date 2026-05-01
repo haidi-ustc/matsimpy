@@ -70,12 +70,10 @@ class TestStructureComprehensive(unittest.TestCase):
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
         struct = Crystal(species, positions, lattice)
-        
+
         formula1 = struct.formula
         formula2 = struct.formula
         self.assertEqual(formula1, formula2)
-        # Should use cache on second call
-        self.assertFalse(struct._formula_dirty)
     
     def test_structure_composition(self):
         """Test composition calculation."""
@@ -105,35 +103,38 @@ class TestStructureComprehensive(unittest.TestCase):
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
         struct = Crystal(species, positions, lattice)
-        
-        # Use fractional coords that don't conflict (1.0 maps to 0.0 with PBC, so use 0.3 instead)
-        struct.add_atom('O', [0.3, 0.3, 0.3])
-        self.assertEqual(len(struct), 2)
-        self.assertEqual(struct.species, ('Si', 'O'))
-    
+
+        # Use fractional coords that don't conflict
+        result = struct.add_atom('O', [0.3, 0.3, 0.3])
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result.species, ('Si', 'O'))
+        # Original unchanged
+        self.assertEqual(len(struct), 1)
+
     def test_structure_add_atom_cache_invalidation(self):
-        """Test that adding atom invalidates cache."""
+        """Test that formula changes after adding atom."""
         species = ['Si']
         positions = [[0, 0, 0]]
         lattice = Lattice.cubic(10.0)
         struct = Crystal(species, positions, lattice)
-        
+
         formula1 = struct.formula
-        # Use fractional coords that don't conflict (1.0 maps to 0.0 with PBC, so use 0.3 instead)
-        struct.add_atom('O', [0.3, 0.3, 0.3])
-        formula2 = struct.formula
+        result = struct.add_atom('O', [0.3, 0.3, 0.3])
+        formula2 = result.formula
         self.assertNotEqual(formula1, formula2)
-    
+
     def test_structure_remove_atom(self):
         """Test removing atom."""
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
         struct = Crystal(species, positions, lattice)
-        
-        struct.remove_atom(0)
-        self.assertEqual(len(struct), 1)
-        self.assertEqual(struct.species, ('O',))
+
+        result = struct.remove_atom(0)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.species, ('O',))
+        # Original unchanged
+        self.assertEqual(len(struct), 2)
     
     def test_structure_remove_atom_invalid_index(self):
         """Test removing atom with invalid index."""
@@ -146,15 +147,15 @@ class TestStructureComprehensive(unittest.TestCase):
             struct.remove_atom(10)
     
     def test_structure_remove_atom_cache_invalidation(self):
-        """Test that removing atom invalidates cache."""
+        """Test that formula changes after removing atom."""
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
         struct = Crystal(species, positions, lattice)
-        
+
         formula1 = struct.formula
-        struct.remove_atom(0)
-        formula2 = struct.formula
+        result = struct.remove_atom(0)
+        formula2 = result.formula
         self.assertNotEqual(formula1, formula2)
     
     def test_structure_len(self):

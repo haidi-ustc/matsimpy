@@ -157,15 +157,15 @@ class TestMoleculeEdgeCases(unittest.TestCase):
         """Cached COM must be invalidated by mutations."""
         molecule = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
         original_com = molecule.get_center_of_mass()
-        molecule.remove_atom(1)
-        removed_com = molecule.get_center_of_mass()
+        result = molecule.remove_atom(1)
+        removed_com = result.get_center_of_mass()
         self.assertNotEqual(original_com, removed_com)
         np.testing.assert_array_almost_equal(removed_com, [0, 0, 0])
 
         molecule = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
         original_com = molecule.get_center_of_mass()
-        molecule.substitute(1, 'H')
-        substituted_com = molecule.get_center_of_mass()
+        result = molecule.substitute(1, 'H')
+        substituted_com = result.get_center_of_mass()
         self.assertNotEqual(original_com, substituted_com)
 
     def test_molecule_add_atom_rolls_back_on_site_property_error(self):
@@ -177,6 +177,7 @@ class TestMoleculeEdgeCases(unittest.TestCase):
         with self.assertRaises(ValueError):
             molecule.add_atom(['H', 'H'], [[1, 0, 0], [2, 0, 0]], site_properties=[{}])
 
+        # Original should be unchanged since add_atom returns a new object
         self.assertEqual(molecule.species, old_species)
         np.testing.assert_array_almost_equal(molecule.positions, old_positions)
         self.assertEqual(len(molecule.sites), 1)

@@ -6,7 +6,6 @@ Tools for adding adsorbates to slab surfaces.
 
 from typing import Tuple, Union
 import numpy as np
-from copy import deepcopy
 from ...core import Crystal
 
 
@@ -38,8 +37,6 @@ def add_adsorbate(
         >>> slab = generate_slab(bulk, (1,1,1), 10, 15)
         >>> with_ads = add_adsorbate(slab, 'O', (0.5, 0.5), 2.0)
     """
-    new_slab = deepcopy(slab)
-
     if isinstance(adsorbate, str):
         # Single atom adsorbate
         # Find the top surface (highest z position)
@@ -56,14 +53,12 @@ def add_adsorbate(
         # Convert to fractional
         frac_pos = np.dot(cart_pos, np.linalg.inv(slab.lattice.lattice_vectors))
 
-        # Add atom
-        new_slab.add_atom(adsorbate, frac_pos)
+        # Add atom (returns new Crystal)
+        return slab.add_atom(adsorbate, frac_pos)
 
     else:
         # Complex adsorbate structure - would need to merge structures
         raise NotImplementedError("Complex adsorbate structures not yet implemented")
-
-    return new_slab
 
 
 __all__ = ["add_adsorbate"]

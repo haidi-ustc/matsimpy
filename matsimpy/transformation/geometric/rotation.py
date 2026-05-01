@@ -63,43 +63,32 @@ def rotate(
             center = [0.0, 0.0, 0.0]
     center = np.array(center, dtype=np.float64)
 
-    # Always create a new structure
-    new_structure = structure.copy()
-    
-    # Apply rotation
-    if isinstance(new_structure, Molecule):
-        from scipy.spatial.transform import Rotation
-        rotation = Rotation.from_rotvec(np.radians(angle) * axis)
-        # Translate to origin, rotate, translate back
-        new_structure.positions -= center
-        new_structure.positions = rotation.apply(new_structure.positions)
-        new_structure.positions += center
-        if hasattr(new_structure, "_cached_com"):
-            new_structure._cached_com = None
-        new_structure._sites = new_structure._initialize_sites()
-        return new_structure
+    # Apply rotation by constructing a new structure
+    from scipy.spatial.transform import Rotation as _Rotation
+    rotation = _Rotation.from_rotvec(np.radians(angle) * axis)
+
+    if isinstance(structure, Molecule):
+        translated = structure.positions - center
+        rotated_positions = rotation.apply(translated)
+        new_positions = rotated_positions + center
+        return Molecule(
+            list(structure.species),
+            new_positions.tolist(),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
     else:
         # For crystals, rotate Cartesian positions
-        from scipy.spatial.transform import Rotation
-
-        rotation = Rotation.from_rotvec(np.radians(angle) * axis)
-
-        # Translate to rotation center, rotate, translate back
-        translated_positions = new_structure.cart_positions - center
+        translated_positions = structure.cart_positions - center
         rotated_positions = rotation.apply(translated_positions)
-        new_structure.cart_positions = rotated_positions + center
-
-        # Update fractional positions
-        new_structure.frac_positions = new_structure._convert_to_fractional()
-        # Keep canonical fractional positions synchronized with the rotated
-        # Cartesian coordinates.
-        new_structure.positions = new_structure.frac_positions
-        # Invalidate caches
-        new_structure._neighbor_tree = None
-        new_structure._neighbor_tree_positions = None
-        if hasattr(new_structure, "_sites"):
-            new_structure._sites = new_structure._initialize_sites()
-        return new_structure
+        new_cart_positions = rotated_positions + center
+        return Crystal(
+            list(structure.species),
+            new_cart_positions.tolist(),
+            structure.lattice,
+            coords_are_cartesian=True,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def rotate_around_axis(

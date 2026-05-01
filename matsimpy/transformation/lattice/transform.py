@@ -35,33 +35,30 @@ def rotate_lattice(
         ...      [0, 0, 1]]
         >>> rotated = rotate_lattice(crystal, R)
     """
-    # Always create a new crystal
-    crystal = crystal.copy()
-
     rotation_matrix = np.array(rotation_matrix, dtype=np.float64)
 
     # Rotate lattice vectors
     new_lattice_vectors = np.dot(rotation_matrix, crystal.lattice.lattice_vectors)
-    crystal.lattice = Lattice(new_lattice_vectors)
+    new_lattice = Lattice(new_lattice_vectors)
 
     if rotate_atoms:
         # Rotate Cartesian positions
         new_cart_positions = np.dot(crystal.cart_positions, rotation_matrix.T)
-        crystal.cart_positions = new_cart_positions
-        # Update fractional positions
-        crystal.positions = np.dot(
+        # Convert back to fractional
+        new_positions = np.dot(
             new_cart_positions, np.linalg.inv(new_lattice_vectors)
         )
-        crystal.frac_positions = crystal.positions
     else:
-        # Keep fractional positions, update Cartesian
-        crystal.cart_positions = crystal._convert_to_cartesian()
+        # Keep fractional positions
+        new_positions = crystal.positions
 
-    crystal._neighbor_tree = None
-    crystal._neighbor_tree_positions = None
-    crystal._sites = crystal._initialize_sites()
-
-    return crystal
+    return Crystal(
+        list(crystal.species), new_positions.tolist(),
+        lattice=new_lattice,
+        coords_are_cartesian=False,
+        pbc=list(crystal.pbc),
+        site_properties=(list(crystal.site_properties) if crystal.site_properties else None),
+    )
 
 
 def transform_lattice(
@@ -114,11 +111,8 @@ def get_niggli_reduced(crystal: Crystal) -> Crystal:
     Note:
         Requires spglib for full implementation.
     """
-    # Always create a new crystal
-    crystal = crystal.copy()
-
-    # Placeholder - full implementation would use spglib
-    return crystal
+    # Placeholder - just returns a copy
+    return crystal.copy()
 
 
 def standardize_cell(
@@ -141,9 +135,6 @@ def standardize_cell(
         >>> standardized = standardize_cell(crystal)
         >>> primitive = standardize_cell(crystal, to_primitive=True)
     """
-    # Always create a new crystal
-    crystal = crystal.copy()
-
     # Placeholder - full implementation would use spglib
     try:
         import spglib
@@ -159,37 +150,32 @@ def standardize_cell(
             if prim_cell is not None:
                 lattice, positions, numbers = prim_cell
                 species = [crystal.species[n - 1] for n in numbers]
-                crystal.lattice = Lattice(lattice)
-                crystal._positions = positions       # Then set positions first
-                crystal._species = tuple(species)     # Then species
-                crystal._formula_dirty = True
-                crystal._cached_composition = None
-                crystal._cached_formula = None
+                return Crystal(
+                    species, positions.tolist(),
+                    lattice=Lattice(lattice),
+                    coords_are_cartesian=False,
+                    pbc=list(crystal.pbc),
+                    site_properties=(list(crystal.site_properties) if crystal.site_properties else None),
+                )
         else:
             std_cell = spglib.standardize_cell(cell)
             if std_cell is not None:
                 lattice, positions, numbers = std_cell
                 species = [crystal.species[n - 1] for n in numbers]
-                crystal.lattice = Lattice(lattice)
-                crystal._positions = positions       # Then set positions first
-                crystal._species = tuple(species)     # Then species
-                crystal._formula_dirty = True
-                crystal._cached_composition = None
-                crystal._cached_formula = None
-
-        # Update derived properties
-        crystal.frac_positions = crystal.positions
-        crystal.cart_positions = crystal._convert_to_cartesian()
-        crystal._neighbor_tree = None
-        crystal._neighbor_tree_positions = None
-        crystal._sites = crystal._initialize_sites()
+                return Crystal(
+                    species, positions.tolist(),
+                    lattice=Lattice(lattice),
+                    coords_are_cartesian=False,
+                    pbc=list(crystal.pbc),
+                    site_properties=(list(crystal.site_properties) if crystal.site_properties else None),
+                )
 
     except ImportError:
         import warnings
 
         warnings.warn("spglib not available, returning unchanged crystal")
 
-    return crystal
+    return crystal.copy()
 
 
 __all__ = [

@@ -109,8 +109,8 @@ def simple_supercell(style: Optional[str] = None) -> None:
             print(f"\n=== Creating Supercell ===")
             print(f"Scaling matrix: {scaling_matrix}")
 
-            # Create supercell (returns new object by default)
-            supercell = input_structure.make_supercell(scaling_matrix, inplace=False)
+            # Create supercell (always returns a new object)
+            supercell = input_structure.make_supercell(scaling_matrix)
 
             # Display final structure information
             print(f"\n=== Final Structure Information ===")

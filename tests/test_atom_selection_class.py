@@ -94,31 +94,31 @@ class TestAtomSelectionWithSubstitution(unittest.TestCase):
     def test_substitute_with_selection(self):
         """Test substitution using AtomSelection."""
         sel = AtomSelection(self.crystal).by_species('Si')
-        self.crystal.substitute(sel, 'Ge')
-        
-        self.assertEqual(self.crystal.species[0], 'Ge')
-        self.assertEqual(self.crystal.species[1], 'O')
-        self.assertEqual(self.crystal.species[2], 'Ge')
-    
+        result = self.crystal.substitute(sel, 'Ge')
+
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[1], 'O')
+        self.assertEqual(result.species[2], 'Ge')
+
     def test_substitute_with_chained_selection(self):
         """Test substitution with chained selection."""
         sel = AtomSelection(self.crystal).by_species('Si').near([0, 0, 0], 5.0)
-        self.crystal.substitute(sel, 'Ge')
-        
-        self.assertEqual(self.crystal.species[0], 'Ge')
-        self.assertEqual(self.crystal.species[1], 'O')
-        self.assertEqual(self.crystal.species[2], 'Si')  # Not substituted
-    
+        result = self.crystal.substitute(sel, 'Ge')
+
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[1], 'O')
+        self.assertEqual(result.species[2], 'Si')  # Not substituted
+
     def test_substitute_with_combined_selection(self):
         """Test substitution with combined selections."""
         sel1 = AtomSelection(self.crystal).by_species('Si')
         sel2 = AtomSelection(self.crystal).near([0, 0, 0], 5.0)
         combined = sel1 & sel2
-        
-        self.crystal.substitute(combined, 'Ge')
-        
-        self.assertEqual(self.crystal.species[0], 'Ge')
-        self.assertEqual(self.crystal.species[2], 'Si')  # Not substituted
+
+        result = self.crystal.substitute(combined, 'Ge')
+
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[2], 'Si')  # Not substituted
     
     def test_substitute_wrong_structure(self):
         """Test that substitution with wrong structure raises error."""

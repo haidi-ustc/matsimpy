@@ -6,8 +6,7 @@ Create various types of point defects in crystal structures.
 
 from typing import List, Optional, Union, Tuple
 import numpy as np
-from copy import deepcopy
-from ...core import Crystal, Molecule, Lattice
+from ...core import Crystal, Lattice
 from ...transformation.chemical.substitution import substitute
 
 
@@ -20,7 +19,7 @@ def create_vacancy(
     Args:
         structure: Crystal structure
         indices: Index or list of indices of atoms to remove
-        inplace: If True, modify structure in-place
+        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with vacancies created
@@ -38,25 +37,28 @@ def create_vacancy(
         >>> # Create multiple vacancies
         >>> with_vacancies = create_vacancy(fcc, [0, 1, 2])
     """
-    if not inplace:
-        structure = deepcopy(structure)
-
     if isinstance(indices, int):
         indices = [indices]
 
-    # Sort indices in descending order to avoid index shifting issues
-    indices = sorted(set(indices), reverse=True)
+    # Remove duplicates
+    remove_set = set(indices)
 
     # Validate indices
-    for idx in indices:
+    for idx in remove_set:
         if idx < 0 or idx >= len(structure.species):
             raise IndexError(f"Invalid atom index: {idx}")
 
-    # Remove atoms
-    for idx in indices:
-        structure.remove_atom(idx)
+    # Build new species and positions skipping removed indices
+    new_species = [s for i, s in enumerate(structure.species) if i not in remove_set]
+    new_positions = [p for i, p in enumerate(structure.positions) if i not in remove_set]
 
-    return structure
+    return Crystal(
+        new_species, new_positions,
+        lattice=structure.lattice,
+        coords_are_cartesian=False,
+        pbc=list(structure.pbc),
+        site_properties=(list(structure.site_properties) if structure.site_properties else None),
+    )
 
 
 def create_interstitial(
@@ -72,7 +74,7 @@ def create_interstitial(
         structure: Crystal structure
         species: Species or list of species for interstitial atoms
         positions: Fractional position or list of positions
-        inplace: If True, modify structure in-place
+        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with interstitials added
@@ -92,13 +94,10 @@ def create_interstitial(
         ...     fcc, ['H', 'H'], [[0.5, 0.5, 0.5], [0.25, 0.25, 0.25]]
         ... )
     """
-    if not inplace:
-        structure = deepcopy(structure)
-
     # Normalize inputs
     if isinstance(species, str):
         species = [species]
-    if isinstance(positions[0], (int, float)):
+    if len(positions) > 0 and isinstance(positions[0], (int, float)):
         positions = [positions]
 
     if len(species) != len(positions):
@@ -107,7 +106,8 @@ def create_interstitial(
             f"number of positions ({len(positions)})"
         )
 
-    # Add interstitials
+    # Add interstitials (chaining new objects)
+    result = structure
     for spec, pos in zip(species, positions):
         # Ensure position is 3D
         pos = np.array(pos, dtype=np.float64)
@@ -116,9 +116,9 @@ def create_interstitial(
 
         # Wrap to [0, 1) for fractional coordinates
         pos = pos % 1.0
-        structure.add_atom(spec, pos.tolist())
+        result = result.add_atom(spec, pos.tolist())
 
-    return structure
+    return result
 
 
 def create_substitution(
@@ -134,7 +134,7 @@ def create_substitution(
         structure: Crystal structure
         indices: Index or list of indices of atoms to substitute
         new_species: New species or list of species
-        inplace: If True, modify structure in-place
+        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with substitutions
@@ -165,20 +165,7 @@ def create_substitution(
         )
 
     # Use transformation function for substitution (always returns new structure)
-    result = substitute(structure, indices, new_species)
-    if inplace:
-        # Copy result back to original structure - set positions first to
-        # avoid mismatches during validation when updating species.
-        structure._positions = result.positions
-        structure._species = result.species
-        if isinstance(structure, Crystal):
-            structure.frac_positions = result.frac_positions
-            structure.cart_positions = result.cart_positions
-            structure._sites = result._sites
-        structure._formula_dirty = True
-        structure._cached_composition = None
-        return structure
-    return result
+    return substitute(structure, indices, new_species)
 
 
 def create_frenkel(
@@ -194,7 +181,7 @@ def create_frenkel(
         structure: Crystal structure
         index: Index of atom to displace
         interstitial_position: Position for interstitial (default: displaced from original)
-        inplace: If True, modify structure in-place
+        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with Frenkel defect
@@ -209,9 +196,6 @@ def create_frenkel(
         >>> # Create Frenkel defect
         >>> with_frenkel = create_frenkel(nacl, 0, [0.5, 0.5, 0.5])
     """
-    if not inplace:
-        structure = deepcopy(structure)
-
     if index < 0 or index >= len(structure.species):
         raise IndexError(f"Invalid atom index: {index}")
 
@@ -230,13 +214,13 @@ def create_frenkel(
             raise ValueError("Interstitial position must be 3D")
         interstitial_position = interstitial_position % 1.0
 
-    # Remove atom from original position
-    structure.remove_atom(index)
+    # Remove atom from original position (returns new object)
+    result = structure.remove_atom(index)
 
-    # Add atom at interstitial position
-    structure.add_atom(species, interstitial_position.tolist())
+    # Add atom at interstitial position (returns new object)
+    result = result.add_atom(species, interstitial_position.tolist())
 
-    return structure
+    return result
 
 
 def create_schottky(
@@ -252,7 +236,7 @@ def create_schottky(
         structure: Crystal structure
         indices: Optional list of specific indices to remove (if None, random selection)
         num_vacancies: Number of vacancies to create (default: 2)
-        inplace: If True, modify structure in-place
+        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with Schottky defects
@@ -267,9 +251,6 @@ def create_schottky(
         >>> # Create Schottky defect (pair of vacancies)
         >>> with_schottky = create_schottky(nacl, num_vacancies=2)
     """
-    if not inplace:
-        structure = deepcopy(structure)
-
     if indices is None:
         # Random selection
         if num_vacancies > len(structure.species):
@@ -288,7 +269,7 @@ def create_schottky(
         )
 
     # Create vacancies
-    return create_vacancy(structure, indices, inplace=True)
+    return create_vacancy(structure, indices)
 
 
 def create_antisite(
@@ -301,7 +282,7 @@ def create_antisite(
         structure: Crystal structure
         index1: Index of first atom
         index2: Index of second atom
-        inplace: If True, modify structure in-place
+        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with antisite defect
@@ -316,9 +297,6 @@ def create_antisite(
         >>> # Create antisite defect (Ga-N swap)
         >>> with_antisite = create_antisite(gan, 0, 1)
     """
-    if not inplace:
-        structure = deepcopy(structure)
-
     if index1 < 0 or index1 >= len(structure.species):
         raise IndexError(f"Invalid atom index: {index1}")
     if index2 < 0 or index2 >= len(structure.species):
@@ -327,31 +305,18 @@ def create_antisite(
     if index1 == index2:
         raise ValueError("Cannot swap atom with itself")
 
-    # Antisite defects exchange species on fixed lattice sites.  Do not swap
-    # positions, otherwise the operation only reorders atoms rather than placing
-    # each species on the other species' site.
-    result = deepcopy(structure)
-    species_list = list(result.species)
+    # Antisite defects exchange species on fixed lattice sites.
+    # Build new species list with swapped species at the given indices.
+    species_list = list(structure.species)
     species_list[index1], species_list[index2] = species_list[index2], species_list[index1]
-    result.species = tuple(species_list)
-    result._formula_dirty = True
-    result._cached_composition = None
-    result._cached_formula = None
-    if hasattr(result, "_sites"):
-        result._sites = result._initialize_sites()
-    if inplace:
-        # Copy result back to original structure - set positions first to
-        # avoid validation issues when updating species
-        structure._positions = result.positions
-        structure._species = result.species
-        if isinstance(structure, Crystal):
-            structure.frac_positions = result.frac_positions
-            structure.cart_positions = result.cart_positions
-            structure._sites = result._sites
-        structure._formula_dirty = True
-        structure._cached_composition = None
-        return structure
-    return result
+
+    return Crystal(
+        species_list, structure.positions.tolist(),
+        lattice=structure.lattice,
+        coords_are_cartesian=False,
+        pbc=list(structure.pbc),
+        site_properties=(list(structure.site_properties) if structure.site_properties else None),
+    )
 
 
 __all__ = [

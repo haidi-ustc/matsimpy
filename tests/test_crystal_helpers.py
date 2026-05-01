@@ -6,39 +6,20 @@ from matsimpy.core import Crystal, Lattice
 
 class TestCrystalHelperMethods(unittest.TestCase):
     """Test helper methods in Crystal class."""
-    
+
     def setUp(self):
         """Set up test crystal."""
         self.lattice = Lattice(10)
         self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], self.lattice)
-    
-    def test_invalidate_neighbor_tree(self):
-        """Test that _invalidate_neighbor_tree clears cache."""
-        # Build neighbor tree
-        self.crystal.get_neighbor_list(5.0)
-        self.assertIsNotNone(self.crystal._neighbor_tree)
-        
-        # Invalidate
-        self.crystal._invalidate_neighbor_tree()
-        
-        # Should be cleared
+
+    def test_neighbor_tree_not_present_on_new_crystal(self):
+        """Test that new crystals don't have a neighbor tree."""
         self.assertIsNone(self.crystal._neighbor_tree)
-        self.assertIsNone(self.crystal._neighbor_tree_positions)
-        self.assertIsNone(self.crystal._neighbor_tree_cutoff)
-    
-    def test_update_coordinates_after_modification(self):
-        """Test coordinate update helper."""
-        original_cart = self.crystal.cart_positions.copy()
-        
-        # Modify positions
-        self.crystal.positions = np.array([[0.1, 0, 0], [0.6, 0.6, 0.6]])
-        
-        # Update using helper
-        self.crystal._update_coordinates_after_modification()
-        
-        # Check updates
-        self.assertTrue(np.array_equal(self.crystal.frac_positions, self.crystal.positions))
-        self.assertFalse(np.array_equal(self.crystal.cart_positions, original_cart))
+
+    def test_cart_positions_are_always_accessible(self):
+        """Test that Cartesian positions are accessible."""
+        cart = self.crystal.cart_positions
+        self.assertEqual(len(cart), 2)
     
     def test_get_sorted_sites_element(self):
         """Test getting sorted sites by element."""
@@ -105,9 +86,9 @@ class TestCrystalHelperMethods(unittest.TestCase):
         """Crystal.__str__ should display atoms in insertion order."""
         lattice = Lattice(10)
         crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
-        crystal.add_atom('O', [0.25, 0.25, 0.25])
+        result = crystal.add_atom('O', [0.25, 0.25, 0.25])
 
-        representation = str(crystal)
+        representation = str(result)
         lines = [line for line in representation.splitlines() if line]
 
         header = "Element    Fractional Coordinates    Cartesian Coordinates"
@@ -121,57 +102,60 @@ class TestCrystalHelperMethods(unittest.TestCase):
         self.assertTrue(second_row.startswith('O'), msg=f"Expected second row to describe 'O', got: {second_row}")
 
 class TestCrystalCodeDeduplication(unittest.TestCase):
-    """Test that helper methods reduce code duplication."""
-    
+    """Test that mutation methods return new objects."""
+
     def setUp(self):
         """Set up test crystal."""
         self.lattice = Lattice(10)
         self.crystal = Crystal(['Si'], [[0, 0, 0]], self.lattice)
-    
-    def test_add_atom_uses_helpers(self):
-        """Test that add_atom uses helper methods."""
-        # Build neighbor tree
-        self.crystal.get_neighbor_list(5.0)
-        self.assertIsNotNone(self.crystal._neighbor_tree)
-        
-        # Add atom - should invalidate tree via helper
-        self.crystal.add_atom('O', [0.5, 0, 0])
-        
-        # Tree should be invalidated
+
+    def test_add_atom_returns_new_object(self):
+        """Test that add_atom returns a new object."""
+        # Original should have no neighbor tree
         self.assertIsNone(self.crystal._neighbor_tree)
-    
-    def test_remove_atom_uses_helpers(self):
-        """Test that remove_atom uses helper methods."""
+
+        # Add atom - returns new object
+        result = self.crystal.add_atom('O', [0.5, 0, 0])
+
+        # Original should remain unchanged
+        self.assertEqual(len(self.crystal), 1)
+        # Result should have the new atom
+        self.assertEqual(len(result), 2)
+
+    def test_remove_atom_returns_new_object(self):
+        """Test that remove_atom returns a new object."""
         crystal = Crystal(['Si', 'O'], [[0,0,0], [0.5,0,0]], self.lattice)
-        
-        # Build neighbor tree
-        crystal.get_neighbor_list(5.0)
-        
-        # Remove atom - should invalidate
-        crystal.remove_atom(1)
-        
-        self.assertIsNone(crystal._neighbor_tree)
-    
-    def test_substitute_uses_helpers(self):
-        """Test that substitute uses helper methods."""
-        # Build neighbor tree
-        self.crystal.get_neighbor_list(5.0)
-        
-        # Substitute - should invalidate
-        self.crystal.substitute(0, 'Ge')
-        
-        self.assertIsNone(self.crystal._neighbor_tree)
-    
-    def test_sort_atoms_uses_helpers(self):
-        """Test that sort_atoms uses helper methods."""
+
+        # Remove atom - returns new object
+        result = crystal.remove_atom(1)
+
+        # Original should remain unchanged
+        self.assertEqual(len(crystal), 2)
+        # Result should have one fewer atom
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.species[0], 'Si')
+
+    def test_substitute_returns_new_object(self):
+        """Test that substitute returns a new object."""
+        # Substitute - returns new object
+        result = self.crystal.substitute(0, 'Ge')
+
+        # Original should remain unchanged
+        self.assertEqual(self.crystal.species[0], 'Si')
+        # Result should have substituted species
+        self.assertEqual(result.species[0], 'Ge')
+
+    def test_sort_atoms_returns_new_object(self):
+        """Test that sort_atoms returns a new object."""
         crystal = Crystal(['O', 'Si'], [[0,0,0], [0.5,0,0]], self.lattice)
-        
-        # Sort
-        crystal.sort_atoms('element')
-        
-        # Coordinates should be updated
-        self.assertEqual(len(crystal.frac_positions), 2)
-        self.assertEqual(len(crystal.cart_positions), 2)
+
+        # Sort (by element: O atomic_no=8, Si atomic_no=14, so O comes first)
+        result = crystal.sort_atoms('element')
+
+        # Original should remain unchanged
+        self.assertEqual(crystal.species, ('O', 'Si'))
+        # Result should be sorted by atomic number (O before Si)
+        self.assertEqual(result.species, ('O', 'Si'))
 
 class TestCrystalTypeHints(unittest.TestCase):
     """Test that methods have proper type hints."""
@@ -187,27 +171,27 @@ class TestCrystalTypeHints(unittest.TestCase):
 
 class TestCrystalIntegration(unittest.TestCase):
     """Integration tests for Crystal helper behavior."""
-    
+
     def test_multiple_modifications_work_together(self):
         """Test that multiple modifications work correctly."""
         lattice = Lattice(10)
         crystal = Crystal(['Si'], [[0,0,0]], lattice)
-        
-        # Add atoms
-        crystal.add_atom(['O', 'O'], [[0.25,0,0], [0.75,0,0]])
+
+        # Add atoms (returns new object)
+        crystal = crystal.add_atom(['O', 'O'], [[0.25,0,0], [0.75,0,0]])
         self.assertEqual(len(crystal), 3)
-        
-        # Substitute
-        crystal.substitute(0, 'Ge')
+
+        # Substitute (returns new object)
+        crystal = crystal.substitute(0, 'Ge')
         self.assertEqual(crystal.species[0], 'Ge')
-        
-        # Sort
-        crystal.sort_atoms('alphabet')
-        
-        # Remove
-        crystal.remove_atom(0)
+
+        # Sort (returns new object)
+        crystal = crystal.sort_atoms('alphabet')
+
+        # Remove (returns new object)
+        crystal = crystal.remove_atom(0)
         self.assertEqual(len(crystal), 2)
-        
+
         # All should work without errors
         self.assertIsInstance(crystal.formula, str)
 

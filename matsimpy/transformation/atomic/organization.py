@@ -40,8 +40,6 @@ def sort_atoms(
     """
     from ...core import Element
 
-    structure = structure.copy()
-
     # Create list of (index, key_value) tuples
     n_atoms = len(structure.species)
 
@@ -67,27 +65,23 @@ def sort_atoms(
         idx for idx, _ in sorted(keys, key=lambda x: x[1], reverse=reverse)
     ]
 
-    # Reorder positions first, then species to avoid validation issues
-    new_species = tuple(structure.species[i] for i in sorted_indices)
-    new_positions = structure.positions[sorted_indices]
-
-    structure._positions = new_positions
-    structure._species = new_species
+    # Build sorted species and positions
+    new_species = [structure.species[i] for i in sorted_indices]
+    new_positions = [structure.positions[i].tolist() for i in sorted_indices]
 
     if isinstance(structure, Crystal):
-        structure.frac_positions = new_positions
-        structure.cart_positions = structure._convert_to_cartesian()
-        structure._sites = structure._initialize_sites()
+        return Crystal(
+            new_species, new_positions,
+            lattice=structure.lattice,
+            coords_are_cartesian=False,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
     else:
-        structure._positions = new_positions
-
-    # Invalidate caches
-    structure._neighbor_tree = None
-    structure._neighbor_tree_positions = None
-    structure._formula_dirty = True
-    structure._cached_composition = None
-
-    return structure
+        return Molecule(
+            new_species, new_positions,
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def center_structure(
@@ -114,8 +108,6 @@ def center_structure(
         >>> # Center at specific point
         >>> centered = center_structure(molecule, center=[5, 5, 5])
     """
-    structure = structure.copy()
-
     if center is None:
         center = np.array([0.0, 0.0, 0.0])
     else:
@@ -127,26 +119,27 @@ def center_structure(
         displacement = center - current_center
 
         # Move all atoms
-        structure.positions += displacement
-        if hasattr(structure, "_cached_com"):
-            structure._cached_com = None
-        structure._sites = structure._initialize_sites()
+        new_positions = structure.positions + displacement
+
+        return Molecule(
+            list(structure.species), new_positions.tolist(),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
     else:
         # For crystals, center in fractional coordinates
         current_center = np.mean(structure.positions, axis=0)
         displacement = center - current_center
 
-        structure.positions += displacement
-        structure.frac_positions = structure.positions
-        structure.cart_positions = structure._convert_to_cartesian()
-        structure._sites = structure._initialize_sites()
+        new_positions = structure.positions + displacement
 
-    # Invalidate caches
-    structure._neighbor_tree = None
-    structure._neighbor_tree_positions = None
-
-    return structure
+        return Crystal(
+            list(structure.species), new_positions.tolist(),
+            lattice=structure.lattice,
+            coords_are_cartesian=False,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def perturb_positions(

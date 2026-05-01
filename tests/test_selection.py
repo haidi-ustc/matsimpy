@@ -215,17 +215,19 @@ class TestSelectionIntegration(unittest.TestCase):
     def test_select_and_substitute(self):
         """Test using selection for substitution."""
         from matsimpy.utils.selection import select_by_species
-        
+
         # Select all Si atoms
         si_indices = select_by_species(self.crystal, 'Si')
         self.assertEqual(len(si_indices), 2)
-        
-        # Substitute them
-        self.crystal.substitute(si_indices, ['Ge'] * len(si_indices))
-        
-        # Verify substitution
-        self.assertEqual(self.crystal.species[0], 'Ge')
-        self.assertEqual(self.crystal.species[2], 'Ge')
+
+        # Substitute them (returns new object)
+        result = self.crystal.substitute(si_indices, ['Ge'] * len(si_indices))
+
+        # Verify substitution on the result
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[2], 'Ge')
+        # Original unchanged
+        self.assertEqual(self.crystal.species[0], 'Si')
     
     def test_complex_selection(self):
         """Test complex selection combining multiple criteria."""

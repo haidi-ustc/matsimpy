@@ -66,14 +66,12 @@ class TestStructureValidationEdgeCases(unittest.TestCase):
             struct._validate_positions([[float('inf'), 0, 0]])
         self.assertIn("infinite", str(cm.exception))
     
-    def test_positions_setter_count_mismatch(self):
-        """Test positions setter with count mismatch."""
+    def test_positions_immutable(self):
+        """Test that positions property has no setter."""
         struct = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
-        
-        with self.assertRaises(ValueError) as cm:
-            struct.positions = [[0, 0, 0], [1, 0, 0], [2, 0, 0]]  # 3 positions, 2 species
-        self.assertIn("number of positions", str(cm.exception))
-        self.assertIn("number of species", str(cm.exception))
+
+        with self.assertRaises(AttributeError):
+            struct.positions = [[0, 0, 0], [1, 0, 0], [2, 0, 0]]
 
 
 class TestStructureSerializationEdgeCases(unittest.TestCase):
@@ -163,32 +161,32 @@ class TestStructureAddAtomEdgeCases(unittest.TestCase):
         """Test add_atom with empty lists."""
         struct = Molecule(['H'], [[0, 0, 0]])
         initial_len = len(struct)
-        struct.add_atom([], [])  # Should do nothing
-        self.assertEqual(len(struct), initial_len)
+        result = struct.add_atom([], [])  # Should do nothing
+        self.assertEqual(len(result), initial_len)
     
     def test_add_atom_1d_position_wrong_length(self):
         """Test add_atom with 1D position of wrong length."""
         struct = Molecule(['H'], [[0, 0, 0]])
-        
+
         with self.assertRaises(ValueError) as cm:
             struct.add_atom('C', [1, 2])  # Only 2 coordinates
         self.assertIn("3D coordinate", str(cm.exception))
-    
+
     def test_add_atom_wrong_dimensions(self):
         """Test add_atom with wrong dimensions."""
         struct = Molecule(['H'], [[0, 0, 0]])
-        
+
         with self.assertRaises(ValueError) as cm:
             struct.add_atom('C', [[[1, 2, 3]]])  # 3D array
         self.assertIn("3D coordinate", str(cm.exception))
-    
+
     def test_add_atom_2d_wrong_coordinate_count(self):
         """Test add_atom with 2D array but wrong coordinate count."""
         struct = Molecule(['H'], [[0, 0, 0]])
-        
+
         with self.assertRaises(ValueError) as cm:
             struct.add_atom('C', [[1, 2]])  # Only 2 coordinates
-        self.assertIn("3D coordinates", str(cm.exception))
+        self.assertIn("3D coordinate", str(cm.exception))
 
 
 class TestStructureInitEdgeCases(unittest.TestCase):

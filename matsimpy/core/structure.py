@@ -234,6 +234,10 @@ class Structure(ABC, MSONable):
                 f"Positions must be convertible to numeric array: {e}"
             ) from e
 
+        # Handle empty positions (0 atoms)
+        if len(positions_array) == 0:
+            return positions_array.reshape(0, 3)
+
         # Handle 1D input (single position) - this should be an error for Structure
         if positions_array.ndim == 1:
             if len(positions_array) == 3:

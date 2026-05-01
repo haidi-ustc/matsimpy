@@ -133,23 +133,23 @@ class TestHashUseCases(unittest.TestCase):
         """Test that hash changes after modifying structure."""
         mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
         hash1 = hash(mol)
-        
-        # Modify structure
-        mol.add_atom('H', [2.0, 0, 0])
-        hash2 = hash(mol)
-        
+
+        # Modify structure (returns new object)
+        mol2 = mol.add_atom('H', [2.0, 0, 0])
+        hash2 = hash(mol2)
+
         # Hash should be different
         self.assertNotEqual(hash1, hash2)
-    
+
     def test_hash_after_substitution(self):
         """Test that hash changes after substitution."""
         mol = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
         hash1 = hash(mol)
-        
-        # Substitute atom
-        mol.substitute(0, 'N')
-        hash2 = hash(mol)
-        
+
+        # Substitute atom (returns new object)
+        mol2 = mol.substitute(0, 'N')
+        hash2 = hash(mol2)
+
         # Hash should be different
         self.assertNotEqual(hash1, hash2)
     

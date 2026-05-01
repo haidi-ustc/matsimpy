@@ -191,10 +191,10 @@ class Crystal(Structure):
             # Pass fractional to super so self._positions is always fractional
             super().__init__(species, frac_array.tolist(), lattice)
             self.cart_positions = cart_array
-            self.frac_positions = frac_array
+            self.frac_positions = np.array(self.positions)
         else:
             super().__init__(species, positions, lattice)
-            self.frac_positions = np.array(positions)
+            self.frac_positions = np.array(self.positions)
             self.cart_positions = self._convert_to_cartesian()
 
         self.lattice = lattice
@@ -388,7 +388,12 @@ class Crystal(Structure):
             {'charge': 1.0, 'magmom': 0.5}
         """
         # Parse and normalize position input
-        if isinstance(position, list):
+        if isinstance(position, np.ndarray):
+            if position.ndim == 1:
+                new_positions = [position.tolist()]
+            else:
+                new_positions = position.tolist()
+        elif isinstance(position, list):
             if len(position) == 0:
                 # Empty list - nothing to check
                 new_positions = []
@@ -410,7 +415,7 @@ class Crystal(Structure):
         # Normalize site_properties
         if site_properties is not None:
             if isinstance(site_properties, dict):
-                site_properties_list = [site_properties]
+                site_properties_list = [site_properties] * len(species_list)
             else:
                 site_properties_list = site_properties
             if len(site_properties_list) != len(species_list):
@@ -570,7 +575,10 @@ class Crystal(Structure):
 
         new_site_props = None
         if self.site_properties or site_properties_list:
-            new_site_props = list(self.site_properties) if self.site_properties else []
+            if self.site_properties and len(self.site_properties) == len(self.species):
+                new_site_props = list(self.site_properties)
+            else:
+                new_site_props = [{}] * len(self.species)
             if site_properties_list:
                 new_site_props.extend(site_properties_list)
             else:

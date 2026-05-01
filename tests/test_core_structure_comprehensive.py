@@ -182,26 +182,26 @@ class TestStructureProperties(unittest.TestCase):
     def test_symbol_set_affected_by_sort_atoms(self):
         """Test that symbol_set changes when sort_atoms is called."""
         from matsimpy.core import Lattice
-        
+
         # Create crystal with Cl, Na, Cl (original order: Cl, Na)
-        crystal = Crystal(['Cl', 'Na', 'Cl'], 
-                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
+        crystal = Crystal(['Cl', 'Na', 'Cl'],
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
                          Lattice.cubic(5.64))
-        
+
         # Original symbol_set should reflect original order
         self.assertEqual(crystal.symbol_set, ('Cl', 'Na'))
-        
+
         # Sort by element (atomic number: Na=11, Cl=17, so Na comes first)
-        crystal.sort_atoms('element')
+        result = crystal.sort_atoms('element')
         # After sorting, species order is Na, Cl, Cl, so symbol_set should be Na, Cl
-        self.assertEqual(crystal.species, ('Na', 'Cl', 'Cl'))
-        self.assertEqual(crystal.symbol_set, ('Na', 'Cl'))
-        
+        self.assertEqual(result.species, ('Na', 'Cl', 'Cl'))
+        self.assertEqual(result.symbol_set, ('Na', 'Cl'))
+
         # Sort alphabetically (Cl comes before Na)
-        crystal.sort_atoms('alphabet')
+        result2 = result.sort_atoms('alphabet')
         # After sorting, species order is Cl, Cl, Na, so symbol_set should be Cl, Na
-        self.assertEqual(crystal.species, ('Cl', 'Cl', 'Na'))
-        self.assertEqual(crystal.symbol_set, ('Cl', 'Na'))
+        self.assertEqual(result2.species, ('Cl', 'Cl', 'Na'))
+        self.assertEqual(result2.symbol_set, ('Cl', 'Na'))
     
     def test_symbol_set_affects_vasp_output_after_sort(self):
         """Test that sort_atoms affects VASP output via symbol_set."""
@@ -209,12 +209,12 @@ class TestStructureProperties(unittest.TestCase):
         from matsimpy.io.vasp import write_POSCAR
         import tempfile
         import os
-        
+
         # Create crystal with Cl, Na, Cl
-        crystal = Crystal(['Cl', 'Na', 'Cl'], 
-                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
+        crystal = Crystal(['Cl', 'Na', 'Cl'],
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
                          Lattice.cubic(5.64))
-        
+
         # Write before sorting
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
             temp_file1 = f.name
@@ -222,17 +222,17 @@ class TestStructureProperties(unittest.TestCase):
         with open(temp_file1, 'r') as f:
             vasp_species_before = f.readlines()[5].strip().split()
         self.assertEqual(vasp_species_before, ['Cl', 'Na'])
-        
+
         # Sort and write again
-        crystal.sort_atoms('element')
+        sorted_crystal = crystal.sort_atoms('element')
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
             temp_file2 = f.name
-        write_POSCAR(crystal, temp_file2)
+        write_POSCAR(sorted_crystal, temp_file2)
         with open(temp_file2, 'r') as f:
             vasp_species_after = f.readlines()[5].strip().split()
         self.assertEqual(vasp_species_after, ['Na', 'Cl'])
-        self.assertEqual(list(crystal.symbol_set), vasp_species_after)
-        
+        self.assertEqual(list(sorted_crystal.symbol_set), vasp_species_after)
+
         # Cleanup
         os.unlink(temp_file1)
         os.unlink(temp_file2)
@@ -249,40 +249,33 @@ class TestStructureMethods(unittest.TestCase):
     def test_add_atom(self):
         """Test adding an atom."""
         initial_len = len(self.struct)
-        # Clear cache before adding
-        self.struct._cached_formula = None
-        self.struct._formula_dirty = True
-        self.struct.add_atom('C', [2, 2, 2])
-        self.assertEqual(len(self.struct), initial_len + 1)
-        self.assertEqual(self.struct.species[-1], 'C')
+        result = self.struct.add_atom('C', [2, 2, 2])
+        self.assertEqual(len(result), initial_len + 1)
+        self.assertEqual(result.species[-1], 'C')
         np.testing.assert_array_almost_equal(
-            self.struct.positions[-1], [2, 2, 2]
+            result.positions[-1], [2, 2, 2]
         )
         # Formula should be updated
-        formula = self.struct.formula
+        formula = result.formula
         self.assertIn('C', formula)
-    
+
     def test_add_atom_invalid_position(self):
         """Test adding atom with invalid position raises ValueError."""
         with self.assertRaises(ValueError):
             self.struct.add_atom('C', [2, 2])  # 2D position
-    
+
     def test_remove_atom(self):
         """Test removing an atom."""
         initial_len = len(self.struct)
-        original_species = self.struct.species[0]
-        # Clear cache before removing
-        self.struct._cached_formula = None
-        self.struct._formula_dirty = True
-        self.struct.remove_atom(0)
-        self.assertEqual(len(self.struct), initial_len - 1)
-        self.assertNotEqual(self.struct.species[0], original_species)
+        result = self.struct.remove_atom(0)
+        self.assertEqual(len(result), initial_len - 1)
+        self.assertEqual(result.species[0], 'O')
         # Formula should be updated
-        formula = self.struct.formula
+        formula = result.formula
         # After removing first H from H2O (species=['H', 'O', 'H']),
         # species becomes ['O', 'H'], so formula is 'OH' (preserves order)
         self.assertEqual(formula, 'OH')
-    
+
     def test_remove_atom_invalid_index(self):
         """Test removing atom with invalid index raises IndexError."""
         with self.assertRaises(IndexError):
@@ -304,50 +297,49 @@ class TestStructureMethods(unittest.TestCase):
 
 class TestStructureSubstitution(unittest.TestCase):
     """Test Structure substitution methods."""
-    
+
     def setUp(self):
         """Set up test fixtures."""
         self.species = ['Si', 'O', 'Si', 'O']
-        self.positions = [[0, 0, 0], [0.25, 0.25, 0.25], 
+        self.positions = [[0, 0, 0], [0.25, 0.25, 0.25],
                           [0.5, 0.5, 0.5], [0.75, 0.75, 0.75]]
         self.struct = Molecule(self.species, self.positions)
-    
+
     def test_substitute_single_atom(self):
         """Test substituting a single atom."""
-        self.struct.substitute(0, 'Ge')
-        self.assertEqual(self.struct.species[0], 'Ge')
-        self.assertEqual(self.struct.species[1], 'O')
-    
+        result = self.struct.substitute(0, 'Ge')
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[1], 'O')
+
     def test_substitute_multiple_atoms(self):
         """Test substituting multiple atoms."""
-        self.struct.substitute([0, 2], ['Ge', 'Ge'])
-        self.assertEqual(self.struct.species[0], 'Ge')
-        self.assertEqual(self.struct.species[2], 'Ge')
-    
+        result = self.struct.substitute([0, 2], ['Ge', 'Ge'])
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[2], 'Ge')
+
     def test_substitute_multiple_atoms_same_species(self):
         """Test substituting multiple atoms with same species."""
-        self.struct.substitute([0, 2], 'Ge')
-        self.assertEqual(self.struct.species[0], 'Ge')
-        self.assertEqual(self.struct.species[2], 'Ge')
-    
+        result = self.struct.substitute([0, 2], 'Ge')
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[2], 'Ge')
+
     def test_substitute_with_dict(self):
         """Test substituting using dictionary mapping."""
-        self.struct.substitute([0, 1, 2, 3], {'Si': 'Ge', 'O': 'S'})
-        self.assertEqual(self.struct.species[0], 'Ge')
-        self.assertEqual(self.struct.species[1], 'S')
-    
+        result = self.struct.substitute([0, 1, 2, 3], {'Si': 'Ge', 'O': 'S'})
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[1], 'S')
+
     def test_substitute_all(self):
         """Test substitute_all method."""
-        self.struct.substitute_all('Si', 'Ge')
-        self.assertEqual(self.struct.species[0], 'Ge')
-        self.assertEqual(self.struct.species[2], 'Ge')
-        self.assertEqual(self.struct.species[1], 'O')  # O unchanged
-    
+        result = self.struct.substitute_all('Si', 'Ge')
+        self.assertEqual(result.species[0], 'Ge')
+        self.assertEqual(result.species[2], 'Ge')
+        self.assertEqual(result.species[1], 'O')  # O unchanged
+
     def test_substitute_all_no_match(self):
         """Test substitute_all when no atoms match."""
-        initial_species = list(self.struct.species)
-        self.struct.substitute_all('C', 'N')  # No C atoms
-        self.assertEqual(list(self.struct.species), initial_species)
+        result = self.struct.substitute_all('C', 'N')  # No C atoms
+        self.assertEqual(list(result.species), list(self.struct.species))
     
     def test_substitute_invalid_index(self):
         """Test substitute with invalid index raises IndexError."""
@@ -366,30 +358,30 @@ class TestStructureSubstitution(unittest.TestCase):
 
 class TestStructureSorting(unittest.TestCase):
     """Test Structure sorting methods."""
-    
+
     def setUp(self):
         """Set up test fixtures."""
         self.species = ['O', 'H', 'C', 'N']
         self.positions = [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]
         self.struct = Molecule(self.species, self.positions)
-    
+
     def test_sort_atoms_by_element(self):
         """Test sorting atoms by element (atomic number)."""
-        self.struct.sort_atoms('element')
+        result = self.struct.sort_atoms('element')
         # Should be sorted by atomic number: H(1), C(6), N(7), O(8)
-        self.assertEqual(self.struct.species[0], 'H')
-        self.assertEqual(self.struct.species[1], 'C')
-        self.assertEqual(self.struct.species[2], 'N')
-        self.assertEqual(self.struct.species[3], 'O')
-    
+        self.assertEqual(result.species[0], 'H')
+        self.assertEqual(result.species[1], 'C')
+        self.assertEqual(result.species[2], 'N')
+        self.assertEqual(result.species[3], 'O')
+
     def test_sort_atoms_alphabetically(self):
         """Test sorting atoms alphabetically."""
-        self.struct.sort_atoms('alphabet')
+        result = self.struct.sort_atoms('alphabet')
         # Should be sorted alphabetically: C, H, N, O
-        self.assertEqual(self.struct.species[0], 'C')
-        self.assertEqual(self.struct.species[1], 'H')
-        self.assertEqual(self.struct.species[2], 'N')
-        self.assertEqual(self.struct.species[3], 'O')
+        self.assertEqual(result.species[0], 'C')
+        self.assertEqual(result.species[1], 'H')
+        self.assertEqual(result.species[2], 'N')
+        self.assertEqual(result.species[3], 'O')
     
     def test_sort_atoms_invalid_method(self):
         """Test sorting with invalid method raises ValueError."""
@@ -399,13 +391,13 @@ class TestStructureSorting(unittest.TestCase):
     def test_sort_atoms_preserves_positions(self):
         """Test that sorting preserves atom-position correspondence."""
         original_positions = self.struct.positions.copy()
-        self.struct.sort_atoms('element')
+        result = self.struct.sort_atoms('element')
         # Positions should be reordered but values preserved
-        self.assertEqual(len(self.struct.positions), len(original_positions))
+        self.assertEqual(len(result.positions), len(original_positions))
         # All original positions should still be present
         for pos in original_positions:
             self.assertTrue(
-                any(np.allclose(pos, p) for p in self.struct.positions)
+                any(np.allclose(pos, p) for p in result.positions)
             )
 
 class TestStructureSerialization(unittest.TestCase):
@@ -483,24 +475,20 @@ class TestStructureEdgeCases(unittest.TestCase):
         self.assertEqual(len(struct), 2)
     
     def test_formula_cache_invalidation(self):
-        """Test that formula cache is invalidated on modification."""
+        """Test that formula is different after modification."""
         struct = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
         formula1 = struct.formula  # Get initial formula
-        struct.add_atom('C', [2, 2, 2])
-        # Check that _formula_dirty flag is set
-        self.assertTrue(struct._formula_dirty)
-        formula2 = struct.formula  # Get updated formula
+        result = struct.add_atom('C', [2, 2, 2])
+        formula2 = result.formula  # Get updated formula
         self.assertNotEqual(formula1, formula2)
         self.assertIn('C', formula2)
-    
+
     def test_composition_cache_invalidation(self):
-        """Test that composition cache is invalidated on modification."""
+        """Test that composition is different after modification."""
         struct = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
         comp1 = struct.composition  # Get initial composition
-        struct.add_atom('C', [2, 2, 2])
-        # Check that cache is cleared
-        self.assertIsNone(struct._cached_composition)
-        comp2 = struct.composition  # Get updated composition
+        result = struct.add_atom('C', [2, 2, 2])
+        comp2 = result.composition  # Get updated composition
         self.assertNotEqual(comp1.formula, comp2.formula)
         self.assertIn('C', comp2.composition)
 

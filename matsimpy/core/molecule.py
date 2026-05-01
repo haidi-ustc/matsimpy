@@ -339,7 +339,12 @@ class Molecule(Structure):
             ...                             [{'charge': 1}, {'charge': -2}])  # With properties
         """
         # Parse position input
-        if isinstance(position, list):
+        if isinstance(position, np.ndarray):
+            if position.ndim == 1:
+                new_positions = [position.tolist()]
+            else:
+                new_positions = position.tolist()
+        elif isinstance(position, list):
             if len(position) == 0:
                 new_positions = []
             elif isinstance(position[0], (int, float)):
@@ -348,6 +353,14 @@ class Molecule(Structure):
                 new_positions = position
         else:
             new_positions = [position]
+
+        # Validate that all positions are 3D
+        for idx, pos in enumerate(new_positions):
+            if not isinstance(pos, (list, tuple, np.ndarray)) or len(pos) != 3:
+                raise ValueError(
+                    f"Each position must be a 3D coordinate [x, y, z], "
+                    f"got {pos} at index {idx}."
+                )
 
         # Check for duplicates within new positions
         if len(new_positions) > 1:
@@ -384,7 +397,8 @@ class Molecule(Structure):
                         raise ValueError(
                             f"Cannot add atom at position {new_pos}: "
                             f"too close to existing atom "
-                            f"(distance: {min_distance:.6f} Angstrom)."
+                            f"(distance: {min_distance:.6f} Angstrom). "
+                            f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
         # Normalize species

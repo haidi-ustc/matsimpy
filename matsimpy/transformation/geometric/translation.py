@@ -43,30 +43,24 @@ def translate(
     if vector.ndim != 1 or len(vector) != 3:
         raise ValueError("Translation vector must be 3D [x, y, z]")
 
-    # Always create a new structure
-    new_structure = structure.copy()
-    
-    # Apply translation
-    if isinstance(new_structure, Molecule):
-        new_structure.positions += vector
-        if hasattr(new_structure, "_cached_com"):
-            new_structure._cached_com = None
-        new_structure._sites = new_structure._initialize_sites()
+    # Apply translation by constructing a new structure
+    if isinstance(structure, Molecule):
+        new_positions = structure.positions + vector
+        return Molecule(
+            list(structure.species),
+            new_positions.tolist(),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
     else:
-        # For crystals, modify positions directly
-        new_structure.cart_positions += vector
-        new_structure.frac_positions = new_structure._convert_to_fractional()
-        # Keep canonical fractional positions in sync. Many downstream APIs
-        # (sites, serialization, equality, further transformations) read
-        # ``positions`` rather than ``frac_positions``.
-        new_structure.positions = new_structure.frac_positions
-        # Invalidate caches
-        new_structure._neighbor_tree = None
-        new_structure._neighbor_tree_positions = None
-        if hasattr(new_structure, "_sites"):
-            new_structure._sites = new_structure._initialize_sites()
-    
-    return new_structure
+        new_cart_positions = structure.cart_positions + vector
+        return Crystal(
+            list(structure.species),
+            new_cart_positions.tolist(),
+            structure.lattice,
+            coords_are_cartesian=True,
+            pbc=list(structure.pbc),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
 
 def translate_to_origin(
