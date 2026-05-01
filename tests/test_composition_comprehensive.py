@@ -219,5 +219,34 @@ class TestCompositionComprehensive(unittest.TestCase):
         self.assertEqual(comp.reduced_formula, "OH2")
 
 
+    def test_anonymous_formula_binary(self):
+        """Fe2O3 -> A3B2 (O=8->A, Fe=26->B)."""
+        comp = Composition("Fe2O3")
+        # O (atomic_no=8) sorts first -> A with count 3 -> A3
+        # Fe (atomic_no=26) sorts second -> B with count 2 -> B2
+        self.assertEqual(comp.anonymous_formula, "A3B2")
+
+    def test_anonymous_formula_ternary(self):
+        """CaTiO3 -> A3BC (O=8->A, Ca=20->B, Ti=22->C)."""
+        comp = Composition("CaTiO3")
+        self.assertEqual(comp.anonymous_formula, "A3BC")
+
+    def test_anonymous_formula_single_element(self):
+        """C -> A."""
+        comp = Composition("C")
+        self.assertEqual(comp.anonymous_formula, "A")
+
+    def test_anonymous_formula_single_element_with_count(self):
+        """O2 -> A2."""
+        comp = Composition("O2")
+        self.assertEqual(comp.anonymous_formula, "A2")
+
+    def test_anonymous_formula_same_atomic_number(self):
+        """Elements with distinct atomic numbers but same stoichiometry."""
+        comp = Composition("NaCl")
+        # Na=11->A, Cl=17->B (sorted by atomic_no ascending: Na first, Cl second)
+        self.assertEqual(comp.anonymous_formula, "AB")
+
+
 if __name__ == '__main__':
     unittest.main()

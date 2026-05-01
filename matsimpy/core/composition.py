@@ -353,6 +353,44 @@ class Composition(MSONable):
                 seen.add(element)
         return "".join(parts)
 
+    @property
+    def anonymous_formula(self) -> str:
+        """
+        Formula with element symbols replaced by A, B, C... in atomic number order.
+
+        Elements are sorted by atomic number ascending, then assigned labels
+        A, B, C, ... following pymatgen convention.
+
+        Returns:
+            str: Anonymized chemical formula.
+
+        Examples:
+            >>> Composition('Fe2O3').anonymous_formula
+            'A2B3'
+            >>> Composition('CaTiO3').anonymous_formula
+            'A3BC'
+            >>> Composition('NaCl').anonymous_formula
+            'AB'
+        """
+        import string
+
+        # Sort by atomic number ascending
+        sorted_elements = sorted(
+            self._composition.items(),
+            key=lambda x: Element.get_element(x[0]).atomic_no,
+        )
+        # Assign labels A, B, C, ...
+        labels = {}
+        for i, (element, _) in enumerate(sorted_elements):
+            labels[element] = string.ascii_uppercase[i]
+
+        # Build formula in sorted (atomic number) order
+        parts = []
+        for element, count in sorted_elements:
+            label = labels[element]
+            parts.append(f"{label}{count if count > 1 else ''}")
+        return "".join(parts)
+
     def __str__(self) -> str:
         """
         String representation of the composition.
