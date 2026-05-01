@@ -182,6 +182,11 @@ class Molecule(Structure):
                 for pos, spec in zip(self.positions, self.species)
             ]
 
+    def _extra_dict_fields(self) -> Dict[str, Any]:
+        if self.site_properties:
+            return {"site_properties": list(self.site_properties)}
+        return {}
+
     @property
     def sites(self) -> List[Site]:
         """
@@ -241,119 +246,76 @@ class Molecule(Structure):
             self._cached_com = center_of_mass.tolist()
         return self._cached_com
 
-    def translate(self, vector: List[float], inplace: bool = False) -> "Molecule":
+    def translate(self, vector: List[float]) -> "Molecule":
         """
         Translate the molecule by a given vector.
 
-        Moves all atoms by the specified translation vector. By default,
-        returns a new molecule. Set inplace=True to modify in-place.
+        Moves all atoms by the specified translation vector.
+        Returns a new molecule; the original is not modified.
 
         Args:
             vector: Translation vector [dx, dy, dz] in Angstroms.
-            inplace: If True, modify this molecule in-place (default: False).
-                    If False, return a new Molecule object.
 
         Returns:
-            Molecule: Translated molecule. If inplace=True, returns self.
-                    If inplace=False, returns a new Molecule object.
+            Molecule: Translated molecule.
 
         Example:
             >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-            >>> # Return new molecule (default)
             >>> translated = molecule.translate([1.0, 0.0, 0.0])
             >>> translated.positions[0]
             array([1., 0., 0.])
-            >>> # Modify in-place
-            >>> molecule.translate([1.0, 0.0, 0.0], inplace=True)
-            >>> molecule.positions[0]
-            array([1., 0., 0.])
         """
-        if inplace:
-            self._check_frozen()
-            self.positions += np.array(vector)
-            # Invalidate center of mass cache
-            if hasattr(self, "_cached_com"):
-                self._cached_com = None
-            # Update sites
-            self._sites = self._initialize_sites()
-            return self
-        else:
-            # Create new molecule with translated positions
-            new_molecule = self.copy()
-            new_molecule.positions += np.array(vector)
-            # Invalidate center of mass cache
-            if hasattr(new_molecule, "_cached_com"):
-                new_molecule._cached_com = None
-            # Update sites
-            new_molecule._sites = new_molecule._initialize_sites()
-            return new_molecule
+        new_positions = self.positions + np.array(vector)
+        return Molecule(
+            list(self.species), new_positions.tolist(),
+            site_properties=(list(self.site_properties) if self.site_properties else None),
+        )
 
-    def rotate(self, angle: float, axis: List[float], inplace: bool = False) -> "Molecule":
+    def rotate(self, angle: float, axis: List[float]) -> "Molecule":
         """
         Rotate the molecule around an axis.
 
         Rotates all atoms around the specified axis by the given angle.
-        The rotation axis is automatically normalized. By default,
-        returns a new molecule. Set inplace=True to modify in-place.
+        The rotation axis is automatically normalized.
+        Returns a new molecule; the original is not modified.
 
         Args:
             angle: Rotation angle in degrees.
             axis: Rotation axis vector [x, y, z] (will be normalized automatically).
-            inplace: If True, modify this molecule in-place (default: False).
-                    If False, return a new Molecule object.
 
         Returns:
-            Molecule: Rotated molecule. If inplace=True, returns self.
-                    If inplace=False, returns a new Molecule object.
+            Molecule: Rotated molecule.
 
         Note:
             Uses scipy.spatial.transform.Rotation for rotation.
 
         Example:
             >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-            >>> # Return new molecule (default)
             >>> rotated = molecule.rotate(90, [0, 0, 1])  # 90° rotation around z-axis
             >>> rotated.positions[1]  # H atom rotated
-            array([0., 0.96, 0.])
-            >>> # Modify in-place
-            >>> molecule.rotate(90, [0, 0, 1], inplace=True)
-            >>> molecule.positions[1]
             array([0., 0.96, 0.])
         """
         from scipy.spatial.transform import Rotation
 
         rotation = Rotation.from_rotvec(np.radians(angle) * np.array(axis))
-        if inplace:
-            self._check_frozen()
-            self.positions = rotation.apply(self.positions)
-            # Invalidate center of mass cache
-            if hasattr(self, "_cached_com"):
-                self._cached_com = None
-            # Update sites
-            self._sites = self._initialize_sites()
-            return self
-        else:
-            # Create new molecule with rotated positions
-            new_molecule = self.copy()
-            new_molecule.positions = rotation.apply(new_molecule.positions)
-            # Invalidate center of mass cache
-            if hasattr(new_molecule, "_cached_com"):
-                new_molecule._cached_com = None
-            # Update sites
-            new_molecule._sites = new_molecule._initialize_sites()
-            return new_molecule
+        new_positions = rotation.apply(self.positions)
+        return Molecule(
+            list(self.species), new_positions.tolist(),
+            site_properties=(list(self.site_properties) if self.site_properties else None),
+        )
 
     def add_atom(
         self,
         species: Union[str, List[str]],
         position: Union[List[float], List[List[float]]],
         site_properties: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
-    ) -> None:
+    ) -> "Molecule":
         """
-        Add one or more atoms to the molecule and update sites.
+        Add one or more atoms to the molecule and return a new Molecule.
 
         Performs chemical reasonableness checks on interatomic distances.
         Prevents adding duplicate atoms at the same position or atoms that are too close.
+        The original molecule is not modified.
 
         Args:
             species: Atomic species (single string or list of strings).
@@ -361,30 +323,28 @@ class Molecule(Structure):
             site_properties: Optional site properties (single dict or list of dicts).
                            If list, must match length of species.
 
+        Returns:
+            Molecule: New molecule with the added atom(s).
+
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
-            ValueError: If duplicate positions are detected (distance < 1e-6 Å).
-            ValueError: If atoms are too close (distance < 0.5 Å).
+            ValueError: If duplicate positions are detected (distance < 1e-6 Angstrom).
+            ValueError: If atoms are too close (distance < 0.5 Angstrom).
 
         Examples:
-            >>> molecule.add_atom('H', [0, 0, 0])  # Add single atom
-            >>> molecule.add_atom(['H', 'O'], [[0, 0, 0], [1.2, 0, 0]])  # Add multiple
-            >>> molecule.add_atom(['H', 'O'], [[0, 0, 0], [1.2, 0, 0]],
-            ...                   [{'charge': 1}, {'charge': -2}])  # With properties
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> new_mol = molecule.add_atom('H', [2.0, 0, 0])  # Add single atom
+            >>> new_mol = molecule.add_atom(['H', 'O'], [[2.0, 0, 0], [3.0, 0, 0]])  # Add multiple
+            >>> new_mol = molecule.add_atom(['H', 'O'], [[2.0, 0, 0], [3.0, 0, 0]],
+            ...                             [{'charge': 1}, {'charge': -2}])  # With properties
         """
-        # Enforce frozen state before ANY validation
-        self._check_frozen()
-        # Chemical reasonableness check - validate interatomic distances
-        # Convert to array for processing
+        # Parse position input
         if isinstance(position, list):
             if len(position) == 0:
-                # Empty list - nothing to check
                 new_positions = []
             elif isinstance(position[0], (int, float)):
-                # Single position [x, y, z]
                 new_positions = [position]
             else:
-                # Multiple positions [[x1,y1,z1], [x2,y2,z2], ...]
                 new_positions = position
         else:
             new_positions = [position]
@@ -392,143 +352,114 @@ class Molecule(Structure):
         # Check for duplicates within new positions
         if len(new_positions) > 1:
             new_positions_array = np.array(new_positions, dtype=np.float64)
-            # Check pairwise distances within new positions
             for i in range(len(new_positions_array)):
                 for j in range(i + 1, len(new_positions_array)):
-                    dist = np.linalg.norm(
-                        new_positions_array[i] - new_positions_array[j]
-                    )
-                    if dist < 1e-6:  # Essentially zero distance (duplicate)
+                    dist = np.linalg.norm(new_positions_array[i] - new_positions_array[j])
+                    if dist < 1e-6:
                         raise ValueError(
                             f"Duplicate positions detected in new atoms: "
                             f"positions {i} and {j} are at the same location "
                             f"({new_positions[i]})."
                         )
-                    elif dist < 0.5:  # Too close
+                    elif dist < 0.5:
                         raise ValueError(
                             f"Atoms being added are too close: distance between "
-                            f"positions {i} and {j} is {dist:.6f} Å. "
+                            f"positions {i} and {j} is {dist:.6f} Angstrom. "
                             f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
         # Check each new position against existing atoms
         if len(self.positions) > 0:
             for idx, new_pos in enumerate(new_positions):
-                if len(new_pos) == 3:  # Valid 3D position
+                if len(new_pos) == 3:
                     new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
                     min_distance = np.min(cdist(new_pos_array, self.positions))
-
-                    # Raise error for duplicates or too close
-                    if min_distance < 1e-6:  # Essentially zero distance (duplicate)
+                    if min_distance < 1e-6:
                         raise ValueError(
-                            f"Cannot add atom at position {new_pos}: atom already exists "
-                            f"at this location (distance: {min_distance:.6f} Å)."
+                            f"Cannot add atom at position {new_pos}: "
+                            f"atom already exists at this location "
+                            f"(distance: {min_distance:.6f} Angstrom)."
                         )
-                    elif min_distance < 0.5:  # Too close
+                    elif min_distance < 0.5:
                         raise ValueError(
-                            f"Cannot add atom at position {new_pos}: too close to existing "
-                            f"atom (distance: {min_distance:.6f} Å). "
-                            f"Minimum allowed distance is 0.5 Angstrom."
+                            f"Cannot add atom at position {new_pos}: "
+                            f"too close to existing atom "
+                            f"(distance: {min_distance:.6f} Angstrom)."
                         )
 
-        # Determine number of atoms being added.  From this point on we may
-        # mutate state, so keep a rollback snapshot in case validation of
-        # site_properties fails after the parent mutation.
+        # Normalize species
+        if isinstance(species, str):
+            species_list = [species]
+        else:
+            species_list = list(species)
+
+        if not species_list:
+            return self.copy()
+
+        new_species = list(self.species) + species_list
+        new_positions_arr = (
+            np.vstack([self.positions, np.array(new_positions, dtype=np.float64)])
+            if new_positions
+            else self.positions.copy()
+        )
+
         n_atoms_before = len(self.species)
-        old_species = self.species
-        old_positions = self.positions.copy()
-        old_sites = self._sites.copy()
-        old_site_properties = self.site_properties.copy() if self.site_properties else []
-        old_formula_dirty = self._formula_dirty
-        old_cached_composition = self._cached_composition
-        old_cached_formula = self._cached_formula
-        old_cached_com = getattr(self, "_cached_com", None)
-        try:
-            # Call parent to add atoms
-            super().add_atom(species, position)
+        n_atoms_added = len(new_species) - n_atoms_before
 
-            n_atoms_added = len(self.species) - n_atoms_before
+        # Handle site_properties
+        new_site_props = list(self.site_properties) if self.site_properties else []
+        if site_properties is not None:
+            if isinstance(site_properties, dict):
+                site_properties_list = [site_properties] * n_atoms_added
+            else:
+                site_properties_list = list(site_properties)
+            if len(site_properties_list) != n_atoms_added:
+                raise ValueError(
+                    f"Number of site_properties ({len(site_properties_list)}) "
+                    f"must match number of atoms added ({n_atoms_added})"
+                )
+            if not new_site_props:
+                new_site_props = [{}] * n_atoms_before
+            new_site_props.extend(site_properties_list)
+        elif new_site_props:
+            new_site_props.extend([{}] * n_atoms_added)
 
-            # Invalidate center of mass cache
-            if hasattr(self, "_cached_com"):
-                self._cached_com = None
+        return Molecule(
+            new_species, new_positions_arr.tolist(),
+            site_properties=new_site_props if new_site_props else None,
+        )
 
-            # Update site properties
-            if site_properties is not None:
-                # Normalize to list
-                if isinstance(site_properties, dict):
-                    site_properties_list = [site_properties] * n_atoms_added
-                else:
-                    site_properties_list = site_properties
-
-                # Validate length
-                if len(site_properties_list) != n_atoms_added:
-                    raise ValueError(
-                        f"Number of site_properties ({len(site_properties_list)}) "
-                        f"must match number of atoms added ({n_atoms_added})"
-                    )
-
-                # Initialize site_properties if needed
-                if not self.site_properties:
-                    self.site_properties = [{}] * n_atoms_before
-
-                self.site_properties.extend(site_properties_list)
-            elif self.site_properties:
-                # Maintain existing site_properties with empty dicts
-                self.site_properties.extend([{}] * n_atoms_added)
-
-            # Reinitialize sites
-            self._sites = self._initialize_sites()
-        except Exception:
-            # Roll back using backing fields to bypass strict setters
-            self._species = old_species
-            self._positions = old_positions
-            self._sites = old_sites
-            self.site_properties = old_site_properties
-            self._formula_dirty = old_formula_dirty
-            self._cached_composition = old_cached_composition
-            self._cached_formula = old_cached_formula
-            if hasattr(self, "_cached_com"):
-                self._cached_com = None
-            raise
-
-    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:
+    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> "Molecule":
         """
-        Remove one or more atoms from the molecule (in-place).
+        Remove one or more atoms from the molecule and return a new Molecule.
 
-        Removes atoms by index and updates sites and cached properties.
         If multiple indices are provided, atoms are removed in reverse order
-        to avoid index shifting issues.
+        to avoid index shifting issues. The original molecule is not modified.
 
         Args:
-            indices: Atom index, list of indices, or :class:`~matsimpy.utils.selection.AtomSelection`
-                    object to remove. If list, atoms are removed in reverse order
-                    to avoid index shifting.
+            indices: Atom index, list of indices, or
+                    :class:`~matsimpy.utils.selection.AtomSelection` object to remove.
+
+        Returns:
+            Molecule: New molecule with the specified atoms removed.
 
         Raises:
             IndexError: If any index is out of range.
             ValueError: If AtomSelection is from a different structure.
             TypeError: If indices is not int, list, or AtomSelection.
 
-        Note:
-            This method modifies the molecule in-place. Cached properties
-            (formula, composition, center of mass) are invalidated and will
-            be recalculated on next access.
-
         Example:
             >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-            >>> molecule.remove_atom(0)  # Remove atom at index 0 (O)
-            >>> molecule.formula  # 'H2'
+            >>> new_mol = molecule.remove_atom(0)  # Remove atom at index 0 (O)
             >>>
             >>> # Remove multiple atoms
-            >>> molecule.remove_atom([0, 1])  # Remove first two atoms
+            >>> new_mol = molecule.remove_atom([0, 1])  # Remove first two atoms
             >>>
             >>> # Using AtomSelection
             >>> from matsimpy.utils.selection import AtomSelection
             >>> sel = AtomSelection(molecule).by_species('H')
-            >>> molecule.remove_atom(sel)  # Remove all H atoms
+            >>> new_mol = molecule.remove_atom(sel)  # Remove all H atoms
         """
-        # Handle AtomSelection object
         from ..utils.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
@@ -536,9 +467,6 @@ class Molecule(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        # Guard for frozen state before mutation
-        self._check_frozen()
-        # Normalize to list
         if isinstance(indices, int):
             indices = [indices]
         elif not isinstance(indices, list):
@@ -546,42 +474,44 @@ class Molecule(Structure):
                 f"indices must be int, list of int, or AtomSelection, got {type(indices)}"
             )
 
-        # Validate all indices
         n_atoms = len(self.species)
         for idx in indices:
             if not (0 <= idx < n_atoms):
-                raise IndexError(f"Atom index {idx} is out of range [0, {n_atoms-1}]")
+                raise IndexError(f"Atom index {idx} is out of range [0, {n_atoms - 1}]")
 
-        # Remove duplicates and sort in reverse order to avoid index shifting
         indices_to_remove = sorted(set(indices), reverse=True)
 
-        # Remove atoms one by one in reverse order
+        species_list = list(self.species)
+        new_positions = self.positions.copy()
+        new_site_props = list(self.site_properties) if self.site_properties else []
+
         for idx in indices_to_remove:
-            super().remove_atom(idx)
+            species_list.pop(idx)
+            new_positions = np.delete(new_positions, idx, axis=0)
+            if new_site_props and len(new_site_props) > idx:
+                new_site_props.pop(idx)
 
-            # Update site properties
-            if self.site_properties and len(self.site_properties) > idx:
-                self.site_properties.pop(idx)
-
-        # Reinitialize sites (only once after all removals)
-        self._sites = self._initialize_sites()
-        if hasattr(self, "_cached_com"):
-            self._cached_com = None
+        return Molecule(
+            species_list, new_positions.tolist(),
+            site_properties=new_site_props if new_site_props else None,
+        )
 
     def substitute(
         self,
         indices: Union[int, List[int], "AtomSelection"],
         new_species: Union[str, List[str], Dict[str, str]],
-    ) -> None:
+    ) -> "Molecule":
         """
-        Substitute atoms with new species.
+        Substitute atoms with new species and return a new Molecule.
 
-        This is a common operation for modifying molecules. For functional
-        style (returning new object), use matsimpy.transformation.substitute().
+        The original molecule is not modified.
 
         Args:
             indices: Atom index, list of indices, or AtomSelection object to substitute
             new_species: New species symbol, list of symbols, or dict mapping old->new species
+
+        Returns:
+            Molecule: New molecule with the substituted species.
 
         Raises:
             IndexError: If index is out of range
@@ -589,23 +519,53 @@ class Molecule(Structure):
             KeyError: If dict mapping doesn't contain a species
 
         Examples:
-            >>> molecule.substitute(0, 'N')  # Substitute atom at index 0
-            >>> molecule.substitute([0, 1], ['N', 'O'])  # Substitute multiple
+            >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+            >>> new_mol = molecule.substitute(0, 'N')  # Substitute atom at index 0
+            >>> new_mol = molecule.substitute([0, 1], ['N', 'O'])  # Substitute multiple
             >>> # Using AtomSelection
             >>> from matsimpy.utils.selection import AtomSelection
-            >>> sel = AtomSelection(molecule).by_species('C')
-            >>> molecule.substitute(sel, 'N')  # Substitute selected atoms
+            >>> sel = AtomSelection(molecule).by_species('H')
+            >>> new_mol = molecule.substitute(sel, 'N')  # Substitute selected atoms
             >>> # Using dict mapping (maps old species to new species)
-            >>> molecule.substitute([0, 1, 2], {'C': 'N', 'O': 'S'})
+            >>> new_mol = molecule.substitute([0, 1, 2], {'H': 'F', 'O': 'S'})
         """
-        # Call parent implementation to handle the actual substitution
-        # and cache invalidation (formula, composition)
-        super().substitute(indices, new_species)
+        from ..utils.selection import AtomSelection
 
-        # Molecule-specific updates: reinitialize sites with updated species
-        self._sites = self._initialize_sites()
-        if hasattr(self, "_cached_com"):
-            self._cached_com = None
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
+
+        if isinstance(indices, int):
+            indices = [indices]
+
+        if isinstance(new_species, dict):
+            new_species_list = []
+            for idx in indices:
+                old_spec = self.species[idx]
+                if old_spec not in new_species:
+                    raise KeyError(
+                        f"Species '{old_spec}' at index {idx} not found in substitution mapping"
+                    )
+                new_species_list.append(new_species[old_spec])
+            new_species = new_species_list
+
+        if isinstance(new_species, str):
+            new_species = [new_species] * len(indices)
+
+        if len(indices) != len(new_species):
+            raise ValueError(
+                f"Number of indices ({len(indices)}) must match number of new species ({len(new_species)})"
+            )
+
+        species_list = list(self.species)
+        for idx, new_spec in zip(indices, new_species):
+            species_list[idx] = new_spec
+
+        return Molecule(
+            species_list, self.positions.tolist(),
+            site_properties=(list(self.site_properties) if self.site_properties else None),
+        )
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -1312,38 +1272,33 @@ class Molecule(Structure):
         amplitude: float,
         indices: Optional[Union[List[int], "AtomSelection"]] = None,
         seed: Optional[int] = None,
-        inplace: bool = True,
     ) -> "Molecule":
         """
         Add random perturbations to atomic positions.
 
-        Convenience method that calls the transformation module's perturb_positions function.
-        By default, modifies the structure in-place.
+        Returns a new molecule with perturbed positions; the original is not modified.
 
         Args:
             amplitude: Maximum perturbation amplitude (Angstroms)
             indices: Atom indices to perturb (default: all atoms).
                     Can be a list of indices or an AtomSelection object.
             seed: Random seed for reproducibility
-            inplace: If True, modify this molecule in-place (default: True).
-                    If False, return a new Molecule object.
 
         Returns:
-            Molecule: Structure with perturbed positions (self if inplace=True, new object if inplace=False)
+            Molecule: New molecule with perturbed positions.
 
         Examples:
             >>> from matsimpy.core import Molecule
             >>> from matsimpy.utils.selection import AtomSelection
             >>> molecule = Molecule(['H', 'O', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
             >>> # Perturb all atoms by up to 0.1 Angstrom
-            >>> molecule.perturb(0.1)
-            >>> # Perturb specific atoms without modifying original
-            >>> perturbed = molecule.perturb(0.1, indices=[0, 1], inplace=False)
+            >>> perturbed = molecule.perturb(0.1)
+            >>> # Perturb specific atoms
+            >>> perturbed = molecule.perturb(0.1, indices=[0, 1])
             >>> # Perturb using AtomSelection
             >>> sel = AtomSelection(molecule).by_species('H')
-            >>> molecule.perturb(0.1, indices=sel)
+            >>> perturbed = molecule.perturb(0.1, indices=sel)
         """
-        # Handle AtomSelection object
         from ..utils.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
@@ -1352,15 +1307,4 @@ class Molecule(Structure):
             indices = indices.indices
 
         from ..transformation.atomic import perturb_positions
-
-        # perturb_positions always returns a new structure
-        result = perturb_positions(
-            self, amplitude, indices=indices, seed=seed
-        )
-        if inplace:
-            # Update self with result's attributes
-            self.positions = result.positions
-            self._sites = result._sites
-            self._cached_com = None  # Invalidate center of mass cache
-            return self
-        return result
+        return perturb_positions(self, amplitude, indices=indices, seed=seed)

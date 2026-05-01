@@ -195,9 +195,9 @@ class Crystal(Structure):
             self.frac_positions = np.array(positions)
             self.cart_positions = self._convert_to_cartesian()
 
-        self.positions = (
+        self._positions = (
             self.frac_positions
-        )  # Set self.positions as the same as self.frac_positions by default
+        )  # Set self._positions as the same as self.frac_positions by default
         self.site_properties = site_properties or []
         self._sites = (
             self._initialize_sites()

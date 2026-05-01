@@ -177,15 +177,13 @@ def perturb_positions(
         >>> # Perturb specific atoms
         >>> perturbed = perturb_positions(structure, 0.1, indices=[0, 1, 2])
     """
-    structure = structure.copy()
-
     if seed is not None:
         np.random.seed(seed)
 
     if indices is None:
         indices = list(range(len(structure.species)))
 
-    # Generate random perturbations
+    # Generate random perturbations (Cartesian)
     perturbations = np.random.randn(len(indices), 3) * amplitude
 
     if isinstance(structure, Crystal):
@@ -194,32 +192,26 @@ def perturb_positions(
             perturbations, np.linalg.inv(structure.lattice.lattice_vectors)
         )
 
-        new_positions = structure.positions.copy()
+        new_positions = structure.positions.copy()  # fractional positions
         for i, idx in enumerate(indices):
             new_positions[idx] += frac_perturbations[i]
 
-        structure.positions = new_positions
-        structure.frac_positions = new_positions
-        structure.cart_positions = structure._convert_to_cartesian()
-        structure._sites = structure._initialize_sites()
+        return Crystal(
+            list(structure.species), new_positions.tolist(),
+            lattice=structure.lattice,
+            coords_are_cartesian=False,  # positions are fractional
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
 
-    else:
-        new_positions = structure.positions.copy()
-        for i, idx in enumerate(indices):
-            new_positions[idx] += perturbations[i]
+    # Molecule: apply Cartesian perturbations
+    new_positions = structure.positions.copy()
+    for i, idx in enumerate(indices):
+        new_positions[idx] += perturbations[i]
 
-        structure.positions = new_positions
-        structure._sites = structure._initialize_sites()
-        if hasattr(structure, "_cached_com"):
-            structure._cached_com = None
-
-    # Invalidate caches
-    if hasattr(structure, "_neighbor_tree"):
-        structure._neighbor_tree = None
-    if hasattr(structure, "_neighbor_tree_positions"):
-        structure._neighbor_tree_positions = None
-
-    return structure
+    return Molecule(
+        list(structure.species), new_positions.tolist(),
+        site_properties=(list(structure.site_properties) if structure.site_properties else None),
+    )
 
 
 __all__ = ["sort_atoms", "center_structure", "perturb_positions"]
