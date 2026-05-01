@@ -25,14 +25,14 @@ Example:
     >>> # Create a crystal structure
     >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
     >>> crystal.formula  # 'NaCl'
-    >>> crystal.volume  # 179.4 Å³
+    >>> crystal.volume  # 179.4 A^3
     >>>
     >>> # Access fractional and Cartesian coordinates
     >>> crystal.frac_positions  # Fractional coordinates
     >>> crystal.cart_positions  # Cartesian coordinates
     >>>
     >>> # Set periodic boundary conditions
-    >>> crystal.set_pbc([True, True, False])  # 2D slab
+    >>> crystal = crystal.set_pbc([True, True, False])  # 2D slab
     >>>
     >>> # Neighbor finding with PBC
     >>> neighbors = crystal.get_neighbor_list(5.0, use_pbc=True)
@@ -78,7 +78,7 @@ class Crystal(Structure):
 
     Attributes:
         species (Tuple[str]): Immutable tuple of atomic species symbols.
-        positions (np.ndarray): Numpy array of fractional positions (default).
+        positions (np.ndarray): Numpy array of fractional positions.
         frac_positions (np.ndarray): Fractional coordinates with shape (n_atoms, 3).
         cart_positions (np.ndarray): Cartesian coordinates in Angstroms with shape (n_atoms, 3).
         lattice (Lattice): Lattice object defining the unit cell.
@@ -140,7 +140,7 @@ class Crystal(Structure):
         >>> crystal.cart_positions  # Cartesian coordinates
         >>>
         >>> # Set periodic boundary conditions
-        >>> crystal.set_pbc([True, True, False])  # 2D slab
+        >>> crystal = crystal.set_pbc([True, True, False])  # 2D slab
         >>> crystal.area  # Area for 2D system
         >>>
         >>> # With site properties
@@ -185,23 +185,21 @@ class Crystal(Structure):
             Both fractional and Cartesian coordinates are maintained internally.
             The default coordinate system is fractional.
         """
-        super().__init__(species, positions, lattice)
-        self.lattice = lattice
-
         if coords_are_cartesian:
-            self.cart_positions = np.array(positions)
-            self.frac_positions = self._convert_to_fractional()
+            cart_array = np.array(positions, dtype=np.float64)
+            frac_array = np.dot(cart_array, lattice.inv_matrix)
+            # Pass fractional to super so self._positions is always fractional
+            super().__init__(species, frac_array.tolist(), lattice)
+            self.cart_positions = cart_array
+            self.frac_positions = frac_array
         else:
+            super().__init__(species, positions, lattice)
             self.frac_positions = np.array(positions)
             self.cart_positions = self._convert_to_cartesian()
 
-        self._positions = (
-            self.frac_positions
-        )  # Set self._positions as the same as self.frac_positions by default
+        self.lattice = lattice
         self.site_properties = site_properties or []
-        self._sites = (
-            self._initialize_sites()
-        )  # Add this line to initialize the _sites attribute
+        self._sites = self._initialize_sites()
         self.pbc = pbc if pbc is not None else [True, True, True]
 
         # Add neighbor tree cache for optimized neighbor finding
@@ -215,19 +213,15 @@ class Crystal(Structure):
     # Helper Methods - Reduce Code Duplication
     # ========================================================================
 
-    def _invalidate_neighbor_tree(self) -> None:
-        """
-        Invalidate neighbor tree cache.
+    def _extra_dict_fields(self) -> Dict[str, Any]:
+        """Return extra fields for from_dict reconstruction."""
+        return {
+            "lattice": self.lattice.as_dict(),
+            "pbc": list(self.pbc),
+            "site_properties": list(self.site_properties) if self.site_properties else [],
+        }
 
-        Called when structure changes (add/remove atoms, substitute, etc.).
-        """
-        self._neighbor_tree = None
-        self._neighbor_tree_positions = None
-        self._neighbor_tree_cutoff = None
-        self._neighbor_tree_use_pbc = None
-        self._neighbor_tree_pbc = None
-
-    def set_pbc(self, pbc: Union[List[bool], Tuple[bool, bool, bool]]) -> None:
+    def set_pbc(self, pbc: Union[List[bool], Tuple[bool, bool, bool]]) -> "Crystal":
         """
         Set periodic boundary conditions for the crystal.
 
@@ -235,14 +229,17 @@ class Crystal(Structure):
             pbc: List or tuple of 3 booleans indicating periodicity along a, b, c axes.
                  [True, True, True] for 3D, [True, True, False] for 2D, etc.
 
+        Returns:
+            Crystal: New Crystal with updated periodic boundary conditions.
+
         Raises:
             ValueError: If pbc is not a list/tuple of 3 booleans.
 
         Examples:
-            >>> crystal.set_pbc([True, True, True])  # 3D material
-            >>> crystal.set_pbc([True, True, False])  # 2D material (slab)
-            >>> crystal.set_pbc([True, False, False])  # 1D material (wire)
-            >>> crystal.set_pbc([False, False, False])  # 0D (cluster)
+            >>> crystal = crystal.set_pbc([True, True, True])  # 3D material
+            >>> crystal = crystal.set_pbc([True, True, False])  # 2D material (slab)
+            >>> crystal = crystal.set_pbc([True, False, False])  # 1D material (wire)
+            >>> crystal = crystal.set_pbc([False, False, False])  # 0D (cluster)
         """
         # Validate input
         if not isinstance(pbc, (list, tuple)):
@@ -254,22 +251,11 @@ class Crystal(Structure):
         if not all(isinstance(x, bool) for x in pbc):
             raise ValueError("All PBC elements must be booleans")
 
-        # Set PBC
-        self.pbc = list(pbc)
-
-        # Invalidate caches that depend on PBC
-        self._invalidate_neighbor_tree()
-        # Note: area/length properties will recalculate on access
-        # density() will use correct units based on new PBC
-
-    def _update_coordinates_after_modification(self) -> None:
-        """
-        Update fractional and Cartesian coordinates after modification.
-
-        Ensures consistency between frac_positions and cart_positions.
-        """
-        self.frac_positions = self.positions
-        self.cart_positions = self._convert_to_cartesian()
+        return Crystal(
+            list(self.species), self.frac_positions.tolist(), self.lattice,
+            pbc=list(pbc), coords_are_cartesian=False,
+            site_properties=(list(self.site_properties) if self.site_properties else None),
+        )
 
     def _get_sorted_sites(self, sort_by: str = "element") -> List[CrystalSite]:
         """
@@ -354,9 +340,9 @@ class Crystal(Structure):
         position: Union[List[float], List[List[float]]],
         site_properties: Optional[Union[dict, List[dict]]] = None,
         coords_are_cartesian: bool = False,
-    ) -> None:
+    ) -> "Crystal":
         """
-        Add one or more atoms to the crystal structure and update coordinates.
+        Add one or more atoms to the crystal structure and return a new Crystal.
 
         Performs chemical reasonableness checks on interatomic distances with PBC support.
         Prevents adding duplicate atoms at the same position or atoms that are too close.
@@ -371,6 +357,9 @@ class Crystal(Structure):
             coords_are_cartesian: If True, positions are in Cartesian coordinates (Angstrom).
                                 If False, positions are in fractional coordinates (default).
 
+        Returns:
+            Crystal: New Crystal with added atoms.
+
         Raises:
             ValueError: If site_properties length doesn't match number of atoms added.
             ValueError: If duplicate positions are detected (distance < 1e-6 Angstrom).
@@ -382,34 +371,22 @@ class Crystal(Structure):
             >>> crystal = Crystal(['Si'], [[0, 0, 0]], lattice)
             >>>
             >>> # Add single atom at fractional coordinates (default)
-            >>> crystal.add_atom('H', [0.5, 0.5, 0.5])
-            >>> print(len(crystal))  # 2 atoms
+            >>> new_crystal = crystal.add_atom('H', [0.5, 0.5, 0.5])
+            >>> print(len(new_crystal))  # 2 atoms
             2
             >>>
             >>> # Add atom at Cartesian coordinates
-            >>> crystal.add_atom('O', [2.5, 2.5, 2.5], coords_are_cartesian=True)
+            >>> new_crystal = crystal.add_atom('O', [2.5, 2.5, 2.5], coords_are_cartesian=True)
             >>>
             >>> # Add multiple atoms at once (fractional)
-            >>> crystal.add_atom(['O', 'C'], [[0.25, 0.25, 0.25], [0.75, 0.75, 0.75]])
-            >>> print(len(crystal))  # 4 atoms
-            4
-            >>>
-            >>> # Add multiple atoms at Cartesian coordinates
-            >>> crystal.add_atom(['H', 'O'], [[1.0, 1.0, 1.0], [3.0, 3.0, 3.0]],
-            ...                  coords_are_cartesian=True)
+            >>> new_crystal = crystal.add_atom(['O', 'C'], [[0.25, 0.25, 0.25], [0.75, 0.75, 0.75]])
             >>>
             >>> # Add atoms with site properties
-            >>> crystal.add_atom(['H', 'O'], [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]],
-            ...                  [{'charge': 1.0, 'magmom': 0.5}, {'charge': -2.0}])
-            >>> print(crystal.site_properties[4])  # {'charge': 1.0, 'magmom': 0.5}
+            >>> new_crystal = crystal.add_atom(['H', 'O'], [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]],
+            ...                                [{'charge': 1.0, 'magmom': 0.5}, {'charge': -2.0}])
+            >>> print(new_crystal.site_properties[1])  # {'charge': 1.0, 'magmom': 0.5}
             {'charge': 1.0, 'magmom': 0.5}
-            >>>
-            >>> # PBC-aware distance checking prevents duplicates across boundaries
-            >>> # This will raise ValueError if atom is too close to existing atoms
-            >>> # crystal.add_atom('Si', [1.0, 0.0, 0.0])  # Would be duplicate with [0,0,0] due to PBC
         """
-        # Guard for frozen state before mutation
-        self._check_frozen()
         # Parse and normalize position input
         if isinstance(position, list):
             if len(position) == 0:
@@ -423,6 +400,26 @@ class Crystal(Structure):
                 new_positions = position
         else:
             new_positions = [position]
+
+        # Normalize species input
+        if isinstance(species, str):
+            species_list = [species]
+        else:
+            species_list = species
+
+        # Normalize site_properties
+        if site_properties is not None:
+            if isinstance(site_properties, dict):
+                site_properties_list = [site_properties]
+            else:
+                site_properties_list = site_properties
+            if len(site_properties_list) != len(species_list):
+                raise ValueError(
+                    f"Number of site_properties ({len(site_properties_list)}) "
+                    f"must match number of atoms added ({len(species_list)})"
+                )
+        else:
+            site_properties_list = None
 
         # Convert to fractional coordinates if needed
         if new_positions:
@@ -485,7 +482,7 @@ class Crystal(Structure):
 
         # Check each new position against existing atoms (with PBC)
         # For PBC, we need to use minimum image convention, which requires
-        # checking periodic images. This is more complex but we can still optimize.
+        # checking periodic images.
         if len(self.frac_positions) > 0:
             existing_cart = self.cart_positions
             existing_frac = self.frac_positions
@@ -565,115 +562,48 @@ class Crystal(Structure):
                             f"Minimum allowed distance is 0.5 Angstrom."
                         )
 
-        # Store complete state for rollback in case of exception
-        n_atoms_before = len(self.species)
-        old_species = self.species
-        old_positions = self.positions.copy()
-        old_frac_positions = self.frac_positions.copy()
-        old_cart_positions = self.cart_positions.copy()
-        old_sites = self._sites.copy() if self._sites else None
-        old_site_properties = (
-            self.site_properties.copy() if self.site_properties else None
-        )
-        old_formula_dirty = self._formula_dirty
-        old_cached_composition = self._cached_composition
-        old_cached_formula = self._cached_formula
+        # All validations passed -- construct new Crystal
+        new_species = list(self.species)
+        new_species.extend(species_list)
 
-        try:
-            # Convert fractional positions to list for parent method
-            # Parent method expects:
-            # - Single atom: position = [x, y, z] (single list)
-            # - Multiple atoms: position = [[x1, y1, z1], [x2, y2, z2], ...] (list of lists)
-            if isinstance(new_frac_positions, np.ndarray):
-                if new_frac_positions.shape[0] == 1:
-                    # Single position: extract first row as a list
-                    new_frac_list = new_frac_positions[0].tolist()
-                else:
-                    # Multiple positions: convert 2D array to list of lists
-                    new_frac_list = new_frac_positions.tolist()
+        new_frac = np.vstack([self.frac_positions, new_frac_positions])
+
+        new_site_props = None
+        if self.site_properties or site_properties_list:
+            new_site_props = list(self.site_properties) if self.site_properties else []
+            if site_properties_list:
+                new_site_props.extend(site_properties_list)
             else:
-                # Already a list
-                if len(new_frac_positions) == 1:
-                    # Single position: ensure it's a flat list
-                    new_frac_list = (
-                        new_frac_positions[0]
-                        if isinstance(new_frac_positions[0], list)
-                        else list(new_frac_positions[0])
-                    )
-                else:
-                    new_frac_list = new_frac_positions
+                new_site_props.extend([{}] * len(species_list))
 
-            # Call parent to add atoms (parent expects fractional coordinates)
-            super().add_atom(species, new_frac_list)
+        return Crystal(
+            new_species, new_frac.tolist(), self.lattice,
+            pbc=list(self.pbc), coords_are_cartesian=False,
+            site_properties=new_site_props,
+        )
 
-            n_atoms_added = len(self.species) - n_atoms_before
-
-            # Update coordinates and invalidate caches
-            self._update_coordinates_after_modification()
-            self._invalidate_neighbor_tree()
-
-            # Update site properties
-            if site_properties is not None:
-                # Normalize to list
-                if isinstance(site_properties, dict):
-                    site_properties_list = [site_properties] * n_atoms_added
-                else:
-                    site_properties_list = site_properties
-
-                # Validate length
-                if len(site_properties_list) != n_atoms_added:
-                    raise ValueError(
-                        f"Number of site_properties ({len(site_properties_list)}) "
-                        f"must match number of atoms added ({n_atoms_added})"
-                    )
-
-                # Initialize site_properties if needed
-                if not self.site_properties:
-                    self.site_properties = [{}] * n_atoms_before
-
-                self.site_properties.extend(site_properties_list)
-            elif self.site_properties:
-                # Maintain existing site_properties with empty dicts
-                self.site_properties.extend([{}] * n_atoms_added)
-
-            # Reinitialize sites
-            self._sites = self._initialize_sites()
-
-        except Exception:
-            # Complete rollback to restore all state using backing fields
-            self._species = old_species
-            self._positions = old_positions
-            self.frac_positions = old_frac_positions
-            self.cart_positions = old_cart_positions
-            self._sites = old_sites
-            if old_site_properties is not None:
-                self.site_properties = old_site_properties
-            # Restore cache flags
-            self._formula_dirty = old_formula_dirty
-            self._cached_composition = old_cached_composition
-            self._cached_formula = old_cached_formula
-            # Re-raise the original exception
-            raise
-
-    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> None:
+    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> "Crystal":
         """
-        Remove one or more atoms from the crystal structure and update coordinates.
+        Remove one or more atoms from the crystal structure and return a new Crystal.
 
         Args:
             indices: Atom index, list of indices, or AtomSelection object to remove.
                     If list, atoms are removed in reverse order to avoid index shifting.
+
+        Returns:
+            Crystal: New Crystal with removed atoms.
 
         Raises:
             IndexError: If any index is out of range.
             ValueError: If AtomSelection is from a different structure.
 
         Examples:
-            >>> crystal.remove_atom(0)  # Remove atom at index 0
-            >>> crystal.remove_atom([0, 1, 2])  # Remove multiple atoms
+            >>> new_crystal = crystal.remove_atom(0)  # Remove atom at index 0
+            >>> new_crystal = crystal.remove_atom([0, 1, 2])  # Remove multiple atoms
             >>> # Using AtomSelection
             >>> from matsimpy.utils.selection import AtomSelection
             >>> sel = AtomSelection(crystal).by_species('H')
-            >>> crystal.remove_atom(sel)  # Remove selected atoms
+            >>> new_crystal = crystal.remove_atom(sel)  # Remove selected atoms
         """
         # Handle AtomSelection object
         from ..utils.selection import AtomSelection
@@ -683,8 +613,6 @@ class Crystal(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        # Guard for frozen state before mutation
-        self._check_frozen()
         # Normalize to list
         if isinstance(indices, int):
             indices = [indices]
@@ -702,59 +630,90 @@ class Crystal(Structure):
         # Remove duplicates and sort in reverse order to avoid index shifting
         indices_to_remove = sorted(set(indices), reverse=True)
 
-        # Remove atoms one by one in reverse order
+        species_list = list(self.species)
+        new_frac = self.frac_positions.copy()
+        new_site_props = list(self.site_properties) if self.site_properties else []
+
         for idx in indices_to_remove:
-            super().remove_atom(idx)
+            species_list.pop(idx)
+            new_frac = np.delete(new_frac, idx, axis=0)
+            if new_site_props and len(new_site_props) > idx:
+                new_site_props.pop(idx)
 
-            # Update site properties
-            if self.site_properties and len(self.site_properties) > idx:
-                self.site_properties.pop(idx)
-
-        # Update coordinates and caches (only once after all removals)
-        self._update_coordinates_after_modification()
-        self._invalidate_neighbor_tree()
-
-        # Reinitialize sites
-        self._sites = self._initialize_sites()
+        return Crystal(
+            species_list, new_frac.tolist(), self.lattice,
+            pbc=list(self.pbc), coords_are_cartesian=False,
+            site_properties=new_site_props if new_site_props else None,
+        )
 
     def substitute(
         self,
         indices: Union[int, List[int], "AtomSelection"],
         new_species: Union[str, List[str], Dict[str, str]],
-    ) -> None:
+    ) -> "Crystal":
         """
-        Substitute atoms with new species.
-
-        This is a common operation for modifying crystals. For functional
-        style (returning new object), use matsimpy.transformation.substitute().
+        Substitute atoms with new species and return a new Crystal.
 
         Args:
-            indices: Atom index, list of indices, or AtomSelection object to substitute
-            new_species: New species symbol, list of symbols, or dict mapping old->new species
+            indices: Atom index, list of indices, or AtomSelection object to substitute.
+            new_species: New species symbol, list of symbols, or dict mapping old->new species.
+
+        Returns:
+            Crystal: New Crystal with substituted species.
 
         Raises:
-            IndexError: If index is out of range
-            ValueError: If number of indices doesn't match number of species
-            KeyError: If dict mapping doesn't contain a species
+            IndexError: If index is out of range.
+            ValueError: If number of indices doesn't match number of species.
+            KeyError: If dict mapping doesn't contain a species.
 
         Examples:
-            >>> crystal.substitute(0, 'Ge')  # Substitute atom at index 0
-            >>> crystal.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
+            >>> new_crystal = crystal.substitute(0, 'Ge')  # Substitute atom at index 0
+            >>> new_crystal = crystal.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
             >>> # Using AtomSelection
             >>> from matsimpy.utils.selection import AtomSelection
             >>> sel = AtomSelection(crystal).by_species('Si')
-            >>> crystal.substitute(sel, 'Ge')  # Substitute selected atoms
+            >>> new_crystal = crystal.substitute(sel, 'Ge')  # Substitute selected atoms
             >>> # Using dict mapping (maps old species to new species)
-            >>> crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
+            >>> new_crystal = crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
-        # Call parent implementation to handle the actual substitution
-        # and cache invalidation (formula, composition)
-        super().substitute(indices, new_species)
+        from ..utils.selection import AtomSelection
 
-        # Crystal-specific updates: invalidate neighbor tree cache
-        # and reinitialize sites with updated species
-        self._invalidate_neighbor_tree()
-        self._sites = self._initialize_sites()
+        if isinstance(indices, AtomSelection):
+            if indices.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            indices = indices.indices
+
+        if isinstance(indices, int):
+            indices = [indices]
+
+        if isinstance(new_species, dict):
+            new_species_list = []
+            for idx in indices:
+                old_spec = self.species[idx]
+                if old_spec not in new_species:
+                    raise KeyError(
+                        f"Species '{old_spec}' at index {idx} not found in substitution mapping"
+                    )
+                new_species_list.append(new_species[old_spec])
+            new_species = new_species_list
+
+        if isinstance(new_species, str):
+            new_species = [new_species] * len(indices)
+
+        if len(indices) != len(new_species):
+            raise ValueError(
+                f"Number of indices ({len(indices)}) must match number of new species ({len(new_species)})"
+            )
+
+        species_list = list(self.species)
+        for idx, new_spec in zip(indices, new_species):
+            species_list[idx] = new_spec
+
+        return Crystal(
+            species_list, self.frac_positions.tolist(), self.lattice,
+            pbc=list(self.pbc), coords_are_cartesian=False,
+            site_properties=(list(self.site_properties) if self.site_properties else None),
+        )
 
     def _initialize_sites(self) -> List[CrystalSite]:
         """
@@ -780,7 +739,7 @@ class Crystal(Structure):
                     coords_are_cartesian=False,
                 )
                 for pos, spec, props in zip(
-                    self.positions, self.species, self.site_properties
+                    self.frac_positions, self.species, self.site_properties
                 )
             ]
         else:
@@ -791,7 +750,7 @@ class Crystal(Structure):
                     lattice=self.lattice,
                     coords_are_cartesian=False,
                 )
-                for pos, spec in zip(self.positions, self.species)
+                for pos, spec in zip(self.frac_positions, self.species)
             ]
 
     @property
@@ -844,8 +803,8 @@ class Crystal(Structure):
             "pbc": self.pbc,
             "lattice": self.lattice.as_dict(),
             "species": self.species,
-            "positions": self.positions.tolist(),
-            "site_properties": self.site_properties,  # Add site_properties to the dictionary
+            "positions": self.frac_positions.tolist(),
+            "site_properties": self.site_properties,
         }
         return d
 
@@ -907,7 +866,7 @@ class Crystal(Structure):
         Calculate the volume of the unit cell.
 
         Returns:
-            float: Unit cell volume in cubic Angstroms (Å³).
+            float: Unit cell volume in cubic Angstroms (A^3).
 
         Note:
             This property is only meaningful for 3D periodic systems
@@ -929,7 +888,7 @@ class Crystal(Structure):
         Calculate the area for 2D materials (when exactly one PBC is False).
 
         Returns:
-            float: Unit cell area in square Angstroms (Å²).
+            float: Unit cell area in square Angstroms (A^2).
 
         Raises:
             ValueError: If the crystal is not a 2D material (exactly 2 PBC True).
@@ -940,7 +899,7 @@ class Crystal(Structure):
 
         Example:
             >>> crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
-            >>> crystal.set_pbc([True, True, False])  # 2D slab
+            >>> crystal = crystal.set_pbc([True, True, False])  # 2D slab
             >>> crystal.area
             100.0
         """
@@ -972,7 +931,7 @@ class Crystal(Structure):
         Calculate the length for 1D materials (when exactly two PBC are False).
 
         Returns:
-            float: Unit cell length in Angstroms (Å).
+            float: Unit cell length in Angstroms (A).
 
         Raises:
             ValueError: If the crystal is not a 1D material (exactly 1 PBC True).
@@ -983,7 +942,7 @@ class Crystal(Structure):
 
         Example:
             >>> crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(10))
-            >>> crystal.set_pbc([True, False, False])  # 1D wire
+            >>> crystal = crystal.set_pbc([True, False, False])  # 1D wire
             >>> crystal.length
             10.0
         """
@@ -1026,10 +985,10 @@ class Crystal(Structure):
             Crystal: ClNa
               Sites: 2 atoms
               PBC: [T T T]
-              Lattice: a=5.6400 Å, b=5.6400 Å, c=5.6400 Å
-                       α=90.00°, β=90.00°, γ=90.00°
-              Volume: 179.4064 Å³
-              Density: 2.1650 g/cm³
+              Lattice: a=5.6400 A, b=5.6400 A, c=5.6400 A
+                       alpha=90.00 deg, beta=90.00 deg, gamma=90.00 deg
+              Volume: 179.4064 A^3
+              Density: 2.1650 g/cm^3
             ...
         """
         # Basic info
@@ -1050,33 +1009,33 @@ class Crystal(Structure):
         try:
             if pbc_count == 3:
                 # 3D material
-                info += f"  Volume: {self.volume:.4f} Å³\n"
+                info += f"  Volume: {self.volume:.4f} A^3\n"
                 density = self.density()
                 # Use appropriate formatting based on magnitude
                 if density < 0.01 or density > 1000:
-                    info += f"  Density: {density:.6e} g/cm³\n"
+                    info += f"  Density: {density:.6e} g/cm^3\n"
                 else:
-                    info += f"  Density: {density:.4f} g/cm³\n"
+                    info += f"  Density: {density:.4f} g/cm^3\n"
             elif pbc_count == 2:
                 # 2D material
-                info += f"  Area: {self.area:.4f} Å²\n"
+                info += f"  Area: {self.area:.4f} A^2\n"
                 density = self.density()
                 # 2D densities are typically very small, use scientific notation
-                info += f"  Density: {density:.6e} g/cm²\n"
+                info += f"  Density: {density:.6e} g/cm^2\n"
             elif pbc_count == 1:
                 # 1D material
-                info += f"  Length: {self.length:.4f} Å\n"
+                info += f"  Length: {self.length:.4f} A\n"
                 density = self.density()
                 # 1D densities are typically very small, use scientific notation
                 info += f"  Density: {density:.6e} g/cm\n"
             else:
                 # 0D material (no PBC) - still show volume
-                info += f"  Volume: {self.volume:.4f} Å³\n"
+                info += f"  Volume: {self.volume:.4f} A^3\n"
                 density = self.density()
                 if density < 0.01 or density > 1000:
-                    info += f"  Density: {density:.6e} g/cm³\n"
+                    info += f"  Density: {density:.6e} g/cm^3\n"
                 else:
-                    info += f"  Density: {density:.4f} g/cm³\n"
+                    info += f"  Density: {density:.4f} g/cm^3\n"
         except (ValueError, AttributeError) as e:
             info += "\n"
 
@@ -1111,10 +1070,10 @@ class Crystal(Structure):
     def __repr__(self):
         """Unambiguous string representation of Crystal for debugging."""
         # Compact representation with key info
-        # Use shorter lattice format: a×b×c, α°β°γ°
+        # Use shorter lattice format: axbxc, alpha/beta/gamma
         lattice_str = (
-            f"{self.lattice.a:.4f}×{self.lattice.b:.4f}×{self.lattice.c:.4f}, "
-            f"{self.lattice.alpha:.1f}°/{self.lattice.beta:.1f}°/{self.lattice.gamma:.1f}°"
+            f"{self.lattice.a:.4f}x{self.lattice.b:.4f}x{self.lattice.c:.4f}, "
+            f"{self.lattice.alpha:.1f} deg/{self.lattice.beta:.1f} deg/{self.lattice.gamma:.1f} deg"
         )
         # Compact PBC format: [T,T,T] or [T,F,T]
         pbc_str = "[" + ",".join("T" if p else "F" for p in self.pbc) + "]"
@@ -1126,30 +1085,53 @@ class Crystal(Structure):
     def __getitem__(self, item):
         return self.sites[item]
 
-    def sort_atoms(self, sort_by: str = "element") -> None:
+    def sort_atoms(self, sort_by: str = "element") -> "Crystal":
         """
-        Sort atoms in the crystal by element (in-place).
-
-        This method reorders internal species and positions arrays,
-        unlike __str__ which only sorts for display.
+        Sort atoms in the crystal by element and return a new Crystal.
 
         Args:
             sort_by: Sorting method - 'element' (atomic number) or 'alphabet'.
+
+        Returns:
+            Crystal: New Crystal with sorted atoms.
 
         Raises:
             ValueError: If sort_by is not 'element' or 'alphabet'.
 
         Examples:
-            >>> crystal.sort_atoms('element')  # Sort by atomic number
-            >>> crystal.sort_atoms('alphabet')  # Sort alphabetically
+            >>> sorted_crystal = crystal.sort_atoms('element')  # Sort by atomic number
+            >>> sorted_crystal = crystal.sort_atoms('alphabet')  # Sort alphabetically
         """
-        # Call parent method to sort species and positions
-        super().sort_atoms(sort_by)
+        atoms = list(zip(range(len(self.species)), self.species, self.frac_positions))
 
-        # Update coordinates and caches using helper methods
-        self._update_coordinates_after_modification()
-        self._invalidate_neighbor_tree()
-        self._sites = self._initialize_sites()
+        if sort_by == "element":
+            elements = self.elements
+            sorted_atoms = sorted(
+                atoms, key=lambda a: (
+                    elements[a[0]].atomic_no,
+                    a[2][0], a[2][1], a[2][2],
+                ),
+            )
+        elif sort_by == "alphabet":
+            sorted_atoms = sorted(
+                atoms, key=lambda a: (a[1], a[2][0], a[2][1], a[2][2])
+            )
+        else:
+            raise ValueError("sort_by must be 'element' or 'alphabet'")
+
+        sorted_species = [a[1] for a in sorted_atoms]
+        sorted_frac = np.array([a[2] for a in sorted_atoms])
+        sorted_indices = [a[0] for a in sorted_atoms]
+
+        new_site_props = None
+        if self.site_properties:
+            new_site_props = [self.site_properties[i] for i in sorted_indices]
+
+        return Crystal(
+            sorted_species, sorted_frac.tolist(), self.lattice,
+            pbc=list(self.pbc), coords_are_cartesian=False,
+            site_properties=new_site_props,
+        )
 
     def _convert_to_cartesian(self) -> np.ndarray:
         """
@@ -1189,37 +1171,30 @@ class Crystal(Structure):
 
         Wraps all fractional coordinates to the standard unit cell range [0, 1)
         using modulo operation. This ensures that coordinates outside the unit
-        cell are mapped back into the primary unit cell. Both fractional and
-        Cartesian coordinates are updated accordingly, and all sites are refreshed.
+        cell are mapped back into the primary unit cell.
 
         Returns:
-            Crystal: Returns self for method chaining.
+            Crystal: New Crystal with wrapped coordinates.
 
         Example:
             >>> from matsimpy.core import Crystal, Lattice
             >>> lattice = Lattice.cubic(10.0)
             >>> crystal = Crystal(['Fe', 'O'], [[1.5, -0.3, 0.5], [0.2, 0.2, 0.2]], lattice)
-            >>> crystal.wrap()
-            >>> crystal.frac_positions[0].tolist()
+            >>> wrapped = crystal.wrap()
+            >>> wrapped.frac_positions[0].tolist()
             [0.5, 0.7, 0.5]
             >>>
             >>> # Method chaining
-            >>> crystal = Crystal(['Fe'], [[2.1, 0.5, 0.5]], lattice).wrap()
-            >>> crystal.frac_positions[0].tolist()
+            >>> wrapped = Crystal(['Fe'], [[2.1, 0.5, 0.5]], lattice).wrap()
+            >>> wrapped.frac_positions[0].tolist()
             [0.1, 0.5, 0.5]
         """
-        # Wrap each site using the CrystalSite.wrap() method
-        for site in self._sites:
-            site.wrap()
-        
-        # Update crystal's positions from the wrapped sites
-        self.frac_positions = np.array([site.frac_position for site in self._sites])
-        self.cart_positions = np.array([site.cart_position for site in self._sites])
-        self.positions = self.frac_positions
-        
-        # Invalidate neighbor tree cache
-        self._invalidate_neighbor_tree()
-        return self
+        new_frac = self.frac_positions % 1.0
+        return Crystal(
+            list(self.species), new_frac.tolist(), self.lattice,
+            pbc=list(self.pbc), coords_are_cartesian=False,
+            site_properties=(list(self.site_properties) if self.site_properties else None),
+        )
 
     def _get_periodic_images(self, cutoff: float) -> np.ndarray:
         """
@@ -1427,22 +1402,22 @@ class Crystal(Structure):
 
         Returns:
             float: Density in appropriate units:
-                   - 3D (all PBC True): g/cm³
-                   - 2D (two PBC True): g/cm²
+                   - 3D (all PBC True): g/cm^3
+                   - 2D (two PBC True): g/cm^2
                    - 1D (one PBC True): g/cm
-                   - 0D (no PBC): g/cm³ (uses volume)
+                   - 0D (no PBC): g/cm^3 (uses volume)
 
         Raises:
             ValueError: If crystal volume/area/length is zero or negative.
 
         Example:
             >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
-            >>> crystal.density()  # 3D density in g/cm³
+            >>> crystal.density()  # 3D density in g/cm^3
             2.165...
             >>>
             >>> # 2D material
-            >>> crystal.set_pbc([True, True, False])
-            >>> crystal.density()  # 2D density in g/cm²
+            >>> crystal = crystal.set_pbc([True, True, False])
+            >>> crystal.density()  # 2D density in g/cm^2
             0.123...
         """
         # Mass is in atomic mass units (amu)
@@ -1459,8 +1434,8 @@ class Crystal(Structure):
                 raise ValueError(
                     "Cannot calculate density: crystal volume is zero or negative"
                 )
-            # Convert: (mass in amu * amu_to_g) / (volume in Å³ * Å³_to_cm³)
-            # 1 Å³ = 1e-24 cm³
+            # Convert: (mass in amu * amu_to_g) / (volume in A^3 * A^3_to_cm^3)
+            # 1 A^3 = 1e-24 cm^3
             return (mass_amu * AMU_TO_GRAM) / (size * 1e-24)
         elif pbc_count == 2:
             # 2D material: use area
@@ -1469,8 +1444,8 @@ class Crystal(Structure):
                 raise ValueError(
                     "Cannot calculate density: crystal area is zero or negative"
                 )
-            # Convert: (mass in amu * amu_to_g) / (area in Å² * Å²_to_cm²)
-            # 1 Å² = 1e-16 cm²
+            # Convert: (mass in amu * amu_to_g) / (area in A^2 * A^2_to_cm^2)
+            # 1 A^2 = 1e-16 cm^2
             return (mass_amu * AMU_TO_GRAM) / (size * 1e-16)
         elif pbc_count == 1:
             # 1D material: use length
@@ -1479,8 +1454,8 @@ class Crystal(Structure):
                 raise ValueError(
                     "Cannot calculate density: crystal length is zero or negative"
                 )
-            # Convert: (mass in amu * amu_to_g) / (length in Å * Å_to_cm)
-            # 1 Å = 1e-8 cm
+            # Convert: (mass in amu * amu_to_g) / (length in A * A_to_cm)
+            # 1 A = 1e-8 cm
             return (mass_amu * AMU_TO_GRAM) / (size * 1e-8)
         else:
             # 0D material (no PBC) - not periodic, use volume for display
@@ -1799,7 +1774,7 @@ class Crystal(Structure):
         calculation hasn't been performed yet, it will be triggered automatically.
 
         Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/Å, where N is the
+            np.ndarray: Forces array of shape (N, 3) in eV/A, where N is the
                        number of atoms. Each row contains [Fx, Fy, Fz] for one atom.
 
         Raises:
@@ -1832,9 +1807,9 @@ class Crystal(Structure):
         Returns:
             np.ndarray: Stress tensor. Can be:
                 - Shape (3, 3): Full stress tensor matrix
-                - Shape (6,): Voigt notation [σxx, σyy, σzz, σyz, σxz, σxy]
+                - Shape (6,): Voigt notation [sxx, syy, szz, syz, sxz, sxy]
 
-            Units are in eV/Å³.
+            Units are in eV/A^3.
 
         Raises:
             ValueError: If no calculator is attached.
@@ -1933,24 +1908,21 @@ class Crystal(Structure):
     def make_supercell(
         self,
         scaling_matrix: Union[List[int], List[List[int]], np.ndarray],
-        inplace: bool = False,
     ) -> "Crystal":
         """
         Create a supercell from this crystal structure.
 
         Convenience method that calls the transformation module's make_supercell function.
-        By default, returns a new crystal. Set inplace=True to modify in-place.
+        Returns a new Crystal.
 
         Args:
             scaling_matrix: Scaling matrix for supercell generation.
                            Can be:
                            - Simple: [a, b, c] - repeats a times in a, b times in b, c times in c
                            - Matrix: [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]] - general transformation
-            inplace: If True, modify this crystal in-place (default: False).
-                    If False, return a new Crystal object.
 
         Returns:
-            Crystal: Supercell structure (self if inplace=True, new object if inplace=False)
+            Crystal: New supercell Crystal object.
 
         Examples:
             >>> from matsimpy.builders.bulk import from_prototype
@@ -1959,43 +1931,15 @@ class Crystal(Structure):
             >>> new_crystal = crystal.make_supercell([2, 2, 2])
             >>> print(len(new_crystal))  # 16 atoms (2*2*2*2)
             16
-            >>> # Create supercell in-place
-            >>> crystal.make_supercell([2, 2, 2], inplace=True)
-            >>> print(len(crystal))  # 16 atoms
-            16
         """
         from ..transformation.structural import make_supercell
-
-        # Transformation function always returns a new object
-        new_crystal = make_supercell(self, scaling_matrix)
-
-        if inplace:
-            # Copy data from new_crystal to self using backing fields to bypass
-            # the strict setters that require parity between species and positions.
-            self._species = new_crystal.species
-            self._positions = new_crystal.positions
-            self.frac_positions = new_crystal.frac_positions
-            self.cart_positions = new_crystal.cart_positions
-            self.lattice = new_crystal.lattice
-            self.site_properties = new_crystal.site_properties
-            # Invalidate caches
-            self._neighbor_tree = None
-            self._neighbor_tree_positions = None
-            self._sites = self._initialize_sites()
-            self._formula_dirty = True
-            self._cached_composition = None
-            self._cached_formula = None
-            return self
-        else:
-            # Return the new object
-            return new_crystal
+        return make_supercell(self, scaling_matrix)
 
     def perturb(
         self,
         amplitude: float,
         indices: Optional[Union[List[int], "AtomSelection"]] = None,
         seed: Optional[int] = None,
-        inplace: bool = True,
         perturb_positions: bool = True,
         perturb_lattice: bool = False,
         amplitude_lattice: Optional[float] = None,
@@ -2004,7 +1948,7 @@ class Crystal(Structure):
         Add random perturbations to atomic positions, lattice, or both.
 
         Supports perturbing positions, lattice vectors, or both simultaneously.
-        By default, only positions are perturbed (backward compatible).
+        Always returns a new Crystal.
 
         Args:
             amplitude: Maximum perturbation amplitude (Angstroms) for positions.
@@ -2013,15 +1957,13 @@ class Crystal(Structure):
                     Can be a list of indices or an AtomSelection object.
                     Only used when perturb_positions=True.
             seed: Random seed for reproducibility
-            inplace: If True, modify this crystal in-place (default: True).
-                    If False, return a new Crystal object.
             perturb_positions: If True, perturb atomic positions (default: True).
             perturb_lattice: If True, perturb lattice vectors (default: False).
             amplitude_lattice: Maximum perturbation amplitude for lattice vectors (Angstroms).
                              If None, uses the same value as amplitude.
 
         Returns:
-            Crystal: Structure with perturbations applied (self if inplace=True, new object if inplace=False)
+            Crystal: New Crystal with perturbations applied.
 
         Raises:
             ValueError: If both perturb_positions and perturb_lattice are False.
@@ -2031,21 +1973,21 @@ class Crystal(Structure):
             >>> from matsimpy.utils.selection import AtomSelection
             >>> crystal = from_prototype('diamond', 'Si', 5.43)
             >>>
-            >>> # Perturb positions only (default, backward compatible)
-            >>> crystal.perturb(0.1)
+            >>> # Perturb positions only
+            >>> perturbed = crystal.perturb(0.1)
             >>>
             >>> # Perturb lattice only
-            >>> crystal.perturb(0.05, perturb_positions=False, perturb_lattice=True)
+            >>> perturbed = crystal.perturb(0.05, perturb_positions=False, perturb_lattice=True)
             >>>
             >>> # Perturb both positions and lattice
-            >>> crystal.perturb(0.1, perturb_lattice=True, amplitude_lattice=0.05)
+            >>> perturbed = crystal.perturb(0.1, perturb_lattice=True, amplitude_lattice=0.05)
             >>>
             >>> # Perturb specific atoms (positions only)
-            >>> perturbed = crystal.perturb(0.1, indices=[0, 1], inplace=False)
+            >>> perturbed = crystal.perturb(0.1, indices=[0, 1])
             >>>
             >>> # Perturb using AtomSelection
             >>> sel = AtomSelection(crystal).by_species('Si')
-            >>> crystal.perturb(0.1, indices=sel)
+            >>> perturbed = crystal.perturb(0.1, indices=sel)
         """
         if not perturb_positions and not perturb_lattice:
             raise ValueError(
@@ -2060,25 +2002,14 @@ class Crystal(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        # Determine if we need to copy the structure
-        if not inplace:
-            result = self.copy()
-        else:
-            result = self
-
-        # Set up random seed if provided
-        if seed is not None:
-            import numpy as np
-
-            np.random.seed(seed)
-
+        result = self
         # Perturb positions if requested
         if perturb_positions:
             from ..transformation.atomic import perturb_positions
 
             # perturb_positions always returns a new structure
             result = perturb_positions(
-                result, amplitude, indices=indices, seed=None
+                result, amplitude, indices=indices, seed=seed
             )
 
         # Perturb lattice if requested
@@ -2089,16 +2020,6 @@ class Crystal(Structure):
                 amplitude_lattice if amplitude_lattice is not None else amplitude
             )
             # perturb_lattice always returns a new structure
-            result = perturb_lattice(result, lattice_amplitude, seed=None)
+            result = perturb_lattice(result, lattice_amplitude, seed=seed)
 
-        if inplace:
-            # Update self with result's attributes
-            self.positions = result.positions
-            self.frac_positions = result.frac_positions
-            self.cart_positions = result.cart_positions
-            self.lattice = result.lattice
-            self._sites = result._sites
-            self._neighbor_tree = None  # Invalidate neighbor tree
-            self._neighbor_tree_positions = None
-            return self
         return result
