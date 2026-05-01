@@ -321,17 +321,17 @@ class TestCrystalComprehensive(unittest.TestCase):
         positions = [[1.5, 2.3, 0.5], [0.2, 0.2, 0.2]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.wrap()
+
+        result = crystal.wrap()
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[0], [0.5, 0.3, 0.5], decimal=6
+            result.frac_positions[0], [0.5, 0.3, 0.5], decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[1], [0.2, 0.2, 0.2], decimal=6
+            result.frac_positions[1], [0.2, 0.2, 0.2], decimal=6
         )
         # Verify sites are updated
         np.testing.assert_array_almost_equal(
-            crystal.sites[0].frac_position, [0.5, 0.3, 0.5], decimal=6
+            result.sites[0].frac_position, [0.5, 0.3, 0.5], decimal=6
         )
     
     def test_crystal_wrap_negative(self):
@@ -340,15 +340,15 @@ class TestCrystalComprehensive(unittest.TestCase):
         positions = [[-0.3, -1.2, 0.5], [0.2, 0.2, 0.2]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.wrap()
+
+        result = crystal.wrap()
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[0], [0.7, 0.8, 0.5], decimal=6
+            result.frac_positions[0], [0.7, 0.8, 0.5], decimal=6
         )
         # Verify Cartesian coordinates are updated
         expected_cart = np.dot([0.7, 0.8, 0.5], lattice.matrix)
         np.testing.assert_array_almost_equal(
-            crystal.cart_positions[0], expected_cart, decimal=6
+            result.cart_positions[0], expected_cart, decimal=6
         )
     
     def test_crystal_wrap_mixed(self):
@@ -357,16 +357,16 @@ class TestCrystalComprehensive(unittest.TestCase):
         positions = [[1.5, -0.3, 2.7], [0.2, 0.2, 0.2], [-0.1, 1.1, -0.5]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.wrap()
+
+        result = crystal.wrap()
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[0], [0.5, 0.7, 0.7], decimal=6
+            result.frac_positions[0], [0.5, 0.7, 0.7], decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[1], [0.2, 0.2, 0.2], decimal=6
+            result.frac_positions[1], [0.2, 0.2, 0.2], decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[2], [0.9, 0.1, 0.5], decimal=6
+            result.frac_positions[2], [0.9, 0.1, 0.5], decimal=6
         )
     
     def test_crystal_wrap_already_in_range(self):
@@ -377,28 +377,34 @@ class TestCrystalComprehensive(unittest.TestCase):
         crystal = Crystal(species, positions, lattice)
         original_frac = crystal.frac_positions.copy()
         original_cart = crystal.cart_positions.copy()
-        
-        crystal.wrap()
+
+        result = crystal.wrap()
         # Should remain unchanged
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions, original_frac, decimal=6
+            result.frac_positions, original_frac, decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.cart_positions, original_cart, decimal=6
+            result.cart_positions, original_cart, decimal=6
         )
     
     def test_crystal_wrap_method_chaining(self):
-        """Test wrap method chaining."""
+        """Test wrap returns new crystal."""
         species = ['Fe', 'O']
         positions = [[1.5, -0.3, 0.5], [0.2, 0.2, 0.2]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
+        original_frac = crystal.frac_positions.copy()
         result = crystal.wrap()
-        # Should return self for chaining
-        self.assertIs(result, crystal)
+        # Should return new object for chaining
+        self.assertIsNot(result, crystal)
+        # Original should be unchanged
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[0], [0.5, 0.7, 0.5], decimal=6
+            crystal.frac_positions, original_frac, decimal=6
+        )
+        # Result should be wrapped
+        np.testing.assert_array_almost_equal(
+            result.frac_positions[0], [0.5, 0.7, 0.5], decimal=6
         )
     
     def test_crystal_wrap_updates_sites(self):
@@ -407,38 +413,32 @@ class TestCrystalComprehensive(unittest.TestCase):
         positions = [[1.5, -0.3, 0.5], [0.2, 0.2, 0.2]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.wrap()
+
+        result = crystal.wrap()
         # Verify sites match wrapped positions
         np.testing.assert_array_almost_equal(
-            crystal.sites[0].frac_position, crystal.frac_positions[0], decimal=6
+            result.sites[0].frac_position, result.frac_positions[0], decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.sites[1].frac_position, crystal.frac_positions[1], decimal=6
+            result.sites[1].frac_position, result.frac_positions[1], decimal=6
         )
         # Verify sites' Cartesian coordinates match
         np.testing.assert_array_almost_equal(
-            crystal.sites[0].cart_position, crystal.cart_positions[0], decimal=6
+            result.sites[0].cart_position, result.cart_positions[0], decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.sites[1].cart_position, crystal.cart_positions[1], decimal=6
+            result.sites[1].cart_position, result.cart_positions[1], decimal=6
         )
     
-    def test_crystal_wrap_invalidates_neighbor_tree(self):
-        """Test that wrap invalidates neighbor tree cache."""
+    def test_crystal_wrap_original_unchanged(self):
         species = ['Fe', 'O']
         positions = [[1.5, -0.3, 0.5], [0.2, 0.2, 0.2]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        # Build neighbor tree
-        crystal.get_neighbor_list(5.0)
-        # Verify tree exists
-        self.assertIsNotNone(crystal._neighbor_tree)
-        
-        # Wrap should invalidate tree
-        crystal.wrap()
-        self.assertIsNone(crystal._neighbor_tree)
+        original_frac = crystal.frac_positions.copy()
+        result = crystal.wrap()
+        self.assertIsNot(result, crystal)
+        self.assertTrue(np.allclose(crystal.frac_positions, original_frac))
     
     def test_crystal_wrap_boundary_values(self):
         """Test wrapping boundary values (0.0, 1.0, etc.)."""
@@ -447,21 +447,21 @@ class TestCrystalComprehensive(unittest.TestCase):
         positions = [[1.0, 1.0, 1.0], [0.0, 0.0, 0.0]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
-        crystal.wrap()
+
+        result = crystal.wrap()
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[0], [0.0, 0.0, 0.0], decimal=6
+            result.frac_positions[0], [0.0, 0.0, 0.0], decimal=6
         )
         np.testing.assert_array_almost_equal(
-            crystal.frac_positions[1], [0.0, 0.0, 0.0], decimal=6
+            result.frac_positions[1], [0.0, 0.0, 0.0], decimal=6
         )
-        
+
         # Test values just below 1.0 (should remain unchanged)
         positions2 = [[0.999, 0.999, 0.999], [0.001, 0.001, 0.001]]
         crystal2 = Crystal(species, positions2, lattice)
-        crystal2.wrap()
+        result2 = crystal2.wrap()
         np.testing.assert_array_almost_equal(
-            crystal2.frac_positions[0], [0.999, 0.999, 0.999], decimal=6
+            result2.frac_positions[0], [0.999, 0.999, 0.999], decimal=6
         )
 
 if __name__ == '__main__':
