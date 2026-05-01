@@ -101,6 +101,10 @@ addopts = [
     "--strict-markers",
     "--tb=short",
 ]
+filterwarnings = [
+    "ignore:CUDA initialization:UserWarning:torch",
+    "ignore:.*pkg_resources is deprecated.*:UserWarning",
+]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "requires_torch: marks tests that require torch",
