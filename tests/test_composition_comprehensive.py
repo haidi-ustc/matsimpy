@@ -139,6 +139,17 @@ class TestCompositionComprehensive(unittest.TestCase):
         self.assertIn('formula', d)
         self.assertEqual(d['formula'], 'H2O')
     
+    def test_composition_as_dict_uses_processed_formula(self):
+        """as_dict stores the processed formula, not raw input."""
+        # Input "OH2" with element sorting produces "H2O"
+        comp = Composition("OH2", sort_by="element")
+        d = comp.as_dict()
+        self.assertEqual(d["formula"], "H2O")  # processed, not raw "OH2"
+        # Round-trip: from_dict(as_dict()) preserves the formula
+        comp2 = Composition.from_dict(d)
+        self.assertEqual(comp2.formula, "H2O")
+        self.assertEqual(str(comp2), "H2O")
+
     def test_composition_from_dict(self):
         """Test creation from dictionary."""
         d = {'formula': 'H2O'}

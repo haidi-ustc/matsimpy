@@ -463,7 +463,7 @@ class Composition(MSONable):
         return {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
-            "formula": self._input_formula,
+            "formula": self.formula,
             "sort_by": self._sort_by,
         }
 
