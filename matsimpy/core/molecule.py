@@ -126,6 +126,41 @@ class Molecule(Structure):
     # Construction & internal helpers
     # ======================================================================
 
+    @classmethod
+    def _construct(
+        cls,
+        species: Tuple[str, ...],
+        positions: np.ndarray,
+        lattice: Optional[Lattice] = None,
+        site_properties: Optional[List[dict]] = None,
+        **kwargs: Any,
+    ) -> "Molecule":
+        """
+        Internal lightweight constructor.
+
+        ``positions`` must be Cartesian coordinates (this matches the internal
+        ``Structure._positions`` convention for Molecule).
+        """
+        obj = cls.__new__(cls)
+        obj._species = tuple(species)
+        obj._positions = np.array(positions, dtype=np.float64, copy=True)
+        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
+            raise ValueError("positions must have shape (n_atoms, 3)")
+        obj._positions.flags.writeable = False
+        obj.lattice = lattice
+        obj._composition = None
+        obj._formula = None
+
+        obj.site_properties = tuple(site_properties) if site_properties else ()
+        obj._sites = None  # lazy — populated on first .sites access
+        obj._cached_com = None
+        return obj
+
+    def _construct_kwargs(self) -> Dict[str, Any]:
+        return {
+            "site_properties": list(self.site_properties) if self.site_properties else None,
+        }
+
     def __init__(
         self,
         species: List[str],
@@ -235,6 +270,8 @@ class Molecule(Structure):
             >>> len(molecule.sites)
             3
         """
+        if self._sites is None:
+            self._sites = self._initialize_sites()
         return self._sites
 
     def __getitem__(self, item: Union[int, slice]) -> Union[Site, List[Site]]:
@@ -303,9 +340,10 @@ class Molecule(Structure):
             array([1., 0., 0.])
         """
         new_positions = self.positions + np.array(vector)
-        return Molecule(
-            list(self.species), new_positions.tolist(),
-            site_properties=(list(self.site_properties) if self.site_properties else None),
+        return self.__class__._construct(
+            species=tuple(self.species),
+            positions=new_positions,
+            **self._construct_kwargs(),
         )
 
     def rotate(self, angle: float, axis: List[float]) -> "Molecule":
@@ -338,9 +376,10 @@ class Molecule(Structure):
         # Copy to a writeable array; older scipy versions reject read-only buffers
         # even though Rotation.apply() only reads from the input.
         new_positions = rotation.apply(np.array(self.positions))
-        return Molecule(
-            list(self.species), new_positions.tolist(),
-            site_properties=(list(self.site_properties) if self.site_properties else None),
+        return self.__class__._construct(
+            species=tuple(self.species),
+            positions=new_positions,
+            **self._construct_kwargs(),
         )
 
     # ======================================================================
@@ -450,6 +489,12 @@ class Molecule(Structure):
         else:
             species_list = list(species)
 
+        if len(species_list) != len(new_positions):
+            raise ValueError(
+                f"Number of species ({len(species_list)}) must match "
+                f"number of positions ({len(new_positions)})"
+            )
+
         if not species_list:
             return self.copy()
 
@@ -485,8 +530,9 @@ class Molecule(Structure):
         elif new_site_props:
             new_site_props.extend({} for _ in range(n_atoms_added))
 
-        return Molecule(
-            new_species, new_positions_arr.tolist(),
+        return self.__class__._construct(
+            species=tuple(new_species),
+            positions=new_positions_arr,
             site_properties=new_site_props if new_site_props else None,
         )
 
@@ -556,9 +602,10 @@ class Molecule(Structure):
         for idx, new_spec in zip(indices, new_species):
             species_list[idx] = new_spec
 
-        return Molecule(
-            species_list, self.positions.tolist(),
-            site_properties=(list(self.site_properties) if self.site_properties else None),
+        return self.__class__._construct(
+            species=tuple(species_list),
+            positions=self._positions,
+            **self._construct_kwargs(),
         )
 
     def as_dict(self) -> Dict[str, Any]:

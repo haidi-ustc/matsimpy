@@ -165,6 +165,58 @@ class Crystal(Structure):
     # Construction & internal state
     # ======================================================================
 
+    @classmethod
+    def _construct(
+        cls,
+        species: Tuple[str, ...],
+        positions: np.ndarray,
+        lattice: Lattice,
+        pbc: Tuple[bool, bool, bool] = (True, True, True),
+        site_properties: Optional[List[dict]] = None,
+        _cart_positions: Optional[np.ndarray] = None,
+        **kwargs: Any,
+    ) -> "Crystal":
+        """
+        Internal lightweight constructor.
+
+        ``positions`` must be fractional coordinates (this matches the internal
+        ``Structure._positions`` convention for Crystal).
+
+        ``_cart_positions`` is an optional precomputed Cartesian array.  When
+        provided it is used directly (after a read-only copy) instead of
+        recomputing ``positions @ lattice.matrix``.  Only pass this when the
+        caller already has the correct Cartesian array to avoid redundant work.
+        """
+        obj = cls.__new__(cls)
+        obj._species = tuple(species)
+        obj._positions = np.array(positions, dtype=np.float64, copy=True)
+        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
+            raise ValueError("positions must have shape (n_atoms, 3)")
+        obj._positions.flags.writeable = False
+        obj.lattice = lattice
+        obj._composition = None
+        obj._formula = None
+
+        obj._frac_positions = obj._positions
+        if _cart_positions is not None:
+            cart = np.array(_cart_positions, dtype=np.float64, copy=True)
+        else:
+            cart = np.dot(obj._frac_positions, lattice.matrix)
+        cart.flags.writeable = False
+        obj._cart_positions = cart
+
+        obj.site_properties = tuple(site_properties) if site_properties else ()
+        obj.pbc = tuple(pbc)
+        obj._sites = None  # lazy — populated on first .sites access
+        obj._neighbor_cache = None
+        return obj
+
+    def _construct_kwargs(self) -> Dict[str, Any]:
+        return {
+            "pbc": self.pbc,
+            "site_properties": list(self.site_properties) if self.site_properties else None,
+        }
+
     def __init__(
         self,
         species: Union[List[str], List[int], List[Element]],
@@ -323,10 +375,13 @@ class Crystal(Structure):
         if not all(isinstance(x, bool) for x in pbc):
             raise ValueError("All PBC elements must be booleans")
 
-        return Crystal(
-            list(self.species), self.frac_positions.tolist(), self.lattice,
-            pbc=list(pbc), coords_are_cartesian=False,
-            site_properties=(list(self.site_properties) if self.site_properties else None),
+        return self.__class__._construct(
+            species=tuple(self.species),
+            positions=self._positions,
+            lattice=self.lattice,
+            pbc=tuple(pbc),
+            site_properties=list(self.site_properties) if self.site_properties else None,
+            _cart_positions=self._cart_positions,
         )
 
     def _get_sorted_sites(self, sort_by: str = "element") -> List[CrystalSite]:
@@ -475,7 +530,13 @@ class Crystal(Structure):
         if isinstance(species, str):
             species_list = [species]
         else:
-            species_list = species
+            species_list = list(species)
+
+        if len(species_list) != len(new_positions):
+            raise ValueError(
+                f"Number of species ({len(species_list)}) must match "
+                f"number of positions ({len(new_positions)})"
+            )
 
         # Normalize site_properties
         if site_properties is not None:
@@ -641,6 +702,7 @@ class Crystal(Structure):
         new_species.extend(species_list)
 
         new_frac = np.vstack([self.frac_positions, new_frac_positions])
+        new_cart = np.vstack([self.cart_positions, new_cart_positions])
 
         new_site_props = None
         if self.site_properties or site_properties_list:
@@ -662,10 +724,13 @@ class Crystal(Structure):
             else:
                 new_site_props.extend({} for _ in range(len(species_list)))
 
-        return Crystal(
-            new_species, new_frac.tolist(), self.lattice,
-            pbc=list(self.pbc), coords_are_cartesian=False,
+        return self.__class__._construct(
+            species=tuple(new_species),
+            positions=new_frac,
+            lattice=self.lattice,
+            pbc=self.pbc,
             site_properties=new_site_props,
+            _cart_positions=new_cart,
         )
 
     def substitute(
@@ -731,10 +796,13 @@ class Crystal(Structure):
         for idx, new_spec in zip(indices, new_species):
             species_list[idx] = new_spec
 
-        return Crystal(
-            species_list, self.frac_positions.tolist(), self.lattice,
-            pbc=list(self.pbc), coords_are_cartesian=False,
-            site_properties=(list(self.site_properties) if self.site_properties else None),
+        return self.__class__._construct(
+            species=tuple(species_list),
+            positions=self._positions,
+            lattice=self.lattice,
+            pbc=self.pbc,
+            site_properties=list(self.site_properties) if self.site_properties else None,
+            _cart_positions=self._cart_positions,
         )
 
     def _initialize_sites(self) -> List[CrystalSite]:
@@ -790,6 +858,8 @@ class Crystal(Structure):
             >>> len(crystal.sites)
             2
         """
+        if self._sites is None:
+            self._sites = self._initialize_sites()
         return self._sites
 
     def as_dict(self) -> Dict[str, Any]:
@@ -1164,10 +1234,11 @@ class Crystal(Structure):
             [0.1, 0.5, 0.5]
         """
         new_frac = self.frac_positions % 1.0
-        return Crystal(
-            list(self.species), new_frac.tolist(), self.lattice,
-            pbc=list(self.pbc), coords_are_cartesian=False,
-            site_properties=(list(self.site_properties) if self.site_properties else None),
+        return self.__class__._construct(
+            species=tuple(self.species),
+            positions=new_frac,
+            lattice=self.lattice,
+            **self._construct_kwargs(),
         )
 
     def _get_periodic_images(self, cutoff: float) -> np.ndarray:

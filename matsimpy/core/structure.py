@@ -122,6 +122,36 @@ class Structure(ABC, MSONable):
     # Construction & core data model
     # ======================================================================
 
+    @classmethod
+    def _construct(
+        cls,
+        species: Tuple[str, ...],
+        positions: np.ndarray,
+        lattice: Optional[Lattice] = None,
+    ) -> "Structure":
+        """
+        Internal lightweight constructor.
+
+        This bypasses ``__init__`` and therefore skips validation. It is intended
+        for internal mutation pipelines that already operate on validated data.
+        """
+        obj = cls.__new__(cls)
+        obj._species = tuple(species)
+        obj._positions = np.array(positions, dtype=np.float64, copy=True)
+        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
+            raise ValueError("positions must have shape (n_atoms, 3)")
+        obj._positions.flags.writeable = False
+        obj.lattice = lattice
+
+        # Compute-once caches (never invalidated — structure is immutable)
+        obj._composition = None
+        obj._formula = None
+        return obj
+
+    def _construct_kwargs(self) -> Dict[str, Any]:
+        """Extra kwargs forwarded to ``_construct`` in base mutation helpers."""
+        return {}
+
     def __init__(
         self,
         species: Union[List[str], List[int], List[Element]],
@@ -846,13 +876,12 @@ class Structure(ABC, MSONable):
         new_species.extend(species)
         new_positions = np.vstack([self._positions, positions_array])
 
-        return self.__class__.from_dict({
-            "@module": self.__class__.__module__,
-            "@class": self.__class__.__name__,
-            "species": new_species,
-            "positions": new_positions.tolist(),
-            **self._extra_dict_fields(),
-        })
+        return self.__class__._construct(
+            species=tuple(new_species),
+            positions=new_positions,
+            lattice=self.lattice,
+            **self._construct_kwargs(),
+        )
 
     def remove_atom(
         self,
@@ -896,16 +925,15 @@ class Structure(ABC, MSONable):
             species_list.pop(idx)
             new_positions = np.delete(new_positions, idx, axis=0)
 
-        return self.__class__.from_dict({
-            "@module": self.__class__.__module__,
-            "@class": self.__class__.__name__,
-            "species": species_list,
-            "positions": new_positions.tolist(),
-            **self._extra_dict_fields(),
-            # Overrides any stale per-atom lists (e.g. site_properties) that
-            # _extra_dict_fields() may have emitted with the old atom count.
-            **self._filter_per_atom_data(kept_indices),
-        })
+        # Propagate per-atom metadata via hooks when present.
+        per_atom = self._filter_per_atom_data(kept_indices)
+        return self.__class__._construct(
+            species=tuple(species_list),
+            positions=new_positions,
+            lattice=self.lattice,
+            **self._construct_kwargs(),
+            **per_atom,
+        )
 
     # ------------------------------------------------------------------
     # Species editing
@@ -951,25 +979,23 @@ class Structure(ABC, MSONable):
         for idx, new_spec in zip(indices, new_species):
             species_list[idx] = new_spec
 
-        return self.__class__.from_dict({
-            "@module": self.__class__.__module__,
-            "@class": self.__class__.__name__,
-            "species": species_list,
-            "positions": self._positions.tolist(),
-            **self._extra_dict_fields(),
-        })
+        return self.__class__._construct(
+            species=tuple(species_list),
+            positions=self._positions,
+            lattice=self.lattice,
+            **self._construct_kwargs(),
+        )
 
     def substitute_all(self, old_species: str, new_species: str) -> "Structure":
         species_list = [
             new_species if s == old_species else s for s in self.species
         ]
-        return self.__class__.from_dict({
-            "@module": self.__class__.__module__,
-            "@class": self.__class__.__name__,
-            "species": species_list,
-            "positions": self._positions.tolist(),
-            **self._extra_dict_fields(),
-        })
+        return self.__class__._construct(
+            species=tuple(species_list),
+            positions=self._positions,
+            lattice=self.lattice,
+            **self._construct_kwargs(),
+        )
 
     # ------------------------------------------------------------------
     # Reordering
@@ -1007,16 +1033,14 @@ class Structure(ABC, MSONable):
         sorted_positions = np.array([a[2] for a in sorted_atoms])
         sorted_indices = [a[0] for a in sorted_atoms]
 
-        return self.__class__.from_dict({
-            "@module": self.__class__.__module__,
-            "@class": self.__class__.__name__,
-            "species": sorted_species,
-            "positions": sorted_positions.tolist(),
-            **self._extra_dict_fields(),
-            # Overrides any per-atom lists in _extra_dict_fields() that need
-            # to be reordered to match the new atom sequence.
-            **self._reorder_per_atom_data(sorted_indices),
-        })
+        per_atom = self._reorder_per_atom_data(sorted_indices)
+        return self.__class__._construct(
+            species=tuple(sorted_species),
+            positions=sorted_positions,
+            lattice=self.lattice,
+            **self._construct_kwargs(),
+            **per_atom,
+        )
 
     # ======================================================================
     # Abstract API
