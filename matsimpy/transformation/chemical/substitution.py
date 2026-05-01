@@ -110,26 +110,29 @@ def substitute(
                 f"Atom index {idx} is out of range [0, {len(structure)-1}]"
             )
 
-    # Always create a new structure
-    structure = structure.copy()
-
     # Perform substitutions
     species_list = list(structure.species)
     for idx, species in zip(indices, new_species):
         species_list[idx] = species
 
-    # Update species tuple
-    structure.species = tuple(species_list)
-
-    # Invalidate caches
-    structure._formula_dirty = True
-    structure._cached_composition = None
-
-    # Update sites if they exist
-    if hasattr(structure, "_sites"):
-        structure._sites = structure._initialize_sites()
-
-    return structure
+    # Construct new structure with substituted species
+    if isinstance(structure, Crystal):
+        return Crystal(
+            species_list,
+            structure.frac_positions.tolist(),
+            structure.lattice,
+            pbc=list(structure.pbc),
+            coords_are_cartesian=False,
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
+    elif isinstance(structure, Molecule):
+        return Molecule(
+            species_list,
+            structure.positions.tolist(),
+            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        )
+    else:
+        raise TypeError(f"Unsupported structure type: {type(structure)}")
 
 
 def substitute_all(
