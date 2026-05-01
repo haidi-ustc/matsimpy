@@ -219,6 +219,19 @@ class TestNoPositionsSetter(unittest.TestCase):
         with self.assertRaises(AttributeError):
             crystal.positions = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
 
+    def test_internal_positions_array_is_read_only(self):
+        crystal = Crystal(
+            ["Na", "Cl"],
+            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+            Lattice.cubic(5.64),
+        )
+        molecule = Molecule(["H"], [[0.0, 0.0, 0.0]])
+
+        with self.assertRaises(ValueError):
+            crystal._positions[0, 0] = 0.25
+        with self.assertRaises(ValueError):
+            molecule._positions[0, 0] = 0.25
+
 
 class TestNoSpeciesSetter(unittest.TestCase):
     """species property is read-only."""

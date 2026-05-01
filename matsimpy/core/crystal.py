@@ -89,7 +89,7 @@ class Crystal(Structure):
 
     Attributes:
         species (Tuple[str]): Immutable tuple of atomic species symbols.
-        positions (np.ndarray): Numpy array of fractional positions.
+        positions (np.ndarray): Cartesian coordinates in Angstroms (ASE-style).
         frac_positions (np.ndarray): Fractional coordinates with shape (n_atoms, 3).
         cart_positions (np.ndarray): Cartesian coordinates in Angstroms with shape (n_atoms, 3).
         lattice (Lattice): Lattice object defining the unit cell.

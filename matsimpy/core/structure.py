@@ -63,7 +63,7 @@ class Structure(ABC, MSONable):
 
     Attributes:
         species (Tuple[str]): Immutable tuple of atomic species symbols.
-        positions (np.ndarray): Numpy array of atomic positions with shape (n_atoms, 3).
+        positions (np.ndarray): Cartesian atomic positions with shape (n_atoms, 3).
         lattice (Optional[Lattice]): Lattice object for periodic structures (None for molecules).
         formula (str): Chemical formula of the structure (cached property).
         composition (Composition): Composition object (cached property).
@@ -75,9 +75,9 @@ class Structure(ABC, MSONable):
             - List[str]: List of element symbols (e.g., ['Na', 'Cl', 'Na'])
             - List[int]: List of atomic numbers (e.g., [11, 17, 11])
             - List[Element]: List of Element objects
-        positions: List of atomic positions. Each position is a 3D coordinate [x, y, z].
-                  For crystals, positions are typically fractional coordinates.
-                  For molecules, positions are Cartesian coordinates in Angstroms.
+        positions: List of atomic positions. The public ``positions`` API is
+                  always Cartesian; Crystal also exposes ``frac_positions`` for
+                  fractional coordinates.
         lattice: Optional Lattice object. Required for Crystal, None for Molecule.
 
     Raises:
@@ -136,9 +136,9 @@ class Structure(ABC, MSONable):
                 - List[str]: Element symbols (e.g., ['Na', 'Cl', 'Na'])
                 - List[int]: Atomic numbers (e.g., [11, 17, 11])
                 - List[Element]: Element objects
-            positions: List of 3D atomic positions. Each position is [x, y, z].
-                     For crystals, typically fractional coordinates.
-                     For molecules, Cartesian coordinates in Angstroms.
+            positions: List of 3D atomic positions. The public ``positions`` API
+                     is always Cartesian; Crystal also exposes ``frac_positions``
+                     for fractional coordinates.
             lattice: Optional Lattice object. Required for Crystal, None for Molecule.
 
         Raises:
@@ -182,6 +182,7 @@ class Structure(ABC, MSONable):
                 f"Number of positions ({len(self._positions)}) must match "
                 f"number of species ({len(self._species)})"
             )
+        self._positions.flags.writeable = False
 
         self.lattice = lattice
 
@@ -795,7 +796,6 @@ class Structure(ABC, MSONable):
         self,
         species: Union[str, List[str]],
         position: Union[List[float], List[List[float]]],
-        site_properties: Optional[Union[dict, List[dict]]] = None,
     ) -> "Structure":
         """
         Add one or more atoms and return a new structure.
@@ -805,19 +805,14 @@ class Structure(ABC, MSONable):
             position: 3D position or list of 3D positions (coordinate system
                       depends on the concrete subclass — Cartesian for Molecule,
                       fractional by default for Crystal).
-            site_properties: Per-atom property dict or list thereof.  The base
-                implementation accepts the parameter for API consistency but
-                **ignores it**.  Crystal and Molecule override this method to
-                handle site properties correctly.
 
         Returns:
             Structure: New structure with the added atom(s).
 
         Warning:
-            Subclasses that store per-atom state beyond ``site_properties``
-            must override this method entirely; the base round-trip via
-            ``from_dict`` will not preserve state that is not captured by
-            ``_extra_dict_fields`` + ``_filter_per_atom_data``.
+            The base class cannot generically persist subclass-specific per-atom
+            metadata such as ``site_properties``. Subclasses that expose such
+            metadata should override this method, as Crystal and Molecule do.
         """
 
         # Handle single atom case
