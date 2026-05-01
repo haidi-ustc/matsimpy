@@ -118,6 +118,10 @@ class Structure(ABC, MSONable):
         >>> elements[0].atomic_no  # Atomic number of first element
     """
 
+    # ======================================================================
+    # Construction & core data model
+    # ======================================================================
+
     def __init__(
         self,
         species: Union[List[str], List[int], List[Element]],
@@ -274,6 +278,10 @@ class Structure(ABC, MSONable):
 
         return positions_array
 
+    # ======================================================================
+    # Coordinate accessors
+    # ======================================================================
+
     @property
     def positions(self) -> np.ndarray:
         """
@@ -290,6 +298,10 @@ class Structure(ABC, MSONable):
         view = self._positions.view()
         view.flags.writeable = False
         return view
+
+    # ======================================================================
+    # (De)serialization
+    # ======================================================================
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -368,6 +380,10 @@ class Structure(ABC, MSONable):
         )
         return cls(species, positions, lattice)
 
+    # ======================================================================
+    # Chemistry-derived properties (cached)
+    # ======================================================================
+
     @property
     def formula(self) -> str:
         """Get the chemical formula of the structure (cached)."""
@@ -385,6 +401,10 @@ class Structure(ABC, MSONable):
                 formula += element + (str(count) if count > 1 else "")
                 seen.add(element)
         return formula
+
+    # ======================================================================
+    # Convenience properties
+    # ======================================================================
 
     @property
     def symbol_set(self) -> tuple:
@@ -422,6 +442,10 @@ class Structure(ABC, MSONable):
                 unique_symbols.append(specie)
                 seen.add(specie)
         return tuple(unique_symbols)
+
+    # ======================================================================
+    # Copy / hashing / equality
+    # ======================================================================
 
     def copy(self) -> "Structure":
         """
@@ -687,6 +711,10 @@ class Structure(ABC, MSONable):
 
     # ------------------------------------------------------------------
 
+    # ======================================================================
+    # Subclass extension hooks
+    # ======================================================================
+
     def _extra_dict_fields(self) -> Dict[str, Any]:
         """
         Return extra fields required to reconstruct this structure via ``from_dict``.
@@ -710,6 +738,10 @@ class Structure(ABC, MSONable):
             dict: Extra serialisation fields (empty dict for the base class).
         """
         return {}
+
+    # ======================================================================
+    # Per-atom metadata adjustment hooks (used by base mutation helpers)
+    # ======================================================================
 
     def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
         """
@@ -754,6 +786,10 @@ class Structure(ABC, MSONable):
             dict: Reordered per-atom fields (empty dict in the base class).
         """
         return {}
+
+    # ======================================================================
+    # Structure editing (immutable: returns new instances)
+    # ======================================================================
 
     def add_atom(
         self,
@@ -853,6 +889,10 @@ class Structure(ABC, MSONable):
             **self._filter_per_atom_data(kept_indices),
         })
 
+    # ------------------------------------------------------------------
+    # Species editing
+    # ------------------------------------------------------------------
+
     def substitute(
         self,
         indices: Union[int, List[int], "AtomSelection"],
@@ -913,6 +953,10 @@ class Structure(ABC, MSONable):
             **self._extra_dict_fields(),
         })
 
+    # ------------------------------------------------------------------
+    # Reordering
+    # ------------------------------------------------------------------
+
     def sort_atoms(self, sort_by: str = "element") -> "Structure":
         """
         Sort atoms and return a new structure.
@@ -955,6 +999,10 @@ class Structure(ABC, MSONable):
             # to be reordered to match the new atom sequence.
             **self._reorder_per_atom_data(sorted_indices),
         })
+
+    # ======================================================================
+    # Abstract API
+    # ======================================================================
 
     @abstractmethod
     def get_neighbor_list(

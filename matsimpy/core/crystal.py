@@ -152,6 +152,10 @@ class Crystal(Structure):
         2.5
     """
 
+    # ======================================================================
+    # Construction & internal state
+    # ======================================================================
+
     def __init__(
         self,
         species: Union[List[str], List[int], List[Element]],
@@ -214,9 +218,9 @@ class Crystal(Structure):
         self._neighbor_tree_use_pbc: Optional[bool] = None
         self._neighbor_tree_pbc: Optional[Tuple[bool, bool, bool]] = None
 
-    # ========================================================================
-    # Helper Methods - Reduce Code Duplication
-    # ========================================================================
+    # ======================================================================
+    # Subclass extension hooks / extra serialisation fields
+    # ======================================================================
 
     def _extra_dict_fields(self) -> Dict[str, Any]:
         """Return extra fields for from_dict reconstruction."""
@@ -237,6 +241,10 @@ class Crystal(Structure):
         if not self.site_properties:
             return {}
         return {"site_properties": [self.site_properties[i] for i in new_order]}
+
+    # ======================================================================
+    # Coordinate accessors
+    # ======================================================================
 
     @property
     def positions(self) -> np.ndarray:
@@ -377,9 +385,9 @@ class Crystal(Structure):
         """
         return Composition._get_sorted_element_counts(element_counts, sort_by)
 
-    # ========================================================================
-    # Atom Modification Methods
-    # ========================================================================
+    # ======================================================================
+    # Structure editing (immutable: returns new instances)
+    # ======================================================================
 
     def add_atom(
         self,
@@ -1338,6 +1346,10 @@ class Crystal(Structure):
         # Stack original positions with image positions
         return np.vstack([self.cart_positions, image_positions])
 
+    # ======================================================================
+    # Neighbor finding & geometry
+    # ======================================================================
+
     def get_neighbor_list(
         self, cutoff: float, atom_index: Optional[int] = None, use_pbc: bool = True
     ) -> Dict[int, List[Tuple[int, float]]]:
@@ -1744,6 +1756,10 @@ class Crystal(Structure):
         except ValueError as e:
             raise ValueError(f"Unsupported DFT code: {code}") from e
 
+    # ======================================================================
+    # Builders / convenience constructors
+    # ======================================================================
+
     @classmethod
     def random_crystal(
         cls, dim: int, group: int, species: list, num_ions: list, **kwargs
@@ -1767,6 +1783,10 @@ class Crystal(Structure):
         from ..builders.bulk.random import random_crystal
 
         return random_crystal(dim, group, species, num_ions, **kwargs)
+
+    # ======================================================================
+    # Calculator results (Crystal overrides)
+    # ======================================================================
 
     def get_stress(self) -> np.ndarray:
         """

@@ -121,6 +121,10 @@ class Molecule(Structure):
         -2
     """
 
+    # ======================================================================
+    # Construction & internal helpers
+    # ======================================================================
+
     def __init__(
         self,
         species: List[str],
@@ -183,10 +187,18 @@ class Molecule(Structure):
                 for pos, spec in zip(self.positions, self.species)
             ]
 
+    # ======================================================================
+    # Subclass extension hooks / extra serialisation fields
+    # ======================================================================
+
     def _extra_dict_fields(self) -> Dict[str, Any]:
         if self.site_properties:
             return {"site_properties": list(self.site_properties)}
         return {}
+
+    # ----------------------------------------------------------------------
+    # Per-atom metadata adjustment hooks (Structure base helpers)
+    # ----------------------------------------------------------------------
 
     def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
         """Return site_properties filtered to kept_indices after atom removal."""
@@ -199,6 +211,10 @@ class Molecule(Structure):
         if not self.site_properties:
             return {}
         return {"site_properties": [self.site_properties[i] for i in new_order]}
+
+    # ======================================================================
+    # Sites / indexing
+    # ======================================================================
 
     @property
     def sites(self) -> List[Site]:
@@ -236,6 +252,10 @@ class Molecule(Structure):
             [<Site object>, <Site object>]
         """
         return self.sites[item]
+
+    # ======================================================================
+    # Geometry & transformations (immutable)
+    # ======================================================================
 
     def get_center_of_mass(self) -> List[float]:
         """
@@ -318,6 +338,10 @@ class Molecule(Structure):
             list(self.species), new_positions.tolist(),
             site_properties=(list(self.site_properties) if self.site_properties else None),
         )
+
+    # ======================================================================
+    # Structure editing (immutable: returns new instances)
+    # ======================================================================
 
     def add_atom(
         self,
@@ -672,6 +696,10 @@ class Molecule(Structure):
         positions = d["positions"]
         site_properties = d.get("site_properties", [])
         return cls(species, positions, site_properties=site_properties)
+
+    # ======================================================================
+    # Conversion helpers
+    # ======================================================================
 
     def to_crystal(self, vacuum: float = 15.0) -> "Crystal":
         """
