@@ -1,36 +1,41 @@
 # MatSimPy
 
-**MatSimPy** (Materials Simulation in Python) is a comprehensive Python package for molecular and materials simulation, designed to provide a modern, efficient, and user-friendly interface for materials science research.
+**MatSimPy (Materials Simulation in Python)** is a Python library for building, transforming, analyzing, and storing crystal/molecular structures with a clean, ASE-like workflow.
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Status](https://img.shields.io/badge/status-Alpha-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1324%20passed-brightgreen)](tests/)
+[![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
+[![Tests](https://img.shields.io/badge/tests-1295%20passed-brightgreen)](tests/)
 
+**Version**: v0.3.0 — **core modules are stable** (API ergonomics + immutability + coordinate semantics are consistent).
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Core Conventions](#core-conventions)
+- [CLI](#command-line-interface)
+- [Project Structure](#project-structure)
+- [Examples](#examples)
+- [Testing](#testing)
+- [Documentation](#documentation)
 
 ## Features
 
-- **Core Data Structures**: Crystal, Molecule, Lattice, Composition, Site, Element
-- **Structure Builders**: Bulk, surface, alloy, molecule, defects, nanostructures
-- **Transformations**: Geometric, lattice, atomic, chemical operations
-- **High-Throughput Tools**: Transformation pipelines, parameter sweeps, batch processing
-- **Graph Analysis**: 13+ graph methods, OOP API, connectivity analysis, NetworkX integration
-- **Calculators**: Classical potentials (LJ), ML potentials (Mattersim), DFT interfaces
-- **Symmetry Analysis**: Space group determination, conventional cell conversion
-- **Configuration System**: Global config with environment variable overrides
-- **Data Storage**: Persistent storage for structures and calculation results (maggma)
-- **File I/O**: High-level `read()`/`write()` interface with auto-format detection, supporting VASP, CIF, XYZ, PDB, MOL, XSF, JSON, ASE formats
-- **LaTeX Export**: Professional tables for publications with mhchem support
-- **CLI Interface**: Interactive menu system for easy access to all features
-- **Immutable by Default**: All mutation methods return new objects — no cache invalidation bugs
-- **Performance**: Compute-once caches, KDTree, vectorized operations
-- **Comprehensive Examples**: 19 example files demonstrating all features
+- **Core data model**: `Crystal`, `Molecule`, `Structure`, `Lattice`, `Composition`, `Site`, `Element`
+- **Immutable-by-default**: mutation returns new objects (safe caching, predictable pipelines)
+- **Coordinate system clarity**: `Structure.positions` is **always Cartesian**; `Crystal` also supports `frac_positions`
+- **Builders**: bulk/surface/alloy/molecule/defects/nanostructures
+- **Transformations**: geometric, lattice, atomic, chemical, structural, plus composite (pipelines/sweeps/batch)
+- **Analysis**: symmetry (spglib), graph connectivity (OOP + NetworkX export), convenience properties
+- **Calculators**: classical + ML (optional), ASE/pymatgen I/O bridges (optional)
+- **Storage**: persistent storage via maggma (optional)
+- **CLI**: interactive menu for structure editing and utilities
 
 ## Installation
 
-### Basic Installation
-
-Install MatSimPy using pip:
+### Basic installation
 
 ```bash
 pip install MatSimPy
@@ -42,7 +47,7 @@ This installs the core package with required dependencies:
 - monty
 - tabulate
 
-### Installation from Source
+### From source (editable)
 
 Clone the repository and install in editable mode:
 
@@ -52,7 +57,7 @@ cd MatSimPy
 pip install -e .
 ```
 
-For development with testing support:
+For development:
 
 ```bash
 pip install -e .[dev]
@@ -63,12 +68,12 @@ This includes:
 - pytest-cov
 - pytest-xdist
 
-### Optional Dependencies
+### Optional extras
 
 MatSimPy supports optional features through extra dependencies:
 
 ```bash
-# CLI interface (interactive menu)
+# CLI (interactive menu)
 pip install -e .[cli]
 
 # Machine learning calculators (torch, torch-geometric)
@@ -86,44 +91,18 @@ pip install -e .[analysis]
 # Data storage (maggma)
 pip install -e .[storage]
 
-# All optional features
+# Everything
 pip install -e .[all]
 ```
 
-### Using requirements.txt
-
-For a minimal installation with only core dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-For development:
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-### Package Configuration
-
-MatSimPy uses modern Python packaging standards:
-- **pyproject.toml** - PEP 517/518 compliant build configuration
-- **requirements.txt** - Core dependencies
-- **requirements-dev.txt** - Development dependencies
-- **pytest.ini** - Test configuration
-
-The package automatically discovers all modules and includes necessary data files (JSON, YAML) from the package directories.
-
 ## Quick Start
-
-### Core Structures
 
 Structures are **immutable by default** — all mutation methods return new objects without modifying the original.
 
 ```python
 from matsimpy import Crystal, Molecule, Lattice, Composition
 
-# Create crystal structure
+# Crystal (fractional input by default)
 crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
 print(crystal.formula)   # NaCl
 print(crystal.volume)    # ~179.4 Å³
@@ -133,11 +112,11 @@ doped = crystal.add_atom(['H', 'O'], [[0.1, 0, 0], [0.9, 0, 0]])
 print(len(crystal))      # 2 (original unchanged)
 print(len(doped))        # 4 (new object)
 
-# Chained mutations
+# Chained mutations (returns new objects each step)
 result = crystal.substitute(0, 'K').add_atom('H', [0.1, 0, 0])
 print(result.formula)    # KClH
 
-# Create a molecule
+# Molecule (Cartesian)
 molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
 print(molecule.formula)  # OH2
 print(molecule.get_center_of_mass())
@@ -157,7 +136,7 @@ mass_frac = comp.mass_fractions()   # {'Fe': 0.699, 'O': 0.301}
 mole_frac = comp.mole_fractions()   # {'Fe': 0.4, 'O': 0.6}
 ```
 
-### Graph Analysis
+### Graph analysis (optional)
 
 ```python
 from matsimpy.core.graph import MoleculeGraph, create_structure_graph
@@ -183,7 +162,7 @@ adj = get_adjacency_matrix(molecule, cutoff=3.0)
 coord = get_coordination_numbers(crystal, cutoff=5.0)
 ```
 
-### LaTeX Export
+### LaTeX export
 
 ```python
 from matsimpy.io import crystals_to_latex_table, molecules_to_latex_table
@@ -215,7 +194,7 @@ from matsimpy.io import save_latex_table
 save_latex_table(crystals, 'structures.tex')
 ```
 
-### Structure Builders
+### Builders
 
 ```python
 from matsimpy.builders import (
@@ -269,7 +248,7 @@ substituted = substitute(crystal, [0, 1], ['Ge', 'Ge'])
 supercell = make_supercell(crystal, [2, 2, 2])  # 2x2x2 supercell
 ```
 
-### High-Throughput Transformations
+### High-throughput transformations
 
 ```python
 from matsimpy.transformation.composite import (
@@ -411,7 +390,7 @@ config = ConfigManager()
 config.set('calculator.ml.default_device', 'cuda', save=True)
 ```
 
-### Symmetry Analysis
+### Symmetry analysis
 
 ```python
 from matsimpy.builders.bulk import from_prototype
@@ -432,7 +411,22 @@ print(f"Primitive: {len(crystal)} atoms")         # 2 atoms
 print(f"Conventional: {len(conventional)} atoms") # 8 atoms
 ```
 
-### Data Storage
+### Data storage
+
+## Core Conventions
+
+### Immutability
+
+- All mutation APIs return **new** objects (`add_atom`, `remove_atom`, `substitute`, `sort_atoms`, transformations, etc.)
+- Internal numpy arrays are read-only to prevent accidental in-place edits.
+
+### Coordinates
+
+- `Structure.positions` is **always Cartesian** (Å).
+- `Crystal` stores fractional internally and provides:
+  - `Crystal.frac_positions` (fractional)
+  - `Crystal.cart_positions` (Cartesian)
+  - `Crystal.positions` (Cartesian, consistent with `Structure`)
 
 ```python
 from matsimpy.storage import DataStorage
@@ -539,13 +533,7 @@ matsimpy
 matsimpy path/to/matsimpy_menu.json
 ```
 
-The CLI provides access to:
-- Structure generation and editing
-- Analysis tools (symmetry, properties, etc.)
-- File format conversion
-- Database management
-- Calculator interfaces
-- And much more!
+The CLI provides access to structure generation/editing, analysis tools, format conversion, and more.
 
 ## Examples
 
@@ -568,123 +556,9 @@ python examples/core_basic.py
 python examples/builders_bulk.py
 ```
 
-## Module Reference
-
-### Core Module
-
-```python
-from matsimpy import (
-    Structure, Crystal, Molecule,
-    Lattice, Composition, Site, CrystalSite, Element
-)
-```
-
-### I/O Module
-
-```python
-from matsimpy.io import read, write  # High-level interface (recommended)
-
-# Or use class methods
-from matsimpy.core import Crystal, Molecule
-crystal = Crystal.from_file('structure.vasp')
-crystal.to_file('output.cif')
-
-# Or format-specific functions
-from matsimpy.io import read_POSCAR, write_POSCAR, read_XYZ, write_XYZ
-```
-
-### Builders Module
-
-```python
-from matsimpy.builders import (
-    # Bulk
-    from_prototype, random_crystal, from_space_group,
-    # Surface
-    generate_slab, add_adsorbate,
-    # Alloy
-    generate_random_alloy, generate_ordered_alloy, generate_intermetallic,
-    # Molecule
-    build_linear, build_bent, build_tetrahedral, build_from_smiles,
-    # Defects
-    create_vacancy, create_interstitial, create_substitution,
-    create_frenkel, create_schottky, create_antisite,
-    # Nanostructure
-    build_nanotube, build_carbon_nanotube,
-    build_twisted_bilayer, build_magic_angle_twisted
-)
-```
-
-### Transformation Module
-
-```python
-from matsimpy.transformation import (
-    # Geometric
-    translate, rotate,
-    # Lattice
-    apply_strain, scale_lattice, set_volume,
-    # Atomic
-    move_atoms, swap_atoms, sort_atoms,
-    # Chemical
-    substitute,
-    # Structural
-    make_supercell
-)
-
-# High-throughput composite transformations
-from matsimpy.transformation.composite import (
-    TransformationPipeline,  # Reusable pipelines
-    ParameterSweep,           # Parameter variation
-    BatchProcessor,           # Batch processing
-    BatchResult               # Result metadata
-)
-```
-
-## Requirements
-
-### Core Dependencies
-
-- **Python** >=3.9 (tested up to 3.12)
-- **NumPy** >=1.20.0
-- **SciPy** >=1.7.0
-- **monty** >=2021.0 (for MSONable serialization)
-- **tabulate** >=0.9.0 (for formatted output)
-
-### Optional Dependencies
-
-Install these based on your needs:
-
-- **CLI Interface**:
-  - `prompt-toolkit` - Interactive command-line interface
-
-- **Machine Learning**:
-  - `torch` >=2.0.0 - PyTorch for ML calculators
-  - `torch-geometric` >=2.0.0 - Graph neural networks
-
-- **I/O Converters**:
-  - `pymatgen` >=2024.0.0 - Pymatgen interoperability
-  - `ase` >=3.20.0 - ASE interoperability
-
-- **Structure Builders**:
-  - `pyxtal` >=1.0.0 - Random crystal generation
-  - `rdkit` - SMILES parsing for molecule builders
-
-- **Analysis**:
-  - `spglib` - Symmetry analysis
-
-- **Storage**:
-  - `maggma` >=0.70.0 - Persistent data storage
-
-### Python Version Support
-
-MatSimPy supports Python 3.9 through 3.12. The package is tested on:
-- Python 3.9 ✓
-- Python 3.10 ✓
-- Python 3.11 ✓
-- Python 3.12 ✓
-
 ## Testing
 
-The project includes comprehensive tests with **1,324 passing tests** (100% pass rate):
+The project includes comprehensive tests:
 
 ```bash
 # Run all tests
@@ -704,13 +578,7 @@ pytest --tb=no -q                          # Quick run
 pytest tests/ -v --durations=10            # Show slowest tests
 ```
 
-**Test Statistics**:
-- 1,325 total tests
-- 100% pass rate
-- Coverage across all core modules
-- Unit, integration, and edge case tests
-- Immutability contract tests
-- Performance regression tests
+Current status in CI/local runs varies by optional extras; core suite is green.
 
 ## Documentation
 
@@ -743,4 +611,4 @@ MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen)
 
 ---
 
-**Note**: MatSimPy is currently in Alpha development. The API may change in future versions.
+**Note**: v0.3.0 is Beta; core modules are stable. Non-core modules and optional integrations may still evolve.
