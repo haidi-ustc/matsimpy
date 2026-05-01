@@ -22,8 +22,8 @@
 - **File I/O**: High-level `read()`/`write()` interface with auto-format detection, supporting VASP, CIF, XYZ, PDB, MOL, XSF, JSON, ASE formats
 - **LaTeX Export**: Professional tables for publications with mhchem support
 - **CLI Interface**: Interactive menu system for easy access to all features
-- **Composition Analysis**: Mass and mole fraction calculations with caching
-- **Performance**: Optimized with caching, KDTree, and vectorized operations
+- **Immutable by Default**: All mutation methods return new objects — no cache invalidation bugs
+- **Performance**: Compute-once caches, KDTree, vectorized operations
 - **Comprehensive Examples**: 19 example files demonstrating all features
 
 ## Installation
@@ -122,12 +122,11 @@ Structures are **immutable by default** — all mutation methods return new obje
 
 ```python
 from matsimpy import Crystal, Molecule, Lattice, Composition
-from matsimpy.builders.bulk import from_prototype
 
 # Create crystal structure
 crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
-print(crystal.formula)   # ClNa
-print(crystal.volume)    # 179.4 Å³
+print(crystal.formula)   # NaCl
+print(crystal.volume)    # ~179.4 Å³
 
 # Mutation returns a new object — must capture the result
 doped = crystal.add_atom(['H', 'O'], [[0.1, 0, 0], [0.9, 0, 0]])
@@ -136,11 +135,11 @@ print(len(doped))        # 4 (new object)
 
 # Chained mutations
 result = crystal.substitute(0, 'K').add_atom('H', [0.1, 0, 0])
-print(result.formula)    # H Cl K
+print(result.formula)    # KClH
 
 # Create a molecule
 molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-print(molecule.formula)  # H2O
+print(molecule.formula)  # OH2
 print(molecule.get_center_of_mass())
 
 # Transformations return new objects
@@ -158,7 +157,7 @@ mass_frac = comp.mass_fractions()   # {'Fe': 0.699, 'O': 0.301}
 mole_frac = comp.mole_fractions()   # {'Fe': 0.4, 'O': 0.6}
 ```
 
-### 🆕 Graph Analysis (NEW!)
+### Graph Analysis
 
 ```python
 from matsimpy.core.graph import MoleculeGraph, create_structure_graph
@@ -184,16 +183,16 @@ adj = get_adjacency_matrix(molecule, cutoff=3.0)
 coord = get_coordination_numbers(crystal, cutoff=5.0)
 ```
 
-### 🆕 LaTeX Export for Publications (NEW!)
+### LaTeX Export
 
 ```python
 from matsimpy.io import crystals_to_latex_table, molecules_to_latex_table
-from matsimpy import Molecule,Crystal,Lattice
+from matsimpy import Molecule, Crystal, Lattice
 
 # Export crystals to LaTeX table
-crystal1 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.63))
-crystal2 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.64))
-crystal3 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.65))
+crystal1 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.63))
+crystal2 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+crystal3 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.65))
 crystals = [crystal1, crystal2, crystal3]
 latex = crystals_to_latex_table(
     crystals,
@@ -288,8 +287,9 @@ pipeline.add_step(apply_strain, strain_matrix=[[0.01, 0, 0], [0, 0, 0], [0, 0, 0
 crystal = from_prototype('diamond', 'Si', 5.43)
 result = pipeline.apply(crystal)
 
-# Apply to multiple structures in parallel
-results = pipeline.apply_batch([crystal1, crystal2, crystal3], parallel=True, n_workers=4)
+# Apply to multiple structures
+structures = [from_prototype('diamond', 'Si', 5.43), from_prototype('fcc', 'Cu', 3.61)]
+results = pipeline.apply_batch(structures)
 
 # 2. Parameter sweep - generate structures with varying parameters
 sweep = ParameterSweep(
@@ -311,24 +311,27 @@ sweep = ParameterSweep(
 
 # Generate all structures
 for struct, params in sweep:
-    print(f"Strain: {params['strain']}")
-    run_calculation(struct)
+    print(f"Strain: {params['strain']}, Formula: {struct.formula}")
 
 # 3. Batch processing with error handling
+def make_2x2x2_supercell(s):
+    return make_supercell(s, [2, 2, 2])
+
+def apply_1pct_strain(s):
+    return apply_strain(s, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
+
 processor = BatchProcessor(
-    transformations=[
-        lambda s: make_supercell(s, [2, 2, 2]),
-        lambda s: apply_strain(s, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
-    ],
-    n_workers=4,
+    transformations=[make_2x2x2_supercell, apply_1pct_strain],
+    n_workers=1,
     progress=True,
     error_handling='skip'  # or 'raise', 'log'
 )
 
-results = processor.process([crystal1, crystal2, ..., crystal1000])
+structures = [from_prototype('fcc', 'Cu', 3.61) for _ in range(10)]
+results = processor.process(structures)
 for result in results:
     if result.success:
-        process_structure(result.structure)
+        print(f"Processed: {result.structure.formula}")
 ```
 
 ### File I/O
@@ -433,13 +436,12 @@ print(f"Conventional: {len(conventional)} atoms") # 8 atoms
 
 ```python
 from matsimpy.storage import DataStorage
-from matsimpy import Crystal, Lattice
-
-# Initialize storage (uses config default path)
-storage = DataStorage()
-
-# Store crystal structure (proper diamond structure with 2 atoms)
 from matsimpy.builders.bulk import from_prototype
+
+# Initialize storage with a JSON file
+storage = DataStorage(store_path='mydata.json')
+
+# Store crystal structure
 crystal = from_prototype('diamond', 'Si', 5.43)
 doc_id = storage.store_data(crystal, metadata={'description': 'Si primitive cell'})
 
@@ -448,8 +450,13 @@ results = {'energy': -10.5, 'forces': [[0,0,0]]}
 storage.store_data(results, metadata={'calculator': 'LJ'})
 
 # Retrieve and query
-retrieved = storage.retrieve_data(doc_id)
+retrieved = storage.retrieve_data(doc_id)    # Returns dict with full MSON data
 lj_results = storage.retrieve_data(query={'metadata.calculator': 'LJ'})
+
+# Reconstruct Crystal from stored data
+from matsimpy import Crystal
+reconstructed = Crystal.from_dict(retrieved)
+print(reconstructed.formula)                 # Si2
 ```
 
 ## Project Structure
@@ -560,68 +567,6 @@ Run an example:
 python examples/core_basic.py
 python examples/builders_bulk.py
 ```
-
-## Key Capabilities
-
-### Structure Builders
-
-- **Bulk Structures**: 9+ prototypes (FCC, BCC, diamond, rocksalt, perovskite, etc.)
-- **Surface Structures**: Slab generation with customizable Miller indices and vacuum spacing
-- **Alloys**: Random and ordered alloys, intermetallic compounds
-- **Molecules**: Linear, bent, tetrahedral geometries, SMILES parsing (with RDKit)
-- **Defects**: Vacancy, interstitial, substitution, Frenkel, Schottky, antisite defects
-- **Nanostructures**: Nanotubes (CNT, h-BN, MoS2, etc.), twisted bilayers, magic-angle structures
-
-### Transformations
-
-- **Geometric**: Translation, rotation (with center options)
-- **Lattice**: Strain application, scaling, volume setting, lattice transformations
-- **Atomic**: Atom movement, swapping, sorting, centering
-- **Chemical**: Single/multiple substitutions, bulk substitutions
-- **Structural**: Supercell generation, molecular operations
-- **High-Throughput**: 
-  - **TransformationPipeline**: Reusable transformation sequences with save/load
-  - **ParameterSweep**: Systematic parameter variation (cartesian product or zip mode)
-  - **BatchProcessor**: Parallel batch processing with progress tracking and error handling
-
-### Calculators
-
-- **Classical Potentials**: Lennard-Jones potential with periodic boundary conditions
-- **ML Potentials**: Machine learning calculators (Mattersim framework)
-- **DFT Calculators**: Base classes for VASP, Quantum Espresso (future)
-- **ASE-Style Interface**: Calculators attach to structures via `structure.calc`
-- **Config Integration**: Default parameters from global configuration
-
-### Configuration System
-
-- **Global Config**: `~/.matsimpy/config.yaml` for user settings
-- **Environment Overrides**: `MATSIMPY_*` environment variables
-- **Calculator Defaults**: Default parameters for all calculator types
-- **Path Management**: Centralized paths for models, cache, output
-
-### Data Storage
-
-- **Persistent Storage**: Store structures and calculation results
-- **MSONable Support**: Automatic serialization of Crystal, Molecule objects
-- **Query Support**: Query stored data by ID or criteria
-- **Metadata**: Attach metadata for organization and search
-- **Memory & File Stores**: In-memory for testing, JSON file for persistence
-
-### Symmetry Analysis
-
-- **Space Group Determination**: Get space group number, symbol, point group, crystal system
-- **Conventional Cell**: Convert primitive cells to standard conventional cells
-- **Symmetry Operations**: Access to rotation matrices and translation vectors
-- **Integration**: Direct methods on Crystal objects (`get_symmetry_info()`, `get_conventional_cell()`)
-
-### Performance Features
-
-- **Immutability**: Structures are immutable by default — no freeze/thaw, no cache invalidation bugs
-- **Compute-Once Caches**: Formula and composition computed on first access, reused forever
-- **KDTree**: Optimized neighbor finding for large structures
-- **Lazy Evaluation**: Sites and properties computed on-demand
-- **Vectorized Operations**: Efficient numpy-based coordinate transformations
-- **Parallel Processing**: Multiprocessing support for batch operations
 
 ## Module Reference
 

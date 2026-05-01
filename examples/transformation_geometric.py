@@ -34,7 +34,7 @@ print(f"  Translated position [0]: {translated.cart_positions[0]}")
 
 # For in-place translation, use structure method (Molecule only)
 if hasattr(crystal, 'translate'):
-    crystal.translate([0.5, 0.5, 0.5], inplace=True)
+    crystal = crystal.translate([0.5, 0.5, 0.5])
     print(f"\nIn-place translation by [0.5, 0.5, 0.5]")
     print(f"  New position [0]: {crystal.cart_positions[0]}")
 
@@ -62,7 +62,7 @@ print(f"\nRotated 45° around [1,1,0] axis:")
 print(f"  New position [0]: {rotated2.positions[0]}")
 
 # For in-place rotation, use structure method (Molecule only)
-molecule.rotate(angle=180.0, axis=[0, 1, 0], inplace=True)
+molecule = molecule.rotate(angle=180.0, axis=[0, 1, 0])
 print(f"\nIn-place rotation 180° around y-axis")
 print(f"  New position [0]: {molecule.positions[0]}")
 

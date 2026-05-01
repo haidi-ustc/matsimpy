@@ -67,7 +67,7 @@ print("\nStep 4: Apply Transformations")
 print("-" * 70)
 
 # Translate structure
-translated = translate(defected, [0.1, 0.1, 0.1], inplace=False)
+translated = translate(defected, [0.1, 0.1, 0.1])
 print(f"Translated by [0.1, 0.1, 0.1]")
 print(f"  Structure unchanged: {len(translated) == len(defected)}")
 

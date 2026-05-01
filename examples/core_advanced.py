@@ -113,12 +113,12 @@ crystal = Crystal(['Na'], [[0.5, 0.5, 0.5]], lattice)
 print(f"Initial: {crystal.formula}, {len(crystal)} atoms")
 
 # Add atoms
-crystal.add_atom('Cl', [0, 0, 0])
-crystal.add_atom('Na', [.5, 0, 0])
+crystal = crystal.add_atom('Cl', [0, 0, 0])
+crystal = crystal.add_atom('Na', [.5, 0, 0])
 print(f"After adding 2 atoms: {crystal.formula}, {len(crystal)} atoms")
 
 # Remove an atom
-crystal.remove_atom(0)
+crystal = crystal.remove_atom(0)
 print(f"After removing atom 0: {crystal.formula}, {len(crystal)} atoms")
 
 # ============================================================================
@@ -136,15 +136,15 @@ crystal = Crystal(species, positions, lattice)
 print(f"Initial: {crystal.formula}")
 
 # Substitute single atom
-crystal.substitute(0, 'Ge')
+crystal = crystal.substitute(0, 'Ge')
 print(f"After substituting atom 0: {crystal.formula}")
 
 # Substitute multiple atoms
-crystal.substitute([1, 2], ['Ge', 'Ge'])
+crystal = crystal.substitute([1, 2], ['Ge', 'Ge'])
 print(f"After substituting atoms 1,2: {crystal.formula}")
 
 # Substitute all atoms of a species
-crystal.substitute_all('Si', 'Ge')
+crystal = crystal.substitute_all('Si', 'Ge')
 print(f"After substituting all Si: {crystal.formula}")
 
 # ============================================================================
@@ -161,11 +161,11 @@ crystal = Crystal(species, positions, lattice)
 print(f"Before sorting: {list(crystal.species)}")
 
 # Sort by element (atomic number)
-crystal.sort_atoms('element')
+crystal = crystal.sort_atoms('element')
 print(f"After sorting by element: {list(crystal.species)}")
 
 # Sort alphabetically
-crystal.sort_atoms('alphabet')
+crystal = crystal.sort_atoms('alphabet')
 print(f"After sorting alphabetically: {list(crystal.species)}")
 
 # ============================================================================
@@ -203,12 +203,12 @@ print(f"Original H2O:")
 print(f"  Center of mass: {h2o.get_center_of_mass()}")
 
 # Translate molecule
-h2o.translate([1.0, 2.0, 3.0], inplace=True)
+h2o = h2o.translate([1.0, 2.0, 3.0])
 print(f"\nAfter translation by [1, 2, 3]:")
 print(f"  Center of mass: {h2o.get_center_of_mass()}")
 
 # Rotate molecule (90 degrees around z-axis)
-h2o.rotate(90, [0, 0, 1], inplace=True)
+h2o = h2o.rotate(90, [0, 0, 1])
 print(f"\nAfter rotation (90° around z-axis):")
 print(f"  O position: {h2o.positions[0]}")
 print(f"  H1 position: {h2o.positions[1]}")
@@ -379,21 +379,21 @@ crystal = Crystal(species, positions, lattice)
 print(f"Initial: {crystal.formula}")
 
 # Substitute single atom
-crystal.substitute(0, 'Ge')
+crystal = crystal.substitute(0, 'Ge')
 print(f"After substituting atom 0: {crystal.formula}")
 
 # Substitute multiple atoms
-crystal.substitute([1, 2], ['Ge', 'Ge'])
+crystal = crystal.substitute([1, 2], ['Ge', 'Ge'])
 print(f"After substituting atoms 1,2: {crystal.formula}")
 
 # Substitute all atoms of a species
-crystal.substitute_all('Si', 'Ge')
+crystal = crystal.substitute_all('Si', 'Ge')
 print(f"After substituting all Si: {crystal.formula}")
 
 # Substitute using AtomSelection
 crystal = Crystal(species, positions, lattice)  # Reset
 sel = AtomSelection(crystal).by_indices([0, 1, 2])
-crystal.substitute(sel, 'Ge')
+crystal = crystal.substitute(sel, 'Ge')
 print(f"After substituting selected atoms: {crystal.formula}")
 
 # ============================================================================
@@ -446,7 +446,7 @@ print(f"  Are they the same object? {original is copied}")
 print(f"  Do they have same formula? {original.formula == copied.formula}")
 
 # Modify the copy
-copied.add_atom('H', [0.5, 0.5, 0.5])
+copied = copied.add_atom('H', [0.5, 0.5, 0.5])
 print(f"\nAfter adding H to copy:")
 print(f"  Original: {len(original)} atoms")
 print(f"  Copied: {len(copied)} atoms")

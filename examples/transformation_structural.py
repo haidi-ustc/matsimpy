@@ -53,7 +53,7 @@ print(f"Original: {nacl.formula}")
 print(f"  Species: {list(nacl.species[:4])}")
 
 # Swap two atoms
-swapped = swap_atoms(nacl, 0, 1, inplace=False)
+swapped = swap_atoms(nacl, 0, 1)
 print(f"\nAfter swapping atoms 0 and 1:")
 print(f"  Formula: {swapped.formula}")
 print(f"  Species: {list(swapped.species[:4])}")
