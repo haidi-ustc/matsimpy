@@ -67,11 +67,10 @@ class TestStructureInitialization(unittest.TestCase):
             Molecule(species, positions)
     
     def test_init_empty_structure(self):
-        """Test initialization with empty structure."""
-        # Empty structure is not supported due to position validation
-        # This is expected behavior - structures need at least one atom
-        with self.assertRaises(ValueError):
-            Molecule([], [])
+        """Test initialization with empty structure (0 atoms allowed)."""
+        empty = Molecule([], [])
+        self.assertEqual(len(empty), 0)
+        self.assertEqual(empty.species, ())
 
 class TestStructureProperties(unittest.TestCase):
     """Test Structure properties and caching."""
