@@ -1,7 +1,7 @@
 """Tests for Composition cache behavior and error handling."""
 import unittest
 
-from matsimpy.core.composition import Composition
+from matsimpy.core.composition import Composition, _get_element_cached
 
 class TestCompositionErrorHandling(unittest.TestCase):
     """Test enhanced error handling in Composition."""
@@ -71,24 +71,15 @@ class TestCompositionCaching(unittest.TestCase):
         
         # Calculate mass (populates cache)
         _ = comp.mass
-        
-        # Element cache should have H and O
-        self.assertIn('H', comp._element_cache)
-        self.assertIn('O', comp._element_cache)
+        # Module-level cache should have been used at least once
+        info = _get_element_cached.cache_info()
+        self.assertGreaterEqual(info.hits + info.misses, 1)
     
     def test_element_cache_reused(self):
         """Test that cached elements are reused."""
-        comp = Composition('H2O')
-        
-        # Call mass
-        _ = comp.mass
-        elem_h1 = comp._element_cache['H']
-        
-        # Call mass_fractions (should reuse cache)
-        _ = comp.mass_fractions()
-        elem_h2 = comp._element_cache['H']
-        
-        # Should be same object
+        # Calling twice should hit lru_cache and return the same object.
+        elem_h1 = _get_element_cached("H")
+        elem_h2 = _get_element_cached("H")
         self.assertIs(elem_h1, elem_h2)
     
     def test_mass_uses_cache_after_first_calculation(self):
@@ -230,10 +221,6 @@ class TestCompositionIntegration(unittest.TestCase):
         mass = comp.mass
         fractions = comp.mass_fractions()
         mole_fractions = comp.mole_fractions()
-        
-        # Cache should have both elements
-        self.assertIn('Fe', comp._element_cache)
-        self.assertIn('O', comp._element_cache)
         
         # Mass should be cached
         self.assertEqual(comp._cached_mass, mass)
