@@ -35,7 +35,6 @@ Example:
 import numpy as np
 from typing import List, Union, Optional, Dict, Any
 from monty.json import MSONable
-from scipy.spatial.distance import pdist, squareform
 
 
 class Lattice(MSONable):
@@ -160,8 +159,10 @@ class Lattice(MSONable):
         # Make lattice_vectors read-only so that in-place mutation cannot
         # silently invalidate the cached _inv_matrix or other derived quantities.
         self.lattice_vectors.flags.writeable = False
-        # Cache inverse matrix
-        self._inv_matrix: Optional[np.ndarray] = None
+        # Cache inverse matrix eagerly to avoid thread-unsafe lazy init.
+        inv = np.linalg.inv(self.matrix)
+        inv.flags.writeable = False
+        self._inv_matrix: np.ndarray = inv
 
     def _validate_lattice_vectors(self) -> None:
         """
@@ -293,8 +294,6 @@ class Lattice(MSONable):
                    [0., 1., 0.],
                    [0., 0., 1.]])
         """
-        if self._inv_matrix is None:
-            self._inv_matrix = np.linalg.inv(self.matrix)
         return self._inv_matrix
 
     @property
