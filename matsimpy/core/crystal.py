@@ -656,11 +656,11 @@ class Crystal(Structure):
                         UserWarning,
                         stacklevel=2,
                     )
-                new_site_props = [{}] * len(self.species)
+                new_site_props = [{} for _ in range(len(self.species))]
             if site_properties_list:
                 new_site_props.extend(site_properties_list)
             else:
-                new_site_props.extend([{}] * len(species_list))
+                new_site_props.extend({} for _ in range(len(species_list)))
 
         return Crystal(
             new_species, new_frac.tolist(), self.lattice,

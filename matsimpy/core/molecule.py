@@ -43,6 +43,7 @@ from .structure import Structure
 from .composition import Composition
 from .periodic_table import Element
 from .site import Site
+from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
 if TYPE_CHECKING:
@@ -479,10 +480,10 @@ class Molecule(Structure):
                     f"must match number of atoms added ({n_atoms_added})"
                 )
             if not new_site_props:
-                new_site_props = [{}] * n_atoms_before
+                new_site_props = [{} for _ in range(n_atoms_before)]
             new_site_props.extend(site_properties_list)
         elif new_site_props:
-            new_site_props.extend([{}] * n_atoms_added)
+            new_site_props.extend({} for _ in range(n_atoms_added))
 
         return Molecule(
             new_species, new_positions_arr.tolist(),
@@ -863,32 +864,31 @@ class Molecule(Structure):
             >>> all_neighbors = molecule.get_neighbor_list(2.0)
             >>> print(all_neighbors)  # {0: [(1, 1.2)], 1: [(0, 1.2)]}
         """
+        n_atoms = len(self.positions)
         if atom_index is not None:
-            # Single atom query
-            if not (0 <= atom_index < len(self)):
+            if not (0 <= atom_index < n_atoms):
                 raise IndexError(
-                    f"Atom index {atom_index} is out of range [0, {len(self)-1}]"
+                    f"Atom index {atom_index} is out of range [0, {n_atoms-1}]"
                 )
 
-            distances = cdist([self.positions[atom_index]], self.positions)[0]
-            neighbors = [
-                (i, float(d))
-                for i, d in enumerate(distances)
-                if d < cutoff and i != atom_index
-            ]
-            return {atom_index: neighbors}
-        else:
-            # All atoms query
-            distances = cdist(self.positions, self.positions)
-            neighbors_dict = {}
-            for i in range(len(self)):
-                neighbors = [
-                    (j, float(distances[i, j]))
-                    for j in range(len(self))
-                    if distances[i, j] < cutoff and j != i
-                ]
-                neighbors_dict[i] = neighbors
-            return neighbors_dict
+        # Build KDTree once (O(n log n)) and query neighbors efficiently.
+        positions = self.positions
+        tree = cKDTree(positions)
+
+        neighbors_dict: Dict[int, List[Tuple[int, float]]] = {}
+        atoms_to_query = [atom_index] if atom_index is not None else range(n_atoms)
+        for i in atoms_to_query:
+            idxs = tree.query_ball_point(positions[i], cutoff)
+            # Exclude self and compute exact distances only for candidates.
+            neigh: List[Tuple[int, float]] = []
+            for j in idxs:
+                if j == i:
+                    continue
+                dist = float(np.linalg.norm(positions[i] - positions[j]))
+                neigh.append((j, dist))
+            neighbors_dict[i] = neigh
+
+        return neighbors_dict
 
     def get_all_neighbor_lists(self, cutoff: float) -> List[List[int]]:
         """

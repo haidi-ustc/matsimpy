@@ -36,28 +36,9 @@ def create_vacancy(
         >>> # Create multiple vacancies
         >>> with_vacancies = create_vacancy(fcc, [0, 1, 2])
     """
-    if isinstance(indices, int):
-        indices = [indices]
-
-    # Remove duplicates
-    remove_set = set(indices)
-
-    # Validate indices
-    for idx in remove_set:
-        if idx < 0 or idx >= len(structure.species):
-            raise IndexError(f"Invalid atom index: {idx}")
-
-    # Build new species and positions skipping removed indices
-    new_species = [s for i, s in enumerate(structure.species) if i not in remove_set]
-    new_positions = [p.tolist() for i, p in enumerate(structure.frac_positions) if i not in remove_set]
-
-    return Crystal(
-        new_species, new_positions,
-        lattice=structure.lattice,
-        coords_are_cartesian=False,
-        pbc=list(structure.pbc),
-        site_properties=(list(structure.site_properties) if structure.site_properties else None),
-    )
+    # Delegate to Crystal/Structure remove_atom implementation so all per-atom
+    # data (e.g. site_properties) is filtered consistently.
+    return structure.remove_atom(indices)
 
 
 def create_interstitial(
