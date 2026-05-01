@@ -8,6 +8,18 @@ Version 0.1.0 (Alpha)
 
 Initial release of MatSimPy.
 
+Version 0.3.0 (Beta)
+--------------------
+
+Core modules stabilized.
+
+Highlights
+~~~~~~~~~~
+
+* Stable core data model semantics (Cartesian ``Structure.positions``; Crystal supports both frac/cart access)
+* Immutability and thread-safety improvements in caches and internal arrays
+* Faster mutation paths via lightweight constructors and reduced recomputation
+
 Features
 ~~~~~~~~
 

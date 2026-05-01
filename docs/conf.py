@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 project = 'MatSimPy'
 copyright = '2025, haidi wang'
 author = 'haidi wang'
-release = '0.1.0'
+release = '0.3.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

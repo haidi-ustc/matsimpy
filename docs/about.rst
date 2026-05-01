@@ -6,9 +6,9 @@ MatSimPy (Materials Simulation in Python) is a comprehensive Python package for 
 Project Information
 --------------------
 
-**Version**: 0.1.0
+**Version**: 0.3.0
 
-**Status**: Alpha
+**Status**: Beta (core modules stable)
 
 **License**: MIT License
 
