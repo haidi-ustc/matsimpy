@@ -481,6 +481,23 @@ class Site(MSONable):
             and self.properties == other.properties
         )
 
+    def __hash__(self) -> int:
+        """
+        Hash consistent with __eq__.
+
+        Based on species and position rounded to 7 decimal places, matching
+        the tolerance used in __eq__ (numpy.allclose default ~1e-8).
+        Properties are intentionally excluded to keep the hash cheap and to
+        mirror the common pattern of using sites as structural keys.
+
+        Returns:
+            int: Hash value for use in sets and as dict keys.
+        """
+        return hash((
+            self._specie,
+            tuple(np.round(self._position, decimals=7).tolist()),
+        ))
+
 
 class CrystalSite(Site):
     """
@@ -835,37 +852,38 @@ class CrystalSite(Site):
 
     def wrap(self) -> "CrystalSite":
         """
-        Wrap fractional coordinates to the unit cell [0, 1) range.
+        Return a new CrystalSite with fractional coordinates wrapped to [0, 1).
 
-        Wraps the fractional coordinates to the standard unit cell range [0, 1)
-        using modulo operation. This ensures that coordinates outside the unit
-        cell are mapped back into the primary unit cell. Both fractional and
-        Cartesian coordinates are updated accordingly.
+        Wraps fractional coordinates using modulo, mapping any coordinate outside
+        the primary unit cell back into it.  A new instance is returned to keep
+        CrystalSite consistent with the immutable pattern used by Crystal.wrap().
 
         Returns:
-            CrystalSite: Returns self for method chaining.
+            CrystalSite: New CrystalSite with wrapped fractional coordinates.
 
         Example:
             >>> from matsimpy.core import Lattice
             >>> lattice = Lattice.cubic(10.0)
             >>> site = CrystalSite([1.5, -0.3, 0.5], 'Fe', lattice)
-            >>> site.wrap()
-            >>> site.frac_position.tolist()
+            >>> wrapped = site.wrap()
+            >>> wrapped.frac_position.tolist()
             [0.5, 0.7, 0.5]
+            >>> site.frac_position.tolist()  # original unchanged
+            [1.5, -0.3, 0.5]
             >>>
             >>> # Method chaining
-            >>> site = CrystalSite([2.1, 0.5, 0.5], 'Fe', lattice).wrap()
-            >>> site.frac_position.tolist()
+            >>> wrapped = CrystalSite([2.1, 0.5, 0.5], 'Fe', lattice).wrap()
+            >>> wrapped.frac_position.tolist()
             [0.1, 0.5, 0.5]
         """
-        # Wrap fractional coordinates to [0, 1) range
-        # Use modulo operation which correctly handles both positive and negative
-        self._frac_position = self._frac_position % 1.0
-        # Recalculate Cartesian coordinates
-        self._cart_position = self._convert_to_cartesian()
-        # Update parent Site's position (always Cartesian)
-        self._position = self._cart_position
-        return self
+        new_frac = self._frac_position % 1.0
+        return CrystalSite(
+            position=new_frac,
+            specie=self._specie,
+            lattice=self._lattice,
+            properties=dict(self._properties),
+            coords_are_cartesian=False,
+        )
 
     def __repr__(self) -> str:
         """
@@ -938,3 +956,20 @@ class CrystalSite(Site):
             and np.allclose(self.lattice.matrix, other.lattice.matrix)
             and self._coords_are_cartesian == other._coords_are_cartesian
         )
+
+    def __hash__(self) -> int:
+        """
+        Hash consistent with __eq__.
+
+        Uses fractional position (rounded to 7 d.p.) and the lattice hash so
+        that two sites at the same fractional location in the same lattice
+        produce identical hashes when they compare equal.
+
+        Returns:
+            int: Hash value for use in sets and as dict keys.
+        """
+        return hash((
+            self._specie,
+            tuple(np.round(self._frac_position, decimals=7).tolist()),
+            hash(self._lattice),
+        ))

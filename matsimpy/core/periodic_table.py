@@ -149,6 +149,10 @@ ELEMENTS = [
 # Use set for O(1) lookup instead of O(n) list lookup
 _ELEMENTS_SET = set(ELEMENTS)
 
+# Special dummy/placeholder element symbols that are not in the periodic table.
+# "X" is the conventional unknown/placeholder atom used in site definitions.
+DUMMY_ELEMENTS: set = {"X"}
+
 # Cache for Element instances to avoid repeated creation
 _element_cache: Dict[str, "Element"] = {}
 
@@ -240,6 +244,18 @@ class Element:
         """
         # Normalize and validate symbol
         symbol = symbol.capitalize()
+
+        # Handle dummy/placeholder elements (e.g. "X" for unknown atom) before
+        # checking the real periodic table, so they don't raise ValueError.
+        if symbol in DUMMY_ELEMENTS:
+            self.symbol = symbol
+            self._data = {}
+            self._atomic_no = 0
+            self._atomic_mass = 0.0
+            self._name = "Dummy"
+            self._X = None
+            return
+
         if symbol not in _ELEMENTS_SET:
             raise ValueError(f"{symbol} not found in periodic table")
 
@@ -1649,6 +1665,14 @@ class Element:
         # Fast path: check if name exists in data
         if name in data:
             return data[name]
+
+        # Dummy elements (e.g. "X") have an empty _data dict; don't cache
+        # their empty key list as it would corrupt the global attribute cache.
+        if not data:
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object '{self.symbol}' is a dummy "
+                f"element and has no data attributes."
+            )
 
         # Provide helpful error message with available attributes
         # Cache the sorted list to avoid sorting on every error

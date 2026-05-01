@@ -177,22 +177,21 @@ class TestHashUseCases(unittest.TestCase):
 class TestHashPrecision(unittest.TestCase):
     """Test the precision level of hash rounding."""
     
-    def test_precision_at_8_decimals(self):
-        """Test that 8 decimal places are preserved."""
-        # These differ at 8th decimal
+    def test_precision_at_7_decimals(self):
+        """Test that 7 decimal places are preserved in hash."""
+        # These differ at the 7th decimal; hash should distinguish them.
+        mol1 = Molecule(['C'], [[1.1234567, 0, 0]])
+        mol2 = Molecule(['C'], [[1.1234568, 0, 0]])
+
+        self.assertNotEqual(hash(mol1), hash(mol2))
+
+    def test_precision_beyond_7_decimals_ignored(self):
+        """Test that differences beyond 7 decimals are ignored in hash."""
+        # These differ only at the 8th decimal; hash rounds to 7 d.p.
         mol1 = Molecule(['C'], [[1.12345678, 0, 0]])
         mol2 = Molecule(['C'], [[1.12345679, 0, 0]])
-        
-        # Should have different hashes
-        self.assertNotEqual(hash(mol1), hash(mol2))
-    
-    def test_precision_beyond_8_decimals_ignored(self):
-        """Test that differences beyond 8 decimals are ignored."""
-        # These differ at 9th decimal
-        mol1 = Molecule(['C'], [[1.123456789, 0, 0]])
-        mol2 = Molecule(['C'], [[1.123456788, 0, 0]])
-        
-        # Should have same hash (rounded to 8 decimals)
+
+        # Should produce the same hash (both round to 1.1234568 at 7 d.p.)
         self.assertEqual(hash(mol1), hash(mol2))
     
     def test_negative_positions(self):

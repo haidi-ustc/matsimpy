@@ -30,9 +30,6 @@ def scale_lattice(
         >>> # Anisotropic scaling
         >>> scaled = scale_lattice(crystal, [1.1, 1.0, 0.95])
     """
-    # Always create a new crystal
-    crystal = crystal.copy()
-
     if isinstance(scale_factor, (int, float)):
         scale_matrix = np.eye(3) * scale_factor
     else:
@@ -40,14 +37,20 @@ def scale_lattice(
         scale_matrix = np.diag(scale_factor)
 
     new_lattice_vectors = np.dot(scale_matrix, crystal.lattice.lattice_vectors)
-    crystal.lattice = Lattice(new_lattice_vectors)
+    new_lattice = Lattice(new_lattice_vectors)
 
-    # Update Cartesian positions (fractional stay same)
-    crystal.cart_positions = crystal._convert_to_cartesian()
-    crystal._neighbor_tree = None
-    crystal._neighbor_tree_positions = None
-
-    return crystal
+    # Fractional positions are invariant under uniform lattice scaling;
+    # the new Crystal constructor recomputes Cartesian positions automatically.
+    return Crystal(
+        list(crystal.species),
+        crystal.frac_positions.tolist(),
+        new_lattice,
+        pbc=list(crystal.pbc),
+        coords_are_cartesian=False,
+        site_properties=(
+            list(crystal.site_properties) if crystal.site_properties else None
+        ),
+    )
 
 
 def set_volume(

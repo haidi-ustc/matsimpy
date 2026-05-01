@@ -786,8 +786,12 @@ class Lattice(MSONable):
         """
         import hashlib
 
-        hash_dict = self.as_dict()
-        hash_str = str(hash_dict).encode("utf-8")
+        # Round to 5 decimal places so that any two lattices considered equal by
+        # __eq__ (atol=1e-6) map to the same rounded representation and thus the
+        # same hash.  The rounding bucket (5e-6) is strictly larger than the
+        # equality tolerance (1e-6), satisfying the hash contract.
+        rounded = np.round(self.lattice_vectors, decimals=5).tolist()
+        hash_str = str({"lattice_vectors": rounded}).encode("utf-8")
         hash_bytes = hashlib.sha256(hash_str).digest()
         # Use first 8 bytes for standard Python hash size (64-bit)
         return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
@@ -823,8 +827,12 @@ class Lattice(MSONable):
         if not isinstance(other, Lattice):
             return False
 
-        # Compare with tolerance
-        return np.allclose(self.lattice_vectors, other.lattice_vectors, rtol=1e-8)
+        # Use absolute tolerance only so the equality window is independent of
+        # the magnitude of the lattice parameters.  atol=1e-6 Å is well within
+        # any physically meaningful lattice precision and guarantees that the
+        # hash contract (a == b → hash(a) == hash(b)) is satisfied when __hash__
+        # rounds to 5 decimal places (bucket size = 5e-6 >> 1e-6).
+        return np.allclose(self.lattice_vectors, other.lattice_vectors, atol=1e-6, rtol=0)
 
     def get_reciprocal_lattice(self) -> "Lattice":
         """

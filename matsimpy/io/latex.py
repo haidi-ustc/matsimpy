@@ -241,7 +241,7 @@ def _format_crystal_column(
 
     elif column == "Density":
         try:
-            density = crystal.density()
+            density = crystal.density
             return f"{density:.3f}"
         except:
             return "N/A"

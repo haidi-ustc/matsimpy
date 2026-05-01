@@ -237,92 +237,102 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         """Test wrapping positive fractional coordinates > 1."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([1.5, 2.3, 0.5], 'Fe', lattice)
-        
-        site.wrap()
+
+        wrapped = site.wrap()
         np.testing.assert_array_almost_equal(
-            site.frac_position, [0.5, 0.3, 0.5], decimal=6
+            wrapped.frac_position, [0.5, 0.3, 0.5], decimal=6
         )
-        # Verify Cartesian coordinates are updated
+        # Verify Cartesian coordinates of the wrapped site
         expected_cart = np.dot([0.5, 0.3, 0.5], lattice.matrix)
         np.testing.assert_array_almost_equal(
-            site.cart_position, expected_cart, decimal=6
+            wrapped.cart_position, expected_cart, decimal=6
         )
-    
+
     def test_crystalsite_wrap_negative(self):
         """Test wrapping negative fractional coordinates."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([-0.3, -1.2, 0.5], 'Fe', lattice)
-        
-        site.wrap()
+
+        wrapped = site.wrap()
         np.testing.assert_array_almost_equal(
-            site.frac_position, [0.7, 0.8, 0.5], decimal=6
+            wrapped.frac_position, [0.7, 0.8, 0.5], decimal=6
         )
-        # Verify Cartesian coordinates are updated
+        # Verify Cartesian coordinates of the wrapped site
         expected_cart = np.dot([0.7, 0.8, 0.5], lattice.matrix)
         np.testing.assert_array_almost_equal(
-            site.cart_position, expected_cart, decimal=6
+            wrapped.cart_position, expected_cart, decimal=6
         )
-    
+
     def test_crystalsite_wrap_mixed(self):
         """Test wrapping mixed positive and negative coordinates."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([1.5, -0.3, 2.7], 'Fe', lattice)
-        
-        site.wrap()
+
+        wrapped = site.wrap()
         np.testing.assert_array_almost_equal(
-            site.frac_position, [0.5, 0.7, 0.7], decimal=6
+            wrapped.frac_position, [0.5, 0.7, 0.7], decimal=6
         )
-    
+
     def test_crystalsite_wrap_already_in_range(self):
-        """Test wrapping coordinates already in [0, 1) range."""
+        """Test wrapping coordinates already in [0, 1) range — original unchanged."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([0.3, 0.5, 0.7], 'Fe', lattice)
         original_frac = site.frac_position.copy()
         original_cart = site.cart_position.copy()
-        
-        site.wrap()
-        # Should remain unchanged
+
+        wrapped = site.wrap()
+        # Wrapped result matches original (already in range)
+        np.testing.assert_array_almost_equal(
+            wrapped.frac_position, original_frac, decimal=6
+        )
+        np.testing.assert_array_almost_equal(
+            wrapped.cart_position, original_cart, decimal=6
+        )
+        # Original is not mutated
         np.testing.assert_array_almost_equal(
             site.frac_position, original_frac, decimal=6
         )
-        np.testing.assert_array_almost_equal(
-            site.cart_position, original_cart, decimal=6
-        )
     
-    def test_crystalsite_wrap_method_chaining(self):
-        """Test wrap method chaining."""
+    def test_crystalsite_wrap_returns_new_instance(self):
+        """wrap() returns a new CrystalSite; original is left unchanged."""
         lattice = Lattice.cubic(10.0)
         site = CrystalSite([1.5, -0.3, 0.5], 'Fe', lattice)
-        
+
         result = site.wrap()
-        # Should return self for chaining
-        self.assertIs(result, site)
+
+        # Must be a different object (immutable pattern)
+        self.assertIsNot(result, site)
+        # Wrapped result has correct fractional coordinates
         np.testing.assert_array_almost_equal(
-            site.frac_position, [0.5, 0.7, 0.5], decimal=6
+            result.frac_position, [0.5, 0.7, 0.5], decimal=6
         )
-    
+        # Original is unchanged
+        np.testing.assert_array_almost_equal(
+            site.frac_position, [1.5, -0.3, 0.5], decimal=6
+        )
+
     def test_crystalsite_wrap_boundary_values(self):
         """Test wrapping boundary values (0.0, 1.0, etc.)."""
         lattice = Lattice.cubic(10.0)
         # Test exactly 1.0 (should wrap to 0.0)
         site1 = CrystalSite([1.0, 1.0, 1.0], 'Fe', lattice)
-        site1.wrap()
+        wrapped1 = site1.wrap()
         np.testing.assert_array_almost_equal(
-            site1.frac_position, [0.0, 0.0, 0.0], decimal=6
+            wrapped1.frac_position, [0.0, 0.0, 0.0], decimal=6
         )
-        
+
         # Test exactly 0.0 (should remain 0.0)
         site2 = CrystalSite([0.0, 0.0, 0.0], 'Fe', lattice)
-        site2.wrap()
+        wrapped2 = site2.wrap()
         np.testing.assert_array_almost_equal(
-            site2.frac_position, [0.0, 0.0, 0.0], decimal=6
+            wrapped2.frac_position, [0.0, 0.0, 0.0], decimal=6
         )
-        
+
         # Test values just below 1.0 (should remain unchanged)
         site3 = CrystalSite([0.999, 0.999, 0.999], 'Fe', lattice)
-        site3.wrap()
+        wrapped3 = site3.wrap()
         np.testing.assert_array_almost_equal(
-            site3.frac_position, [0.999, 0.999, 0.999], decimal=6
+            wrapped3.frac_position, [0.999, 0.999, 0.999], decimal=6
         )
 
 if __name__ == '__main__':

@@ -33,6 +33,7 @@ Example:
     >>> molecule2 = Molecule.from_file('molecule.xyz')
 """
 
+import copy
 import numpy as np
 import warnings
 from typing import List, Optional, Dict, Any, Union, Tuple, TYPE_CHECKING
@@ -424,7 +425,11 @@ class Molecule(Structure):
         new_site_props = list(self.site_properties) if self.site_properties else []
         if site_properties is not None:
             if isinstance(site_properties, dict):
-                site_properties_list = [site_properties] * n_atoms_added
+                # Deep-copy so each atom gets an independent dict; a shallow
+                # list-multiply would share one dict object across all entries.
+                site_properties_list = [
+                    copy.deepcopy(site_properties) for _ in range(n_atoms_added)
+                ]
             else:
                 site_properties_list = list(site_properties)
             if len(site_properties_list) != n_atoms_added:

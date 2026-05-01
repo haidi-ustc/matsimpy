@@ -86,7 +86,7 @@ class TestCrystalComprehensive(unittest.TestCase):
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
         
-        density = crystal.density()
+        density = crystal.density
         self.assertGreater(density, 0)
     
     def test_crystal_pbc(self):

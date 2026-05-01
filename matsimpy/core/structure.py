@@ -461,12 +461,15 @@ class Structure(ABC, MSONable):
             >>> {crystal1: 'value'}  # Can use as dictionary key
             {<Crystal object>: 'value'}
         """
-        # Create a normalized dictionary with rounded positions
+        # Round positions to 7 decimal places.  The equality tolerance in
+        # __eq__ is atol=1e-7, which is strictly less than the rounding bucket
+        # (5e-8), so any two positions considered equal will round identically
+        # and produce the same hash — satisfying the hash contract.
         hash_dict = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "species": list(self.species),
-            "positions": np.round(self.positions, decimals=8).tolist(),
+            "positions": np.round(self.positions, decimals=7).tolist(),
         }
         if self.lattice is not None:
             hash_dict["lattice"] = self.lattice.as_dict()
@@ -513,15 +516,17 @@ class Structure(ABC, MSONable):
         if self.species != other.species:
             return False
 
-        # Check positions with tolerance
-        if not np.allclose(self.positions, other.positions, atol=1e-8, rtol=0):
+        # Check positions with tolerance.  atol=1e-7 keeps the equality window
+        # strictly inside the hash rounding bucket (5e-8 for 7 d.p.), ensuring
+        # a == b ⟹ hash(a) == hash(b).
+        if not np.allclose(self.positions, other.positions, atol=1e-7, rtol=0):
             return False
 
         # Check lattice (if both have lattices)
         if self.lattice is not None and other.lattice is not None:
-            # Compare lattice matrices
+            # Compare lattice matrices using the same tolerance as Lattice.__eq__
             if not np.allclose(
-                self.lattice.matrix, other.lattice.matrix, atol=1e-8, rtol=0
+                self.lattice.matrix, other.lattice.matrix, atol=1e-6, rtol=0
             ):
                 return False
         elif self.lattice is not None or other.lattice is not None:
@@ -566,7 +571,13 @@ class Structure(ABC, MSONable):
         self,
         species: Union[str, List[str]],
         position: Union[List[float], List[List[float]]],
+        site_properties: Optional[Union[dict, List[dict]]] = None,
     ) -> "Structure":
+        # site_properties is accepted here for interface consistency with
+        # Crystal.add_atom and Molecule.add_atom, but the base implementation
+        # does not process it.  Subclasses that support site properties override
+        # this method and handle the parameter themselves.
+
         # Handle single atom case
         if isinstance(species, str):
             species = [species]

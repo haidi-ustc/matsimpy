@@ -26,7 +26,10 @@ import json
 from collections import Counter
 from typing import Optional, Dict, List, Tuple, Any
 from monty.json import MSONable
-from .periodic_table import Element
+from .periodic_table import Element, ELEMENTS, DUMMY_ELEMENTS
+
+# Valid element symbols: all real elements plus recognised dummy symbols ("X").
+_VALID_ELEMENTS: frozenset = frozenset(ELEMENTS) | frozenset(DUMMY_ELEMENTS)
 
 
 class Composition(MSONable):
@@ -218,6 +221,14 @@ class Composition(MSONable):
         if not composition:
             raise ValueError("No valid elements found in formula")
 
+        # Validate all parsed symbols are real elements or known dummies (e.g. "X")
+        for symbol in composition:
+            if symbol not in _VALID_ELEMENTS:
+                raise ValueError(
+                    f"Unknown element symbol '{symbol}' in formula '{formula}'. "
+                    f"Formula must contain only valid element symbols."
+                )
+
         return composition, element_order
 
     def _get_cached_element(self, symbol: str) -> Element:
@@ -308,6 +319,26 @@ class Composition(MSONable):
         if isinstance(other, Composition):
             return self.composition == other.composition
         return False
+
+    def __hash__(self) -> int:
+        """
+        Hash based on element counts, consistent with __eq__.
+
+        Two Composition objects that compare equal (same element counts) will
+        always have the same hash, satisfying the Python hash contract.
+
+        Returns:
+            int: Hash value for use in sets and as dict keys.
+
+        Example:
+            >>> c1 = Composition('H2O')
+            >>> c2 = Composition('OH2')
+            >>> c1 == c2
+            True
+            >>> hash(c1) == hash(c2)
+            True
+        """
+        return hash(frozenset(self.composition.items()))
 
     def __add__(self, other: "Composition") -> "Composition":
         """
@@ -557,13 +588,12 @@ class Composition(MSONable):
 
         return fractions
 
-    def to_html(self, sort_by: Optional[str] = None) -> str:
+    def to_html(self, sort_by: str = "alphabet") -> str:
         """
         Convert formula to HTML with subscript formatting.
 
         Args:
-            sort_by: Sorting method - 'alphabet' or 'element'.
-                    If None, uses 'alphabet'.
+            sort_by: Sorting method - 'alphabet' (default) or 'element'.
 
         Returns:
             HTML string with subscripts.
@@ -578,9 +608,6 @@ class Composition(MSONable):
             >>> c.to_html(sort_by='element')
             'Fe<sub>2</sub>O<sub>3</sub>'
         """
-        if sort_by is None:
-            sort_by = "alphabet"
-
         sorted_elements = self._get_sorted_element_counts(self.composition, sort_by)
 
         html_parts = []
@@ -591,13 +618,12 @@ class Composition(MSONable):
 
         return "".join(html_parts)
 
-    def to_latex(self, sort_by: Optional[str] = None) -> str:
+    def to_latex(self, sort_by: str = "alphabet") -> str:
         """
         Convert formula to LaTeX with subscript formatting.
 
         Args:
-            sort_by: Sorting method - 'alphabet' or 'element'.
-                    If None, uses 'alphabet'.
+            sort_by: Sorting method - 'alphabet' (default) or 'element'.
 
         Returns:
             LaTeX string with subscripts.
@@ -612,9 +638,6 @@ class Composition(MSONable):
             >>> c.to_latex(sort_by='element')
             'Fe$_2$O$_3$'
         """
-        if sort_by is None:
-            sort_by = "alphabet"
-
         sorted_elements = self._get_sorted_element_counts(self.composition, sort_by)
 
         latex_parts = []

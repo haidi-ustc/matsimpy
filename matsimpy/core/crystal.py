@@ -38,6 +38,7 @@ Example:
     >>> neighbors = crystal.get_neighbor_list(5.0, use_pbc=True)
 """
 
+import copy
 import numpy as np
 import warnings
 from tabulate import tabulate
@@ -49,6 +50,7 @@ from .structure import Structure
 from .lattice import Lattice
 from .periodic_table import Element
 from .site import CrystalSite
+from .composition import Composition
 
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
@@ -127,7 +129,7 @@ class Crystal(Structure):
         >>> # Create a crystal with fractional coordinates (default)
         >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
         >>> crystal.formula
-        'ClNa'
+        'NaCl'
         >>> crystal.volume
         179.406...
         >>>
@@ -190,14 +192,13 @@ class Crystal(Structure):
             frac_array = np.dot(cart_array, lattice.inv_matrix)
             # Pass fractional to super so self._positions is always fractional
             super().__init__(species, frac_array.tolist(), lattice)
-            self.cart_positions = cart_array
-            self.frac_positions = np.array(self.positions)
+            self._cart_positions = cart_array
+            self._frac_positions = np.array(self.positions)
         else:
             super().__init__(species, positions, lattice)
-            self.frac_positions = np.array(self.positions)
-            self.cart_positions = self._convert_to_cartesian()
+            self._frac_positions = np.array(self.positions)
+            self._cart_positions = self._convert_to_cartesian()
 
-        self.lattice = lattice
         self.site_properties = site_properties or []
         self._sites = self._initialize_sites()
         self.pbc = pbc if pbc is not None else [True, True, True]
@@ -220,6 +221,32 @@ class Crystal(Structure):
             "pbc": list(self.pbc),
             "site_properties": list(self.site_properties) if self.site_properties else [],
         }
+
+    @property
+    def frac_positions(self) -> np.ndarray:
+        """
+        Fractional coordinates as a read-only numpy array of shape (n_atoms, 3).
+
+        The returned array is a read-only view; mutating it raises ValueError.
+        Use the immutable modification methods (add_atom, remove_atom, etc.) to
+        produce a new Crystal with updated positions.
+        """
+        view = self._frac_positions.view()
+        view.flags.writeable = False
+        return view
+
+    @property
+    def cart_positions(self) -> np.ndarray:
+        """
+        Cartesian coordinates in Ångströms as a read-only numpy array of shape (n_atoms, 3).
+
+        The returned array is a read-only view; mutating it raises ValueError.
+        Use the immutable modification methods (add_atom, remove_atom, etc.) to
+        produce a new Crystal with updated positions.
+        """
+        view = self._cart_positions.view()
+        view.flags.writeable = False
+        return view
 
     def set_pbc(self, pbc: Union[List[bool], Tuple[bool, bool, bool]]) -> "Crystal":
         """
@@ -308,6 +335,9 @@ class Crystal(Structure):
         """
         Get sorted element counts for formula generation.
 
+        Delegates to :meth:`Composition._get_sorted_element_counts` to avoid
+        logic duplication.  Kept here for backward compatibility.
+
         Args:
             element_counts: Dictionary mapping element symbols to counts.
             sort_by: Sorting method - 'element' or 'alphabet'.
@@ -318,17 +348,7 @@ class Crystal(Structure):
         Raises:
             ValueError: If sort_by is invalid.
         """
-        if sort_by == "alphabet":
-            return sorted(element_counts.items(), key=lambda x: x[0])
-        elif sort_by == "element":
-            return sorted(
-                element_counts.items(),
-                key=lambda x: Element.get_element(x[0]).atomic_no,
-            )
-        else:
-            raise ValueError(
-                f"sort_by must be 'element' or 'alphabet', got '{sort_by}'"
-            )
+        return Composition._get_sorted_element_counts(element_counts, sort_by)
 
     # ========================================================================
     # Atom Modification Methods
@@ -415,7 +435,11 @@ class Crystal(Structure):
         # Normalize site_properties
         if site_properties is not None:
             if isinstance(site_properties, dict):
-                site_properties_list = [site_properties] * len(species_list)
+                # Deep-copy so each atom gets an independent dict; a shallow
+                # list-multiply would share one dict object across all entries.
+                site_properties_list = [
+                    copy.deepcopy(site_properties) for _ in species_list
+                ]
             else:
                 site_properties_list = site_properties
             if len(site_properties_list) != len(species_list):
@@ -851,7 +875,7 @@ class Crystal(Structure):
             ... }
             >>> crystal = Crystal.from_dict(d)
             >>> crystal.formula
-            'ClNa'
+            'NaCl'
         """
         species = d["species"]
         positions = d["positions"]
@@ -990,7 +1014,7 @@ class Crystal(Structure):
         Example:
             >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
             >>> print(crystal)
-            Crystal: ClNa
+            Crystal: NaCl
               Sites: 2 atoms
               PBC: [T T T]
               Lattice: a=5.6400 A, b=5.6400 A, c=5.6400 A
@@ -1018,7 +1042,7 @@ class Crystal(Structure):
             if pbc_count == 3:
                 # 3D material
                 info += f"  Volume: {self.volume:.4f} A^3\n"
-                density = self.density()
+                density = self.density
                 # Use appropriate formatting based on magnitude
                 if density < 0.01 or density > 1000:
                     info += f"  Density: {density:.6e} g/cm^3\n"
@@ -1027,19 +1051,19 @@ class Crystal(Structure):
             elif pbc_count == 2:
                 # 2D material
                 info += f"  Area: {self.area:.4f} A^2\n"
-                density = self.density()
+                density = self.density
                 # 2D densities are typically very small, use scientific notation
                 info += f"  Density: {density:.6e} g/cm^2\n"
             elif pbc_count == 1:
                 # 1D material
                 info += f"  Length: {self.length:.4f} A\n"
-                density = self.density()
+                density = self.density
                 # 1D densities are typically very small, use scientific notation
                 info += f"  Density: {density:.6e} g/cm\n"
             else:
                 # 0D material (no PBC) - still show volume
                 info += f"  Volume: {self.volume:.4f} A^3\n"
-                density = self.density()
+                density = self.density
                 if density < 0.01 or density > 1000:
                     info += f"  Density: {density:.6e} g/cm^3\n"
                 else:
@@ -1401,12 +1425,18 @@ class Crystal(Structure):
 
         return neighbors_dict
 
+    @property
     def density(self) -> float:
         """
-        Calculate the density of the crystal based on PBC dimensionality.
+        Density of the crystal, adapted to the PBC dimensionality.
 
-        The density calculation automatically adapts to the dimensionality
-        of the periodic system (3D, 2D, or 1D) based on the PBC settings.
+        Consistent with ``volume``, ``area``, and ``length``, this is exposed
+        as a read-only property rather than a method.
+
+        .. note::
+            This was changed from a method (``crystal.density()``) to a property
+            (``crystal.density``) for API consistency.  Call sites using
+            ``crystal.density()`` should be updated to ``crystal.density``.
 
         Returns:
             float: Density in appropriate units:
@@ -1420,12 +1450,12 @@ class Crystal(Structure):
 
         Example:
             >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
-            >>> crystal.density()  # 3D density in g/cm^3
+            >>> crystal.density  # 3D density in g/cm^3
             2.165...
             >>>
             >>> # 2D material
             >>> crystal = crystal.set_pbc([True, True, False])
-            >>> crystal.density()  # 2D density in g/cm^2
+            >>> crystal.density  # 2D density in g/cm^2
             0.123...
         """
         # Mass is in atomic mass units (amu)
@@ -1666,9 +1696,7 @@ class Crystal(Structure):
         from ..code import get_code_interface
 
         try:
-            interface = get_code_interface(code)
-            read_output = interface["read_output"]
-            # TODO: Implement output parsing
+            get_code_interface(code)
             raise NotImplementedError(
                 f"Reading {code} output files not yet implemented"
             )
