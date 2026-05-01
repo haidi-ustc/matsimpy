@@ -44,11 +44,6 @@ if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
 
 
-class FrozenStructureError(RuntimeError):
-    """Raised when a frozen structure is mutated."""
-    pass
-
-
 class Structure(ABC, MSONable):
     """
     Abstract base class for representing crystal and molecule structures.
@@ -185,69 +180,14 @@ class Structure(ABC, MSONable):
 
         self.lattice = lattice
 
-        # Frozen state flag (Wave 1: initialization should not freeze)
-        self._frozen = False
-
-        # Add cache attributes
-        self._cached_composition: Optional[Composition] = None
-        self._cached_formula: Optional[str] = None
-        self._formula_dirty = True
-
-    # Wave 1: freezing functionality
-    def freeze(self) -> None:
-        """Make structure immutable. Raises FrozenStructureError on subsequent mutation attempts."""
-        self._frozen = True
-
-    def unfreeze(self) -> None:
-        """Allow mutations again."""
-        self._frozen = False
-
-    @property
-    def is_frozen(self) -> bool:
-        """Check if the structure is currently frozen."""
-        return getattr(self, '_frozen', False)
-
-    def _check_frozen(self) -> None:
-        """Raise FrozenStructureError if the structure is frozen."""
-        if getattr(self, '_frozen', False):
-            raise FrozenStructureError("Structure is frozen. Call unfreeze() to allow modifications.")
+        # Compute-once caches (never invalidated — structure is immutable)
+        self._composition: Optional[Composition] = None
+        self._formula: Optional[str] = None
 
     @property
     def species(self) -> Tuple[str, ...]:
         """Get the species as a tuple of strings."""
         return self._species
-
-    @species.setter
-    def species(self, value: Union[List[str], Tuple[str, ...]]):
-        """Set the species with validation and cache invalidation.
-
-        Accepts a list or tuple of strings. Validates type and length against
-        current positions when available. Invalidates cached formula and
-        composition. Does not raise on internal mutation sequences that update
-        both species and positions in succession.
-        """
-        self._check_frozen()
-        if not isinstance(value, (list, tuple)):
-            raise TypeError("Species must be a list or tuple of strings.")
-        if not all(isinstance(s, str) for s in value):
-            raise TypeError("All species must be strings.")
-        value_tuple = tuple(value)
-
-        # Length validation: enforce species/positions parity strictly
-        if hasattr(self, '_positions') and len(value_tuple) != len(self._positions):
-            raise ValueError(
-                f"Cannot set species: number of species ({len(value_tuple)}) "
-                f"must match number of positions ({len(self._positions)})."
-            )
-        self._species = value_tuple
-
-        # Invalidate caches
-        self._formula_dirty = True
-        self._cached_composition = None
-        self._cached_formula = None
-        # Also clear cached center-of-mass if present (COM cache)
-        if hasattr(self, '_cached_com'):
-            self._cached_com = None
 
     def _validate_positions(self, positions: Union[List, np.ndarray]) -> np.ndarray:
         """
@@ -331,78 +271,8 @@ class Structure(ABC, MSONable):
 
     @property
     def positions(self) -> np.ndarray:
-        """
-        Get atomic positions as numpy array.
-
-        Returns:
-            np.ndarray: Array of positions with shape (n_atoms, 3).
-                      Each row is a 3D coordinate [x, y, z].
-
-        Note:
-            For Crystal structures, these are typically fractional coordinates.
-            For Molecule structures, these are Cartesian coordinates in Angstroms.
-
-        Example:
-            >>> structure.positions
-            array([[0. , 0. , 0. ],
-                   [0.5, 0.5, 0.5]])
-            >>> structure.positions.shape
-            (2, 3)
-        """
-        if self.is_frozen:
-            # Return read-only view to prevent bypassing freeze via array mutation
-            view = self._positions.view()
-            view.flags.writeable = False
-            return view
+        """Get atomic positions as numpy array."""
         return self._positions
-
-    @positions.setter
-    def positions(self, positions: Union[List, np.ndarray]) -> None:
-        """
-        Set atomic positions with validation.
-
-        Validates positions and updates internal state. Also invalidates
-        cached properties that depend on positions (e.g., sites, neighbor trees).
-
-        Args:
-            positions: New positions. Can be:
-                - List of lists: [[x1, y1, z1], [x2, y2, z2], ...]
-                - Numpy array: shape (n_atoms, 3)
-
-        Raises:
-            ValueError: If positions are invalid (not 3D, contain NaN/Inf).
-            ValueError: If number of positions doesn't match number of species.
-
-        Note:
-            Setting positions invalidates cached properties like sites and
-            neighbor trees, which will be recomputed on next access.
-
-        Example:
-            >>> structure.positions = [[0, 0, 0], [1, 1, 1]]
-            >>> structure.positions = np.array([[0, 0, 0], [1, 1, 1]])
-        """
-        self._check_frozen()
-        validated_positions = self._validate_positions(positions)
-
-        # Check that number of positions matches number of species
-        if len(validated_positions) != len(self.species):
-            raise ValueError(
-                f"Cannot set positions: number of positions ({len(validated_positions)}) "
-                f"must match number of species ({len(self.species)})."
-            )
-
-        self._positions = validated_positions
-
-        # Invalidate caches that depend on positions
-        if hasattr(self, "_sites"):
-            if hasattr(self, "_initialize_sites"):
-                self._sites = self._initialize_sites()
-        if hasattr(self, "_neighbor_tree"):
-            self._neighbor_tree = None
-            self._neighbor_tree_positions = None
-        # Invalidate any cached center-of-mass if present
-        if hasattr(self, '_cached_com'):
-            self._cached_com = None
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -483,46 +353,21 @@ class Structure(ABC, MSONable):
 
     @property
     def formula(self) -> str:
-        """
-        Get the chemical formula of the structure (cached).
+        """Get the chemical formula of the structure (cached)."""
+        if self._formula is None:
+            self._formula = self._compute_formula()
+        return self._formula
 
-        Calculates the chemical formula preserving the original order of elements
-        as they appear in the structure, rather than sorting alphabetically or
-        by atomic number. The result is cached for performance.
-
-        Returns:
-            str: Chemical formula string (e.g., 'H2O', 'NaCl', 'Fe2O3').
-
-        Note:
-            The formula preserves the order of first appearance of elements,
-            matching VASP POSCAR format style. The cache is invalidated when
-            atoms are added, removed, or substituted.
-
-        Example:
-            >>> crystal = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
-            >>> crystal.formula
-            'ClNa'
-            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
-            >>> molecule.formula
-            'O2'
-            >>> crystal.add_atom('H', [0.1, 0, 0])
-            >>> crystal.formula  # Cache invalidated, recalculated
-            'ClHNa'
-        """
-        if self._cached_formula is None or self._formula_dirty:
-            element_counter = Counter(self.species)
-            # Preserve original order by iterating through species in order
-            # and tracking which elements we've already added
-            seen = set()
-            formula = ""
-            for element in self.species:
-                if element not in seen:
-                    count = element_counter[element]
-                    formula += element + (str(count) if count > 1 else "")
-                    seen.add(element)
-            self._cached_formula = formula
-            self._formula_dirty = False
-        return self._cached_formula
+    def _compute_formula(self) -> str:
+        element_counter = Counter(self.species)
+        seen = set()
+        formula = ""
+        for element in self.species:
+            if element not in seen:
+                count = element_counter[element]
+                formula += element + (str(count) if count > 1 else "")
+                seen.add(element)
+        return formula
 
     @property
     def symbol_set(self) -> tuple:
@@ -683,40 +528,10 @@ class Structure(ABC, MSONable):
 
     @property
     def composition(self) -> Composition:
-        """
-        Get the Composition object for the structure (cached).
-
-        Returns a Composition object that provides access to element counts,
-        mass calculations, and formatted output. The result is cached for
-        performance.
-
-        Returns:
-            Composition: Composition object with element counts and properties.
-
-        Note:
-            The composition is derived from the formula and cached. The cache
-            is invalidated when atoms are added, removed, or substituted.
-
-        Example:
-            >>> crystal = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], lattice)
-            >>> comp = crystal.composition
-            >>> comp['Na']
-            1
-            >>> comp['Cl']
-            1
-            >>> comp.mass  # Total mass in atomic mass units
-            58.4428...
-            >>>
-            >>> molecule = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
-            >>> comp = molecule.composition
-            >>> comp['H']
-            2
-            >>> comp['O']
-            1
-        """
-        if self._cached_composition is None or self._formula_dirty:
-            self._cached_composition = Composition(self.formula)
-        return self._cached_composition
+        """Get the Composition object for the structure (cached)."""
+        if self._composition is None:
+            self._composition = Composition(self.formula)
+        return self._composition
 
     @property
     def elements(self) -> List[Element]:
@@ -739,55 +554,20 @@ class Structure(ABC, MSONable):
         """
         return [Element.get_element(specie) for specie in self.species]
 
+    def _extra_dict_fields(self) -> Dict[str, Any]:
+        """Return extra fields for from_dict reconstruction. Override in subclasses."""
+        return {}
+
     def add_atom(
         self,
         species: Union[str, List[str]],
         position: Union[List[float], List[List[float]]],
-    ) -> None:
-        """
-        Add one or more atoms to the structure (in-place).
-
-        Adds atoms to the structure and invalidates cached properties
-        (formula, composition). The operation modifies the structure directly.
-
-        Args:
-            species: Atomic species. Can be:
-                - str: Single element symbol (e.g., 'H')
-                - List[str]: List of element symbols (e.g., ['H', 'O'])
-            position: Atomic position(s). Can be:
-                - List[float]: Single 3D coordinate [x, y, z]
-                - List[List[float]]: List of 3D coordinates [[x1, y1, z1], [x2, y2, z2], ...]
-
-        Raises:
-            ValueError: If position is not 3D.
-            ValueError: If number of species doesn't match number of positions.
-
-        Note:
-            This method modifies the structure in-place. Cached properties
-            (formula, composition) are invalidated and will be recalculated
-            on next access.
-
-        Example:
-            >>> # Add single atom
-            >>> structure.add_atom('H', [0, 0, 0])
-            >>> len(structure)
-            3
-            >>>
-            >>> # Add multiple atoms
-            >>> structure.add_atom(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
-            >>> len(structure)
-            5
-            >>>
-            >>> # Formula is recalculated
-            >>> structure.formula  # Cache invalidated, recalculated
-        """
-        self._check_frozen()
+    ) -> "Structure":
         # Handle single atom case
         if isinstance(species, str):
             species = [species]
             position = [position]
 
-        # Validate inputs
         if len(species) != len(position):
             raise ValueError(
                 f"Number of species ({len(species)}) must match "
@@ -795,17 +575,14 @@ class Structure(ABC, MSONable):
             )
 
         if not species:
-            return  # Nothing to add
+            return self.copy()
 
-        # Validate all positions are 3D
         positions_array = np.array(position, dtype=np.float64)
         if positions_array.ndim == 1:
-            # Single atom: [x, y, z]
             if len(positions_array) != 3:
                 raise ValueError("Position must be a 3D coordinate")
             positions_array = positions_array.reshape(1, 3)
         elif positions_array.ndim == 2:
-            # Multiple atoms: [[x1, y1, z1], ...]
             if positions_array.shape[1] != 3:
                 raise ValueError("Positions must be 3D coordinates")
         else:
@@ -813,242 +590,123 @@ class Structure(ABC, MSONable):
                 "Position must be a 3D coordinate or list of 3D coordinates"
             )
 
-        # Add atoms
-        species_list = list(self.species)
-        species_list.extend(species)
-        # Bypass species/positions setters to avoid strict length check during multi-step mutation
-        self._species = tuple(species_list)
-        self._positions = np.vstack([self.positions, positions_array])
+        new_species = list(self.species)
+        new_species.extend(species)
+        new_positions = np.vstack([self._positions, positions_array])
 
-        # Invalidate caches
-        self._formula_dirty = True
-        self._cached_composition = None
-        self._cached_formula = None
-        # Properties computed lazily on access
+        return self.__class__.from_dict({
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "species": new_species,
+            "positions": new_positions.tolist(),
+            **self._extra_dict_fields(),
+        })
 
-    def remove_atom(self, index: int) -> None:
-        """
-        Remove an atom from the structure by index (in-place).
-
-        Removes the atom at the specified index and invalidates cached
-        properties (formula, composition). The operation modifies the
-        structure directly.
-
-        Args:
-            index: Zero-based index of the atom to remove.
-
-        Raises:
-            IndexError: If index is out of range (not in [0, len(structure))).
-
-        Note:
-            This method modifies the structure in-place. Cached properties
-            (formula, composition) are invalidated and will be recalculated
-            on next access.
-
-        Example:
-            >>> structure = Molecule(['O', 'H', 'H'], [[0,0,0], [0.96,0,0], [-0.24,0.93,0]])
-            >>> len(structure)
-            3
-            >>> structure.remove_atom(0)  # Remove first atom (O)
-            >>> len(structure)
-            2
-            >>> structure.species
-            ('H', 'H')
-            >>> structure.formula  # Cache invalidated, recalculated
-            'H2'
-        """
-        self._check_frozen()
+    def remove_atom(self, index: int) -> "Structure":
         if not (0 <= index < len(self.species)):
             raise IndexError("Invalid atom index.")
 
-        # Maintain tuple immutability
         species_list = list(self.species)
         species_list.pop(index)
-        # Bypass setters to avoid triggering length checks
-        self._species = tuple(species_list)
-        self._positions = np.delete(self.positions, index, axis=0)
-        self._formula_dirty = True
-        self._cached_composition = None
-        # Properties computed lazily on access
+        new_positions = np.delete(self._positions, index, axis=0)
+
+        return self.__class__.from_dict({
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "species": species_list,
+            "positions": new_positions.tolist(),
+            **self._extra_dict_fields(),
+        })
 
     def substitute(
         self,
         indices: Union[int, List[int], "AtomSelection"],
         new_species: Union[str, List[str], Dict[str, str]],
-    ) -> None:
-        """
-        Substitute atoms with new species (in-place).
-
-        This is a convenience method that modifies the structure directly.
-        For functional style (returning new object), use matsimpy.transformation.substitute().
-
-        Note: This method delegates to the transformation module for the actual implementation.
-
-        Args:
-            indices: Atom index, list of indices, or :class:`~matsimpy.utils.selection.AtomSelection`
-                    object to substitute.
-            new_species: New species symbol, list of symbols, or dict mapping old->new species.
-                       If dict, maps old species to new species (e.g., {'Si': 'Ge', 'O': 'S'}).
-
-        Raises:
-            IndexError: If index is out of range.
-            ValueError: If number of indices doesn't match number of species.
-            KeyError: If dict mapping doesn't contain a species.
-
-        Examples:
-            >>> structure.substitute(0, 'Ge')  # Substitute atom at index 0
-            >>> structure.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
-            >>> # Using AtomSelection
-            >>> from matsimpy.utils.selection import AtomSelection
-            >>> sel = AtomSelection(structure).by_species('Si')
-            >>> structure.substitute(sel, 'Ge')  # Substitute selected atoms
-            >>> # Using dict mapping (maps old species to new species)
-            >>> structure.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
-        """
-        self._check_frozen()
-
-        # Handle AtomSelection
+    ) -> "Structure":
         from ..utils.selection import AtomSelection
+
         if isinstance(indices, AtomSelection):
             if indices.structure is not self:
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        # Normalize indices
         if isinstance(indices, int):
             indices = [indices]
 
-        # Handle dict-based species mapping
         if isinstance(new_species, dict):
             new_species_list = []
             for idx in indices:
                 old_spec = self.species[idx]
                 if old_spec not in new_species:
-                    raise KeyError(f"Species '{old_spec}' at index {idx} not found in substitution mapping")
+                    raise KeyError(
+                        f"Species '{old_spec}' at index {idx} "
+                        f"not found in substitution mapping"
+                    )
                 new_species_list.append(new_species[old_spec])
             new_species = new_species_list
 
-        # Normalize new_species
         if isinstance(new_species, str):
             new_species = [new_species] * len(indices)
 
         if len(indices) != len(new_species):
             raise ValueError(
-                f"Number of indices ({len(indices)}) must match number of new species ({len(new_species)})"
+                f"Number of indices ({len(indices)}) must match "
+                f"number of new species ({len(new_species)})"
             )
 
-        # In-place modification of species tuple
         species_list = list(self.species)
         for idx, new_spec in zip(indices, new_species):
             species_list[idx] = new_spec
-        self.species = tuple(species_list)
 
-        # Invalidate caches
-        self._formula_dirty = True
-        self._cached_composition = None
-        self._cached_formula = None
+        return self.__class__.from_dict({
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "species": species_list,
+            "positions": self._positions.tolist(),
+            **self._extra_dict_fields(),
+        })
 
-    def substitute_all(self, old_species: str, new_species: str) -> None:
-        """
-        Substitute all atoms of a given species with a new species (in-place).
+    def substitute_all(self, old_species: str, new_species: str) -> "Structure":
+        species_list = [
+            new_species if s == old_species else s for s in self.species
+        ]
+        return self.__class__.from_dict({
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "species": species_list,
+            "positions": self._positions.tolist(),
+            **self._extra_dict_fields(),
+        })
 
-        This is a convenience method that modifies the structure directly.
-        For functional style (returning new object), use matsimpy.transformation.substitute_all().
+    def sort_atoms(self, sort_by: str = "element") -> "Structure":
+        atoms = list(zip(range(len(self.species)), self.species, self._positions))
 
-        Note: This method delegates to the transformation module for the actual implementation.
-
-        Args:
-            old_species: Species to replace
-            new_species: Replacement species
-
-        Examples:
-            >>> structure.substitute_all('Si', 'Ge')  # Replace all Si with Ge
-        """
-        self._check_frozen()
-        # In-place substitution of all occurrences of old_species
-        species_list = list(self.species)
-        for i, s in enumerate(species_list):
-            if s == old_species:
-                species_list[i] = new_species
-        self.species = tuple(species_list)
-        self._formula_dirty = True
-        self._cached_composition = None
-        self._cached_formula = None
-
-    def sort_atoms(self, sort_by: str = "element") -> None:
-        """
-        Sort atoms in the structure (in-place).
-
-        Reorders the internal species and positions arrays according to the
-        specified sorting method. This affects the order of atoms in the
-        structure and may change the symbol_set property.
-
-        Args:
-            sort_by: Sorting method. Options:
-                - 'element': Sort by atomic number, then by position (x, y, z)
-                - 'alphabet': Sort alphabetically by species symbol, then by position
-
-        Raises:
-            ValueError: If sort_by is not 'element' or 'alphabet'.
-
-        Note:
-            This method modifies the structure in-place. The symbol_set property
-            will reflect the new order of first appearance after sorting.
-
-        Example:
-            >>> structure = Crystal(['Na', 'Cl', 'Na'], [[0,0,0], [0.5,0.5,0.5], [0.25,0.25,0.25]], lattice)
-            >>> structure.symbol_set
-            ('Na', 'Cl')
-            >>> structure.sort_atoms('element')  # Sort by atomic number
-            >>> structure.symbol_set  # May change based on new order
-            ('Na', 'Cl')  # or ('Cl', 'Na') depending on sorting
-            >>>
-            >>> structure.sort_atoms('alphabet')  # Sort alphabetically
-            >>> structure.symbol_set
-            ('Cl', 'Na')
-        """
-        self._check_frozen()
-        # Create list of (index, specie, position) tuples
-        atoms = list(zip(range(len(self.species)), self.species, self.positions))
-
-        # Sort by element
         if sort_by == "element":
-            # Sort by atomic number, then by position for same element
-            # Use .elements for efficient Element access
             elements = self.elements
             sorted_atoms = sorted(
                 atoms,
                 key=lambda a: (
                     elements[a[0]].atomic_no,
-                    a[2][0],
-                    a[2][1],
-                    a[2][2],
+                    a[2][0], a[2][1], a[2][2],
                 ),
             )
         elif sort_by == "alphabet":
-            # Sort alphabetically by species symbol, then by position
             sorted_atoms = sorted(
                 atoms, key=lambda a: (a[1], a[2][0], a[2][1], a[2][2])
             )
         else:
             raise ValueError("sort_by must be 'element' or 'alphabet'")
 
-        # Extract sorted species and positions
         sorted_species = [a[1] for a in sorted_atoms]
         sorted_positions = np.array([a[2] for a in sorted_atoms])
 
-        # Update internal data
-        self._species = tuple(sorted_species)
-        self._positions = sorted_positions
-
-        # Invalidate caches
-        self._formula_dirty = True
-        self._cached_composition = None
-
-        # Reinitialize sites if they exist
-        if hasattr(self, "_sites"):
-            if hasattr(self, "_initialize_sites"):
-                self._sites = self._initialize_sites()
+        return self.__class__.from_dict({
+            "@module": self.__class__.__module__,
+            "@class": self.__class__.__name__,
+            "species": sorted_species,
+            "positions": sorted_positions.tolist(),
+            **self._extra_dict_fields(),
+        })
 
     @abstractmethod
     def get_neighbor_list(
