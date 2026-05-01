@@ -23,6 +23,7 @@ Example:
 
 import re
 import json
+import math
 import functools
 import types
 from collections import Counter
@@ -311,6 +312,46 @@ class Composition(MSONable):
     def canonical_formula(self) -> str:
         """Canonical formula independent of input ordering (atomic number order)."""
         return self._chemical_formula(sort_by="element")
+
+    @property
+    def reduced_formula(self) -> str:
+        """
+        Formula with element counts divided by their greatest common divisor.
+
+        Returns the formula with each element count divided by the GCD of all
+        counts. Element ordering is preserved from the current formula.
+
+        Returns:
+            str: Reduced chemical formula.
+
+        Examples:
+            >>> Composition('H4O2').reduced_formula
+            'H2O'
+            >>> Composition('Fe2O3').reduced_formula
+            'Fe2O3'
+            >>> Composition('C6H12O6').reduced_formula
+            'CH2O'
+        """
+        counts = list(self._composition.values())
+        gcd = counts[0]
+        for c in counts[1:]:
+            gcd = math.gcd(gcd, c)
+        if gcd <= 1:
+            return self.formula
+        # Build formula preserving current element ordering
+        seen = set()
+        parts = []
+        for element in self._element_order:
+            if element in self._composition and element not in seen:
+                reduced_count = self._composition[element] // gcd
+                parts.append(f"{element}{reduced_count if reduced_count > 1 else ''}")
+                seen.add(element)
+        for element in self._composition:
+            if element not in seen:
+                reduced_count = self._composition[element] // gcd
+                parts.append(f"{element}{reduced_count if reduced_count > 1 else ''}")
+                seen.add(element)
+        return "".join(parts)
 
     def __str__(self) -> str:
         """

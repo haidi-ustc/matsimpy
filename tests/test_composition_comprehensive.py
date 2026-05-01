@@ -187,5 +187,37 @@ class TestCompositionComprehensive(unittest.TestCase):
         comp = Composition('H2O')
         self.assertIsNotNone(comp)
 
+    def test_reduced_formula_basic(self):
+        """GCD reduction: H4O2 -> H2O."""
+        comp = Composition("H4O2")
+        self.assertEqual(comp.reduced_formula, "H2O")
+
+    def test_reduced_formula_already_reduced(self):
+        """Already reduced: Fe2O3 stays Fe2O3."""
+        comp = Composition("Fe2O3")
+        self.assertEqual(comp.reduced_formula, "Fe2O3")
+
+    def test_reduced_formula_single_element(self):
+        """Single element: O2 -> O."""
+        comp = Composition("O2")
+        self.assertEqual(comp.reduced_formula, "O")
+
+    def test_reduced_formula_complex(self):
+        """Complex: C6H12O6 -> CH2O."""
+        comp = Composition("C6H12O6")
+        self.assertEqual(comp.reduced_formula, "CH2O")
+
+    def test_reduced_formula_ternary(self):
+        """Ternary: Ca2Mg2Si4O12 -> CaMgSi2O6 (GCD=2)."""
+        comp = Composition("Ca2Mg2Si4O12")
+        self.assertEqual(comp.reduced_formula, "CaMgSi2O6")
+
+    def test_reduced_formula_preserves_ordering(self):
+        """Reduced formula preserves element ordering from self.formula."""
+        comp = Composition("O2H4", sort_by=None)
+        # formula = 'O2H4' with sort_by=None; reduced: gcd(2,4)=2 -> OH2
+        self.assertEqual(comp.reduced_formula, "OH2")
+
+
 if __name__ == '__main__':
     unittest.main()
