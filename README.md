@@ -5,8 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Alpha-yellow)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1300%20passed-brightgreen)](tests/)
-[![Code Quality](https://img.shields.io/badge/code%20quality-A+-success)](AIdocs/SESSION_SUMMARY_2025_11.md)
+[![Tests](https://img.shields.io/badge/tests-1324%20passed-brightgreen)](tests/)
 
 
 ## Features
@@ -117,42 +116,46 @@ The package automatically discovers all modules and includes necessary data file
 
 ## Quick Start
 
-### Core Structures (with NEW convenient APIs!)
+### Core Structures
+
+Structures are **immutable by default** — all mutation methods return new objects without modifying the original.
 
 ```python
 from matsimpy import Crystal, Molecule, Lattice, Composition
 from matsimpy.builders.bulk import from_prototype
 
-# 🆕 Convenient Lattice constructors
-lattice = Lattice(5.43)          # Cubic lattice
-lattice = Lattice([3, 4, 5])     # Orthorhombic lattice
-lattice = Lattice.cubic(5.0)     # Traditional (still works)
-
 # Create crystal structure
-crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice(5.64))
+crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
 print(crystal.formula)   # ClNa
 print(crystal.volume)    # 179.4 Å³
 
-# 🆕 Add multiple atoms at once
-crystal.add_atom(['H', 'O'], [[0.1, 0, 0], [0.9, 0, 0]])
+# Mutation returns a new object — must capture the result
+doped = crystal.add_atom(['H', 'O'], [[0.1, 0, 0], [0.9, 0, 0]])
+print(len(crystal))      # 2 (original unchanged)
+print(len(doped))        # 4 (new object)
+
+# Chained mutations
+result = crystal.substitute(0, 'K').add_atom('H', [0.1, 0, 0])
+print(result.formula)    # H Cl K
 
 # Create a molecule
 molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
 print(molecule.formula)  # H2O
 print(molecule.get_center_of_mass())
 
-# 🆕 Molecule works in sets/dicts now!
-unique_molecules = {molecule, molecule, molecule}  # Deduplication works!
+# Transformations return new objects
+translated = molecule.translate([1.0, 0, 0])
+rotated = translated.rotate(90, [0, 0, 1])
 
-# Work with composition (🆕 with caching!)
+# Work with composition
 comp = Composition('Fe2O3')
 print(comp['Fe'])     # 2
 print(comp['O'])      # 3
-print(comp.mass)      # Fast! (cached)
+print(comp.mass)      # Fast! (compute-once cached)
 
-# 🆕 Mass and mole fractions
+# Mass and mole fractions
 mass_frac = comp.mass_fractions()   # {'Fe': 0.699, 'O': 0.301}
-mole_frac = comp.mole_fractions()  # {'Fe': 0.4, 'O': 0.6}
+mole_frac = comp.mole_fractions()   # {'Fe': 0.4, 'O': 0.6}
 ```
 
 ### 🆕 Graph Analysis (NEW!)
@@ -613,7 +616,8 @@ python examples/builders_bulk.py
 
 ### Performance Features
 
-- **Caching**: Formula and composition caching for faster repeated access
+- **Immutability**: Structures are immutable by default — no freeze/thaw, no cache invalidation bugs
+- **Compute-Once Caches**: Formula and composition computed on first access, reused forever
 - **KDTree**: Optimized neighbor finding for large structures
 - **Lazy Evaluation**: Sites and properties computed on-demand
 - **Vectorized Operations**: Efficient numpy-based coordinate transformations
@@ -735,7 +739,7 @@ MatSimPy supports Python 3.9 through 3.12. The package is tested on:
 
 ## Testing
 
-The project includes comprehensive tests with **1,195 passing tests** (100% pass rate):
+The project includes comprehensive tests with **1,324 passing tests** (100% pass rate):
 
 ```bash
 # Run all tests
@@ -756,10 +760,11 @@ pytest tests/ -v --durations=10            # Show slowest tests
 ```
 
 **Test Statistics**:
-- 1,292 total tests
+- 1,325 total tests
 - 100% pass rate
 - Coverage across all core modules
 - Unit, integration, and edge case tests
+- Immutability contract tests
 - Performance regression tests
 
 ## Documentation
