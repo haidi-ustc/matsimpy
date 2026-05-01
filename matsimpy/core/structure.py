@@ -859,24 +859,47 @@ class Structure(ABC, MSONable):
             **self._extra_dict_fields(),
         })
 
-    def remove_atom(self, index: int) -> "Structure":
+    def remove_atom(
+        self,
+        index: Union[int, List[int], "AtomSelection"],
+    ) -> "Structure":
         """
-        Remove one atom by index and return a new structure.
+        Remove one or more atoms by index and return a new structure.
+
+        Args:
+            index: A single atom index, a list of indices, or an AtomSelection.
+                   Duplicates are silently ignored.
+
+        Raises:
+            IndexError: If any index is out of range.
 
         Warning:
             Subclasses that store per-atom lists (e.g. ``site_properties``)
             must override ``_filter_per_atom_data`` so that those lists are
-            trimmed correctly, or override this method entirely.
+            trimmed correctly.
         """
-        if not (0 <= index < len(self.species)):
-            raise IndexError("Invalid atom index.")
+        from ..utils.selection import AtomSelection
+
+        if isinstance(index, AtomSelection):
+            if index.structure is not self:
+                raise ValueError("AtomSelection must be created from this structure")
+            index = index.indices
+        if isinstance(index, int):
+            index = [index]
 
         n = len(self.species)
-        kept_indices = [i for i in range(n) if i != index]
+        indices_to_remove = sorted(set(index), reverse=True)
+        for idx in indices_to_remove:
+            if not (0 <= idx < n):
+                raise IndexError(f"Atom index {idx} out of range [0, {n - 1}]")
+
+        kept_indices = [i for i in range(n) if i not in set(index)]
 
         species_list = list(self.species)
-        species_list.pop(index)
-        new_positions = np.delete(self._positions, index, axis=0)
+        new_positions = self._positions.copy()
+        for idx in indices_to_remove:
+            species_list.pop(idx)
+            new_positions = np.delete(new_positions, idx, axis=0)
 
         return self.__class__.from_dict({
             "@module": self.__class__.__module__,

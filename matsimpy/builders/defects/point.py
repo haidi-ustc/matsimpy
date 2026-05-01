@@ -11,7 +11,7 @@ from ...transformation.chemical.substitution import substitute
 
 
 def create_vacancy(
-    structure: Crystal, indices: Union[int, List[int]], inplace: bool = False
+    structure: Crystal, indices: Union[int, List[int]]
 ) -> Crystal:
     """
     Create vacancy defects by removing atoms.
@@ -19,7 +19,6 @@ def create_vacancy(
     Args:
         structure: Crystal structure
         indices: Index or list of indices of atoms to remove
-        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with vacancies created
@@ -65,7 +64,6 @@ def create_interstitial(
     structure: Crystal,
     species: Union[str, List[str]],
     positions: Union[List[float], List[List[float]]],
-    inplace: bool = False,
 ) -> Crystal:
     """
     Create interstitial defects by adding atoms.
@@ -74,7 +72,6 @@ def create_interstitial(
         structure: Crystal structure
         species: Species or list of species for interstitial atoms
         positions: Fractional position or list of positions
-        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with interstitials added
@@ -125,7 +122,6 @@ def create_substitution(
     structure: Crystal,
     indices: Union[int, List[int]],
     new_species: Union[str, List[str]],
-    inplace: bool = False,
 ) -> Crystal:
     """
     Create substitution defects by replacing atoms.
@@ -134,7 +130,6 @@ def create_substitution(
         structure: Crystal structure
         indices: Index or list of indices of atoms to substitute
         new_species: New species or list of species
-        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with substitutions
@@ -172,7 +167,6 @@ def create_frenkel(
     structure: Crystal,
     index: int,
     interstitial_position: Optional[List[float]] = None,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Create Frenkel defect: atom displaced from lattice site to interstitial position.
@@ -181,7 +175,6 @@ def create_frenkel(
         structure: Crystal structure
         index: Index of atom to displace
         interstitial_position: Position for interstitial (default: displaced from original)
-        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with Frenkel defect
@@ -227,7 +220,6 @@ def create_schottky(
     structure: Crystal,
     indices: Optional[List[int]] = None,
     num_vacancies: int = 2,
-    inplace: bool = False,
 ) -> Crystal:
     """
     Create Schottky defect: pair (or set) of vacancies maintaining charge neutrality.
@@ -236,7 +228,6 @@ def create_schottky(
         structure: Crystal structure
         indices: Optional list of specific indices to remove (if None, random selection)
         num_vacancies: Number of vacancies to create (default: 2)
-        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with Schottky defects
@@ -273,7 +264,7 @@ def create_schottky(
 
 
 def create_antisite(
-    structure: Crystal, index1: int, index2: int, inplace: bool = False
+    structure: Crystal, index1: int, index2: int
 ) -> Crystal:
     """
     Create antisite defect: swap two different atoms.
@@ -282,7 +273,6 @@ def create_antisite(
         structure: Crystal structure
         index1: Index of first atom
         index2: Index of second atom
-        inplace: If True, modify structure in-place (deprecated, always returns new)
 
     Returns:
         Crystal with antisite defect

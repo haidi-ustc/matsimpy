@@ -496,7 +496,6 @@ def move_atoms_interface(style: Optional[str] = None) -> None:
             selected_indices,
             displacement,
             cartesian=use_cartesian,
-            inplace=False,
         )
 
         # Check final structure

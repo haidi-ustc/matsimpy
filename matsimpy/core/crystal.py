@@ -668,70 +668,6 @@ class Crystal(Structure):
             site_properties=new_site_props,
         )
 
-    def remove_atom(self, indices: Union[int, List[int], "AtomSelection"]) -> "Crystal":
-        """
-        Remove one or more atoms from the crystal structure and return a new Crystal.
-
-        Args:
-            indices: Atom index, list of indices, or AtomSelection object to remove.
-                    If list, atoms are removed in reverse order to avoid index shifting.
-
-        Returns:
-            Crystal: New Crystal with removed atoms.
-
-        Raises:
-            IndexError: If any index is out of range.
-            ValueError: If AtomSelection is from a different structure.
-
-        Examples:
-            >>> new_crystal = crystal.remove_atom(0)  # Remove atom at index 0
-            >>> new_crystal = crystal.remove_atom([0, 1, 2])  # Remove multiple atoms
-            >>> # Using AtomSelection
-            >>> from matsimpy.utils.selection import AtomSelection
-            >>> sel = AtomSelection(crystal).by_species('H')
-            >>> new_crystal = crystal.remove_atom(sel)  # Remove selected atoms
-        """
-        # Handle AtomSelection object
-        from ..utils.selection import AtomSelection
-
-        if isinstance(indices, AtomSelection):
-            if indices.structure is not self:
-                raise ValueError("AtomSelection must be created from this structure")
-            indices = indices.indices
-
-        # Normalize to list
-        if isinstance(indices, int):
-            indices = [indices]
-        elif not isinstance(indices, list):
-            raise TypeError(
-                f"indices must be int, list of int, or AtomSelection, got {type(indices)}"
-            )
-
-        # Validate all indices
-        n_atoms = len(self.species)
-        for idx in indices:
-            if not (0 <= idx < n_atoms):
-                raise IndexError(f"Atom index {idx} is out of range [0, {n_atoms-1}]")
-
-        # Remove duplicates and sort in reverse order to avoid index shifting
-        indices_to_remove = sorted(set(indices), reverse=True)
-
-        species_list = list(self.species)
-        new_frac = self.frac_positions.copy()
-        new_site_props = list(self.site_properties) if self.site_properties else []
-
-        for idx in indices_to_remove:
-            species_list.pop(idx)
-            new_frac = np.delete(new_frac, idx, axis=0)
-            if new_site_props and len(new_site_props) > idx:
-                new_site_props.pop(idx)
-
-        return Crystal(
-            species_list, new_frac.tolist(), self.lattice,
-            pbc=list(self.pbc), coords_are_cartesian=False,
-            site_properties=new_site_props if new_site_props else None,
-        )
-
     def substitute(
         self,
         indices: Union[int, List[int], "AtomSelection"],
@@ -1170,54 +1106,6 @@ class Crystal(Structure):
 
     def __getitem__(self, item):
         return self.sites[item]
-
-    def sort_atoms(self, sort_by: str = "element") -> "Crystal":
-        """
-        Sort atoms in the crystal by element and return a new Crystal.
-
-        Args:
-            sort_by: Sorting method - 'element' (atomic number) or 'alphabet'.
-
-        Returns:
-            Crystal: New Crystal with sorted atoms.
-
-        Raises:
-            ValueError: If sort_by is not 'element' or 'alphabet'.
-
-        Examples:
-            >>> sorted_crystal = crystal.sort_atoms('element')  # Sort by atomic number
-            >>> sorted_crystal = crystal.sort_atoms('alphabet')  # Sort alphabetically
-        """
-        atoms = list(zip(range(len(self.species)), self.species, self.frac_positions))
-
-        if sort_by == "element":
-            elements = self.elements
-            sorted_atoms = sorted(
-                atoms, key=lambda a: (
-                    elements[a[0]].atomic_no,
-                    a[2][0], a[2][1], a[2][2],
-                ),
-            )
-        elif sort_by == "alphabet":
-            sorted_atoms = sorted(
-                atoms, key=lambda a: (a[1], a[2][0], a[2][1], a[2][2])
-            )
-        else:
-            raise ValueError("sort_by must be 'element' or 'alphabet'")
-
-        sorted_species = [a[1] for a in sorted_atoms]
-        sorted_frac = np.array([a[2] for a in sorted_atoms])
-        sorted_indices = [a[0] for a in sorted_atoms]
-
-        new_site_props = None
-        if self.site_properties:
-            new_site_props = [self.site_properties[i] for i in sorted_indices]
-
-        return Crystal(
-            sorted_species, sorted_frac.tolist(), self.lattice,
-            pbc=list(self.pbc), coords_are_cartesian=False,
-            site_properties=new_site_props,
-        )
 
     def _convert_to_cartesian(self) -> np.ndarray:
         """
