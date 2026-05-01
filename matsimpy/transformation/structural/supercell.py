@@ -81,7 +81,7 @@ def make_supercell(
                     offset = np.array([i, j, k], dtype=np.float64)
 
                     for atom_idx, (spec, pos) in enumerate(
-                        zip(crystal.species, crystal.positions)
+                        zip(crystal.species, crystal.frac_positions)
                     ):
                         new_pos = pos + offset
                         # Scale by supercell dimensions and wrap to [0, 1)
@@ -122,7 +122,7 @@ def make_supercell(
                     if np.all(frac_coords >= 0) and np.all(frac_coords < 1):
                         # This is a valid translation in the supercell
                         for atom_idx, (spec, pos) in enumerate(
-                            zip(crystal.species, crystal.positions)
+                            zip(crystal.species, crystal.frac_positions)
                         ):
                             new_pos = pos + frac_coords
                             new_pos = new_pos % 1.0  # Wrap to [0, 1)

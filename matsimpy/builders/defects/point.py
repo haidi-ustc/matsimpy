@@ -50,7 +50,7 @@ def create_vacancy(
 
     # Build new species and positions skipping removed indices
     new_species = [s for i, s in enumerate(structure.species) if i not in remove_set]
-    new_positions = [p for i, p in enumerate(structure.positions) if i not in remove_set]
+    new_positions = [p.tolist() for i, p in enumerate(structure.frac_positions) if i not in remove_set]
 
     return Crystal(
         new_species, new_positions,
@@ -199,9 +199,9 @@ def create_frenkel(
     if index < 0 or index >= len(structure.species):
         raise IndexError(f"Invalid atom index: {index}")
 
-    # Get original atom info
+    # Get original atom info (fractional coordinates)
     species = structure.species[index]
-    original_pos = structure.positions[index].copy()
+    original_pos = structure.frac_positions[index].copy()
 
     # Determine interstitial position
     if interstitial_position is None:
@@ -311,7 +311,7 @@ def create_antisite(
     species_list[index1], species_list[index2] = species_list[index2], species_list[index1]
 
     return Crystal(
-        species_list, structure.positions.tolist(),
+        species_list, structure.frac_positions.tolist(),
         lattice=structure.lattice,
         coords_are_cartesian=False,
         pbc=list(structure.pbc),

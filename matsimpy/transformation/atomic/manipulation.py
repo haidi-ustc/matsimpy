@@ -57,7 +57,7 @@ def move_atoms(
             frac_displacement = displacement
 
         # Move atoms
-        new_positions = structure.positions.copy()
+        new_positions = structure.frac_positions.copy()
         for idx in indices:
             new_positions[idx] += frac_displacement
 
@@ -111,21 +111,22 @@ def swap_atoms(
         species_list[index1],
     )
 
-    # Swap positions (in fractional for Crystal, Cartesian for Molecule)
-    positions = structure.positions.copy()
-    positions[[index1, index2]] = positions[[index2, index1]]
-
     if isinstance(structure, Crystal):
+        # Use fractional coordinates for Crystal construction
+        frac_positions = structure.frac_positions.copy()
+        frac_positions[[index1, index2]] = frac_positions[[index2, index1]]
         return Crystal(
-            species_list, positions.tolist(),
+            species_list, frac_positions.tolist(),
             lattice=structure.lattice,
             coords_are_cartesian=False,
             pbc=list(structure.pbc),
             site_properties=(list(structure.site_properties) if structure.site_properties else None),
         )
     else:
+        cart_positions = structure.positions.copy()
+        cart_positions[[index1, index2]] = cart_positions[[index2, index1]]
         return Molecule(
-            species_list, positions.tolist(),
+            species_list, cart_positions.tolist(),
             site_properties=(list(structure.site_properties) if structure.site_properties else None),
         )
 
@@ -165,29 +166,34 @@ def merge_atoms(
     if species is None:
         species = structure.species[index1]
 
-    # Determine merged position
-    if position is None:
-        # Midpoint
-        position = (structure.positions[index1] + structure.positions[index2]) / 2.0
-    else:
-        position = np.array(position, dtype=np.float64)
-
     # Build new species and positions lists
     keep_idx = min(index1, index2)
     remove_idx = max(index1, index2)
 
     new_species = [s for i, s in enumerate(structure.species) if i != keep_idx and i != remove_idx]
-    new_positions = [p for i, p in enumerate(structure.positions) if i != keep_idx and i != remove_idx]
+
+    if isinstance(structure, Crystal):
+        src_positions = structure.frac_positions
+    else:
+        src_positions = structure.positions
+
+    # Determine merged position in the same coordinate frame
+    if position is None:
+        merged_position = (src_positions[index1] + src_positions[index2]) / 2.0
+    else:
+        merged_position = np.array(position, dtype=np.float64)
+
+    new_positions = [p for i, p in enumerate(src_positions) if i != keep_idx and i != remove_idx]
 
     # Add merged atom at the keep position
     new_species.insert(keep_idx, species)
-    new_positions.insert(keep_idx, position.tolist())
+    new_positions.insert(keep_idx, merged_position.tolist())
 
     if isinstance(structure, Crystal):
         return Crystal(
             new_species, new_positions,
             lattice=structure.lattice,
-            coords_are_cartesian=not isinstance(structure, Crystal),  # use frac by default
+            coords_are_cartesian=False,
             pbc=list(structure.pbc),
             site_properties=(list(structure.site_properties) if structure.site_properties else None),
         )
@@ -225,9 +231,14 @@ def split_atom(
         >>> split = split_atom(structure, 0, ['H', 'H'],
         ...                    [[0, 0, 0], [0.1, 0, 0]])
     """
+    if isinstance(structure, Crystal):
+        src_pos = structure.frac_positions
+    else:
+        src_pos = structure.positions
+
     # Build new species and positions lists
     new_species = [s for i, s in enumerate(structure.species) if i != index]
-    new_positions = [p for i, p in enumerate(structure.positions) if i != index]
+    new_positions = [p.tolist() for i, p in enumerate(src_pos) if i != index]
 
     # Add new atoms at the split position
     for spec, pos in zip(species, positions):

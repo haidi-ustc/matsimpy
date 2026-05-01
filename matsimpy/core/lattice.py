@@ -157,6 +157,9 @@ class Lattice(MSONable):
             )
 
         self._validate_lattice_vectors()
+        # Make lattice_vectors read-only so that in-place mutation cannot
+        # silently invalidate the cached _inv_matrix or other derived quantities.
+        self.lattice_vectors.flags.writeable = False
         # Cache inverse matrix
         self._inv_matrix: Optional[np.ndarray] = None
 

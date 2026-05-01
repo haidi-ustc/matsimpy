@@ -42,6 +42,7 @@ from .periodic_table import Element
 
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
+    from ..calculator.base import Calculator
 
 
 class Structure(ABC, MSONable):
@@ -275,8 +276,20 @@ class Structure(ABC, MSONable):
 
     @property
     def positions(self) -> np.ndarray:
-        """Get atomic positions as numpy array."""
-        return self._positions
+        """
+        Atomic positions as a read-only numpy array, shape (n_atoms, 3), in Angstroms.
+
+        Always returns **Cartesian** coordinates for all structure types
+        (both Molecule and Crystal).  For Crystal, use ``frac_positions``
+        to access fractional coordinates explicitly.
+
+        The returned array is a read-only view; mutating it raises ValueError.
+        Use the immutable modification methods (add_atom, remove_atom, etc.) to
+        produce a new structure with updated positions.
+        """
+        view = self._positions.view()
+        view.flags.writeable = False
+        return view
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -346,7 +359,7 @@ class Structure(ABC, MSONable):
             ... }
             >>> structure = Crystal.from_dict(d)
             >>> structure.formula
-            'ClNa'
+            'NaCl'
         """
         species = d["species"]
         positions = d["positions"]
@@ -415,12 +428,20 @@ class Structure(ABC, MSONable):
         Create a deep copy of the structure.
 
         Creates a new Structure instance (Crystal or Molecule) with copied
-        data. The copy is independent of the original - modifications to
+        data. The copy is independent of the original — modifications to
         one will not affect the other.
 
         Returns:
             Structure: A new instance of the structure with copied data.
                      Type matches the original (Crystal or Molecule).
+
+        Note:
+            The attached calculator (``calc``) is **not** copied.  The returned
+            structure always has ``calc = None``.  Copy and re-attach the
+            calculator explicitly if needed::
+
+                new = crystal.copy()
+                new.calc = crystal.calc  # share, or pass a new instance
 
         Example:
             >>> from matsimpy.core import Crystal, Lattice
@@ -430,11 +451,6 @@ class Structure(ABC, MSONable):
             True
             >>> crystal_copy.species == crystal.species  # Same data
             True
-            >>> crystal_copy.add_atom('H', [0.5, 0.5, 0.5])
-            >>> len(crystal)  # Original unchanged
-            2
-            >>> len(crystal_copy)  # Copy modified
-            3
         """
         return self.from_dict(self.as_dict())
 
@@ -563,8 +579,180 @@ class Structure(ABC, MSONable):
         """
         return [Element.get_element(specie) for specie in self.species]
 
+    # ------------------------------------------------------------------
+    # Calculator attachment
+    # ------------------------------------------------------------------
+
+    @property
+    def calc(self) -> Optional["Calculator"]:
+        """
+        Get the attached calculator.
+
+        Returns:
+            :obj:`~matsimpy.calculator.base.Calculator` or None
+
+        Example:
+            >>> from matsimpy.calculator import LennardJones
+            >>> structure.calc = LennardJones()
+            >>> structure.calc = None  # detach
+        """
+        return getattr(self, "_calculator", None)
+
+    @calc.setter
+    def calc(self, calculator: Optional["Calculator"]) -> None:
+        """
+        Attach or detach a calculator.
+
+        Args:
+            calculator: A Calculator instance, or None to detach.
+
+        Raises:
+            TypeError: If *calculator* is not a Calculator instance or None.
+        """
+        from ..calculator.base import Calculator
+
+        if calculator is not None and not isinstance(calculator, Calculator):
+            raise TypeError(
+                f"Calculator must be a Calculator instance, got {type(calculator)}"
+            )
+        self._calculator = calculator
+
+    def _needs_calculation(self) -> bool:
+        """Return True if a (re-)calculation is required."""
+        calc = self.calc
+        if calc is None:
+            return False
+        return (
+            not calc._calculation_performed
+            or getattr(calc, "_last_structure_hash", None) != hash(self)
+        )
+
+    def get_potential_energy(self) -> float:
+        """
+        Get potential energy from the attached calculator.
+
+        Triggers ``calculator.calculate(self)`` automatically if the results
+        are not yet available or if the structure has changed since the last run.
+
+        Returns:
+            float: Potential energy in eV.
+
+        Raises:
+            ValueError: If no calculator is attached.
+        """
+        if self.calc is None:
+            raise ValueError(
+                f"No calculator attached. Set {self.__class__.__name__.lower()}"
+                f".calc = calculator first."
+            )
+        if self._needs_calculation():
+            self.calc.calculate(self)
+        return self.calc.get_potential_energy()
+
+    def get_forces(self) -> np.ndarray:
+        """
+        Get atomic forces from the attached calculator.
+
+        Triggers ``calculator.calculate(self)`` automatically if needed.
+
+        Returns:
+            np.ndarray: Forces array of shape (N, 3) in eV/Å.
+
+        Raises:
+            ValueError: If no calculator is attached.
+        """
+        if self.calc is None:
+            raise ValueError(
+                f"No calculator attached. Set {self.__class__.__name__.lower()}"
+                f".calc = calculator first."
+            )
+        if self._needs_calculation():
+            self.calc.calculate(self)
+        return self.calc.get_forces()
+
+    def get_stress(self) -> np.ndarray:
+        """
+        Get the stress tensor from the attached calculator.
+
+        The base implementation raises ``NotImplementedError`` — only subclasses
+        that support stress (e.g. ``Crystal``) override this method.
+
+        Raises:
+            NotImplementedError: Always (in the base class).
+            ValueError: If no calculator is attached (in subclasses).
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support stress calculations."
+        )
+
+    # ------------------------------------------------------------------
+
     def _extra_dict_fields(self) -> Dict[str, Any]:
-        """Return extra fields for from_dict reconstruction. Override in subclasses."""
+        """
+        Return extra fields required to reconstruct this structure via ``from_dict``.
+
+        **Subclass contract** — override this method when your subclass stores
+        state beyond ``species`` and ``positions``:
+
+        1. Every key returned here must be accepted by ``from_dict`` (or by
+           the subclass ``__init__`` which ``from_dict`` calls).
+        2. Values must be JSON-serialisable (use ``.tolist()`` for ndarrays,
+           ``as_dict()`` for nested ``MSONable`` objects).
+        3. ``add_atom`` / ``remove_atom`` / ``sort_atoms`` in the **base class**
+           forward these fields unchanged.  If any field contains a **per-atom**
+           list (e.g. ``site_properties``), also override
+           ``_filter_per_atom_data`` and ``_reorder_per_atom_data`` so that
+           those lists are correctly adjusted when atoms are removed or reordered.
+        4. Do **not** include ``species`` or ``positions`` — those are always
+           managed by the base class.
+
+        Returns:
+            dict: Extra serialisation fields (empty dict for the base class).
+        """
+        return {}
+
+    def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
+        """
+        Return per-atom serialisation fields filtered to *kept_indices*.
+
+        Called by :meth:`remove_atom` (base) to correct any per-atom lists
+        (e.g. ``site_properties``) that would otherwise be passed stale via
+        :meth:`_extra_dict_fields`.  The returned dict is merged **after**
+        ``_extra_dict_fields()``, so it overrides matching keys.
+
+        Override in subclasses that store per-atom lists::
+
+            def _filter_per_atom_data(self, kept_indices):
+                if not self.site_properties:
+                    return {}
+                return {"site_properties":
+                        [self.site_properties[i] for i in kept_indices]}
+
+        Returns:
+            dict: Filtered per-atom fields (empty dict in the base class).
+        """
+        return {}
+
+    def _reorder_per_atom_data(self, new_order: List[int]) -> Dict[str, Any]:
+        """
+        Return per-atom serialisation fields reordered to *new_order*.
+
+        Called by :meth:`sort_atoms` (base) to correct any per-atom lists
+        that would otherwise be passed in original order via
+        :meth:`_extra_dict_fields`.  The returned dict is merged **after**
+        ``_extra_dict_fields()``, overriding matching keys.
+
+        Override in subclasses that store per-atom lists::
+
+            def _reorder_per_atom_data(self, new_order):
+                if not self.site_properties:
+                    return {}
+                return {"site_properties":
+                        [self.site_properties[i] for i in new_order]}
+
+        Returns:
+            dict: Reordered per-atom fields (empty dict in the base class).
+        """
         return {}
 
     def add_atom(
@@ -573,10 +761,28 @@ class Structure(ABC, MSONable):
         position: Union[List[float], List[List[float]]],
         site_properties: Optional[Union[dict, List[dict]]] = None,
     ) -> "Structure":
-        # site_properties is accepted here for interface consistency with
-        # Crystal.add_atom and Molecule.add_atom, but the base implementation
-        # does not process it.  Subclasses that support site properties override
-        # this method and handle the parameter themselves.
+        """
+        Add one or more atoms and return a new structure.
+
+        Args:
+            species: Element symbol or list of symbols.
+            position: 3D position or list of 3D positions (coordinate system
+                      depends on the concrete subclass — Cartesian for Molecule,
+                      fractional by default for Crystal).
+            site_properties: Per-atom property dict or list thereof.  The base
+                implementation accepts the parameter for API consistency but
+                **ignores it**.  Crystal and Molecule override this method to
+                handle site properties correctly.
+
+        Returns:
+            Structure: New structure with the added atom(s).
+
+        Warning:
+            Subclasses that store per-atom state beyond ``site_properties``
+            must override this method entirely; the base round-trip via
+            ``from_dict`` will not preserve state that is not captured by
+            ``_extra_dict_fields`` + ``_filter_per_atom_data``.
+        """
 
         # Handle single atom case
         if isinstance(species, str):
@@ -618,8 +824,19 @@ class Structure(ABC, MSONable):
         })
 
     def remove_atom(self, index: int) -> "Structure":
+        """
+        Remove one atom by index and return a new structure.
+
+        Warning:
+            Subclasses that store per-atom lists (e.g. ``site_properties``)
+            must override ``_filter_per_atom_data`` so that those lists are
+            trimmed correctly, or override this method entirely.
+        """
         if not (0 <= index < len(self.species)):
             raise IndexError("Invalid atom index.")
+
+        n = len(self.species)
+        kept_indices = [i for i in range(n) if i != index]
 
         species_list = list(self.species)
         species_list.pop(index)
@@ -631,6 +848,9 @@ class Structure(ABC, MSONable):
             "species": species_list,
             "positions": new_positions.tolist(),
             **self._extra_dict_fields(),
+            # Overrides any stale per-atom lists (e.g. site_properties) that
+            # _extra_dict_fields() may have emitted with the old atom count.
+            **self._filter_per_atom_data(kept_indices),
         })
 
     def substitute(
@@ -694,6 +914,15 @@ class Structure(ABC, MSONable):
         })
 
     def sort_atoms(self, sort_by: str = "element") -> "Structure":
+        """
+        Sort atoms and return a new structure.
+
+        Warning:
+            Subclasses that store per-atom lists (e.g. ``site_properties``)
+            must override ``_reorder_per_atom_data`` so that those lists are
+            reordered to match the new atom order, or override this method
+            entirely.
+        """
         atoms = list(zip(range(len(self.species)), self.species, self._positions))
 
         if sort_by == "element":
@@ -714,6 +943,7 @@ class Structure(ABC, MSONable):
 
         sorted_species = [a[1] for a in sorted_atoms]
         sorted_positions = np.array([a[2] for a in sorted_atoms])
+        sorted_indices = [a[0] for a in sorted_atoms]
 
         return self.__class__.from_dict({
             "@module": self.__class__.__module__,
@@ -721,6 +951,9 @@ class Structure(ABC, MSONable):
             "species": sorted_species,
             "positions": sorted_positions.tolist(),
             **self._extra_dict_fields(),
+            # Overrides any per-atom lists in _extra_dict_fields() that need
+            # to be reordered to match the new atom sequence.
+            **self._reorder_per_atom_data(sorted_indices),
         })
 
     @abstractmethod

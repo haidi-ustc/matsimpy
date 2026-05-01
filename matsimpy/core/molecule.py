@@ -40,7 +40,6 @@ from typing import List, Optional, Dict, Any, Union, Tuple, TYPE_CHECKING
 from monty.json import MSONable
 from .lattice import Lattice
 from .structure import Structure
-from .crystal import Crystal
 from .composition import Composition
 from .periodic_table import Element
 from .site import Site
@@ -49,6 +48,7 @@ from scipy.spatial.distance import cdist
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
     from ..calculator.base import Calculator
+    from .crystal import Crystal
 
 
 class Molecule(Structure):
@@ -188,6 +188,18 @@ class Molecule(Structure):
             return {"site_properties": list(self.site_properties)}
         return {}
 
+    def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
+        """Return site_properties filtered to kept_indices after atom removal."""
+        if not self.site_properties:
+            return {}
+        return {"site_properties": [self.site_properties[i] for i in kept_indices]}
+
+    def _reorder_per_atom_data(self, new_order: List[int]) -> Dict[str, Any]:
+        """Return site_properties reordered to new_order after atom sorting."""
+        if not self.site_properties:
+            return {}
+        return {"site_properties": [self.site_properties[i] for i in new_order]}
+
     @property
     def sites(self) -> List[Site]:
         """
@@ -299,7 +311,9 @@ class Molecule(Structure):
         from scipy.spatial.transform import Rotation
 
         rotation = Rotation.from_rotvec(np.radians(angle) * np.array(axis))
-        new_positions = rotation.apply(self.positions)
+        # Copy to a writeable array; older scipy versions reject read-only buffers
+        # even though Rotation.apply() only reads from the input.
+        new_positions = rotation.apply(np.array(self.positions))
         return Molecule(
             list(self.species), new_positions.tolist(),
             site_properties=(list(self.site_properties) if self.site_properties else None),
@@ -659,7 +673,7 @@ class Molecule(Structure):
         site_properties = d.get("site_properties", [])
         return cls(species, positions, site_properties=site_properties)
 
-    def to_crystal(self, vacuum: float = 15.0) -> Crystal:
+    def to_crystal(self, vacuum: float = 15.0) -> "Crystal":
         """
         Convert a Molecule to a Crystal structure by automatically creating a box
         with vacuum padding around the molecule.
@@ -683,6 +697,8 @@ class Molecule(Structure):
             >>> # Use custom vacuum padding
             >>> crystal = molecule.to_crystal(vacuum=20.0)
         """
+        from .crystal import Crystal
+
         if len(self.positions) == 0:
             raise ValueError("Cannot convert empty molecule to crystal")
 
@@ -1179,112 +1195,6 @@ class Molecule(Structure):
             )
         except ValueError as e:
             raise ValueError(f"Unsupported DFT code: {code}") from e
-
-    @property
-    def calc(self) -> Optional["Calculator"]:
-        """
-        Get the attached calculator.
-
-        Returns:
-            :obj:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> molecule.calc = LennardJones()
-            >>> molecule.calc  # <LennardJones object>
-            >>> molecule.calc = None  # Remove calculator
-            >>> molecule.calc  # None
-        """
-        from ..calculator.base import Calculator
-
-        return getattr(self, "_calculator", None)
-
-    @calc.setter
-    def calc(self, calculator: Optional["Calculator"]) -> None:
-        """
-        Attach a calculator to this molecule.
-
-        Sets a calculator that can be used to compute energies and forces.
-        The calculator must be an instance of
-        :class:`~matsimpy.calculator.base.Calculator`.
-
-        Args:
-            calculator: Calculator object (e.g., LennardJones, Mattersim, VASP)
-                      or None to remove the calculator.
-
-        Raises:
-            TypeError: If calculator is not a Calculator instance or None.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> molecule.calc = LennardJones()
-            >>> energy = molecule.get_potential_energy()
-        """
-        from ..calculator.base import Calculator
-
-        if calculator is not None and not isinstance(calculator, Calculator):
-            raise TypeError(
-                f"Calculator must be a Calculator instance, got {type(calculator)}"
-            )
-        self._calculator = calculator
-
-    def get_potential_energy(self) -> float:
-        """
-        Get potential energy from attached calculator.
-
-        Computes the potential energy using the attached calculator. If the
-        calculation hasn't been performed yet, it will be triggered automatically.
-
-        Returns:
-            float: Potential energy in eV.
-
-        Raises:
-            ValueError: If no calculator is attached.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> molecule.calc = LennardJones()
-            >>> energy = molecule.get_potential_energy()
-            >>> print(f"Energy: {energy:.4f} eV")
-        """
-        if self.calc is None:
-            raise ValueError(
-                "No calculator attached. Set molecule.calc = calculator first."
-            )
-        if not self.calc._calculation_performed:
-            self.calc.calculate(self)
-        return self.calc.get_potential_energy()
-
-    def get_forces(self) -> np.ndarray:
-        """
-        Get forces from attached calculator.
-
-        Computes the forces on all atoms using the attached calculator. If the
-        calculation hasn't been performed yet, it will be triggered automatically.
-
-        Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/Å, where N is the
-                       number of atoms. Each row contains [Fx, Fy, Fz] for one atom.
-
-        Raises:
-            ValueError: If no calculator is attached.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> molecule.calc = LennardJones()
-            >>> forces = molecule.get_forces()
-            >>> forces.shape
-            (3, 3)  # 3 atoms, 3 force components
-            >>> forces[0]  # Force on first atom
-            array([0.123, -0.456, 0.789])
-        """
-        if self.calc is None:
-            raise ValueError(
-                "No calculator attached. Set molecule.calc = calculator first."
-            )
-        if not self.calc._calculation_performed:
-            self.calc.calculate(self)
-        return self.calc.get_forces()
 
     def perturb(
         self,

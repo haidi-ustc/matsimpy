@@ -68,14 +68,14 @@ class TestSortAtoms(unittest.TestCase):
 
         result = crystal.sort_atoms('element')
 
-        # Check that positions are correctly reordered with species
-        # C should be at [0.25, 0.25, 0.25]
+        # Check that fractional positions are correctly reordered with species
+        # C should be at fractional [0.25, 0.25, 0.25]
         c_idx = list(result.species).index('C')
-        self.assertTrue(np.allclose(result.positions[c_idx], [0.25, 0.25, 0.25]))
+        self.assertTrue(np.allclose(result.frac_positions[c_idx], [0.25, 0.25, 0.25]))
 
-        # O should be at [0.5, 0.5, 0.5] (first O)
+        # O should be at fractional [0.5, 0.5, 0.5] (first O)
         o_indices = [i for i, s in enumerate(result.species) if s == 'O']
-        self.assertTrue(any(np.allclose(result.positions[i], [0.5, 0.5, 0.5]) for i in o_indices))
+        self.assertTrue(any(np.allclose(result.frac_positions[i], [0.5, 0.5, 0.5]) for i in o_indices))
 
     def test_crystal_sort_invalidates_cache(self):
         """Test that sorting returns a fresh object with no cached neighbor tree."""

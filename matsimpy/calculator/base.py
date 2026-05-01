@@ -46,6 +46,10 @@ class Calculator(ABC, MSONable):
         self.results: Dict[str, Any] = {}
         self.structure: Optional[Union[Crystal, Molecule]] = None
         self._calculation_performed = False
+        # Hash of the structure last passed to calculate().  Used by Structure
+        # to detect when the calculator's cached results are stale (i.e. the
+        # attached structure has changed since the last calculate() call).
+        self._last_structure_hash: Optional[int] = None
 
     def set_parameters(self, **kwargs) -> None:
         """
@@ -58,6 +62,7 @@ class Calculator(ABC, MSONable):
         # Clear results if parameters change
         self.results.clear()
         self._calculation_performed = False
+        self._last_structure_hash = None
 
     def get_parameters(self) -> Dict[str, Any]:
         """
@@ -97,6 +102,9 @@ class Calculator(ABC, MSONable):
 
         self.structure = structure
         self._calculation_performed = False
+        # Record the structure identity before running so that callers can
+        # cheaply detect whether results are stale for a different structure.
+        self._last_structure_hash = hash(structure)
 
         # Perform the actual calculation (implemented by subclasses)
         self._compute()

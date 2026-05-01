@@ -67,9 +67,9 @@ def sort_atoms(
 
     # Build sorted species and positions
     new_species = [structure.species[i] for i in sorted_indices]
-    new_positions = [structure.positions[i].tolist() for i in sorted_indices]
 
     if isinstance(structure, Crystal):
+        new_positions = [structure.frac_positions[i].tolist() for i in sorted_indices]
         return Crystal(
             new_species, new_positions,
             lattice=structure.lattice,
@@ -78,6 +78,7 @@ def sort_atoms(
             site_properties=(list(structure.site_properties) if structure.site_properties else None),
         )
     else:
+        new_positions = [structure.positions[i].tolist() for i in sorted_indices]
         return Molecule(
             new_species, new_positions,
             site_properties=(list(structure.site_properties) if structure.site_properties else None),
@@ -128,10 +129,11 @@ def center_structure(
 
     else:
         # For crystals, center in fractional coordinates
-        current_center = np.mean(structure.positions, axis=0)
+        frac_pos = structure.frac_positions
+        current_center = np.mean(frac_pos, axis=0)
         displacement = center - current_center
 
-        new_positions = structure.positions + displacement
+        new_positions = frac_pos + displacement
 
         return Crystal(
             list(structure.species), new_positions.tolist(),
@@ -185,14 +187,14 @@ def perturb_positions(
             perturbations, np.linalg.inv(structure.lattice.lattice_vectors)
         )
 
-        new_positions = structure.positions.copy()  # fractional positions
+        new_positions = structure.frac_positions.copy()
         for i, idx in enumerate(indices):
             new_positions[idx] += frac_perturbations[i]
 
         return Crystal(
             list(structure.species), new_positions.tolist(),
             lattice=structure.lattice,
-            coords_are_cartesian=False,  # positions are fractional
+            coords_are_cartesian=False,
             site_properties=(list(structure.site_properties) if structure.site_properties else None),
         )
 

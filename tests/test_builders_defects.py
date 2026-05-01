@@ -88,8 +88,8 @@ class TestInterstitial(unittest.TestCase):
         """Test that positions are wrapped to [0, 1)."""
         with_interstitial = create_interstitial(self.fcc, 'H', [1.5, 1.5, 1.5])
         
-        # Position should be wrapped to [0.5, 0.5, 0.5]
-        pos = with_interstitial.positions[-1]
+        # Position should be wrapped to fractional [0.5, 0.5, 0.5]
+        pos = with_interstitial.frac_positions[-1]
         self.assertAlmostEqual(pos[0], 0.5, places=5)
     
     def test_create_interstitial_mismatch(self):

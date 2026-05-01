@@ -49,9 +49,10 @@ class TestTranslation(unittest.TestCase):
         new_crystal = translate(self.crystal, [1, 1, 1])
         
         np.testing.assert_array_almost_equal(new_crystal.cart_positions[0], original_cart + [1, 1, 1])
-        np.testing.assert_array_almost_equal(new_crystal.positions, new_crystal.frac_positions)
+        # positions now returns Cartesian; frac_positions returns fractional
+        np.testing.assert_array_almost_equal(new_crystal.positions, new_crystal.cart_positions)
         np.testing.assert_array_almost_equal(
-            new_crystal.sites[0].frac_position, new_crystal.positions[0]
+            new_crystal.sites[0].frac_position, new_crystal.frac_positions[0]
         )
     
     def test_translate_to_origin(self):
@@ -114,11 +115,13 @@ class TestRotation(unittest.TestCase):
         crystal = Crystal(['Si'], [[0.1, 0.0, 0.0]], Lattice.cubic(10))
         rotated = rotate(crystal, angle=90, axis=[0, 0, 1], center=[0, 0, 0])
 
-        np.testing.assert_array_almost_equal(rotated.positions, rotated.frac_positions)
+        # positions returns Cartesian; frac_positions returns fractional
+        np.testing.assert_array_almost_equal(rotated.positions, rotated.cart_positions)
         np.testing.assert_array_almost_equal(
-            rotated.sites[0].frac_position, rotated.positions[0]
+            rotated.sites[0].frac_position, rotated.frac_positions[0]
         )
-        np.testing.assert_array_almost_equal(rotated.positions[0], [0.0, 0.1, 0.0])
+        # After 90° rotation around z, fractional [0.1, 0, 0] → [0.0, 0.1, 0.0]
+        np.testing.assert_array_almost_equal(rotated.frac_positions[0], [0.0, 0.1, 0.0])
 
 class TestSubstitution(unittest.TestCase):
     """Tests for substitution transformations."""

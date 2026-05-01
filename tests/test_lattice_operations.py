@@ -84,8 +84,8 @@ class TestLatticeStrain(unittest.TestCase):
         deformation = [[1.1, 0, 0], [0, 1, 0], [0, 0, 1]]
         deformed = apply_deformation(self.crystal, deformation, deform_positions=False)
         
-        # Fractional coordinates should be the same
-        np.testing.assert_array_almost_equal(deformed.positions, self.crystal.positions)
+        # Fractional coordinates should be unchanged (Cartesian will differ due to new lattice)
+        np.testing.assert_array_almost_equal(deformed.frac_positions, self.crystal.frac_positions)
 
 class TestLatticeScaling(unittest.TestCase):
     """Tests for scaling and volume operations."""

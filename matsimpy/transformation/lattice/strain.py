@@ -40,7 +40,7 @@ def apply_strain(
     new_lattice = Lattice(new_lattice_vectors)
 
     return Crystal(
-        list(crystal.species), crystal.positions.tolist(),
+        list(crystal.species), crystal.frac_positions.tolist(),
         lattice=new_lattice,
         coords_are_cartesian=False,
         pbc=list(crystal.pbc),
@@ -87,8 +87,8 @@ def apply_deformation(
             new_cart_positions, np.linalg.inv(new_lattice_vectors)
         )
     else:
-        # Keep fractional positions
-        new_positions = crystal.positions
+        # Keep fractional positions unchanged
+        new_positions = crystal.frac_positions
 
     return Crystal(
         list(crystal.species), new_positions.tolist(),
@@ -138,7 +138,7 @@ def perturb_lattice(
     new_lattice = Lattice(new_lattice_vectors)
 
     return Crystal(
-        list(crystal.species), crystal.positions.tolist(),
+        list(crystal.species), crystal.frac_positions.tolist(),
         lattice=new_lattice,
         coords_are_cartesian=False,
         pbc=list(crystal.pbc),

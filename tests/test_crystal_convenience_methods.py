@@ -155,7 +155,9 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         """Test perturbing lattice only."""
         original_lattice = self.crystal.lattice.lattice_vectors.copy()
         original_volume = self.crystal.volume
-        original_positions = self.crystal.positions.copy()
+        # Use frac_positions because fractional coords are preserved when only
+        # the lattice is perturbed (Cartesian positions change with the lattice).
+        original_frac = self.crystal.frac_positions.copy()
 
         # Perturb lattice only
         result = self.crystal.perturb(
@@ -169,20 +171,20 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         self.assertIsNot(result, self.crystal)
         self.assertTrue(np.allclose(self.crystal.lattice.lattice_vectors, original_lattice))
         self.assertAlmostEqual(self.crystal.volume, original_volume, places=5)
-        self.assertTrue(np.allclose(self.crystal.positions, original_positions))
+        self.assertTrue(np.allclose(self.crystal.frac_positions, original_frac))
 
         # Lattice should have changed in result
         self.assertFalse(np.allclose(original_lattice, result.lattice.lattice_vectors))
         self.assertNotAlmostEqual(original_volume, result.volume, places=3)
 
-        # Positions should be unchanged in result (fractional)
-        self.assertTrue(np.allclose(original_positions, result.positions))
+        # Fractional positions should be unchanged in result (Cartesian will differ)
+        self.assertTrue(np.allclose(original_frac, result.frac_positions))
 
     def test_perturb_both_positions_and_lattice(self):
         """Test perturbing both positions and lattice."""
         original_lattice = self.crystal.lattice.lattice_vectors.copy()
         original_volume = self.crystal.volume
-        original_positions = self.crystal.positions.copy()
+        original_frac = self.crystal.frac_positions.copy()
 
         # Perturb both
         result = self.crystal.perturb(
@@ -196,11 +198,11 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
         self.assertIsNot(result, self.crystal)
         self.assertTrue(np.allclose(self.crystal.lattice.lattice_vectors, original_lattice))
         self.assertAlmostEqual(self.crystal.volume, original_volume, places=5)
-        self.assertTrue(np.allclose(self.crystal.positions, original_positions))
+        self.assertTrue(np.allclose(self.crystal.frac_positions, original_frac))
 
         # Both should have changed in result
         self.assertFalse(np.allclose(original_lattice, result.lattice.lattice_vectors))
-        self.assertFalse(np.allclose(original_positions, result.positions))
+        self.assertFalse(np.allclose(original_frac, result.frac_positions))
         self.assertNotAlmostEqual(original_volume, result.volume, places=3)
 
     def test_perturb_different_amplitudes(self):

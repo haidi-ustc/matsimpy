@@ -49,8 +49,8 @@ def rotate_lattice(
             new_cart_positions, np.linalg.inv(new_lattice_vectors)
         )
     else:
-        # Keep fractional positions
-        new_positions = crystal.positions
+        # Keep fractional positions unchanged
+        new_positions = crystal.frac_positions
 
     return Crystal(
         list(crystal.species), new_positions.tolist(),
@@ -141,7 +141,7 @@ def standardize_cell(
 
         cell = (
             crystal.lattice.lattice_vectors,
-            crystal.positions,
+            crystal.frac_positions,
             [crystal.species.index(s) + 1 for s in crystal.species],
         )
 

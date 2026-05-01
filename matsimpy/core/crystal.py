@@ -193,10 +193,14 @@ class Crystal(Structure):
             # Pass fractional to super so self._positions is always fractional
             super().__init__(species, frac_array.tolist(), lattice)
             self._cart_positions = cart_array
-            self._frac_positions = np.array(self.positions)
+            # Use self._positions (fractional, set by super) directly to avoid
+            # triggering the positions override which calls cart_positions.
+            self._frac_positions = self._positions.copy()
         else:
             super().__init__(species, positions, lattice)
-            self._frac_positions = np.array(self.positions)
+            # Use self._positions directly; self.positions now returns Cartesian
+            # (via the override) which would create a circular dependency here.
+            self._frac_positions = self._positions.copy()
             self._cart_positions = self._convert_to_cartesian()
 
         self.site_properties = site_properties or []
@@ -221,6 +225,29 @@ class Crystal(Structure):
             "pbc": list(self.pbc),
             "site_properties": list(self.site_properties) if self.site_properties else [],
         }
+
+    def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
+        """Return site_properties filtered to kept_indices after atom removal."""
+        if not self.site_properties:
+            return {}
+        return {"site_properties": [self.site_properties[i] for i in kept_indices]}
+
+    def _reorder_per_atom_data(self, new_order: List[int]) -> Dict[str, Any]:
+        """Return site_properties reordered to new_order after atom sorting."""
+        if not self.site_properties:
+            return {}
+        return {"site_properties": [self.site_properties[i] for i in new_order]}
+
+    @property
+    def positions(self) -> np.ndarray:
+        """
+        Cartesian coordinates in Ångströms as a read-only numpy array of shape (n_atoms, 3).
+
+        Consistent with the ``Structure.positions`` contract (always Cartesian) and
+        with the ASE convention.  Use ``frac_positions`` to access fractional
+        coordinates explicitly.
+        """
+        return self.cart_positions
 
     @property
     def frac_positions(self) -> np.ndarray:
@@ -602,6 +629,15 @@ class Crystal(Structure):
             if self.site_properties and len(self.site_properties) == len(self.species):
                 new_site_props = list(self.site_properties)
             else:
+                if site_properties_list:
+                    warnings.warn(
+                        "Adding atoms with site_properties to a Crystal that has none. "
+                        "All existing atoms will receive an empty ({}) property dict. "
+                        "Initialise site_properties on the original crystal first to "
+                        "suppress this warning.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
                 new_site_props = [{}] * len(self.species)
             if site_properties_list:
                 new_site_props.extend(site_properties_list)
@@ -1358,8 +1394,13 @@ class Crystal(Structure):
             or (use_pbc and self._neighbor_tree_positions is None)
             or (
                 self._neighbor_tree_positions is not None
+                # NOTE: this only catches the case where MORE atoms are present than
+                # in the cached tree (atom count grew).  It does NOT detect position
+                # changes or atom removals.  Because Crystal is immutable every
+                # mutation returns a new object whose _neighbor_tree starts as None,
+                # so stale-tree reads on a live Crystal are not possible in practice.
                 and len(self._neighbor_tree_positions) < n_atoms
-            )  # Structure changed
+            )
         )
 
         if rebuild_tree:
@@ -1723,115 +1764,9 @@ class Crystal(Structure):
         Returns:
             Crystal: A random crystal object.
         """
-        from ..generation.random import random_crystal
+        from ..builders.bulk.random import random_crystal
 
         return random_crystal(dim, group, species, num_ions, **kwargs)
-
-    @property
-    def calc(self) -> Optional["Calculator"]:
-        """
-        Get the attached calculator.
-
-        Returns:
-            :obj:`~matsimpy.calculator.base.Calculator` or None: The attached calculator, or None if none attached.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> crystal.calc = LennardJones()
-            >>> crystal.calc  # <LennardJones object>
-            >>> crystal.calc = None  # Remove calculator
-            >>> crystal.calc  # None
-        """
-        from ..calculator.base import Calculator
-
-        return getattr(self, "_calculator", None)
-
-    @calc.setter
-    def calc(self, calculator: Optional["Calculator"]) -> None:
-        """
-        Attach a calculator to this crystal.
-
-        Sets a calculator that can be used to compute energies, forces, and stress.
-        The calculator must be an instance of
-        :class:`~matsimpy.calculator.base.Calculator`.
-
-        Args:
-            calculator: Calculator object (e.g., LennardJones, Mattersim, VASP)
-                      or None to remove the calculator.
-
-        Raises:
-            TypeError: If calculator is not a Calculator instance or None.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> crystal.calc = LennardJones()
-            >>> energy = crystal.get_potential_energy()
-        """
-        from ..calculator.base import Calculator
-
-        if calculator is not None and not isinstance(calculator, Calculator):
-            raise TypeError(
-                f"Calculator must be a Calculator instance, got {type(calculator)}"
-            )
-        self._calculator = calculator
-
-    def get_potential_energy(self) -> float:
-        """
-        Get potential energy from attached calculator.
-
-        Computes the potential energy using the attached calculator. If the
-        calculation hasn't been performed yet, it will be triggered automatically.
-
-        Returns:
-            float: Potential energy in eV.
-
-        Raises:
-            ValueError: If no calculator is attached.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> crystal.calc = LennardJones()
-            >>> energy = crystal.get_potential_energy()
-            >>> print(f"Energy: {energy:.4f} eV")
-        """
-        if self.calc is None:
-            raise ValueError(
-                "No calculator attached. Set crystal.calc = calculator first."
-            )
-        if not self.calc._calculation_performed:
-            self.calc.calculate(self)
-        return self.calc.get_potential_energy()
-
-    def get_forces(self) -> np.ndarray:
-        """
-        Get forces from attached calculator.
-
-        Computes the forces on all atoms using the attached calculator. If the
-        calculation hasn't been performed yet, it will be triggered automatically.
-
-        Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/A, where N is the
-                       number of atoms. Each row contains [Fx, Fy, Fz] for one atom.
-
-        Raises:
-            ValueError: If no calculator is attached.
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> crystal.calc = LennardJones()
-            >>> forces = crystal.get_forces()
-            >>> forces.shape
-            (2, 3)  # 2 atoms, 3 force components
-            >>> forces[0]  # Force on first atom
-            array([0.123, -0.456, 0.789])
-        """
-        if self.calc is None:
-            raise ValueError(
-                "No calculator attached. Set crystal.calc = calculator first."
-            )
-        if not self.calc._calculation_performed:
-            self.calc.calculate(self)
-        return self.calc.get_forces()
 
     def get_stress(self) -> np.ndarray:
         """
@@ -1862,7 +1797,7 @@ class Crystal(Structure):
             raise ValueError(
                 "No calculator attached. Set crystal.calc = calculator first."
             )
-        if not self.calc._calculation_performed:
+        if self._needs_calculation():
             self.calc.calculate(self)
         return self.calc.get_stress()
 
