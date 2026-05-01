@@ -85,3 +85,6 @@ benchmarks/*.csv
 benchmarks/*.txt
 benchmarks/results/
 configs
+
+# Git worktrees
+.worktrees/
