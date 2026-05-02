@@ -24,6 +24,7 @@ Example:
 import re
 import json
 import math
+import string
 import functools
 import types
 from collections import Counter
@@ -84,7 +85,6 @@ class Composition(MSONable):
         """
         # Parse and validate formula, tracking element order
         self._composition, self._element_order = self._parse_formula(formula)
-        self._input_formula = formula
         self._sort_by = sort_by
         self.formula = self._chemical_formula(sort_by=sort_by)
 
@@ -366,14 +366,12 @@ class Composition(MSONable):
 
         Examples:
             >>> Composition('Fe2O3').anonymous_formula
-            'A2B3'
+            'A3B2'
             >>> Composition('CaTiO3').anonymous_formula
             'A3BC'
             >>> Composition('NaCl').anonymous_formula
             'AB'
         """
-        import string
-
         # Sort by atomic number ascending
         sorted_elements = sorted(
             self._composition.items(),
