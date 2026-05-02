@@ -26,3 +26,7 @@ class TestCompositionParserNested(unittest.TestCase):
         with self.assertRaises(ValueError):
             Composition("2H")
 
+    def test_transactinide_formula_from_periodic_table_json(self):
+        comp = Composition("Og")
+        self.assertEqual(comp["Og"], 1)
+        self.assertEqual(comp.formula, "Og")

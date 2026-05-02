@@ -23,6 +23,25 @@ class TestElementComprehensive(unittest.TestCase):
         
         he = Element.from_Z(2)
         self.assertEqual(he.symbol, 'He')
+
+    def test_element_from_Z_supports_all_json_elements(self):
+        """Test creation of highest atomic-number elements from JSON-backed table."""
+        rf = Element.from_Z(104)
+        self.assertEqual(rf.symbol, 'Rf')
+        self.assertEqual(rf.atomic_no, 104)
+
+        og = Element.from_Z(118)
+        self.assertEqual(og.symbol, 'Og')
+        self.assertEqual(og.atomic_no, 118)
+
+    def test_transactinide_elements_by_symbol(self):
+        """Test elements beyond Lr are valid when present in periodic_table.json."""
+        rf = Element('Rf')
+        self.assertEqual(rf.atomic_no, 104)
+
+        og = Element.get_element('og')
+        self.assertEqual(og.symbol, 'Og')
+        self.assertEqual(og.atomic_no, 118)
     
     def test_element_from_Z_invalid_low(self):
         """Test invalid atomic number (too low)."""
@@ -170,7 +189,11 @@ class TestElementComprehensive(unittest.TestCase):
         """Test that all elements can be created."""
         from matsimpy.core.periodic_table import ELEMENTS
         
-        for symbol in ELEMENTS[:10]:  # Test first 10
+        self.assertEqual(len(ELEMENTS), 118)
+        self.assertEqual(ELEMENTS[0], 'H')
+        self.assertEqual(ELEMENTS[-1], 'Og')
+
+        for symbol in ELEMENTS:
             elem = Element(symbol)
             self.assertEqual(elem.symbol, symbol)
     
@@ -370,4 +393,3 @@ class TestElementComprehensive(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
