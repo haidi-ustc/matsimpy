@@ -43,6 +43,7 @@ from .structure import Structure
 from .composition import Composition
 from .periodic_table import Element
 from .site import Site
+from ._validation import validate_site_properties
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
@@ -151,14 +152,14 @@ class Molecule(Structure):
         obj._composition = None
         obj._formula = None
 
-        obj.site_properties = tuple(site_properties) if site_properties else ()
+        obj._site_properties = validate_site_properties(site_properties, len(obj._species))
         obj._sites = None  # lazy — populated on first .sites access
         obj._cached_com = None
         return obj
 
     def _construct_kwargs(self) -> Dict[str, Any]:
         return {
-            "site_properties": list(self.site_properties) if self.site_properties else None,
+            "site_properties": self.site_properties if self.site_properties else None,
         }
 
     def __init__(
@@ -193,11 +194,20 @@ class Molecule(Structure):
             ...                     site_properties=[{'charge': 0}, {'charge': -2}])
         """
         super().__init__(species, positions, None)
-        self.site_properties: Tuple[Dict[str, Any], ...] = (
-            tuple(site_properties) if site_properties else ()
+        self._site_properties: Tuple[Dict[str, Any], ...] = validate_site_properties(
+            site_properties, len(self.species)
         )
         self._sites = self._initialize_sites()
         self._cached_com: Optional[List[float]] = None
+
+    @property
+    def site_properties(self) -> Tuple[Dict[str, Any], ...]:
+        """Per-site metadata as deep-copied dictionaries."""
+        return tuple(copy.deepcopy(p) for p in self._site_properties)
+
+    @site_properties.setter
+    def site_properties(self, site_properties: Optional[List[Dict[str, Any]]]) -> None:
+        self._site_properties = validate_site_properties(site_properties, len(self.species))
 
     def _initialize_sites(self) -> List[Site]:
         """
@@ -640,7 +650,7 @@ class Molecule(Structure):
             "positions": self.positions.tolist(),
         }
         if self.site_properties:
-            d["site_properties"] = self.site_properties
+            d["site_properties"] = list(self.site_properties)
         return d
 
     @classmethod

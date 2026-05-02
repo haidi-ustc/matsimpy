@@ -51,6 +51,7 @@ from .lattice import Lattice
 from .periodic_table import Element
 from .site import CrystalSite
 from .composition import Composition
+from ._validation import validate_site_properties
 
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
@@ -205,7 +206,7 @@ class Crystal(Structure):
         cart.flags.writeable = False
         obj._cart_positions = cart
 
-        obj.site_properties = tuple(site_properties) if site_properties else ()
+        obj._site_properties = validate_site_properties(site_properties, len(obj._species))
         obj.pbc = tuple(pbc)
         obj._sites = None  # lazy — populated on first .sites access
         obj._neighbor_cache = None
@@ -214,7 +215,7 @@ class Crystal(Structure):
     def _construct_kwargs(self) -> Dict[str, Any]:
         return {
             "pbc": self.pbc,
-            "site_properties": list(self.site_properties) if self.site_properties else None,
+            "site_properties": self.site_properties if self.site_properties else None,
         }
 
     def __init__(
@@ -268,8 +269,8 @@ class Crystal(Structure):
             self._frac_positions = self._positions.copy()
             self._cart_positions = self._convert_to_cartesian()
 
-        self.site_properties: Tuple[Dict[str, Any], ...] = (
-            tuple(site_properties) if site_properties else ()
+        self._site_properties: Tuple[Dict[str, Any], ...] = validate_site_properties(
+            site_properties, len(self.species)
         )
         self._sites = self._initialize_sites()
         self.pbc: Tuple[bool, bool, bool] = (
@@ -279,6 +280,15 @@ class Crystal(Structure):
         # Bundled KD-tree cache — replaced as one atomic write to avoid
         # partially-initialised state under concurrent reads.
         self._neighbor_cache: Optional[_NeighborCache] = None
+
+    @property
+    def site_properties(self) -> Tuple[Dict[str, Any], ...]:
+        """Per-site metadata as deep-copied dictionaries."""
+        return tuple(copy.deepcopy(p) for p in self._site_properties)
+
+    @site_properties.setter
+    def site_properties(self, site_properties: Optional[List[dict]]) -> None:
+        self._site_properties = validate_site_properties(site_properties, len(self.species))
 
     # ======================================================================
     # Subclass extension hooks / extra serialisation fields
@@ -892,11 +902,11 @@ class Crystal(Structure):
         d = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
-            "pbc": self.pbc,
+            "pbc": list(self.pbc),
             "lattice": self.lattice.as_dict(),
-            "species": self.species,
+            "species": list(self.species),
             "positions": self.frac_positions.tolist(),
-            "site_properties": self.site_properties,
+            "site_properties": list(self.site_properties),
         }
         return d
 

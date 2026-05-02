@@ -31,6 +31,7 @@ from typing import List, Optional, Union, Dict, Any
 from monty.json import MSONable
 from .lattice import Lattice
 from .periodic_table import Element
+from ._validation import copy_properties
 
 
 class Site(MSONable):
@@ -235,9 +236,7 @@ class Site(MSONable):
         Raises:
             TypeError: If properties is not a dictionary
         """
-        if properties is not None and not isinstance(properties, dict):
-            raise TypeError("Properties must be a dictionary or None.")
-        return properties or {}
+        return copy_properties(properties)
 
     def _validate_position(
         self, position: Union[List[float], np.ndarray]
@@ -326,7 +325,7 @@ class Site(MSONable):
             >>> site2.properties
             {}
         """
-        return self._properties
+        return copy_properties(self._properties)
 
     @properties.setter
     def properties(self, properties: Optional[Dict[str, Any]]) -> None:
