@@ -39,6 +39,35 @@ from .crystal import Crystal
 from .molecule import Molecule
 
 
+def _crystal_all_pairs_distance_matrix(crystal: Crystal, use_pbc: bool) -> np.ndarray:
+    """Compute all-pairs crystal distances without relying on graph cutoffs."""
+    if not use_pbc or not any(crystal.pbc):
+        return cdist(crystal.cart_positions, crystal.cart_positions)
+
+    frac_positions = np.asarray(crystal.frac_positions, dtype=float)
+    frac_diffs = frac_positions[:, np.newaxis, :] - frac_positions[np.newaxis, :, :]
+
+    pbc = np.asarray(crystal.pbc, dtype=bool)
+    translation_axes = [[0] if not periodic else [-1, 0, 1] for periodic in pbc]
+    translations = np.array(
+        [
+            [i, j, k]
+            for i in translation_axes[0]
+            for j in translation_axes[1]
+            for k in translation_axes[2]
+        ],
+        dtype=float,
+    )
+
+    candidate_frac_diffs = frac_diffs[:, :, np.newaxis, :] + translations
+    candidate_cart_diffs = np.dot(candidate_frac_diffs, crystal.lattice.matrix)
+    candidate_distances = np.linalg.norm(candidate_cart_diffs, axis=-1)
+
+    dist_matrix = np.min(candidate_distances, axis=2)
+    np.fill_diagonal(dist_matrix, 0.0)
+    return dist_matrix
+
+
 class StructureGraph(ABC):
     """
     Abstract base class for structure graph representations.
@@ -733,21 +762,9 @@ class CrystalGraph(StructureGraph):
             Distance matrix of shape (N, N).
         """
         if self._distance_matrix is None:
-            if self.use_pbc:
-                n_atoms = self.num_nodes
-                dist_matrix = np.full((n_atoms, n_atoms), np.inf)
-                np.fill_diagonal(dist_matrix, 0.0)
-
-                # Use neighbor list with large cutoff
-                neighbors = self.structure.get_neighbor_list(cutoff=20.0, use_pbc=True)
-                for i, neighbor_list in neighbors.items():
-                    for j, dist in neighbor_list:
-                        dist_matrix[i, j] = dist
-
-                self._distance_matrix = dist_matrix
-            else:
-                positions = self.structure.cart_positions
-                self._distance_matrix = cdist(positions, positions)
+            self._distance_matrix = _crystal_all_pairs_distance_matrix(
+                self.structure, self.use_pbc
+            )
 
         return self._distance_matrix
 
@@ -906,8 +923,9 @@ def get_distance_matrix(
                    Entry (i, j) is the distance between atoms i and j in Angstroms.
 
     Note:
-        Uses a large cutoff (20.0 Å) to capture all distances. For very large
-        structures, this may be memory-intensive.
+        Crystal distances are computed as all-pairs distances directly. When
+        periodic boundary conditions are enabled, distances use the nearest
+        periodic image and are independent of graph edge cutoffs.
 
     Example:
         >>> from matsimpy.core import Molecule
@@ -918,7 +936,7 @@ def get_distance_matrix(
         >>> dist[0, 1]  # Distance between atoms 0 and 1
         1.2
     """
-    graph = create_structure_graph(structure, cutoff=20.0, use_pbc=use_pbc)
+    graph = create_structure_graph(structure, use_pbc=use_pbc)
     return graph.distance_matrix
 
 

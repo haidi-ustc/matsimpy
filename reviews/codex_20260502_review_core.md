@@ -14,11 +14,11 @@ This review identifies correctness issues, hidden bugs, design flaws, and extens
 |---|---|---|---|---|
 | Critical | Elements 104-118 are unusable despite existing in `periodic_table.json` | Correctness | High | Generate element ordering from JSON by atomic number; add `Rf`-`Og` tests. |
 | High | `Structure.__eq__` / `__hash__` contract is broken for near-equal coordinates | Hidden bug | High | Make approximate equality unhashable, or split exact equality from `almost_equals`. |
-| High | Crystal graph distance matrices silently return `inf` for atom pairs farther than 20 Å | Correctness | High | Compute true all-pairs distances; remove hard-coded neighbor cutoff. |
+| High | Crystal graph distance matrices silently return `inf` for atom pairs farther than 20 Å | Correctness | High | **Done**: compute true all-pairs crystal distances independent of neighbor cutoffs. |
 | High | `site_properties` length mismatches are silently ignored; dicts remain mutable/aliased | Hidden bug / design | High | **Done**: validate length, deep-copy on input, expose copy-on-read metadata. |
 | Medium | `Crystal.__init__` does not validate `pbc` or `lattice` consistently | Correctness | High | Centralize validators and use them in all construction paths. |
 | Medium | PBC neighbor model is incomplete for skewed cells and same-index periodic neighbors | Correctness / design | Medium | Replace image heuristic with robust minimum-image/cell-list logic and image shifts. |
-| Medium | `Composition` accepts zero-count formulas like `H0` and normalizes them incorrectly | Correctness | High | Reject zero counts and zero group multipliers during parsing. |
+| Medium | `Composition` accepts zero-count formulas like `H0` and normalizes them incorrectly | Correctness | High | **Done**: reject zero counts, zero group multipliers, and leading-zero counts during parsing. |
 | Medium | Species validation is inconsistent across `Structure`, `Site`, `Composition`, and `Element` | Design | High | Introduce one shared species normalization/validation function. |
 | Medium | Core mutation methods embed arbitrary chemistry policy, e.g. hard 0.5 Å minimum distance | Extensibility | Medium | Move reasonableness checks behind optional validation policies. |
 | Low | Serialization returns tuples in several places despite docs saying lists | Compatibility | Medium | Normalize serialized values to JSON-native lists/dicts. |
@@ -61,6 +61,9 @@ _ELEMENTS_SET = set(ELEMENTS)
 
 ### High: Crystal graph distance matrices are wrong beyond 20 Å
 
+**Status: Fixed**
+Replaced the neighbor-list-backed crystal distance matrix with direct all-pairs distance computation. PBC distances now use nearest-image candidates, respect partial PBC axes, and no longer depend on a 20 Å cutoff. Regression tests cover >20 Å PBC distances and cutoff-independent `CrystalGraph.distance_matrix`.
+
 **Evidence**
 - `matsimpy/core/graph.py:741-747` computes `CrystalGraph.distance_matrix` using `get_neighbor_list(cutoff=20.0)`.
 - `matsimpy/core/graph.py:921-922` makes functional `get_distance_matrix()` use the same hard-coded 20 Å cutoff.
@@ -89,6 +92,9 @@ def _crystal_distance_matrix(crystal):
 ---
 
 ### Medium: `Composition` accepts zero-count formulas
+
+**Status: Fixed**
+`Composition` now rejects numeric counts less than one and rejects leading-zero counts before they can be applied to elements or grouped subformulas. Regression tests cover `H0`, `Ca(OH)0`, and `H02`.
 
 **Evidence**
 - `matsimpy/core/composition.py:217-223` parses digit sequences as integers without rejecting zero.

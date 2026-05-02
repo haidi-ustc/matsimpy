@@ -69,6 +69,34 @@ class TestDistanceMatrix(unittest.TestCase):
         
         self.assertTrue(np.allclose(dist, dist.T))
 
+    def test_crystal_distance_matrix_not_limited_to_20_angstrom(self):
+        """Test PBC crystal distance matrices include pairs beyond 20 Å."""
+        crystal = Crystal(
+            ['H', 'H'],
+            [[0, 0, 0], [0.5, 0, 0]],
+            Lattice.cubic(100),
+        )
+        dist = get_distance_matrix(crystal, use_pbc=True)
+
+        self.assertEqual(dist.shape, (2, 2))
+        self.assertTrue(np.isfinite(dist[0, 1]))
+        self.assertAlmostEqual(dist[0, 1], 50.0)
+        self.assertAlmostEqual(dist[1, 0], 50.0)
+
+    def test_crystal_distance_matrix_uses_nearest_periodic_image(self):
+        """Test PBC crystal distances wrap periodic dimensions."""
+        crystal = Crystal(
+            ['H', 'H'],
+            [[0, 0, 0], [0.99, 0, 0]],
+            Lattice.cubic(100),
+        )
+
+        pbc_dist = get_distance_matrix(crystal, use_pbc=True)
+        non_pbc_dist = get_distance_matrix(crystal, use_pbc=False)
+
+        self.assertAlmostEqual(pbc_dist[0, 1], 1.0)
+        self.assertAlmostEqual(non_pbc_dist[0, 1], 99.0)
+
 class TestEdgeList(unittest.TestCase):
     """Test edge list generation."""
     

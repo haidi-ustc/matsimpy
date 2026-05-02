@@ -26,6 +26,18 @@ class TestCompositionParserNested(unittest.TestCase):
         with self.assertRaises(ValueError):
             Composition("2H")
 
+    def test_zero_element_count_raises(self):
+        with self.assertRaises(ValueError):
+            Composition("H0")
+
+    def test_zero_group_multiplier_raises(self):
+        with self.assertRaises(ValueError):
+            Composition("Ca(OH)0")
+
+    def test_leading_zero_count_raises(self):
+        with self.assertRaises(ValueError):
+            Composition("H02")
+
     def test_transactinide_formula_from_periodic_table_json(self):
         comp = Composition("Og")
         self.assertEqual(comp["Og"], 1)

@@ -220,7 +220,19 @@ class Composition(MSONable):
                 idx += 1
             if idx == start:
                 return 1, idx
-            return int(formula[start:idx]), idx
+            raw_count = formula[start:idx]
+            if len(raw_count) > 1 and raw_count.startswith("0"):
+                raise ValueError(
+                    f"Invalid count '{raw_count}' at position {start} in '{formula}'. "
+                    "Counts cannot have leading zeros."
+                )
+            count = int(raw_count)
+            if count <= 0:
+                raise ValueError(
+                    f"Invalid count '{raw_count}' at position {start} in '{formula}'. "
+                    "Counts must be positive."
+                )
+            return count, idx
 
         def parse_element_at(idx: int) -> Tuple[str, int]:
             if idx >= len(formula) or not formula[idx].isalpha() or not formula[idx].isupper():

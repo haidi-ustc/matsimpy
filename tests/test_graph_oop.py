@@ -176,6 +176,19 @@ class TestCrystalGraph(unittest.TestCase):
         
         self.assertEqual(dist.shape, (2, 2))
         self.assertEqual(dist[0, 0], 0.0)
+
+    def test_distance_matrix_not_limited_by_neighbor_cutoff(self):
+        """Test crystal distance matrices are not capped by graph cutoffs."""
+        crystal = Crystal(
+            ['H', 'H'],
+            [[0, 0, 0], [0.5, 0, 0]],
+            Lattice.cubic(100),
+        )
+        graph = CrystalGraph(crystal, cutoff=1.0, use_pbc=True)
+        dist = graph.distance_matrix
+
+        self.assertTrue(np.isfinite(dist[0, 1]))
+        self.assertAlmostEqual(dist[0, 1], 50.0)
     
     def test_coordination_numbers(self):
         """Test coordination numbers for crystal."""
