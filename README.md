@@ -227,6 +227,13 @@ cnt = build_carbon_nanotube(10, 0, length=1)  # Zigzag CNT
 
 ### Transformations
 
+Transformation helpers are functional: they return new structures and preserve
+the original object. Crystal-returning transformations preserve periodic
+boundary conditions (`pbc`) unless a function explicitly documents otherwise.
+Site metadata (`site_properties`) is preserved, reindexed, duplicated, or
+dropped by an explicit policy for transformations that reorder or synthesize
+sites.
+
 ```python
 from matsimpy.transformation import (
     translate, rotate, apply_strain, scale_lattice,
@@ -238,7 +245,10 @@ translated = translate(crystal, [1, 1, 1])
 rotated = rotate(translated, 90.0, [0, 0, 1])
 
 # Lattice transformations
-strained = apply_strain(crystal, [0.05, 0, 0])  # Uniaxial strain
+strained = apply_strain(
+    crystal,
+    [[0.05, 0, 0], [0, 0, 0], [0, 0, 0]],  # 5% uniaxial strain
+)
 scaled = scale_lattice(crystal, 1.1)            # Scale by 10%
 
 # Chemical transformations
@@ -246,7 +256,21 @@ substituted = substitute(crystal, [0, 1], ['Ge', 'Ge'])
 
 # Structural transformations
 supercell = make_supercell(crystal, [2, 2, 2])  # 2x2x2 supercell
+sheared = make_supercell(crystal, [[2, 1, 0], [0, 1, 0], [0, 0, 1]])
 ```
+
+Metadata and capability notes:
+
+- `swap_atoms()` and `sort_atoms()` reindex `site_properties` with the atoms.
+- `merge_atoms()` keeps the merged site's source metadata; `split_atom()` copies
+  the source site's metadata to each split site.
+- `make_supercell()` preserves `pbc` and repeats site metadata for generated
+  images, including non-diagonal integer scaling matrices.
+- `standardize_cell()` uses spglib when available and intentionally drops
+  `site_properties` when the standardized cell may reorder or change sites.
+- APIs that are not implemented yet, such as `get_niggli_reduced()`,
+  `fragment_molecule()`, and `generate_conformers()`, raise
+  `NotImplementedError` instead of returning placeholder structures.
 
 ### High-throughput transformations
 
@@ -261,6 +285,7 @@ from matsimpy.builders.bulk import from_prototype
 pipeline = TransformationPipeline("strain_study")
 pipeline.add_step(make_supercell, scaling_matrix=[2, 2, 2])
 pipeline.add_step(apply_strain, strain_matrix=[[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
+pipeline.save("strain_study.json")  # Typed JSON; NumPy arrays round-trip, opaque objects fail fast.
 
 # Apply to structure
 crystal = from_prototype('diamond', 'Si', 5.43)
@@ -311,6 +336,10 @@ results = processor.process(structures)
 for result in results:
     if result.success:
         print(f"Processed: {result.structure.formula}")
+
+# Sequential stream processing is lazy and yields as each input is transformed.
+for result in processor.process_stream(iter(structures)):
+    print(result.success)
 ```
 
 ### File I/O
