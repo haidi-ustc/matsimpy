@@ -22,7 +22,7 @@ class TestFromToFile(unittest.TestCase):
     
     def test_crystal_from_file_vasp(self):
         """Test Crystal.from_file with VASP format."""
-        poscar_file = Path(__file__).parent / "POSCAR-frac.vasp"
+        poscar_file = Path(__file__).resolve().parents[1] / "POSCAR-frac.vasp"
         if poscar_file.exists():
             crystal = Crystal.from_file(str(poscar_file))
             self.assertIsInstance(crystal, Crystal)
@@ -30,7 +30,7 @@ class TestFromToFile(unittest.TestCase):
     
     def test_crystal_from_file_with_format(self):
         """Test Crystal.from_file with explicit format."""
-        poscar_file = Path(__file__).parent / "POSCAR-frac.vasp"
+        poscar_file = Path(__file__).resolve().parents[1] / "POSCAR-frac.vasp"
         if poscar_file.exists():
             crystal = Crystal.from_file(str(poscar_file), format='vasp')
             self.assertIsInstance(crystal, Crystal)
