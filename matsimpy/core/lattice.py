@@ -35,6 +35,7 @@ Example:
 import numpy as np
 from typing import List, Union, Optional, Dict, Any
 from monty.json import MSONable
+from matsimpy.constants import LATTICE_TOL
 
 
 class Lattice(MSONable):
@@ -830,11 +831,11 @@ class Lattice(MSONable):
             return False
 
         # Use absolute tolerance only so the equality window is independent of
-        # the magnitude of the lattice parameters.  atol=1e-6 Å is well within
-        # any physically meaningful lattice precision and guarantees that the
-        # hash contract (a == b → hash(a) == hash(b)) is satisfied when __hash__
-        # rounds to 5 decimal places (bucket size = 5e-6 >> 1e-6).
-        return np.allclose(self.lattice_vectors, other.lattice_vectors, atol=1e-6, rtol=0)
+        # the magnitude of the lattice parameters.  LATTICE_TOL = 1e-6 Å is well
+        # within any physically meaningful lattice precision and guarantees that
+        # the hash contract (a == b → hash(a) == hash(b)) is satisfied when
+        # __hash__ rounds to 5 decimal places (bucket = 5e-6 > LATTICE_TOL).
+        return np.allclose(self.lattice_vectors, other.lattice_vectors, atol=LATTICE_TOL, rtol=0)
 
     def get_reciprocal_lattice(self) -> "Lattice":
         """

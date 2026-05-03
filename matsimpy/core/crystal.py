@@ -44,7 +44,7 @@ import warnings
 from tabulate import tabulate
 from typing import List, Optional, Union, Dict, Tuple, Any, Callable, TYPE_CHECKING, NamedTuple
 from scipy.spatial import cKDTree
-from scipy.spatial.distance import pdist, cdist, squareform
+from scipy.spatial.distance import cdist
 from collections import Counter
 from .structure import Structure
 from .lattice import Lattice
@@ -279,6 +279,9 @@ class Crystal(Structure):
             # (via the override) which would create a circular dependency here.
             self._frac_positions = self._positions.copy()
             self._cart_positions = self._convert_to_cartesian()
+
+        self._frac_positions.flags.writeable = False
+        self._cart_positions.flags.writeable = False
 
         self._site_properties: Tuple[Dict[str, Any], ...] = validate_site_properties(
             site_properties, len(self.species)
@@ -582,44 +585,36 @@ class Crystal(Structure):
             new_frac_positions = np.array([]).reshape(0, 3)
             new_cart_positions = np.array([]).reshape(0, 3)
 
-        # Check for duplicates within new positions using vectorized operations
-        if len(new_cart_positions) > 1:
-            # Use pdist for efficient pairwise distance calculation
-            distances_condensed = pdist(new_cart_positions)
+        # Check for duplicates within new positions using minimum-image convention
+        # so that atoms near opposite PBC boundaries are correctly identified as
+        # close neighbours (e.g. frac 0.01 and 0.99 in a 5 Å cell are ~0.1 Å apart).
+        if len(new_frac_positions) > 1:
+            n_new = len(new_frac_positions)
+            # Pairwise fractional differences: shape (n_new, n_new, 3)
+            frac_arr = np.array(new_frac_positions, dtype=np.float64)
+            frac_diffs = frac_arr[:, np.newaxis, :] - frac_arr[np.newaxis, :, :]
+            # Apply minimum image convention along all PBC dimensions
+            pbc_mask = np.array(self.pbc, dtype=bool)
+            if np.any(pbc_mask):
+                frac_diffs[:, :, pbc_mask] -= np.round(frac_diffs[:, :, pbc_mask])
+            # Convert to Cartesian and compute distances; shape (n_new, n_new)
+            cart_diffs = np.dot(frac_diffs, self.lattice.matrix)
+            dist_matrix = np.linalg.norm(cart_diffs, axis=2)
+            np.fill_diagonal(dist_matrix, np.inf)
 
-            if np.any(
-                distances_condensed < 1e-6
-            ):  # Essentially zero distance (duplicate)
-                # Only convert to square form if we found a problem
-                distances_square = squareform(distances_condensed)
-                # Find pairs with distance < 1e-6 (excluding diagonal)
-                np.fill_diagonal(distances_square, np.inf)
-                i, j = np.where(distances_square < 1e-6)
-                # Convert to list for error message
-                pos_list = (
-                    new_frac_positions.tolist()
-                    if isinstance(new_frac_positions, np.ndarray)
-                    else new_frac_positions
-                )
+            if np.any(dist_matrix < 1e-6):
+                i, j = np.where(dist_matrix < 1e-6)
+                pos_list = frac_arr.tolist()
                 raise ValueError(
                     f"Duplicate positions detected in new atoms: "
                     f"positions {i[0]} and {j[0]} are at the same location "
                     f"({pos_list[i[0]]})."
                 )
 
-            if np.any(distances_condensed < 0.5):  # Too close
-                # Only convert to square form if we found a problem
-                min_dist = np.min(distances_condensed)
-                distances_square = squareform(distances_condensed)
-                # Find pairs with minimum distance (excluding diagonal)
-                np.fill_diagonal(distances_square, np.inf)
-                i, j = np.where(np.abs(distances_square - min_dist) < 1e-10)
-                # Convert to list for error message
-                pos_list = (
-                    new_frac_positions.tolist()
-                    if isinstance(new_frac_positions, np.ndarray)
-                    else new_frac_positions
-                )
+            if np.any(dist_matrix < 0.5):
+                min_dist = np.min(dist_matrix)
+                i, j = np.where(np.abs(dist_matrix - min_dist) < 1e-10)
+                pos_list = frac_arr.tolist()
                 raise ValueError(
                     f"Atoms being added are too close: distance between "
                     f"positions {i[0]} and {j[0]} is {min_dist:.6f} Angstrom. "

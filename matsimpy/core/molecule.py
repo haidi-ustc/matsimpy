@@ -382,7 +382,11 @@ class Molecule(Structure):
         """
         from scipy.spatial.transform import Rotation
 
-        rotation = Rotation.from_rotvec(np.radians(angle) * np.array(axis))
+        axis_arr = np.array(axis, dtype=np.float64)
+        axis_norm = np.linalg.norm(axis_arr)
+        if axis_norm == 0:
+            raise ValueError("Rotation axis cannot be zero vector")
+        rotation = Rotation.from_rotvec(np.radians(angle) * (axis_arr / axis_norm))
         # Copy to a writeable array; older scipy versions reject read-only buffers
         # even though Rotation.apply() only reads from the input.
         new_positions = rotation.apply(np.array(self.positions))

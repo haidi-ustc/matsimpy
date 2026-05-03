@@ -193,9 +193,9 @@ def perturb_positions(
     perturbations = rng.normal(size=(len(indices), 3)) * amplitude
 
     if isinstance(structure, Crystal):
-        # Convert Cartesian perturbations to fractional
+        # Convert Cartesian perturbations to fractional using cached inverse
         frac_perturbations = np.dot(
-            perturbations, np.linalg.inv(structure.lattice.lattice_vectors)
+            perturbations, structure.lattice.inv_matrix
         )
 
         new_positions = structure.frac_positions.copy()

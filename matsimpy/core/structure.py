@@ -40,6 +40,7 @@ from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
 from ._validation import normalize_species
+from matsimpy.constants import POSITION_TOL, LATTICE_TOL
 
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
@@ -539,10 +540,10 @@ class Structure(ABC, MSONable):
             >>> {crystal1: 'value'}  # Can use as dictionary key
             {<Crystal object>: 'value'}
         """
-        # Round positions to 7 decimal places.  The equality tolerance in
-        # __eq__ is atol=1e-7, which is strictly less than the rounding bucket
-        # (5e-8), so any two positions considered equal will round identically
-        # and produce the same hash — satisfying the hash contract.
+        # Round positions to 7 decimal places (bucket = 5e-8).  The equality
+        # tolerance POSITION_TOL = 1e-8 is strictly less than 5e-8, so any two
+        # positions considered equal by __eq__ will round identically here and
+        # produce the same hash — satisfying the hash contract.
         hash_dict = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
@@ -594,17 +595,17 @@ class Structure(ABC, MSONable):
         if self.species != other.species:
             return False
 
-        # Check positions with tolerance.  atol=1e-7 keeps the equality window
-        # strictly inside the hash rounding bucket (5e-8 for 7 d.p.), ensuring
+        # Check positions with tolerance.  POSITION_TOL = 1e-8 is strictly less
+        # than the hash rounding bucket (5e-8 for 7 d.p.), ensuring
         # a == b ⟹ hash(a) == hash(b).
-        if not np.allclose(self.positions, other.positions, atol=1e-7, rtol=0):
+        if not np.allclose(self.positions, other.positions, atol=POSITION_TOL, rtol=0):
             return False
 
         # Check lattice (if both have lattices)
         if self.lattice is not None and other.lattice is not None:
-            # Compare lattice matrices using the same tolerance as Lattice.__eq__
+            # Compare lattice matrices using LATTICE_TOL, consistent with Lattice.__eq__
             if not np.allclose(
-                self.lattice.matrix, other.lattice.matrix, atol=1e-6, rtol=0
+                self.lattice.matrix, other.lattice.matrix, atol=LATTICE_TOL, rtol=0
             ):
                 return False
         elif self.lattice is not None or other.lattice is not None:
@@ -926,16 +927,13 @@ class Structure(ABC, MSONable):
 
         kept_indices = [i for i in range(n) if i not in set(index)]
 
-        species_list = list(self.species)
-        new_positions = self._positions.copy()
-        for idx in indices_to_remove:
-            species_list.pop(idx)
-            new_positions = np.delete(new_positions, idx, axis=0)
+        new_species = [self.species[i] for i in kept_indices]
+        new_positions = self._positions[np.array(kept_indices, dtype=int)] if kept_indices else np.empty((0, 3), dtype=np.float64)
 
         # Propagate per-atom metadata via hooks when present.
         per_atom = self._filter_per_atom_data(kept_indices)
         return self.__class__._construct(
-            species=tuple(species_list),
+            species=tuple(new_species),
             positions=new_positions,
             lattice=self.lattice,
             **self._construct_kwargs(),

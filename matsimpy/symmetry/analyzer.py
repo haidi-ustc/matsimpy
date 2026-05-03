@@ -3,6 +3,7 @@ Symmetry analysis implementation for crystals and molecules.
 """
 
 import numpy as np
+import warnings
 from typing import Dict, List, Optional, Tuple, Union, Any
 import os
 import json
@@ -878,7 +879,13 @@ def get_conventional_cell(
     )
 
     if std_cell is None:
-        # If standardization fails, return a copy of the original
+        warnings.warn(
+            "spglib.standardize_cell returned None — symmetry analysis failed. "
+            "Returning original crystal unchanged. "
+            "Check symprec value or structure validity.",
+            UserWarning,
+            stacklevel=2,
+        )
         return crystal.copy()
 
     std_lattice, std_positions, std_numbers = std_cell

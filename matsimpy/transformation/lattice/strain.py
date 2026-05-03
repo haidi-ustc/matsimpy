@@ -83,10 +83,8 @@ def apply_deformation(
     if deform_positions:
         # Also deform atomic positions (Cartesian)
         new_cart_positions = np.dot(crystal.cart_positions, deformation_matrix.T)
-        # Convert back to fractional
-        new_positions = np.dot(
-            new_cart_positions, np.linalg.inv(new_lattice_vectors)
-        )
+        # Convert back to fractional using the cached inverse of the new lattice
+        new_positions = np.dot(new_cart_positions, new_lattice.inv_matrix)
     else:
         # Keep fractional positions unchanged
         new_positions = crystal.frac_positions
