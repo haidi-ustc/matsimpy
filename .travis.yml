@@ -1,0 +1,47 @@
+# Travis CI configuration for MatSimPy
+# https://travis-ci.com/
+
+language: python
+dist: jammy
+os: linux
+
+cache: pip
+
+# Base matrix: core tests across all supported Python versions
+# Core deps only (numpy, scipy, monty, tabulate) — no optional packages
+python:
+  - "3.9"
+  - "3.10"
+  - "3.11"
+  - "3.12"
+
+install:
+  - pip install --upgrade pip
+  - pip install -e .[dev]
+
+script:
+  - pytest -m "not slow and not requires_torch and not requires_ase and not requires_pymatgen"
+
+jobs:
+  fast_finish: true
+  include:
+    # Extended test suite: includes io, builders, analysis, storage optional deps
+    # Excludes heavy torch/torch-geometric (ml extra) to keep CI reasonable
+    - name: "Extended tests (io, builders, analysis, storage)"
+      python: "3.12"
+      install:
+        - pip install --upgrade pip
+        - pip install -e .[dev,io,builders,analysis,storage]
+      script:
+        - pytest -m "not slow and not requires_torch"
+
+    # Coverage report on core suite
+    - name: "Coverage report"
+      python: "3.12"
+      install:
+        - pip install --upgrade pip
+        - pip install -e .[dev]
+      script:
+        - pytest --cov=matsimpy --cov-report=term --cov-report=xml -m "not slow and not requires_torch and not requires_ase and not requires_pymatgen"
+      after_success:
+        - bash <(curl -s https://codecov.io/bash) || echo "Codecov upload skipped"
