@@ -137,7 +137,7 @@ Cartesian
     
     def test_read_existing_POSCAR(self):
         """Test reading existing POSCAR file from tests."""
-        poscar_file = Path(__file__).parent / "POSCAR-frac.vasp"
+        poscar_file = Path(__file__).resolve().parents[1] / "POSCAR-frac.vasp"
         if poscar_file.exists():
             crystal = read_POSCAR(str(poscar_file))
             self.assertIsInstance(crystal, Crystal)
