@@ -7,6 +7,13 @@ Works for both Crystal and Molecule structures.
 from typing import List, Optional, Union, Callable
 import numpy as np
 from ...core import Crystal, Molecule
+from .._helpers import (
+    copy_site_properties,
+    rebuild_structure,
+    site_properties_for_indices,
+    validate_positive_scalar,
+    validate_vector3,
+)
 
 
 def sort_atoms(
@@ -70,18 +77,20 @@ def sort_atoms(
 
     if isinstance(structure, Crystal):
         new_positions = [structure.frac_positions[i].tolist() for i in sorted_indices]
-        return Crystal(
-            new_species, new_positions,
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            new_species,
+            new_positions,
             coords_are_cartesian=False,
-            pbc=list(structure.pbc),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=site_properties_for_indices(structure, sorted_indices),
         )
     else:
         new_positions = [structure.positions[i].tolist() for i in sorted_indices]
-        return Molecule(
-            new_species, new_positions,
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        return rebuild_structure(
+            structure,
+            new_species,
+            new_positions,
+            site_properties=site_properties_for_indices(structure, sorted_indices),
         )
 
 
@@ -112,7 +121,7 @@ def center_structure(
     if center is None:
         center = np.array([0.0, 0.0, 0.0])
     else:
-        center = np.array(center, dtype=np.float64)
+        center = validate_vector3("center", center)
 
     if isinstance(structure, Molecule):
         # Get current center of mass
@@ -122,9 +131,11 @@ def center_structure(
         # Move all atoms
         new_positions = structure.positions + displacement
 
-        return Molecule(
-            list(structure.species), new_positions.tolist(),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        return rebuild_structure(
+            structure,
+            list(structure.species),
+            new_positions.tolist(),
+            site_properties=copy_site_properties(structure),
         )
 
     else:
@@ -135,12 +146,12 @@ def center_structure(
 
         new_positions = frac_pos + displacement
 
-        return Crystal(
-            list(structure.species), new_positions.tolist(),
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            list(structure.species),
+            new_positions.tolist(),
             coords_are_cartesian=False,
-            pbc=list(structure.pbc),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=copy_site_properties(structure),
         )
 
 
@@ -172,14 +183,14 @@ def perturb_positions(
         >>> # Perturb specific atoms
         >>> perturbed = perturb_positions(structure, 0.1, indices=[0, 1, 2])
     """
-    if seed is not None:
-        np.random.seed(seed)
+    amplitude = validate_positive_scalar("amplitude", amplitude)
 
     if indices is None:
         indices = list(range(len(structure.species)))
 
-    # Generate random perturbations (Cartesian)
-    perturbations = np.random.randn(len(indices), 3) * amplitude
+    # Generate random perturbations (Cartesian) without mutating NumPy global RNG state.
+    rng = np.random.default_rng(seed)
+    perturbations = rng.normal(size=(len(indices), 3)) * amplitude
 
     if isinstance(structure, Crystal):
         # Convert Cartesian perturbations to fractional
@@ -191,11 +202,12 @@ def perturb_positions(
         for i, idx in enumerate(indices):
             new_positions[idx] += frac_perturbations[i]
 
-        return Crystal(
-            list(structure.species), new_positions.tolist(),
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            list(structure.species),
+            new_positions.tolist(),
             coords_are_cartesian=False,
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=copy_site_properties(structure),
         )
 
     # Molecule: apply Cartesian perturbations
@@ -203,9 +215,11 @@ def perturb_positions(
     for i, idx in enumerate(indices):
         new_positions[idx] += perturbations[i]
 
-    return Molecule(
-        list(structure.species), new_positions.tolist(),
-        site_properties=(list(structure.site_properties) if structure.site_properties else None),
+    return rebuild_structure(
+        structure,
+        list(structure.species),
+        new_positions.tolist(),
+        site_properties=copy_site_properties(structure),
     )
 
 

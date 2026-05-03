@@ -214,7 +214,6 @@ class BatchProcessor:
         """Process structures in parallel."""
         try:
             import multiprocessing
-            from functools import partial
 
             # Use 'spawn' context to avoid fork() warnings in Python 3.12+
             # when running in multi-threaded environments
@@ -225,7 +224,6 @@ class BatchProcessor:
             if self.progress:
                 try:
                     from tqdm import tqdm
-                    from functools import partial as partial_func
 
                     with ctx.Pool(self.n_workers) as pool:
                         # Use imap for progress tracking
@@ -302,17 +300,19 @@ class BatchProcessor:
             ...     if result.success:
             ...         process_structure(result.structure)
         """
-        items = [(i, s) for i, s in enumerate(structures)]
-
-        if self.n_workers > 1 and len(items) > 1:
+        if self.n_workers > 1:
+            items = [(i, s) for i, s in enumerate(structures)]
             # For parallel, we need to process all first
             # Could be optimized with async processing in future
-            results = self._process_parallel(items)
+            if len(items) > 1:
+                results = self._process_parallel(items)
+            else:
+                results = self._process_sequential(items)
             for result in results:
                 yield result
         else:
             # Sequential processing - can yield immediately
-            for item in items:
+            for item in enumerate(structures):
                 result = self._process_single(item)
 
                 if not result.success and self.error_handling == "raise":

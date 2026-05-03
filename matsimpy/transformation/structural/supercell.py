@@ -4,9 +4,47 @@ Supercell generation tools.
 Create supercells from unit cells by repeating the unit cell.
 """
 
+import copy
+import itertools
 from typing import List, Union
 import numpy as np
 from ...core import Crystal, Lattice
+from .._helpers import validate_integer_matrix3
+
+
+def _translation_representatives(
+    scaling_matrix: np.ndarray, det: int
+) -> list[np.ndarray]:
+    """Find integer lattice translations representing cosets in the supercell."""
+    inv_scaling = np.linalg.inv(scaling_matrix.astype(np.float64))
+    max_elem = int(np.max(np.abs(scaling_matrix)))
+    seen: set[tuple[float, float, float]] = set()
+    reps: list[np.ndarray] = []
+    tol = 1e-10
+
+    # Expand the search bound until all determinant representatives are found.
+    # The loop is bounded but generous for the small transformation matrices this
+    # functional helper is intended to support.
+    max_bound = max(8, 4 * max_elem + det + 2)
+    for bound in range(max(1, max_elem), max_bound + 1):
+        for translation in itertools.product(range(-bound, bound + 1), repeat=3):
+            translation_vector = np.array(translation, dtype=np.float64)
+            frac_in_supercell = translation_vector @ inv_scaling
+            if np.all(frac_in_supercell >= -tol) and np.all(
+                frac_in_supercell < 1.0 - tol
+            ):
+                key = tuple(np.round(frac_in_supercell % 1.0, 12))
+                if key in seen:
+                    continue
+                seen.add(key)
+                reps.append(translation_vector)
+                if len(reps) == det:
+                    return reps
+
+    raise RuntimeError(
+        "Supercell generation failed: could not find the expected translation "
+        f"representatives for determinant {det}."
+    )
 
 
 def make_supercell(
@@ -45,7 +83,7 @@ def make_supercell(
     if not isinstance(crystal, Crystal):
         raise TypeError("make_supercell requires a Crystal object")
 
-    scaling_matrix = np.array(scaling_matrix, dtype=np.int32)
+    scaling_matrix = np.array(scaling_matrix, dtype=np.float64)
 
     # Handle simple [a, b, c] format
     if scaling_matrix.ndim == 1:
@@ -54,8 +92,9 @@ def make_supercell(
         scaling_matrix = np.diag(scaling_matrix)
 
     # Validate matrix format
-    if scaling_matrix.shape != (3, 3):
-        raise ValueError("Scaling matrix must be 3x3 or [a, b, c] format")
+    scaling_matrix = validate_integer_matrix3(
+        "scaling_matrix", scaling_matrix, positive_determinant=True
+    )
 
     # Check if matrix is diagonal for simpler processing
     is_diagonal = np.allclose(scaling_matrix, np.diag(np.diag(scaling_matrix)))
@@ -72,6 +111,8 @@ def make_supercell(
     if is_diagonal:
         # Simple diagonal case - use optimized approach
         diag = np.diag(scaling_matrix)
+        if np.any(diag <= 0):
+            raise ValueError("Diagonal scaling factors must be positive")
         na, nb, nc = diag
 
         # Generate all translation vectors
@@ -93,50 +134,31 @@ def make_supercell(
 
                         if new_site_properties is not None and crystal.site_properties:
                             new_site_properties.append(
-                                crystal.site_properties[atom_idx].copy()
+                                copy.deepcopy(crystal.site_properties[atom_idx])
                             )
     else:
         # General matrix case - use more robust approach
         # Calculate the determinant to get number of unit cells
         det = int(round(np.linalg.det(scaling_matrix)))
-        if det <= 0:
-            raise ValueError("Scaling matrix must have positive determinant")
+        inv_scaling = np.linalg.inv(scaling_matrix.astype(np.float64))
 
-        # Generate all translation vectors in the supercell
-        # We need to find all integer combinations that satisfy:
-        # 0 <= i*a1 + j*b1 + k*c1 < 1, etc.
-        # This is complex, so we use a simpler approach: iterate over a reasonable range
+        for translation in _translation_representatives(scaling_matrix, det):
+            for atom_idx, (spec, pos) in enumerate(
+                zip(crystal.species, crystal.frac_positions)
+            ):
+                # Row-vector convention: r_cart = f_old @ L_old.
+                # With L_new = S @ L_old, the new fractional coordinate is
+                # (f_old + integer_translation) @ inv(S).
+                new_pos = (pos + translation) @ inv_scaling
+                new_pos = new_pos % 1.0
 
-        # Estimate range needed based on matrix elements
-        max_elem = np.max(np.abs(scaling_matrix))
-        range_estimate = max_elem + 2
+                new_species.append(spec)
+                new_positions.append(new_pos.tolist())
 
-        for i in range(-range_estimate, range_estimate + 1):
-            for j in range(-range_estimate, range_estimate + 1):
-                for k in range(-range_estimate, range_estimate + 1):
-                    translation = np.array([i, j, k])
-                    # Apply inverse scaling matrix to get fractional coordinates in new cell
-                    frac_coords = np.linalg.solve(scaling_matrix.T, translation)
-
-                    # Check if these coordinates are within [0, 1) in the supercell
-                    if np.all(frac_coords >= 0) and np.all(frac_coords < 1):
-                        # This is a valid translation in the supercell
-                        for atom_idx, (spec, pos) in enumerate(
-                            zip(crystal.species, crystal.frac_positions)
-                        ):
-                            new_pos = pos + frac_coords
-                            new_pos = new_pos % 1.0  # Wrap to [0, 1)
-
-                            new_species.append(spec)
-                            new_positions.append(new_pos.tolist())
-
-                            if (
-                                new_site_properties is not None
-                                and crystal.site_properties
-                            ):
-                                new_site_properties.append(
-                                    crystal.site_properties[atom_idx].copy()
-                                )
+                if new_site_properties is not None and crystal.site_properties:
+                    new_site_properties.append(
+                        copy.deepcopy(crystal.site_properties[atom_idx])
+                    )
 
         # Verify we found the correct number of atoms
         expected_atoms = len(crystal.species) * det
@@ -155,6 +177,7 @@ def make_supercell(
         new_lattice,
         site_properties=new_site_properties,
         coords_are_cartesian=False,
+        pbc=list(crystal.pbc),
     )
 
 

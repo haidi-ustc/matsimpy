@@ -6,10 +6,50 @@ to multiple structures.
 """
 
 import json
-from typing import List, Callable, Union, Any, Dict, Optional
+from typing import List, Callable, Union, Any, Dict
 from pathlib import Path
+import numpy as np
 from ..base import _validate_structure
 from ...core import Crystal, Molecule
+
+
+def _to_jsonable(value: Any) -> Any:
+    """Convert supported pipeline kwargs/metadata to explicit JSON values."""
+    if isinstance(value, np.ndarray):
+        return {"__matsimpy_ndarray__": value.tolist()}
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, tuple):
+        return {"__matsimpy_tuple__": [_to_jsonable(item) for item in value]}
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        converted = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("Pipeline serialization only supports string dict keys")
+            converted[key] = _to_jsonable(item)
+        return converted
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _from_jsonable(value: Any) -> Any:
+    """Restore values encoded by ``_to_jsonable``."""
+    if isinstance(value, list):
+        return [_from_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        if set(value) == {"__matsimpy_ndarray__"}:
+            return np.array(value["__matsimpy_ndarray__"])
+        if set(value) == {"__matsimpy_tuple__"}:
+            return tuple(_from_jsonable(item) for item in value["__matsimpy_tuple__"])
+        return {key: _from_jsonable(item) for key, item in value.items()}
+    return value
 
 
 class TransformationPipeline:
@@ -191,7 +231,11 @@ class TransformationPipeline:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         # Prepare serializable representation
-        pipeline_dict = {"name": self.name, "steps": [], "metadata": self.metadata}
+        pipeline_dict = {
+            "name": self.name,
+            "steps": [],
+            "metadata": _to_jsonable(self.metadata),
+        }
 
         for step in self.steps:
             # Try to get function module and name
@@ -202,12 +246,12 @@ class TransformationPipeline:
             step_dict = {
                 "func_module": func_module,
                 "func_name": func_name,
-                "kwargs": step["kwargs"],
+                "kwargs": _to_jsonable(step["kwargs"]),
             }
             pipeline_dict["steps"].append(step_dict)
 
         with open(path, "w") as f:
-            json.dump(pipeline_dict, f, indent=2, default=str)
+            json.dump(pipeline_dict, f, indent=2)
 
     @classmethod
     def load(cls, path: Union[str, Path]) -> "TransformationPipeline":
@@ -235,13 +279,13 @@ class TransformationPipeline:
             pipeline_dict = json.load(f)
 
         pipeline = cls(name=pipeline_dict["name"])
-        pipeline.metadata = pipeline_dict.get("metadata", {})
+        pipeline.metadata = _from_jsonable(pipeline_dict.get("metadata", {}))
 
         # Load steps
         for step_dict in pipeline_dict["steps"]:
             func_module = step_dict.get("func_module")
             func_name = step_dict.get("func_name")
-            kwargs = step_dict.get("kwargs", {})
+            kwargs = _from_jsonable(step_dict.get("kwargs", {}))
 
             # Try to import function
             if func_module and func_name:

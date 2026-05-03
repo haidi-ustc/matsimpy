@@ -7,6 +7,11 @@ Works for both Crystal and Molecule structures.
 from typing import List, Optional, Union
 import numpy as np
 from ...core import Crystal, Molecule
+from .._helpers import (
+    copy_site_properties,
+    rebuild_structure,
+    site_properties_for_indices,
+)
 
 
 def move_atoms(
@@ -61,12 +66,12 @@ def move_atoms(
         for idx in indices:
             new_positions[idx] += frac_displacement
 
-        return Crystal(
-            list(structure.species), new_positions.tolist(),
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            list(structure.species),
+            new_positions.tolist(),
             coords_are_cartesian=False,
-            pbc=list(structure.pbc),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=copy_site_properties(structure),
         )
     else:
         if not cartesian:
@@ -77,9 +82,11 @@ def move_atoms(
         for idx in indices:
             new_positions[idx] += displacement
 
-        return Molecule(
-            list(structure.species), new_positions.tolist(),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        return rebuild_structure(
+            structure,
+            list(structure.species),
+            new_positions.tolist(),
+            site_properties=copy_site_properties(structure),
         )
 
 
@@ -111,23 +118,29 @@ def swap_atoms(
         species_list[index1],
     )
 
+    site_order = list(range(len(structure.species)))
+    site_order[index1], site_order[index2] = site_order[index2], site_order[index1]
+    site_properties = site_properties_for_indices(structure, site_order)
+
     if isinstance(structure, Crystal):
         # Use fractional coordinates for Crystal construction
         frac_positions = structure.frac_positions.copy()
         frac_positions[[index1, index2]] = frac_positions[[index2, index1]]
-        return Crystal(
-            species_list, frac_positions.tolist(),
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            species_list,
+            frac_positions.tolist(),
             coords_are_cartesian=False,
-            pbc=list(structure.pbc),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=site_properties,
         )
     else:
         cart_positions = structure.positions.copy()
         cart_positions[[index1, index2]] = cart_positions[[index2, index1]]
-        return Molecule(
-            species_list, cart_positions.tolist(),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        return rebuild_structure(
+            structure,
+            species_list,
+            cart_positions.tolist(),
+            site_properties=site_properties,
         )
 
 
@@ -170,7 +183,10 @@ def merge_atoms(
     keep_idx = min(index1, index2)
     remove_idx = max(index1, index2)
 
-    new_species = [s for i, s in enumerate(structure.species) if i != keep_idx and i != remove_idx]
+    kept_indices = [
+        i for i in range(len(structure.species)) if i != keep_idx and i != remove_idx
+    ]
+    new_species = [structure.species[i] for i in kept_indices]
 
     if isinstance(structure, Crystal):
         src_positions = structure.frac_positions
@@ -183,24 +199,29 @@ def merge_atoms(
     else:
         merged_position = np.array(position, dtype=np.float64)
 
-    new_positions = [p for i, p in enumerate(src_positions) if i != keep_idx and i != remove_idx]
+    new_positions = [src_positions[i].tolist() for i in kept_indices]
 
     # Add merged atom at the keep position
     new_species.insert(keep_idx, species)
     new_positions.insert(keep_idx, merged_position.tolist())
+    site_order = kept_indices.copy()
+    site_order.insert(keep_idx, index1)
+    site_properties = site_properties_for_indices(structure, site_order)
 
     if isinstance(structure, Crystal):
-        return Crystal(
-            new_species, new_positions,
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            new_species,
+            new_positions,
             coords_are_cartesian=False,
-            pbc=list(structure.pbc),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=site_properties,
         )
     else:
-        return Molecule(
-            new_species, new_positions,
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        return rebuild_structure(
+            structure,
+            new_species,
+            new_positions,
+            site_properties=site_properties,
         )
 
 
@@ -231,32 +252,40 @@ def split_atom(
         >>> split = split_atom(structure, 0, ['H', 'H'],
         ...                    [[0, 0, 0], [0.1, 0, 0]])
     """
+    if len(species) != len(positions):
+        raise ValueError("species and positions must have the same length")
+
     if isinstance(structure, Crystal):
         src_pos = structure.frac_positions
     else:
         src_pos = structure.positions
 
     # Build new species and positions lists
-    new_species = [s for i, s in enumerate(structure.species) if i != index]
-    new_positions = [p.tolist() for i, p in enumerate(src_pos) if i != index]
+    kept_indices = [i for i in range(len(structure.species)) if i != index]
+    new_species = [structure.species[i] for i in kept_indices]
+    new_positions = [src_pos[i].tolist() for i in kept_indices]
 
     # Add new atoms at the split position
     for spec, pos in zip(species, positions):
         new_species.append(spec)
         new_positions.append(pos)
+    site_order = kept_indices + [index] * len(species)
+    site_properties = site_properties_for_indices(structure, site_order)
 
     if isinstance(structure, Crystal):
-        return Crystal(
-            new_species, new_positions,
-            lattice=structure.lattice,
+        return rebuild_structure(
+            structure,
+            new_species,
+            new_positions,
             coords_are_cartesian=False,
-            pbc=list(structure.pbc),
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+            site_properties=site_properties,
         )
     else:
-        return Molecule(
-            new_species, new_positions,
-            site_properties=(list(structure.site_properties) if structure.site_properties else None),
+        return rebuild_structure(
+            structure,
+            new_species,
+            new_positions,
+            site_properties=site_properties,
         )
 
 

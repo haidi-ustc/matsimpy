@@ -6,8 +6,10 @@ merging, and conformer generation.
 """
 
 from typing import List, Optional, Tuple
+import copy
 import numpy as np
 from ...core import Molecule
+from .._helpers import copy_site_properties
 
 
 def fragment_molecule(
@@ -28,11 +30,11 @@ def fragment_molecule(
         >>> # Break bond between atoms 1 and 2
         >>> fragments = fragment_molecule(mol, [(1, 2)])
     """
-    # This is a simplified implementation
-    # Full version would use graph analysis
-
-    # For now, return single fragment
-    return [molecule.copy()]
+    raise NotImplementedError(
+        "Molecule fragmentation is not implemented yet. A bond graph and "
+        "site-property remapping policy are required before this can return "
+        "chemically meaningful fragments."
+    )
 
 
 def align_molecules(
@@ -81,7 +83,11 @@ def align_molecules(
     # Apply transformation to molecule2
     aligned_coords = np.dot(molecule2.positions - center2, R) + center1
 
-    return Molecule(list(molecule2.species), aligned_coords.tolist())
+    return Molecule(
+        list(molecule2.species),
+        aligned_coords.tolist(),
+        site_properties=copy_site_properties(molecule2),
+    )
 
 
 def generate_conformers(
@@ -106,15 +112,10 @@ def generate_conformers(
     Note:
         Requires RDKit for conformer generation.
     """
-    try:
-        from rdkit import Chem
-        from rdkit.Chem import AllChem
-    except ImportError:
-        raise ImportError("RDKit required for conformer generation")
-
-    # This is a placeholder - full implementation would use RDKit
-    # For now, return list with original molecule
-    return [molecule.copy() for _ in range(n_conformers)]
+    raise NotImplementedError(
+        "Conformer generation is not implemented yet. It requires a validated "
+        "Molecule-to-RDKit conversion and back-mapping of site metadata."
+    )
 
 
 def merge_molecules(
@@ -153,6 +154,20 @@ def merge_molecules(
     # Combine
     all_species = list(molecule1.species) + list(molecule2.species)
     all_positions = np.vstack([molecule1.positions, new_positions2])
+    if molecule1.site_properties or molecule2.site_properties:
+        props1 = (
+            [copy.deepcopy(prop) for prop in molecule1.site_properties]
+            if molecule1.site_properties
+            else [{} for _ in molecule1.species]
+        )
+        props2 = (
+            [copy.deepcopy(prop) for prop in molecule2.site_properties]
+            if molecule2.site_properties
+            else [{} for _ in molecule2.species]
+        )
+        all_site_properties: Optional[list[dict]] = props1 + props2
+    else:
+        all_site_properties = None
 
     # Remove specified atoms
     if remove_atoms is not None:
@@ -160,8 +175,16 @@ def merge_molecules(
         mask[remove_atoms] = False
         all_species = [s for i, s in enumerate(all_species) if mask[i]]
         all_positions = all_positions[mask]
+        if all_site_properties is not None:
+            all_site_properties = [
+                prop for i, prop in enumerate(all_site_properties) if mask[i]
+            ]
 
-    return Molecule(all_species, all_positions.tolist())
+    return Molecule(
+        all_species,
+        all_positions.tolist(),
+        site_properties=all_site_properties,
+    )
 
 
 __all__ = [

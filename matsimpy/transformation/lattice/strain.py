@@ -5,6 +5,7 @@ Strain and deformation operations for crystal lattices.
 from typing import List, Union, Optional
 import numpy as np
 from ...core import Crystal, Lattice
+from .._helpers import validate_positive_scalar
 
 
 def apply_strain(
@@ -126,12 +127,12 @@ def perturb_lattice(
         >>> # With random seed for reproducibility
         >>> perturbed = perturb_lattice(crystal, 0.05, seed=42)
     """
-    if seed is not None:
-        np.random.seed(seed)
+    amplitude = validate_positive_scalar("amplitude", amplitude)
 
     # Generate random perturbations for each lattice vector
     # Shape: (3, 3) - 3 vectors, each with 3 components
-    perturbations = np.random.randn(3, 3) * amplitude
+    rng = np.random.default_rng(seed)
+    perturbations = rng.normal(size=(3, 3)) * amplitude
 
     # Add perturbations to lattice vectors
     new_lattice_vectors = crystal.lattice.lattice_vectors + perturbations

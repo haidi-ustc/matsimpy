@@ -111,8 +111,10 @@ def get_niggli_reduced(crystal: Crystal) -> Crystal:
     Note:
         Requires spglib for full implementation.
     """
-    # Placeholder - just returns a copy
-    return crystal.copy()
+    raise NotImplementedError(
+        "Niggli reduction is not implemented yet. Install/use a reduction "
+        "backend and add explicit site metadata remapping before exposing this API."
+    )
 
 
 def standardize_cell(
@@ -155,7 +157,7 @@ def standardize_cell(
                     lattice=Lattice(lattice),
                     coords_are_cartesian=False,
                     pbc=list(crystal.pbc),
-                    site_properties=(list(crystal.site_properties) if crystal.site_properties else None),
+                    site_properties=None,
                 )
         else:
             std_cell = spglib.standardize_cell(cell)
@@ -167,7 +169,7 @@ def standardize_cell(
                     lattice=Lattice(lattice),
                     coords_are_cartesian=False,
                     pbc=list(crystal.pbc),
-                    site_properties=(list(crystal.site_properties) if crystal.site_properties else None),
+                    site_properties=None,
                 )
 
     except ImportError:
