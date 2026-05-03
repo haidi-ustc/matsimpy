@@ -129,5 +129,50 @@ class TestSharedSpeciesValidation(unittest.TestCase):
             molecule.substitute(0, 'Zz')
 
 
+class TestUnicodeDisplayUnits(unittest.TestCase):
+    """Test human-readable core displays use Unicode unit symbols."""
+
+    def test_crystal_str_and_repr_use_unicode_units(self):
+        crystal = Crystal(
+            ['Na', 'Cl'],
+            [[0, 0, 0], [0.5, 0.5, 0.5]],
+            Lattice.cubic(5.64),
+        )
+
+        printed = str(crystal)
+        represented = repr(crystal)
+
+        self.assertIn("90.0°/90.0°/90.0°", represented)
+        self.assertIn("Volume: 179.4061 Å³", printed)
+        self.assertIn("Density:", printed)
+        self.assertIn("g/cm³", printed)
+        self.assertNotIn(" deg", represented)
+        self.assertNotIn("A^3", printed)
+        self.assertNotIn("cm^3", printed)
+
+    def test_crystal_lower_dimensional_str_uses_unicode_area_units(self):
+        crystal = Crystal(
+            ['C'],
+            [[0, 0, 0]],
+            Lattice.cubic(5.0),
+            pbc=[True, True, False],
+        )
+
+        printed = str(crystal)
+
+        self.assertIn("Area: 25.0000 Å²", printed)
+        self.assertIn("g/cm²", printed)
+        self.assertNotIn("A^2", printed)
+        self.assertNotIn("cm^2", printed)
+
+    def test_molecule_str_keeps_unicode_angstrom_units(self):
+        molecule = Molecule(['H'], [[0, 0, 0]])
+
+        printed = str(molecule)
+
+        self.assertIn("Center of mass: (0.0000, 0.0000, 0.0000) Å", printed)
+        self.assertNotIn(" A", printed)
+
+
 if __name__ == "__main__":
     unittest.main()

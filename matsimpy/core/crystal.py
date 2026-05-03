@@ -1097,10 +1097,10 @@ class Crystal(Structure):
             Crystal: NaCl
               Sites: 2 atoms
               PBC: [T T T]
-              Lattice: a=5.6400 A, b=5.6400 A, c=5.6400 A
-                       alpha=90.00 deg, beta=90.00 deg, gamma=90.00 deg
-              Volume: 179.4064 A^3
-              Density: 2.1650 g/cm^3
+              Lattice: a=5.6400 Å, b=5.6400 Å, c=5.6400 Å
+                       α=90.00°, β=90.00°, γ=90.00°
+              Volume: 179.4064 Å³
+              Density: 2.1650 g/cm³
             ...
         """
         # Basic info
@@ -1121,33 +1121,33 @@ class Crystal(Structure):
         try:
             if pbc_count == 3:
                 # 3D material
-                info += f"  Volume: {self.volume:.4f} A^3\n"
+                info += f"  Volume: {self.volume:.4f} Å³\n"
                 density = self.density
                 # Use appropriate formatting based on magnitude
                 if density < 0.01 or density > 1000:
-                    info += f"  Density: {density:.6e} g/cm^3\n"
+                    info += f"  Density: {density:.6e} g/cm³\n"
                 else:
-                    info += f"  Density: {density:.4f} g/cm^3\n"
+                    info += f"  Density: {density:.4f} g/cm³\n"
             elif pbc_count == 2:
                 # 2D material
-                info += f"  Area: {self.area:.4f} A^2\n"
+                info += f"  Area: {self.area:.4f} Å²\n"
                 density = self.density
                 # 2D densities are typically very small, use scientific notation
-                info += f"  Density: {density:.6e} g/cm^2\n"
+                info += f"  Density: {density:.6e} g/cm²\n"
             elif pbc_count == 1:
                 # 1D material
-                info += f"  Length: {self.length:.4f} A\n"
+                info += f"  Length: {self.length:.4f} Å\n"
                 density = self.density
                 # 1D densities are typically very small, use scientific notation
                 info += f"  Density: {density:.6e} g/cm\n"
             else:
                 # 0D material (no PBC) - still show volume
-                info += f"  Volume: {self.volume:.4f} A^3\n"
+                info += f"  Volume: {self.volume:.4f} Å³\n"
                 density = self.density
                 if density < 0.01 or density > 1000:
-                    info += f"  Density: {density:.6e} g/cm^3\n"
+                    info += f"  Density: {density:.6e} g/cm³\n"
                 else:
-                    info += f"  Density: {density:.4f} g/cm^3\n"
+                    info += f"  Density: {density:.4f} g/cm³\n"
         except (ValueError, AttributeError) as e:
             info += "\n"
 
@@ -1185,7 +1185,7 @@ class Crystal(Structure):
         # Use shorter lattice format: axbxc, alpha/beta/gamma
         lattice_str = (
             f"{self.lattice.a:.4f}x{self.lattice.b:.4f}x{self.lattice.c:.4f}, "
-            f"{self.lattice.alpha:.1f} deg/{self.lattice.beta:.1f} deg/{self.lattice.gamma:.1f} deg"
+            f"{self.lattice.alpha:.1f}°/{self.lattice.beta:.1f}°/{self.lattice.gamma:.1f}°"
         )
         # Compact PBC format: [T,T,T] or [T,F,T]
         pbc_str = "[" + ",".join("T" if p else "F" for p in self.pbc) + "]"
