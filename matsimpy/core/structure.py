@@ -39,6 +39,7 @@ from monty.json import MSONable
 from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
+from ._validation import normalize_species
 
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
@@ -132,11 +133,12 @@ class Structure(ABC, MSONable):
         """
         Internal lightweight constructor.
 
-        This bypasses ``__init__`` and therefore skips validation. It is intended
-        for internal mutation pipelines that already operate on validated data.
+        This bypasses ``__init__`` but still validates species and array shape.
+        It is intended for internal mutation pipelines that already operate on
+        mostly validated data.
         """
         obj = cls.__new__(cls)
-        obj._species = tuple(species)
+        obj._species = tuple(normalize_species(s) for s in species)
         obj._positions = np.array(positions, dtype=np.float64, copy=True)
         if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
             raise ValueError("positions must have shape (n_atoms, 3)")
@@ -180,13 +182,18 @@ class Structure(ABC, MSONable):
             This is an abstract base class constructor. Use Crystal or Molecule
             subclasses instead of instantiating Structure directly.
         """
-        # Convert to list first, then tuple for immutability
+        # Convert to list first, then tuple for immutability.  Keep the
+        # historical homogeneous-input requirement, but route every accepted
+        # species through the shared normalizer so invalid symbols fail early.
         if all(isinstance(s, str) for s in species):
-            species_list = list(species)
-        elif all(isinstance(s, int) for s in species):
-            species_list = [Element.from_Z(s).symbol for s in species]
+            species_list = [normalize_species(s) for s in species]
+        elif all(
+            isinstance(s, (int, np.integer)) and not isinstance(s, (bool, np.bool_))
+            for s in species
+        ):
+            species_list = [normalize_species(s) for s in species]
         elif all(isinstance(s, Element) for s in species):
-            species_list = [s.symbol for s in species]
+            species_list = [normalize_species(s) for s in species]
         else:
             raise TypeError(
                 "Invalid type for species. \

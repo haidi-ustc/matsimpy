@@ -31,7 +31,7 @@ from typing import List, Optional, Union, Dict, Any
 from monty.json import MSONable
 from .lattice import Lattice
 from .periodic_table import Element
-from ._validation import copy_properties
+from ._validation import copy_properties, normalize_species
 
 
 class Site(MSONable):
@@ -200,26 +200,7 @@ class Site(MSONable):
             TypeError: If specie is not valid type
             ValueError: If atomic number is invalid
         """
-        if specie is None:
-            return "X"
-
-        if not isinstance(specie, (str, int, Element)):
-            raise TypeError("Specie must be a string, integer, or Element object.")
-
-        if isinstance(specie, int):
-            # Validate atomic number before creating Element
-            if not (1 <= specie <= 118):  # Extended to current periodic table
-                raise ValueError(
-                    f"Invalid atomic number: {specie}. Must be between 1 and 118."
-                )
-            return Element.from_Z(specie).symbol
-        elif isinstance(specie, str):
-            # Basic validation for element symbols
-            if len(specie) < 1 or len(specie) > 2:
-                warnings.warn(f"Element symbol '{specie}' may be invalid", UserWarning)
-            return specie
-        elif isinstance(specie, Element):
-            return specie.symbol
+        return normalize_species(specie, none_as_dummy=True)
 
     def _validate_properties(
         self, properties: Optional[Dict[str, Any]]

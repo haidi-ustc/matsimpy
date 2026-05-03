@@ -43,7 +43,7 @@ from .structure import Structure
 from .composition import Composition
 from .periodic_table import Element
 from .site import Site
-from ._validation import validate_site_properties
+from ._validation import normalize_species, validate_site_properties
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
@@ -143,7 +143,7 @@ class Molecule(Structure):
         ``Structure._positions`` convention for Molecule).
         """
         obj = cls.__new__(cls)
-        obj._species = tuple(species)
+        obj._species = tuple(normalize_species(s) for s in species)
         obj._positions = np.array(positions, dtype=np.float64, copy=True)
         if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
             raise ValueError("positions must have shape (n_atoms, 3)")

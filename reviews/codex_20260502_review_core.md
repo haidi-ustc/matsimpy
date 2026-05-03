@@ -12,14 +12,14 @@ This review identifies correctness issues, hidden bugs, design flaws, and extens
 
 | Severity | Issue | Category | Confidence | Primary solution |
 |---|---|---|---|---|
-| Critical | Elements 104-118 are unusable despite existing in `periodic_table.json` | Correctness | High | Generate element ordering from JSON by atomic number; add `Rf`-`Og` tests. |
+| Critical | Elements 104-118 are unusable despite existing in `periodic_table.json` | Correctness | High | **Done**: Generate element ordering from JSON by atomic number; add `Rf`-`Og` tests. |
 | High | `Structure.__eq__` / `__hash__` contract is broken for near-equal coordinates | Hidden bug | High | Make approximate equality unhashable, or split exact equality from `almost_equals`. |
 | High | Crystal graph distance matrices silently return `inf` for atom pairs farther than 20 Å | Correctness | High | **Done**: compute true all-pairs crystal distances independent of neighbor cutoffs. |
 | High | `site_properties` length mismatches are silently ignored; dicts remain mutable/aliased | Hidden bug / design | High | **Done**: validate length, deep-copy on input, expose copy-on-read metadata. |
-| Medium | `Crystal.__init__` does not validate `pbc` or `lattice` consistently | Correctness | High | Centralize validators and use them in all construction paths. |
-| Medium | PBC neighbor model is incomplete for skewed cells and same-index periodic neighbors | Correctness / design | Medium | Replace image heuristic with robust minimum-image/cell-list logic and image shifts. |
+| Medium | `Crystal.__init__` does not validate `pbc` or `lattice` consistently | Correctness | High | **Done**: centralize lattice/PBC validation across constructors, deserialization, and `set_pbc`. |
+| Medium | PBC neighbor model is incomplete for skewed cells and same-index periodic neighbors | Correctness / design | Medium | **Done**: use reciprocal-height image bounds and keep nonzero periodic self-neighbors. |
 | Medium | `Composition` accepts zero-count formulas like `H0` and normalizes them incorrectly | Correctness | High | **Done**: reject zero counts, zero group multipliers, and leading-zero counts during parsing. |
-| Medium | Species validation is inconsistent across `Structure`, `Site`, `Composition`, and `Element` | Design | High | Introduce one shared species normalization/validation function. |
+| Medium | Species validation is inconsistent across `Structure`, `Site`, `Composition`, and `Element` | Design | High | **Done**: route core species inputs through a shared normalizer. |
 | Medium | Core mutation methods embed arbitrary chemistry policy, e.g. hard 0.5 Å minimum distance | Extensibility | Medium | Move reasonableness checks behind optional validation policies. |
 | Low | Serialization returns tuples in several places despite docs saying lists | Compatibility | Medium | Normalize serialized values to JSON-native lists/dicts. |
 | Low | `Crystal`, `Molecule`, and `Structure` mix domain state with I/O, converters, calculators, DFT adapters | Extensibility | High | Move adapters into service modules or thin optional wrappers. |
@@ -192,6 +192,9 @@ solved: Yes
 
 ### Medium: Crystal construction validation is split and inconsistent
 
+**Status: Fixed**
+Added shared `validate_lattice()` and `validate_pbc()` helpers and used them in `Crystal.__init__`, `Crystal._construct`, `Crystal.from_dict`, and `Crystal.set_pbc`. Constructors now reject `None` lattice with a domain-specific error, reject malformed PBC inputs consistently, and normalize `np.bool_` flags to Python `bool`.
+
 **Evidence**
 - `Crystal.set_pbc()` validates PBC at `matsimpy/core/crystal.py:368-376`.
 - `Crystal.__init__()` directly stores `tuple(pbc)` at `matsimpy/core/crystal.py:275-277`.
@@ -207,9 +210,13 @@ Invalid PBC values can enter objects, and missing/invalid lattice errors surface
 4. Normalize `np.bool_` to Python `bool` if accepted.
 5. Add tests for invalid PBC length, non-bool PBC, `None` lattice, and serialization round trips.
 
+solved: Yes
 ---
 
 ### Medium: PBC neighbor model is incomplete for skewed cells and same-index periodic neighbors
+
+**Status: Fixed**
+Periodic image generation now sizes each axis from reciprocal-lattice plane spacing rather than raw lattice-vector length, so highly skewed cells get enough images. Neighbor lookup now excludes only the zero-cell self atom and preserves nonzero periodic self-neighbors such as one-site crystals.
 
 **Evidence**
 - `matsimpy/core/crystal.py:1263-1268` chooses image count from periodic lattice-vector norms.
@@ -224,9 +231,13 @@ Highly skewed cells can miss valid close images, and one-site periodic structure
 3. Return richer neighbor records where needed: `(neighbor_index, distance, image_shift)`.
 4. Add tests for one-atom periodic crystals, skewed/triclinic cells, and partial PBC slabs/wires.
 
+solved: Yes
 ---
 
 ### Medium: Species validation is inconsistent across core classes
+
+**Status: Fixed**
+Added a shared `normalize_species()` helper and routed `Structure`, internal mutation construction paths, `Site`, and `Composition` parsing through it. Invalid symbols now fail at construction/parsing time while recognized template placeholders (`A`, `X`, `Z`), atomic numbers, and `Element` objects remain supported.
 
 **Evidence**
 - `Structure.__init__()` accepts any strings at `matsimpy/core/structure.py:184-185`.
@@ -244,6 +255,7 @@ Invalid species can live in structures until later code accesses `elements`, `co
 4. For advanced labels, store base element and annotation separately instead of accepting arbitrary strings as elements.
 5. Add tests for invalid symbols, dummy symbols, atomic numbers, and `Element` objects through every construction path.
 
+solved: Yes
 ---
 
 ## 4. Extensibility risks

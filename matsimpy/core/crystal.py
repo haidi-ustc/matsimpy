@@ -51,7 +51,12 @@ from .lattice import Lattice
 from .periodic_table import Element
 from .site import CrystalSite
 from .composition import Composition
-from ._validation import validate_site_properties
+from ._validation import (
+    normalize_species,
+    validate_lattice,
+    validate_pbc,
+    validate_site_properties,
+)
 
 if TYPE_CHECKING:
     from ..utils.selection import AtomSelection
@@ -189,7 +194,10 @@ class Crystal(Structure):
         caller already has the correct Cartesian array to avoid redundant work.
         """
         obj = cls.__new__(cls)
-        obj._species = tuple(species)
+        lattice = validate_lattice(lattice)
+        pbc = validate_pbc(pbc)
+
+        obj._species = tuple(normalize_species(s) for s in species)
         obj._positions = np.array(positions, dtype=np.float64, copy=True)
         if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
             raise ValueError("positions must have shape (n_atoms, 3)")
@@ -207,7 +215,7 @@ class Crystal(Structure):
         obj._cart_positions = cart
 
         obj._site_properties = validate_site_properties(site_properties, len(obj._species))
-        obj.pbc = tuple(pbc)
+        obj.pbc = pbc
         obj._sites = None  # lazy — populated on first .sites access
         obj._neighbor_cache = None
         return obj
@@ -253,6 +261,9 @@ class Crystal(Structure):
             Both fractional and Cartesian coordinates are maintained internally.
             The default coordinate system is fractional.
         """
+        lattice = validate_lattice(lattice)
+        pbc_tuple = validate_pbc(pbc)
+
         if coords_are_cartesian:
             cart_array = np.array(positions, dtype=np.float64)
             frac_array = np.dot(cart_array, lattice.inv_matrix)
@@ -273,9 +284,7 @@ class Crystal(Structure):
             site_properties, len(self.species)
         )
         self._sites = self._initialize_sites()
-        self.pbc: Tuple[bool, bool, bool] = (
-            tuple(pbc) if pbc is not None else (True, True, True)
-        )
+        self.pbc: Tuple[bool, bool, bool] = pbc_tuple
 
         # Bundled KD-tree cache — replaced as one atomic write to avoid
         # partially-initialised state under concurrent reads.
@@ -375,21 +384,13 @@ class Crystal(Structure):
             >>> crystal = crystal.set_pbc([True, False, False])  # 1D material (wire)
             >>> crystal = crystal.set_pbc([False, False, False])  # 0D (cluster)
         """
-        # Validate input
-        if not isinstance(pbc, (list, tuple)):
-            raise ValueError("PBC must be a list or tuple of 3 booleans")
-
-        if len(pbc) != 3:
-            raise ValueError("PBC must have exactly 3 elements (for a, b, c axes)")
-
-        if not all(isinstance(x, bool) for x in pbc):
-            raise ValueError("All PBC elements must be booleans")
+        pbc_tuple = validate_pbc(pbc)
 
         return self.__class__._construct(
             species=tuple(self.species),
             positions=self._positions,
             lattice=self.lattice,
-            pbc=tuple(pbc),
+            pbc=pbc_tuple,
             site_properties=list(self.site_properties) if self.site_properties else None,
             _cart_positions=self._cart_positions,
         )
@@ -949,10 +950,19 @@ class Crystal(Structure):
         """
         species = d["species"]
         positions = d["positions"]
-        lattice = Lattice.from_dict(d["lattice"])
+        lattice_data = d["lattice"]
+        if lattice_data is None:
+            lattice = None
+        else:
+            lattice = (
+                lattice_data
+                if isinstance(lattice_data, Lattice)
+                else Lattice.from_dict(lattice_data)
+            )
+        lattice = validate_lattice(lattice)
         site_properties = d.get("site_properties", [])
         coords_are_cartesian = d.get("coords_are_cartesian", False)
-        pbc = d.get("pbc")
+        pbc = validate_pbc(d.get("pbc"))
         return cls(
             species=species,
             positions=positions,
@@ -1270,15 +1280,10 @@ class Crystal(Structure):
         if not np.any(pbc_mask):
             return self.cart_positions.copy()
 
-        # Calculate number of images needed along periodic directions.  Use the
-        # shortest periodic vector as a conservative bound.
-        periodic_lengths = np.linalg.norm(self.lattice.lattice_vectors[pbc_mask], axis=1)
-        min_dist = np.min(periodic_lengths)
-        n_images = int(np.ceil(cutoff / min_dist)) + 1
+        image_ranges = self._get_periodic_image_ranges(cutoff)
 
         n_atoms = len(self.cart_positions)
-        n_periodic_dims = int(np.sum(pbc_mask))
-        n_total_images = (2 * n_images + 1) ** n_periodic_dims - 1  # Exclude origin
+        n_total_images = int(np.prod([len(r) for r in image_ranges])) - 1
 
         # Check for excessive memory usage
         max_cache_atoms = 1_000_000  # Limit to ~1M atoms in cache
@@ -1292,9 +1297,7 @@ class Crystal(Structure):
             )
 
         # Generate all translation vectors at once using meshgrid
-        i_range = np.arange(-n_images, n_images + 1) if self.pbc[0] else np.array([0])
-        j_range = np.arange(-n_images, n_images + 1) if self.pbc[1] else np.array([0])
-        k_range = np.arange(-n_images, n_images + 1) if self.pbc[2] else np.array([0])
+        i_range, j_range, k_range = image_ranges
         i_grid, j_grid, k_grid = np.meshgrid(i_range, j_range, k_range, indexing="ij")
 
         # Flatten and remove (0,0,0)
@@ -1324,6 +1327,22 @@ class Crystal(Structure):
 
         # Stack original positions with image positions
         return np.vstack([self.cart_positions, image_positions])
+
+    def _get_periodic_image_ranges(
+        self, cutoff: float
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return image index ranges using reciprocal lattice heights."""
+        ranges = []
+        inv_matrix = self.lattice.inv_matrix
+        for axis, periodic in enumerate(self.pbc):
+            if not periodic:
+                ranges.append(np.array([0], dtype=int))
+                continue
+
+            plane_spacing = 1.0 / np.linalg.norm(inv_matrix[:, axis])
+            n_images = int(np.ceil(cutoff / plane_spacing)) + 1
+            ranges.append(np.arange(-n_images, n_images + 1, dtype=int))
+        return tuple(ranges)
 
     # ======================================================================
     # Neighbor finding & geometry
@@ -1451,13 +1470,12 @@ class Crystal(Structure):
                 else:
                     # Periodic image
                     image_idx = idx % n_atoms
-                    if image_idx != i:
-                        dist = np.linalg.norm(pos - cache.positions[idx])
-                        if (
-                            image_idx not in neighbors_by_index
-                            or dist < neighbors_by_index[image_idx]
-                        ):
-                            neighbors_by_index[image_idx] = float(dist)
+                    dist = np.linalg.norm(pos - cache.positions[idx])
+                    if (
+                        image_idx not in neighbors_by_index
+                        or dist < neighbors_by_index[image_idx]
+                    ):
+                        neighbors_by_index[image_idx] = float(dist)
 
             neighbors_dict[i] = sorted(neighbors_by_index.items())
 

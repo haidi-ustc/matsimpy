@@ -31,6 +31,7 @@ from collections import Counter
 from typing import Optional, Dict, List, Tuple, Any, Mapping
 from monty.json import MSONable
 from .periodic_table import Element, ELEMENTS, DUMMY_ELEMENTS
+from ._validation import normalize_species
 
 # Valid element symbols: all real elements plus recognised dummy symbols ("X").
 _VALID_ELEMENTS: frozenset = frozenset(ELEMENTS) | frozenset(DUMMY_ELEMENTS)
@@ -241,11 +242,13 @@ class Composition(MSONable):
             while j < len(formula) and formula[j].isalpha() and formula[j].islower():
                 j += 1
             symbol = formula[idx:j]
-            if symbol not in _VALID_ELEMENTS:
+            try:
+                symbol = normalize_species(symbol, allow_dummy=True)
+            except ValueError:
                 raise ValueError(
                     f"Unknown element symbol '{symbol}' in formula '{formula}'. "
                     f"Formula must contain only valid element symbols."
-                )
+                ) from None
             return symbol, j
 
         stack: List[Counter] = [Counter()]

@@ -50,9 +50,10 @@ ELEMENTS = [
 # truth for supported real elements and atomic-number lookup.
 _ELEMENTS_SET = set(ELEMENTS)
 
-# Special dummy/placeholder element symbols that are not in the periodic table.
-# "X" is the conventional unknown/placeholder atom used in site definitions.
-DUMMY_ELEMENTS: set = {"X"}
+# Special dummy/placeholder species that are not in the periodic table.
+# "X" is the conventional unknown atom, and alloy templates also use generic
+# site labels such as "A" and "Z" (while "Y" is already a real element).
+DUMMY_ELEMENTS: set = {"A", "X", "Z"}
 
 # Cache for Element instances to avoid repeated creation
 _element_cache: Dict[str, "Element"] = {}
