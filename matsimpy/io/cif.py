@@ -158,16 +158,20 @@ def read_CIF(filename: str) -> Crystal:
                 # This is a data line - add it
                 loop_data_lines.append(data_line_stripped)
                 i += 1
-            # Process loop data
+            # Collect all tokens from loop data lines into a flat list, then
+            # slice by the number of columns to reconstruct rows correctly.
+            # This handles CIF files where a single row spans multiple lines.
+            tokens = []
             for data_line in loop_data_lines:
-                if not data_line.strip():
-                    continue
-                values = data_line.split()
-                for j, item in enumerate(loop_items):
-                    if item not in cif_data:
-                        cif_data[item] = []
-                    if j < len(values):
-                        cif_data[item].append(values[j])
+                tokens.extend(data_line.split())
+
+            n_cols = len(loop_items)
+            if n_cols > 0:
+                for row_start in range(0, len(tokens), n_cols):
+                    row = tokens[row_start : row_start + n_cols]
+                    for j, item in enumerate(loop_items):
+                        if j < len(row):
+                            cif_data.setdefault(item, []).append(row[j])
             in_loop = False
             # Don't increment i here - we already advanced past data lines
         else:
@@ -175,26 +179,17 @@ def read_CIF(filename: str) -> Crystal:
                 cif_data[data_name] = value
             i += 1
 
-    # Extract lattice parameters
-    # Try both standard and alternative CIF data names
-    a = _parse_cif_value(
-        cif_data.get("_cell_length_a", cif_data.get("_cell_length_a?", "0"))
-    )
-    b = _parse_cif_value(
-        cif_data.get("_cell_length_b", cif_data.get("_cell_length_b?", "0"))
-    )
-    c = _parse_cif_value(
-        cif_data.get("_cell_length_c", cif_data.get("_cell_length_c?", "0"))
-    )
-    alpha = _parse_cif_value(
-        cif_data.get("_cell_angle_alpha", cif_data.get("_cell_angle_alpha?", "90"))
-    )
-    beta = _parse_cif_value(
-        cif_data.get("_cell_angle_beta", cif_data.get("_cell_angle_beta?", "90"))
-    )
-    gamma = _parse_cif_value(
-        cif_data.get("_cell_angle_gamma", cif_data.get("_cell_angle_gamma?", "90"))
-    )
+    # Extract lattice parameters — raise a descriptive error when required keys are absent
+    for key in ("_cell_length_a", "_cell_length_b", "_cell_length_c"):
+        if cif_data.get(key) is None:
+            raise ValueError(f"CIF file missing required key '{key}'")
+
+    a = _parse_cif_value(cif_data["_cell_length_a"])
+    b = _parse_cif_value(cif_data["_cell_length_b"])
+    c = _parse_cif_value(cif_data["_cell_length_c"])
+    alpha = _parse_cif_value(cif_data.get("_cell_angle_alpha", "90"))
+    beta = _parse_cif_value(cif_data.get("_cell_angle_beta", "90"))
+    gamma = _parse_cif_value(cif_data.get("_cell_angle_gamma", "90"))
 
     if a == 0 or b == 0 or c == 0:
         raise ValueError("Invalid lattice parameters in CIF file")
@@ -223,24 +218,24 @@ def read_CIF(filename: str) -> Crystal:
         ]
 
     # Get positions
-    frac_x = cif_data.get("_atom_site_fract_x", cif_data.get("_atom_site_fract_x?"))
-    frac_y = cif_data.get("_atom_site_fract_y", cif_data.get("_atom_site_fract_y?"))
-    frac_z = cif_data.get("_atom_site_fract_z", cif_data.get("_atom_site_fract_z?"))
+    frac_x = cif_data.get("_atom_site_fract_x")
+    frac_y = cif_data.get("_atom_site_fract_y")
+    frac_z = cif_data.get("_atom_site_fract_z")
 
     if not (frac_x and frac_y and frac_z):
         # Try cartesian coordinates
-        cart_x = cif_data.get("_atom_site_Cartn_x", cif_data.get("_atom_site_Cartn_x?"))
-        cart_y = cif_data.get("_atom_site_Cartn_y", cif_data.get("_atom_site_Cartn_y?"))
-        cart_z = cif_data.get("_atom_site_Cartn_z", cif_data.get("_atom_site_Cartn_z?"))
+        cart_x = cif_data.get("_atom_site_Cartn_x")
+        cart_y = cif_data.get("_atom_site_Cartn_y")
+        cart_z = cif_data.get("_atom_site_Cartn_z")
 
         if cart_x and cart_y and cart_z:
-            # Convert cartesian to fractional
+            # Convert cartesian to fractional using cached inverse
             positions = []
             for x, y, z in zip(cart_x, cart_y, cart_z):
                 cart_pos = np.array(
                     [_parse_cif_value(x), _parse_cif_value(y), _parse_cif_value(z)]
                 )
-                frac_pos = np.dot(cart_pos, np.linalg.inv(lattice.matrix))
+                frac_pos = np.dot(cart_pos, lattice.inv_matrix)
                 positions.append(frac_pos.tolist())
 
             if not atom_species:
@@ -318,9 +313,11 @@ def write_CIF(crystal: Crystal, filename: str, title: Optional[str] = None) -> N
         f.write("_atom_site_fract_z\n")
         f.write("_atom_site_occupancy\n")
 
-        # Write atomic positions
-        for i, (specie, pos) in enumerate(zip(crystal.species, crystal.frac_positions)):
-            label = f"{specie}{i+1}"
+        # Write atomic positions with per-element counters (Si1, Si2, O1, ...)
+        element_counters: Dict[str, int] = {}
+        for specie, pos in zip(crystal.species, crystal.frac_positions):
+            element_counters[specie] = element_counters.get(specie, 0) + 1
+            label = f"{specie}{element_counters[specie]}"
             f.write(
                 f"{specie:4s} {label:8s} {pos[0]:12.8f} {pos[1]:12.8f} {pos[2]:12.8f} 1.0\n"
             )

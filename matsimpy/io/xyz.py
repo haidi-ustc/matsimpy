@@ -39,7 +39,8 @@ def read_XYZ(filename: str) -> Molecule:
         raise FileNotFoundError(f"XYZ file not found: {filename}")
 
     with open(filepath, "r") as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        # Preserve all lines (including blank title lines) to avoid offset shifts
+        lines = [line.rstrip("\n") for line in f.readlines()]
 
     if len(lines) < 2:
         raise ValueError(
@@ -48,21 +49,21 @@ def read_XYZ(filename: str) -> Molecule:
 
     # Read number of atoms
     try:
-        n_atoms = int(lines[0])
+        n_atoms = int(lines[0].strip())
     except ValueError:
         raise ValueError(f"Invalid atom count in XYZ file: {lines[0]}")
 
     if n_atoms <= 0:
         raise ValueError(f"Invalid number of atoms: {n_atoms}")
 
-    # Check if we have enough lines
+    # Check if we have enough lines (line 0: count, line 1: title, lines 2+: coords)
     if len(lines) < 2 + n_atoms:
         raise ValueError(
             f"Not enough coordinate lines: expected {n_atoms}, got {len(lines) - 2}"
         )
 
-    # Read title (line 1, optional)
-    title = lines[1] if len(lines) > 1 else ""
+    # Read title (line 1; may be blank)
+    title = lines[1]
 
     # Read atom coordinates (lines 2 onwards)
     species = []
@@ -102,9 +103,7 @@ def write_XYZ(molecule: Molecule, filename: str, title: Optional[str] = None) ->
         raise ValueError("write_XYZ requires a Molecule object")
 
     if title is None:
-        title = (
-            molecule.formula if hasattr(molecule, "formula") else "MatSimPy Molecule"
-        )
+        title = molecule.formula
 
     filepath = Path(filename)
 
@@ -158,7 +157,9 @@ def read_XYZ_multiframe(filename: str) -> List[Molecule]:
             i += 1
             continue
 
-        if i + 1 + n_atoms >= len(lines):
+        # Frame needs: line i (count) + line i+1 (title) + n_atoms coord lines
+        # Last coord line is at index i+1+n_atoms; break if that exceeds the list.
+        if i + 2 + n_atoms > len(lines):
             break
 
         # Read frame

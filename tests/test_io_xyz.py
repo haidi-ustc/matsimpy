@@ -103,6 +103,46 @@ H 0.75 0.0 0.0
         finally:
             Path(temp_file).unlink()
 
+    def test_read_XYZ_blank_title_line(self):
+        """A blank title line must not shift coordinate offsets."""
+        import numpy as np
+        xyz_content = "3\n\nC  0.0 0.0 0.0\nO  1.2 0.0 0.0\nO -1.2 0.0 0.0\n"
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xyz') as f:
+            f.write(xyz_content)
+            temp_file = f.name
+
+        try:
+            molecule = read_XYZ(temp_file)
+            self.assertEqual(len(molecule), 3)
+            self.assertEqual(molecule.species, ('C', 'O', 'O'))
+            np.testing.assert_array_almost_equal(
+                molecule.positions[0], [0.0, 0.0, 0.0], decimal=6
+            )
+        finally:
+            Path(temp_file).unlink()
+
+    def test_read_XYZ_multiframe_includes_last_frame(self):
+        """read_XYZ_multiframe must return all frames, including the last one."""
+        xyz_content = (
+            "2\nFrame 1\nH 0.0 0.0 0.0\nH 0.74 0.0 0.0\n"
+            "2\nFrame 2\nH 0.0 0.0 0.0\nH 0.75 0.0 0.0\n"
+            "2\nFrame 3\nH 0.0 0.0 0.0\nH 0.76 0.0 0.0\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xyz') as f:
+            f.write(xyz_content)
+            temp_file = f.name
+
+        try:
+            molecules = read_XYZ_multiframe(temp_file)
+            self.assertEqual(len(molecules), 3)
+            # Last frame must be present
+            import numpy as np
+            np.testing.assert_almost_equal(
+                molecules[-1].positions[1][0], 0.76, decimal=6
+            )
+        finally:
+            Path(temp_file).unlink()
+
 if __name__ == '__main__':
     unittest.main()
 

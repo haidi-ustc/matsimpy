@@ -71,7 +71,8 @@ def is_crystal_format(format_ext: str) -> bool:
     Returns:
         bool: True if format supports crystal structures
     """
-    crystal_formats = {".vasp", ".poscar", ".contcar", ".cif", ".xsf", ".ase"}
+    # .json and .ase are dual-format (support both Crystal and Molecule)
+    crystal_formats = {".vasp", ".poscar", ".contcar", ".cif", ".xsf", ".ase", ".json"}
     return format_ext in crystal_formats
 
 
@@ -85,7 +86,8 @@ def is_molecule_format(format_ext: str) -> bool:
     Returns:
         bool: True if format supports molecular structures
     """
-    molecule_formats = {".xyz", ".pdb", ".mol"}
+    # .json and .ase are dual-format (support both Crystal and Molecule)
+    molecule_formats = {".xyz", ".pdb", ".mol", ".ase", ".json"}
     return format_ext in molecule_formats
 
 

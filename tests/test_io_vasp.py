@@ -143,6 +143,60 @@ Cartesian
             self.assertIsInstance(crystal, Crystal)
             self.assertGreater(len(crystal), 0)
 
+    def test_write_read_interleaved_species(self):
+        """Interleaved species (Si/O/Si) must be regrouped on write so read recovers correct chemistry."""
+        lattice = Lattice.cubic(10.0)
+        # Intentionally interleaved: Si, O, Si
+        crystal = Crystal(['Si', 'O', 'Si'], [[0, 0, 0], [0.1, 0.1, 0.1], [0.5, 0.5, 0.5]], lattice)
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file = f.name
+
+        try:
+            write_POSCAR(crystal, temp_file)
+            crystal2 = read_POSCAR(temp_file)
+
+            # Both Si atoms come first, then O in the written file;
+            # after read, species order follows the header grouping.
+            self.assertEqual(set(crystal2.species), {'Si', 'O'})
+            self.assertEqual(crystal2.species.count('Si'), 2)
+            self.assertEqual(crystal2.species.count('O'), 1)
+            self.assertEqual(len(crystal2), 3)
+        finally:
+            Path(temp_file).unlink()
+
+    def test_read_POSCAR_selective_dynamics(self):
+        """Optional Selective dynamics line must not corrupt coordinate parsing."""
+        poscar_content = (
+            "Selective dynamics test\n"
+            "1.0\n"
+            "5.0  0.0  0.0\n"
+            "0.0  5.0  0.0\n"
+            "0.0  0.0  5.0\n"
+            "Si\n"
+            "2\n"
+            "Selective dynamics\n"
+            "Direct\n"
+            "0.0  0.0  0.0  T T T\n"
+            "0.5  0.5  0.5  F F F\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            f.write(poscar_content)
+            temp_file = f.name
+
+        try:
+            crystal = read_POSCAR(temp_file)
+            self.assertEqual(len(crystal), 2)
+            self.assertEqual(crystal.species, ('Si', 'Si'))
+            np.testing.assert_array_almost_equal(
+                crystal.frac_positions[0], [0.0, 0.0, 0.0], decimal=6
+            )
+            np.testing.assert_array_almost_equal(
+                crystal.frac_positions[1], [0.5, 0.5, 0.5], decimal=6
+            )
+        finally:
+            Path(temp_file).unlink()
+
 if __name__ == '__main__':
     unittest.main()
 

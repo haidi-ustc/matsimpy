@@ -205,10 +205,11 @@ def write(
 
     # Check format compatibility
     if isinstance(structure, Crystal):
-        if not is_crystal_format(format_ext):
+        # JSON, ASE, and PDB can handle both Crystal and Molecule
+        if not is_crystal_format(format_ext) and format_ext not in [".json", ".ase", ".pdb"]:
             raise ValueError(
                 f"Format {format_ext} is not suitable for Crystal structures. "
-                f"Use molecule formats (.xyz, .pdb, .mol) for molecules."
+                f"Use crystal formats (.vasp, .cif, .xsf, .json, .ase, .pdb) for crystals."
             )
     elif isinstance(structure, Molecule):
         if not is_molecule_format(format_ext) and format_ext not in [".json", ".ase"]:

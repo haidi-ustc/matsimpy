@@ -36,21 +36,25 @@ def read_XSF(filename: str) -> Crystal:
     with open(filepath, "r") as f:
         lines = [line.strip() for line in f.readlines()]
 
-    # Find CRYSTAL block
-    crystal_start = None
-    for i, line in enumerate(lines):
-        if line.upper().startswith("CRYSTAL"):
-            crystal_start = i
-            break
-
-    if crystal_start is None:
+    # Verify CRYSTAL block exists
+    crystal_found = any(line.upper().startswith("CRYSTAL") for line in lines)
+    if not crystal_found:
         raise ValueError("XSF file does not contain CRYSTAL block")
 
-    # Read lattice vectors (3 lines after CRYSTAL)
+    # Find PRIMVEC block and read lattice vectors from the 3 lines after it
+    primvec_start = None
+    for i, line in enumerate(lines):
+        if line.upper().startswith("PRIMVEC"):
+            primvec_start = i
+            break
+
+    if primvec_start is None:
+        raise ValueError("XSF file does not contain PRIMVEC block")
+
     lattice_vectors = []
-    for i in range(crystal_start + 1, crystal_start + 4):
+    for i in range(primvec_start + 1, primvec_start + 4):
         if i >= len(lines):
-            raise ValueError("Not enough lines for lattice vectors")
+            raise ValueError("Not enough lines for lattice vectors after PRIMVEC")
         try:
             vec = [float(x) for x in lines[i].split()[:3]]
             if len(vec) != 3:
@@ -60,9 +64,6 @@ def read_XSF(filename: str) -> Crystal:
             raise ValueError(f"Invalid lattice vector format at line {i+1}: {e}")
 
     lattice = Lattice(lattice_vectors)
-
-    # Find PRIMVEC or CONVVEC (usually PRIMVEC)
-    # For now, we'll use the vectors we already read
 
     # Find atomic positions (after PRIMCOORD)
     primcoord_start = None
@@ -104,8 +105,8 @@ def read_XSF(filename: str) -> Crystal:
         except ValueError as e:
             raise ValueError(f"Invalid coordinate format at line {i+1}: {e}")
 
-    # XSF fractional coordinates are typically in crystal coordinates
-    return Crystal(species, positions, lattice, coords_are_cartesian=False)
+    # XSF PRIMCOORD coordinates are Cartesian Angstrom
+    return Crystal(species, positions, lattice, coords_are_cartesian=True)
 
 
 def write_XSF(crystal: Crystal, filename: str, title: Optional[str] = None) -> None:
@@ -135,12 +136,12 @@ def write_XSF(crystal: Crystal, filename: str, title: Optional[str] = None) -> N
         for vec in crystal.lattice.lattice_vectors:
             f.write(f"{vec[0]:20.12f} {vec[1]:20.12f} {vec[2]:20.12f}\n")
 
-        # Write atomic coordinates (PRIMCOORD)
+        # Write atomic coordinates (PRIMCOORD); the second number is the image-cell count
         f.write("PRIMCOORD\n")
-        f.write(f"{len(crystal)} 1\n")  # 1 = fractional coordinates
+        f.write(f"{len(crystal)} 1\n")
 
-        # Write atom positions
-        for specie, pos in zip(crystal.species, crystal.frac_positions):
+        # Write atom positions in Cartesian Angstrom (XSF standard)
+        for specie, pos in zip(crystal.species, crystal.cart_positions):
             f.write(f"{specie:4s} {pos[0]:20.12f} {pos[1]:20.12f} {pos[2]:20.12f}\n")
 
 

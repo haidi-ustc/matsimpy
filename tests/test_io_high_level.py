@@ -143,6 +143,33 @@ class TestHighLevelIO(unittest.TestCase):
         # Should not raise error
         self.assertTrue(os.path.exists(filename))
 
+    def test_write_crystal_json(self):
+        """write(crystal, *.json) must not raise ValueError."""
+        filename = os.path.join(self.temp_dir, 'test.json')
+        write(self.crystal, filename)
+        self.assertTrue(os.path.exists(filename))
+
+    def test_write_crystal_pdb(self):
+        """write(crystal, *.pdb) must not raise ValueError."""
+        filename = os.path.join(self.temp_dir, 'test.pdb')
+        write(self.crystal, filename)
+        self.assertTrue(os.path.exists(filename))
+
+    def test_write_crystal_ase(self):
+        """write(crystal, *.ase) must not raise ValueError."""
+        filename = os.path.join(self.temp_dir, 'test.ase')
+        write(self.crystal, filename)
+        self.assertTrue(os.path.exists(filename))
+
+    def test_roundtrip_crystal_json(self):
+        """write+read roundtrip via JSON preserves species and atom count."""
+        filename = os.path.join(self.temp_dir, 'test.json')
+        write(self.crystal, filename)
+        crystal_read = read(filename)
+        self.assertIsInstance(crystal_read, Crystal)
+        self.assertEqual(len(crystal_read), len(self.crystal))
+        self.assertEqual(crystal_read.formula, self.crystal.formula)
+
 if __name__ == '__main__':
     unittest.main()
 

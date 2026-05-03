@@ -98,46 +98,29 @@ def read_MOL(filename: str) -> Molecule:
             continue
 
         try:
-            # MOL atom line format (fixed width):
-            # xxxxx.xxxx yyyyy.yyyy zzzzz.zzzz EEE MM 0 0 0 0 0 0 0 0 0 0 0 0
-            # Positions: 0-9, 10-19, 20-29
+            # MDL V2000 atom line (fixed-width):
+            # Columns 0-9: x, 10-19: y, 20-29: z, 31-33: element symbol
             x = float(line[0:10].strip())
             y = float(line[10:20].strip())
             z = float(line[20:30].strip())
 
-            # Element symbol might be at position 31-33 (after coordinates)
-            # Or we might need to infer from atom type
-            if len(line) > 31:
-                element = line[31:34].strip()
-                if not element or element == "0":
-                    # Try to get from later positions or use default
-                    element = "C"  # Default to carbon
-            else:
-                element = "C"  # Default
+            # Primary: fixed-width element at columns 31-34
+            element = line[31:34].strip() if len(line) > 31 else ""
 
-            # Some MOL files have element in different position
-            # Try alternative parsing
-            parts = line.split()
-            if len(parts) >= 4:
-                try:
-                    # If 4th element is numeric, element might be later
-                    float(parts[3])
-                    if len(parts) >= 5:
-                        element = parts[4]
-                except ValueError:
-                    # 4th element might be the element symbol
-                    element = parts[3]
+            # Fallback: space-separated parsing for non-standard MOL variants
+            if not element or not element[0].isalpha():
+                parts = line.split()
+                element = parts[3] if len(parts) >= 4 else ""
 
-            # Clean element symbol
-            element = element.strip()
-            if not element or element.isdigit():
-                element = "C"  # Default fallback
+            if not element or not element[0].isalpha():
+                raise ValueError(f"Could not parse element symbol at atom line {i+1}")
 
             species.append(element)
             positions.append([x, y, z])
-        except (ValueError, IndexError) as e:
-            # Skip invalid lines
-            continue
+        except ValueError:
+            raise
+        except (IndexError,) as e:
+            raise ValueError(f"Malformed atom line {i+1}: {e}")
 
     if not species:
         raise ValueError("No valid atoms found in MOL file")
@@ -161,9 +144,7 @@ def write_MOL(molecule: Molecule, filename: str, title: Optional[str] = None) ->
         raise ValueError("write_MOL requires a Molecule object")
 
     if title is None:
-        title = (
-            molecule.formula if hasattr(molecule, "formula") else "MatSimPy Molecule"
-        )
+        title = molecule.formula
 
     filepath = Path(filename)
 

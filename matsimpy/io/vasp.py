@@ -90,22 +90,29 @@ def read_POSCAR(filename: str) -> Crystal:
 
     total_atoms = sum(species_counts)
 
-    # Read coordinate type (line 7)
+    # Check for optional Selective dynamics line (starts with 'S' or 's')
     if len(lines) < 8:
         raise ValueError("Missing coordinate type indicator")
-    coord_type_line = lines[7].strip().lower()
-    coords_are_cartesian = coord_type_line.startswith(
-        "c"
-    ) or coord_type_line.startswith("k")
+    selective_dynamics_offset = 0
+    if lines[7].strip().lower().startswith("s"):
+        selective_dynamics_offset = 1
 
-    # Read positions (lines 8 onwards)
-    if len(lines) < 8 + total_atoms:
+    # Read coordinate type (line 7 or 8 if Selective dynamics present)
+    coord_type_idx = 7 + selective_dynamics_offset
+    if len(lines) <= coord_type_idx:
+        raise ValueError("Missing coordinate type indicator")
+    coord_type_line = lines[coord_type_idx].strip().lower()
+    coords_are_cartesian = coord_type_line.startswith("c") or coord_type_line.startswith("k")
+
+    # Read positions (lines after coordinate type)
+    pos_start = coord_type_idx + 1
+    if len(lines) < pos_start + total_atoms:
         raise ValueError(
-            f"Not enough position lines: expected {total_atoms}, got {len(lines) - 8}"
+            f"Not enough position lines: expected {total_atoms}, got {len(lines) - pos_start}"
         )
 
     positions = []
-    for i in range(8, 8 + total_atoms):
+    for i in range(pos_start, pos_start + total_atoms):
         try:
             pos = [float(x) for x in lines[i].split()[:3]]  # Take first 3 values
             if len(pos) != 3:
@@ -153,15 +160,17 @@ def write_POSCAR(crystal: Crystal, filename: str, title: Optional[str] = None) -
         for vec in crystal.lattice.lattice_vectors:
             f.write(f"{vec[0]:.16f} {vec[1]:.16f} {vec[2]:.16f}\n")
 
-        # Write species
+        # Build species groups preserving the first-occurrence order
         unique_species = []
-        species_counts = []
         seen = set()
         for specie in crystal.species:
             if specie not in seen:
                 unique_species.append(specie)
-                species_counts.append(crystal.species.count(specie))
                 seen.add(specie)
+
+        species_counts = [
+            sum(1 for s in crystal.species if s == sp) for sp in unique_species
+        ]
 
         f.write(" ".join(unique_species) + "\n")
         f.write(" ".join(map(str, species_counts)) + "\n")
@@ -169,8 +178,14 @@ def write_POSCAR(crystal: Crystal, filename: str, title: Optional[str] = None) -
         # Write coordinate type (always Direct/fractional)
         f.write("Direct\n")
 
-        # Write positions (fractional coordinates)
-        for pos in crystal.frac_positions:
+        # Write positions grouped by species to match the header order
+        write_order = []
+        for sp in unique_species:
+            write_order.extend([i for i, s in enumerate(crystal.species) if s == sp])
+
+        frac = crystal.frac_positions
+        for idx in write_order:
+            pos = frac[idx]
             f.write(f"{pos[0]:.16f} {pos[1]:.16f} {pos[2]:.16f}\n")
 
 

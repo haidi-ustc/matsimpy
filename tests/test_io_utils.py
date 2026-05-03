@@ -120,6 +120,16 @@ class TestIOUtils(unittest.TestCase):
                 f"Writer {writer} for {fmt} has invalid name"
             )
 
+    def test_is_crystal_format_json_and_ase(self):
+        """is_crystal_format must return True for dual-format extensions .json and .ase."""
+        self.assertTrue(is_crystal_format('.json'))
+        self.assertTrue(is_crystal_format('.ase'))
+
+    def test_is_molecule_format_json_and_ase(self):
+        """is_molecule_format must return True for dual-format extensions .json and .ase."""
+        self.assertTrue(is_molecule_format('.json'))
+        self.assertTrue(is_molecule_format('.ase'))
+
 if __name__ == '__main__':
     unittest.main()
 
