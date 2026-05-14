@@ -6,6 +6,10 @@ import unittest
 import tempfile
 import shutil
 from pathlib import Path
+
+import pytest
+pytest.importorskip("maggma", reason="maggma not installed")
+
 from matsimpy import Crystal, Lattice
 from matsimpy.storage import DataStorage
 

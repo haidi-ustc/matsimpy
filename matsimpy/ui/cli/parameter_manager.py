@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, Callable, List, Union, Tuple
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.styles import Style
-from prompt_toolkit.shortcuts import print_formatted_text
+from prompt_toolkit.shortcuts import print_formatted_text as _print_formatted_text
 from prompt_toolkit.completion import WordCompleter, PathCompleter
 from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.history import FileHistory
@@ -19,6 +19,14 @@ from datetime import datetime
 # Import matsimpy core modules
 from ...core import Crystal, Molecule
 from ...io import read
+
+
+def _safe_print_formatted_text(formatted_text, style=None):
+    """Wrapper around print_formatted_text that gracefully handles non-TTY environments."""
+    try:
+        _print_formatted_text(formatted_text, style=style)
+    except Exception:
+        pass
 
 
 @dataclass
@@ -95,8 +103,14 @@ class StructureManager:
 
     def __init__(self, style: Style):
         self.style = style
-        self.session = PromptSession()
+        self._session = None
         self._recent_structures: List[str] = self._load_recent_structures()
+
+    @property
+    def session(self):
+        if self._session is None:
+            self._session = PromptSession()
+        return self._session
 
     def _load_recent_structures(self) -> List[str]:
         """Load recent structure files from history."""
@@ -130,14 +144,14 @@ class StructureManager:
         """Get structure file path with enhanced features."""
         # Show recent files if available
         if self._recent_structures:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText([("class:info", "\nRecent structure files:")]),
                 style=self.style,
             )
 
             for i, filepath in enumerate(self._recent_structures[:5], 1):
                 if os.path.exists(filepath):
-                    print_formatted_text(
+                    _safe_print_formatted_text(
                         FormattedText(
                             [
                                 ("class:menu_code", f"  [{i}]"),
@@ -147,7 +161,7 @@ class StructureManager:
                         style=self.style,
                     )
 
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         (
@@ -181,7 +195,7 @@ class StructureManager:
                         self._save_recent_structure(filepath)
                         return filepath
                     else:
-                        print_formatted_text(
+                        _safe_print_formatted_text(
                             FormattedText(
                                 [("class:error", f"File no longer exists: {filepath}")]
                             ),
@@ -197,7 +211,7 @@ class StructureManager:
                 self._save_recent_structure(filepath)
                 return filepath
             else:
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText([("class:error", f"File not found: {filepath}")]),
                     style=self.style,
                 )
@@ -219,7 +233,7 @@ class StructureManager:
         """Load structure from file using matsimpy.io."""
         try:
             structure = read(filepath)
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         (
@@ -232,7 +246,7 @@ class StructureManager:
             )
             return structure
         except Exception as e:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText([("class:error", f"Error loading structure: {str(e)}")]),
                 style=self.style,
             )
@@ -244,12 +258,18 @@ class CLIParameterManager:
 
     def __init__(self, style: Style):
         self.style = style
-        self.session = PromptSession(
-            history=FileHistory(str(Path.home() / ".matsimpy" / "param_history"))
-        )
+        self._session = None
         self.parameter_definitions: List[ParameterDefinition] = []
         self.structure_manager = StructureManager(style)
         self._param_history: Dict[str, Any] = self._load_param_history()
+
+    @property
+    def session(self):
+        if self._session is None:
+            self._session = PromptSession(
+                history=FileHistory(str(Path.home() / ".matsimpy" / "param_history"))
+            )
+        return self._session
 
     def _load_param_history(self) -> Dict[str, Any]:
         """Load parameter history."""
@@ -293,7 +313,7 @@ class CLIParameterManager:
         self._show_parameter_summary()
 
         # Ask for input method
-        print_formatted_text(
+        _safe_print_formatted_text(
             FormattedText(
                 [
                     ("class:info", "\nParameter input options:"),
@@ -320,7 +340,7 @@ class CLIParameterManager:
             if choice in ["1", "2", "3", "4"]:
                 break
             else:
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText(
                         [
                             (
@@ -350,7 +370,7 @@ class CLIParameterManager:
 
     def _show_parameter_summary(self):
         """Show a summary of all parameters."""
-        print_formatted_text(
+        _safe_print_formatted_text(
             FormattedText(
                 [
                     ("class:header", "\nParameter Summary:"),
@@ -365,7 +385,7 @@ class CLIParameterManager:
             default_text = (
                 f" (default: {param.default})" if param.default is not None else ""
             )
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         ("class:menu_code", f"\n{required_mark} {param.name}"),
@@ -377,7 +397,7 @@ class CLIParameterManager:
             )
 
             if param.choices:
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText(
                         [
                             (
@@ -389,7 +409,7 @@ class CLIParameterManager:
                     style=self.style,
                 )
 
-        print_formatted_text(
+        _safe_print_formatted_text(
             FormattedText([("class:separator", "\n" + "-" * 50)]), style=self.style
         )
 
@@ -413,7 +433,7 @@ class CLIParameterManager:
             elif param.type == list:
                 example_params[param.name] = []
 
-        print_formatted_text(
+        _safe_print_formatted_text(
             FormattedText(
                 [
                     ("class:info", "\nExample JSON format:"),
@@ -449,7 +469,7 @@ class CLIParameterManager:
             try:
                 input_params = json.loads(first_line)
                 validated_params = self._validate_parameters(input_params)
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText(
                         [("class:success", "\nParameters accepted successfully!")]
                     ),
@@ -462,7 +482,7 @@ class CLIParameterManager:
 
             # Collect multiline input
             json_lines = [first_line]
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         (
@@ -503,7 +523,7 @@ class CLIParameterManager:
             try:
                 input_params = json.loads(json_input)
                 validated_params = self._validate_parameters(input_params)
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText(
                         [("class:success", "\nParameters accepted successfully!")]
                     ),
@@ -512,7 +532,7 @@ class CLIParameterManager:
                 return validated_params
 
             except json.JSONDecodeError as e:
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText(
                         [
                             ("class:error", f"\nInvalid JSON: {str(e)}"),
@@ -544,7 +564,7 @@ class CLIParameterManager:
             with open(filepath, "r") as f:
                 input_params = json.load(f)
             validated_params = self._validate_parameters(input_params)
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         (
@@ -558,7 +578,7 @@ class CLIParameterManager:
             return validated_params
 
         except Exception as e:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         ("class:error", f"Error loading file: {str(e)}"),
@@ -582,7 +602,7 @@ class CLIParameterManager:
                 params[param.name] = param.default
 
         if not has_previous:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [
                         ("class:warning", "No previous values found."),
@@ -594,13 +614,13 @@ class CLIParameterManager:
             return self._get_parameters_individual()
 
         # Show what will be used
-        print_formatted_text(
+        _safe_print_formatted_text(
             FormattedText([("class:info", "\nUsing previous values:")]),
             style=self.style,
         )
 
         for key, value in params.items():
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [("class:menu_code", f"  {key}:"), ("class:menu_item", f" {value}")]
                 ),
@@ -643,12 +663,12 @@ class CLIParameterManager:
                 params[param.name] = param.default
 
         if errors:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText([("class:error", "\nValidation errors:")]),
                 style=self.style,
             )
             for error in errors:
-                print_formatted_text(
+                _safe_print_formatted_text(
                     FormattedText([("class:error", f"  - {error}")]), style=self.style
                 )
             raise ValueError("Parameter validation failed")
@@ -659,7 +679,7 @@ class CLIParameterManager:
         """Get parameters one by one with enhanced features."""
         params = {}
 
-        print_formatted_text(
+        _safe_print_formatted_text(
             FormattedText(
                 [
                     ("class:info", "\nEnter parameter values:"),
@@ -692,7 +712,7 @@ class CLIParameterManager:
                         ("class:info", " - Press Enter to use default"),
                     ]
                     prompt_parts.append(("", "\n"))
-                    print_formatted_text(FormattedText(prompt_parts), style=self.style)
+                    _safe_print_formatted_text(FormattedText(prompt_parts), style=self.style)
 
                     value = self.session.prompt(
                         FormattedText([("class:prompt", "> ")]),
@@ -723,7 +743,7 @@ class CLIParameterManager:
 
                         # Validate
                         if param.validator and not param.validator(converted_value):
-                            print_formatted_text(
+                            _safe_print_formatted_text(
                                 FormattedText(
                                     [
                                         (
@@ -739,7 +759,7 @@ class CLIParameterManager:
                         params[param.name] = converted_value
                         break  # Success, move to next parameter
                     except (ValueError, json.JSONDecodeError) as e:
-                        print_formatted_text(
+                        _safe_print_formatted_text(
                             FormattedText(
                                 [
                                     (
@@ -783,7 +803,7 @@ class CLIParameterManager:
                     param.name in self._param_history
                     and self._param_history[param.name]
                 ):
-                    print_formatted_text(
+                    _safe_print_formatted_text(
                         FormattedText(
                             [
                                 ("class:info", "Recent values: "),
@@ -809,7 +829,7 @@ class CLIParameterManager:
                     completer = WordCompleter(["true", "false", "yes", "no", "y", "n"])
 
                 # Get input
-                print_formatted_text(FormattedText(prompt_parts), style=self.style)
+                _safe_print_formatted_text(FormattedText(prompt_parts), style=self.style)
 
                 value = self.session.prompt(
                     FormattedText([("class:prompt", "> ")]),
@@ -825,7 +845,7 @@ class CLIParameterManager:
                 # Handle empty input
                 if not value:
                     if param.required and param.default is None:
-                        print_formatted_text(
+                        _safe_print_formatted_text(
                             FormattedText(
                                 [("class:error", "This parameter is required")]
                             ),
@@ -854,7 +874,7 @@ class CLIParameterManager:
 
                     # Validate
                     if param.validator and not param.validator(converted_value):
-                        print_formatted_text(
+                        _safe_print_formatted_text(
                             FormattedText(
                                 [
                                     (
@@ -871,7 +891,7 @@ class CLIParameterManager:
                     break
 
                 except Exception as e:
-                    print_formatted_text(
+                    _safe_print_formatted_text(
                         FormattedText([("class:error", f"Error: {str(e)}")]),
                         style=self.style,
                     )
@@ -962,14 +982,14 @@ class CLIParameterManager:
             with open(filepath, "w") as f:
                 json.dump(params, f, indent=2)
 
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText([("class:success", f"Parameters saved to: {filepath}")]),
                 style=self.style,
             )
             return filepath
 
         except Exception as e:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText([("class:error", f"Error saving parameters: {str(e)}")]),
                 style=self.style,
             )
@@ -1029,7 +1049,7 @@ class CLIParameterManager:
             return params
 
         except Exception as e:
-            print_formatted_text(
+            _safe_print_formatted_text(
                 FormattedText(
                     [("class:error", f"Error parsing quick parameters: {str(e)}")]
                 ),
