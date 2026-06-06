@@ -24,10 +24,10 @@ class StructureAnalyzer:
 
     def _get_masses(self) -> np.ndarray:
         """Get atomic masses in amu."""
-        from ..core.periodic_table import ELEMENTS
+        from ..core.periodic_table import Element
         masses = []
         for s in self.structure.species:
-            el = ELEMENTS.get(s)
+            el = Element.get_element(s)
             masses.append(el.atomic_mass if el and el.atomic_mass else 1.0)
         return np.array(masses)
 

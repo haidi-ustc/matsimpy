@@ -29,8 +29,9 @@ Example:
     >>> molecule.rotate(90, [0, 0, 1])
     >>>
     >>> # File I/O
-    >>> molecule.to_file('molecule.xyz')
-    >>> molecule2 = Molecule.from_file('molecule.xyz')
+    >>> from matsimpy.io import write, read
+    >>> write(molecule, 'molecule.xyz')
+    >>> molecule2 = read('molecule.xyz')
 """
 
 import copy

@@ -112,9 +112,9 @@ class BondAnalyzer:
         pos = self.structure.positions
         d = float(np.linalg.norm(pos[atom_i] - pos[atom_j]))
         species = self.structure.species
-        from ..core.periodic_table import ELEMENTS
-        ei = ELEMENTS.get(species[atom_i])
-        ej = ELEMENTS.get(species[atom_j])
+        from ..core.periodic_table import Element
+        ei = Element.get_element(species[atom_i])
+        ej = Element.get_element(species[atom_j])
         ri = ei.covalent_radius if ei and ei.covalent_radius else 0.7
         rj = ej.covalent_radius if ej and ej.covalent_radius else 0.7
         if ri + rj == 0:
