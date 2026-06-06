@@ -5,9 +5,9 @@
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1295%20passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1462%20passed-brightgreen)](tests/)
 
-**Version**: v0.3.0 — **core modules are stable** (API ergonomics + immutability + coordinate semantics are consistent).
+**Version**: v0.4.0
 
 ## Table of Contents
 
@@ -26,11 +26,13 @@
 - **Core data model**: `Crystal`, `Molecule`, `Structure`, `Lattice`, `Composition`, `Site`, `Element`
 - **Immutable-by-default**: mutation returns new objects (safe caching, predictable pipelines)
 - **Coordinate system clarity**: `Structure.positions` is **always Cartesian**; `Crystal` also supports `frac_positions`
-- **Builders**: bulk/surface/alloy/molecule/defects/nanostructures
-- **Transformations**: geometric, lattice, atomic, chemical, structural, plus composite (pipelines/sweeps/batch)
-- **Analysis**: symmetry (spglib), graph connectivity (OOP + NetworkX export), convenience properties
-- **Calculators**: classical + ML (optional), ASE/pymatgen I/O bridges (optional)
-- **Storage**: persistent storage via maggma (optional)
+- **Builders**: bulk/surface/alloy/molecule/defects/interface/nanostructures with `BuilderRegistry`
+- **Transformations**: geometric, lattice, atomic, chemical, structural with `TransformationRegistry` + `TransformationSpec`
+- **Analysis**: graph connectivity, neighbor finding, bond/angle/dihedral analysis, structure properties, topology, atom selection
+- **IO**: table-driven `FormatRegistry` with 8 built-in formats, plugin-ready
+- **Storage**: `DataStorage` facade with `MemoryBackend` + `MaggmaBackend`, content-addressed IDs
+- **Adaptability**: `adapters/` for pymatgen/ASE, `export/` for LaTeX, plugin entry points
+- **Calculators**: classical + ML (optional)
 - **CLI**: interactive menu for structure editing and utilities
 
 ## Installation
@@ -136,10 +138,10 @@ mass_frac = comp.mass_fractions()   # {'Fe': 0.699, 'O': 0.301}
 mole_frac = comp.mole_fractions()   # {'Fe': 0.4, 'O': 0.6}
 ```
 
-### Graph analysis (optional)
+### Graph analysis
 
 ```python
-from matsimpy.core.graph import MoleculeGraph, create_structure_graph
+from matsimpy.analysis import MoleculeGraph, create_structure_graph
 from matsimpy import Molecule
 molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
 # OOP API (recommended)
@@ -157,7 +159,7 @@ path = graph.get_shortest_path(0, 2)
 nx_graph = graph.to_networkx()
 
 # Or use functional API
-from matsimpy.core.graph import get_adjacency_matrix, get_coordination_numbers
+from matsimpy.analysis import get_adjacency_matrix, get_coordination_numbers
 adj = get_adjacency_matrix(molecule, cutoff=3.0)
 coord = get_coordination_numbers(crystal, cutoff=5.0)
 ```
@@ -165,32 +167,21 @@ coord = get_coordination_numbers(crystal, cutoff=5.0)
 ### LaTeX export
 
 ```python
-from matsimpy.io import crystals_to_latex_table, molecules_to_latex_table
+from matsimpy.export import crystals_to_latex_table, save_latex_table
 from matsimpy import Molecule, Crystal, Lattice
 
 # Export crystals to LaTeX table
 crystal1 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.63))
 crystal2 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
-crystal3 = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.65))
-crystals = [crystal1, crystal2, crystal3]
+crystals = [crystal1, crystal2]
 latex = crystals_to_latex_table(
     crystals,
-    caption='NaCl',
-    label='tab:si_polymorphs',
-    include_columns=['ID', 'Formula', 'Lattice', 'Volume'],
-    use_mhchem=True  # Use \ce{} from mhchem package
+    caption='NaCl polymorphs',
+    label='tab:nacl',
 )
-
-# Export molecules
-molecules = [molecule, molecule]
-latex = molecules_to_latex_table(
-    molecules,
-    caption='Organic Molecules',
-    include_columns=['ID', 'Formula', 'Mass', 'Atoms']
-)
+print(latex)
 
 # Save to file
-from matsimpy.io import save_latex_table
 save_latex_table(crystals, 'structures.tex')
 ```
 
@@ -198,8 +189,10 @@ save_latex_table(crystals, 'structures.tex')
 
 ```python
 from matsimpy.builders import (
-    from_prototype, generate_slab, create_interstitial,
-    build_tetrahedral, create_vacancy, build_nanotube,build_carbon_nanotube
+    from_prototype, generate_slab,
+    build_tetrahedral, build_carbon_nanotube,
+    create_vacancy, create_interstitial, add_adsorbate,
+    generate_random_alloy, create_simple_interface,
 )
 
 # Build bulk structures from prototypes
@@ -207,11 +200,12 @@ fcc_cu = from_prototype('fcc', 'Cu', 3.61)
 bcc_fe = from_prototype('bcc', 'Fe', 2.87)
 diamond_c = from_prototype('diamond', 'C', 3.57)
 
-# Create surface slabs
+# Create surface slabs with adsorbates
 slab = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=10.0, min_vacuum_size=15.0)
+with_ads = add_adsorbate(slab, 'O', (0.5, 0.5), 2.0)
 
 # Generate supercell
-from matsimpy.transformation.structural import make_supercell
+from matsimpy.transformation import make_supercell
 supercell = make_supercell(fcc_cu, [4, 4, 4])
 
 # Build molecules
@@ -219,10 +213,16 @@ ch4 = build_tetrahedral('C', ['H', 'H', 'H', 'H'], 1.09)
 
 # Create defects
 with_vacancy = create_vacancy(fcc_cu, 0)
-with_interstitial = create_interstitial(fcc_cu, 'H', positions=[0.5, 0.5, 0.5])
+with_interstitial = create_interstitial(fcc_cu, 'H', position=[0.5, 0.5, 0.5])
+
+# Generate alloys
+alloy = generate_random_alloy(supercell, ['Ni'], 'Cu', [0.25])
 
 # Build nanotubes
-cnt = build_carbon_nanotube(10, 0, length=1)  # Zigzag CNT
+cnt = build_carbon_nanotube(10, 0)
+
+# Create interfaces
+interface = create_simple_interface(fcc_cu, bcc_fe)
 ```
 
 ### Transformations
@@ -237,8 +237,9 @@ sites.
 ```python
 from matsimpy.transformation import (
     translate, rotate, apply_strain, scale_lattice,
-    substitute, make_supercell
+    substitute, make_supercell, move_atoms,
 )
+from matsimpy.transformation.registry import registry
 
 # Geometric transformations
 translated = translate(crystal, [1, 1, 1])
@@ -249,14 +250,20 @@ strained = apply_strain(
     crystal,
     [[0.05, 0, 0], [0, 0, 0], [0, 0, 0]],  # 5% uniaxial strain
 )
-scaled = scale_lattice(crystal, 1.1)            # Scale by 10%
+scaled = scale_lattice(crystal, 1.1)              # Scale by 10%
 
 # Chemical transformations
-substituted = substitute(crystal, [0, 1], ['Ge', 'Ge'])
+substituted = substitute(crystal, [0], 'Ge')
+
+# Atomic transformations
+moved = move_atoms(crystal, [0, 1], [0.1, 0, 0])
 
 # Structural transformations
-supercell = make_supercell(crystal, [2, 2, 2])  # 2x2x2 supercell
-sheared = make_supercell(crystal, [[2, 1, 0], [0, 1, 0], [0, 0, 1]])
+supercell = make_supercell(crystal, [2, 2, 2])    # 2x2x2 supercell
+
+# Registry — apply transformations by name with type validation
+result = registry.apply('translate', crystal, vector=[1, 0, 0])
+spec = registry.get('translate')                   # TransformationSpec metadata
 ```
 
 Metadata and capability notes:
@@ -279,23 +286,23 @@ from matsimpy.transformation.composite import (
     TransformationPipeline, ParameterSweep, BatchProcessor
 )
 from matsimpy.transformation import make_supercell, apply_strain
+from matsimpy.transformation.registry import registry
 from matsimpy.builders.bulk import from_prototype
 
-# 1. Reusable transformation pipeline
-pipeline = TransformationPipeline("strain_study")
-pipeline.add_step(make_supercell, scaling_matrix=[2, 2, 2])
-pipeline.add_step(apply_strain, strain_matrix=[[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
-pipeline.save("strain_study.json")  # Typed JSON; NumPy arrays round-trip, opaque objects fail fast.
+# 1. TransformationPlan — serializable sequence of named, registered transforms
+from matsimpy.transformation import TransformationStep, TransformationPlan
 
-# Apply to structure
+plan = TransformationPlan(
+    steps=[
+        TransformationStep("make_supercell", {"scaling_matrix": [2, 2, 2]}),
+        TransformationStep("translate", {"vector": [1.0, 0, 0]}),
+    ],
+    name="2x2x2 supercell + shift",
+)
 crystal = from_prototype('diamond', 'Si', 5.43)
-result = pipeline.apply(crystal)
+result = registry.apply_plan(plan, crystal)
 
-# Apply to multiple structures
-structures = [from_prototype('diamond', 'Si', 5.43), from_prototype('fcc', 'Cu', 3.61)]
-results = pipeline.apply_batch(structures)
-
-# 2. Parameter sweep - generate structures with varying parameters
+# 2. Parameter sweep
 sweep = ParameterSweep(
     base_structure=crystal,
     transformations={
@@ -310,36 +317,26 @@ sweep = ParameterSweep(
             }
         }
     },
-    mode='cartesian'  # All combinations
+    mode='cartesian'
 )
-
-# Generate all structures
 for struct, params in sweep:
     print(f"Strain: {params['strain']}, Formula: {struct.formula}")
 
-# 3. Batch processing with error handling
+# 3. Batch processing
 def make_2x2x2_supercell(s):
     return make_supercell(s, [2, 2, 2])
 
-def apply_1pct_strain(s):
-    return apply_strain(s, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
-
 processor = BatchProcessor(
-    transformations=[make_2x2x2_supercell, apply_1pct_strain],
+    transformations=[make_2x2x2_supercell],
     n_workers=1,
     progress=True,
-    error_handling='skip'  # or 'raise', 'log'
+    error_handling='skip'
 )
-
 structures = [from_prototype('fcc', 'Cu', 3.61) for _ in range(10)]
 results = processor.process(structures)
 for result in results:
     if result.success:
         print(f"Processed: {result.structure.formula}")
-
-# Sequential stream processing is lazy and yields as each input is transformed.
-for result in processor.process_stream(iter(structures)):
-    print(result.success)
 ```
 
 ### File I/O
@@ -360,17 +357,6 @@ molecule = read('molecule.xyz')
 # Explicit format specification
 crystal = read('file.txt', format='vasp')
 write(crystal, 'output.txt', format='cif', title='My Structure')
-```
-
-**Class methods (alternative):**
-
-```python
-# Using class methods
-crystal = Crystal.from_file('structure.vasp')
-crystal.to_file('output.cif', title='My Crystal')
-
-molecule = Molecule.from_file('molecule.xyz')
-molecule.to_file('output.pdb', title='Water')
 ```
 
 **Format-specific functions (advanced use):**
@@ -442,6 +428,40 @@ print(f"Conventional: {len(conventional)} atoms") # 8 atoms
 
 ### Data storage
 
+```python
+from matsimpy.storage import DataStorage, MemoryBackend
+from matsimpy.builders.bulk import from_prototype
+
+# In-memory storage (for testing)
+storage = DataStorage(backend=MemoryBackend())
+
+# For persistent storage, use MaggmaBackend:
+# from matsimpy.storage import MaggmaBackend
+# storage = DataStorage(backend=MaggmaBackend(store_path='mydata.json'))
+
+# Store crystal structure — returns stable sha256 ID
+crystal = from_prototype('diamond', 'Si', 5.43)
+doc_id = storage.store_data(crystal, metadata={'description': 'Si primitive cell'})
+
+# Store calculation results
+results = {'energy': -10.5, 'forces': [[0,0,0]]}
+storage.store_data(results, metadata={'calculator': 'LJ'})
+
+# Retrieve — auto-decodes to Crystal or raw dict
+retrieved = storage.retrieve_data(doc_id)
+print(retrieved.formula)  # Si2
+
+# Query by metadata
+lj_results = storage.query({'metadata.calculator': 'LJ'})
+
+# ID is content-addressed — same data → same ID
+id1 = storage.store_data(crystal)
+id2 = storage.store_data(crystal)
+assert id1 == id2
+
+storage.close()
+```
+
 ## Core Conventions
 
 ### Immutability
@@ -457,31 +477,6 @@ print(f"Conventional: {len(conventional)} atoms") # 8 atoms
   - `Crystal.cart_positions` (Cartesian)
   - `Crystal.positions` (Cartesian, consistent with `Structure`)
 
-```python
-from matsimpy.storage import DataStorage
-from matsimpy.builders.bulk import from_prototype
-
-# Initialize storage with a JSON file
-storage = DataStorage(store_path='mydata.json')
-
-# Store crystal structure
-crystal = from_prototype('diamond', 'Si', 5.43)
-doc_id = storage.store_data(crystal, metadata={'description': 'Si primitive cell'})
-
-# Store calculation results
-results = {'energy': -10.5, 'forces': [[0,0,0]]}
-storage.store_data(results, metadata={'calculator': 'LJ'})
-
-# Retrieve and query
-retrieved = storage.retrieve_data(doc_id)    # Returns dict with full MSON data
-lj_results = storage.retrieve_data(query={'metadata.calculator': 'LJ'})
-
-# Reconstruct Crystal from stored data
-from matsimpy import Crystal
-reconstructed = Crystal.from_dict(retrieved)
-print(reconstructed.formula)                 # Si2
-```
-
 ## Project Structure
 
 ```
@@ -489,18 +484,24 @@ matsimpy/
 ├── core/              # Core data structures
 │   ├── crystal.py     # Crystal class
 │   ├── molecule.py    # Molecule class
+│   ├── structure.py   # Structure ABC
 │   ├── lattice.py     # Lattice class
 │   ├── composition.py # Composition class
 │   ├── site.py        # Site classes
-│   └── periodic_table.py  # Element and periodic table
+│   ├── periodic_table.py  # Element and periodic table
+│   ├── _validation.py # Core validation helpers
+│   └── protocols.py   # StructureLike, CrystalLike, MoleculeLike
 │
-├── builders/         # Structure builders
+├── builders/          # Structure builders
 │   ├── bulk/          # Bulk crystal structures (prototypes, symmetry)
 │   ├── surface/       # Surface slabs and adsorbates
-│   ├── alloy/         # Alloy generation (random, ordered, intermetallic)
+│   ├── alloy/         # Alloy generation (random, ordered, intermetallic, Heusler)
 │   ├── molecule/      # Molecular structure builders
-│   ├── defects/       # Point defect creation
-│   └── nanostructure/ # Nanotubes and twisted structures
+│   ├── defects/       # Point defect creation (vacancy, interstitial, substitution, etc.)
+│   ├── interface/     # Interface/hybrid structure builders
+│   ├── nanostructure/ # Nanotubes and twisted structures
+│   ├── registry.py    # BuilderRegistry + BuilderSpec
+│   └── _register.py   # Auto-registration of built-in builders
 │
 ├── transformation/    # Structure transformations
 │   ├── geometric/     # Translation, rotation
@@ -508,13 +509,14 @@ matsimpy/
 │   ├── atomic/        # Atom manipulation and organization
 │   ├── chemical/      # Chemical substitutions
 │   ├── structural/    # Supercell, molecular operations
-│   └── composite/     # High-throughput transformation tools
-│       ├── pipeline.py    # TransformationPipeline
-│       ├── sweep.py       # ParameterSweep
-│       └── batch.py       # BatchProcessor
+│   ├── composite/     # Pipeline, ParameterSweep, BatchProcessor, TransformationPlan
+│   ├── spec.py        # TransformationSpec dataclass
+│   ├── registry.py    # TransformationRegistry singleton
+│   └── _register.py   # Auto-registration of built-in transformations
 │
 ├── io/                # File format support
 │   ├── core.py        # High-level read/write interface
+│   ├── registry.py    # FormatHandler + FormatRegistry (table-driven dispatch)
 │   ├── vasp.py        # VASP POSCAR/CONTCAR
 │   ├── cif.py         # CIF format
 │   ├── xyz.py         # XYZ format
@@ -522,32 +524,44 @@ matsimpy/
 │   ├── mol.py         # MOL format
 │   ├── xsf.py         # XSF format
 │   ├── ase.py         # ASE format
-│   ├── json.py        # JSON serialization
-│   └── utils.py       # Format detection utilities
+│   └── json.py        # JSON serialization
+│
+├── adapters/          # External library converters
+│   ├── pymatgen.py    # to_pymatgen, from_pymatgen
+│   └── ase.py         # to_ase, from_ase
+│
+├── export/            # Presentation / export
+│   └── latex.py       # LaTeX table export
+│
+├── analysis/          # Analysis tools
+│   ├── graph.py       # StructureGraph, MoleculeGraph, CrystalGraph
+│   ├── neighbors.py   # Neighbor finding (find_points_in_spheres)
+│   ├── bonding.py     # BondAnalyzer (bonds, angles, dihedrals)
+│   ├── structure.py   # StructureAnalyzer (COM, inertia, density)
+│   ├── topology.py    # TopologyAnalyzer (connectivity, rings, paths)
+│   └── selection.py   # AtomSelection + select_by_species, etc.
+│
+├── storage/           # Data storage
+│   ├── facade.py      # DataStorage (user-facing API)
+│   ├── schema.py      # DocumentEnvelope + stable ID generation
+│   ├── codec.py       # DocumentCodec (encode/decode)
+│   ├── backend.py     # StoreBackend protocol
+│   ├── memory_store.py # MemoryBackend (in-memory, for testing)
+│   └── maggma_store.py # MaggmaBackend (persistent, via maggma)
+│
+├── utils/             # General-purpose utilities
+│   ├── validation.py  # validate_vector3, validate_positive_scalar, etc.
+│   ├── dict_utils.py  # get_nested_value, set_nested_value, copy_properties
+│   └── path_utils.py  # expand_path
 │
 ├── calculator/        # Energy/force calculators
-│   ├── base.py        # Base Calculator class
-│   ├── classical/     # Classical potentials (LJ, etc.)
-│   ├── ml/            # Machine learning calculators
-│   └── dft/           # DFT calculators (VASP, QE, etc.)
-│
-├── config/            # Global configuration system
-│   ├── manager.py     # ConfigManager class
-│   ├── defaults.py    # Default configuration
-│   └── utils.py       # Configuration utilities
-│
-├── storage/           # Data storage module
-│   └── maggma_store.py  # Persistent storage using maggma
-│
-├── symmetry/          # Symmetry analysis
-│   └── analyzer.py    # SymmetryAnalyzer, get_conventional_cell
-├── ui/                # User interface
-│   └── cli/           # Command-line interface and interactive menu
-├── utils/             # Utility functions
-├── code/              # DFT code interfaces
+├── config/            # Global configuration (ConfigManager)
+├── symmetry/          # Symmetry analysis (spglib)
+├── ui/                # CLI interface
 ├── ai/                # AI/ML integration
-├── analysis/          # Analysis tools
-└── visualization/     # Visualization tools (planned)
+├── exceptions.py      # MatSimPyError, FormatError, StructureTypeError, etc.
+├── plugins.py         # Plugin discovery via entry points
+└── constants.py       # POSITION_TOL, LATTICE_TOL
 ```
 
 ## Command-Line Interface
@@ -640,4 +654,4 @@ MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen)
 
 ---
 
-**Note**: v0.3.0 is Beta; core modules are stable. Non-core modules and optional integrations may still evolve.
+**Note**: v0.4.0 — architecture stabilized with registries, plugin entry points, and clean module boundaries.
