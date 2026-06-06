@@ -106,7 +106,6 @@ class TestIOConverters(unittest.TestCase):
         self.assertIsInstance(pymatgen_mol, PymatgenMolecule)
         self.assertIsInstance(Molecule.from_pymatgen(pymatgen_mol), Molecule)
     
-    @unittest.skipUnless(has_pymatgen(), "pymatgen not installed")
     def test_to_pymatgen_invalid_input(self):
         """Test converting invalid input to pymatgen."""
         with self.assertRaises(ValueError):
@@ -199,12 +198,9 @@ class TestIOConverters(unittest.TestCase):
         self.assertIsInstance(ase_molecule, Atoms)
         self.assertIsInstance(Molecule.from_ase(ase_molecule), Molecule)
     
-    @unittest.skipUnless(has_ase(), "ASE not installed")
     def test_to_ase_invalid_input(self):
         """Test converting invalid input to ASE."""
-        # to_ase doesn't validate input before accessing attributes
-        # It will raise AttributeError instead of ValueError
-        with self.assertRaises((ValueError, AttributeError)):
+        with self.assertRaises(ValueError):
             to_ase("not a structure")
     
     @unittest.skipUnless(has_ase(), "ASE not installed")

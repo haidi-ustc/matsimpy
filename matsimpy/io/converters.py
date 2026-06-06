@@ -26,6 +26,9 @@ def to_pymatgen(structure: Union[Crystal, Molecule]):
         ImportError: If pymatgen is not installed
         ValueError: If structure type is not supported
     """
+    if not isinstance(structure, (Crystal, Molecule)):
+        raise ValueError(f"Unsupported structure type: {type(structure)}")
+
     try:
         from pymatgen.core import Structure as PymatgenStructure
         from pymatgen.core import Molecule as PymatgenMolecule
@@ -58,9 +61,6 @@ def to_pymatgen(structure: Union[Crystal, Molecule]):
         pymatgen_molecule = PymatgenMolecule(species, positions)
 
         return pymatgen_molecule
-
-    else:
-        raise ValueError(f"Unsupported structure type: {type(structure)}")
 
 
 def from_pymatgen(pymatgen_obj):
@@ -132,6 +132,9 @@ def to_ase(structure: Union[Crystal, Molecule]):
         ImportError: If ASE is not installed
         ValueError: If structure type is not supported
     """
+    if not isinstance(structure, (Crystal, Molecule)):
+        raise ValueError(f"Unsupported structure type: {type(structure)}")
+
     try:
         from ase import Atoms
     except ImportError:

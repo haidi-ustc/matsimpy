@@ -59,6 +59,8 @@ Status markers:
 - [x] Structured adsorbate support added for `Crystal`/`Molecule` adsorbates and covered by regression tests.
 - [x] Builder package export updated so `create_simple_interface` is available from `matsimpy.builders`.
 - [x] Storage optional dependency boundary tightened so missing Maggma is quiet on import and actionable when `DataStorage` is constructed.
+- [x] Interface builder module documentation now matches the implemented conservative z-stacking contract instead of advertising a placeholder.
+- [x] IO converter input validation now rejects unsupported MatSimPy input types before optional ASE/pymatgen imports, so caller errors are deterministic even in base installs.
 
 ### Accepted Deferred Scope
 
@@ -74,6 +76,8 @@ Status markers:
 - [x] `conda run -n pmg python -m compileall matsimpy` passed.
 - [x] `conda run -n pmg python -m pytest -q` passed: `1380 passed, 35 skipped, 3 warnings`.
 - [x] Commit the checklist and follow-up stability fixes with Lore trailers.
+- [x] Targeted converter/interface follow-up tests passed: `19 passed`.
+- [x] `conda run -n pmg python -m compileall matsimpy/io matsimpy/builders/interface` passed.
 
 ### Phase 0 — Baseline and Failure Inventory
 

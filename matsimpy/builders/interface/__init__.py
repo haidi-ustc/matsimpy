@@ -6,9 +6,9 @@ Tools for creating interfaces between materials:
 - Grain boundaries
 - Multilayer structures
 
-Note: This is a placeholder module. Full interface generation requires
-more sophisticated algorithms for lattice matching, strain minimization,
-and interface optimization.
+The implemented public builder covers conservative z-stacking. More
+sophisticated lattice matching, strain minimization, and interface
+optimization are intentionally outside this stability-focused builder.
 
 Examples:
     >>> from matsimpy import Crystal, Lattice
@@ -18,8 +18,7 @@ Examples:
     >>> si = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
     >>> ge = Crystal(['Ge'], [[0,0,0]], Lattice.cubic(5.65))
     >>>
-    >>> # Simple stacking interface (placeholder)
-    >>> # interface = create_simple_interface(si, ge, vacuum=5.0)
+    >>> interface = create_simple_interface(si, ge, vacuum=5.0)
 """
 
 import numpy as np

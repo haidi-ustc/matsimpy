@@ -32,3 +32,17 @@ def test_create_simple_interface_validates_inputs():
         assert "Crystal" in str(e)
     else:
         raise AssertionError("expected TypeError")
+
+    try:
+        create_simple_interface(substrate, substrate, vacuum=-1.0)
+    except ValueError as e:
+        assert "vacuum" in str(e)
+    else:
+        raise AssertionError("expected ValueError")
+
+    try:
+        create_simple_interface(substrate, substrate, gap=-1.0)
+    except ValueError as e:
+        assert "gap" in str(e)
+    else:
+        raise AssertionError("expected ValueError")
