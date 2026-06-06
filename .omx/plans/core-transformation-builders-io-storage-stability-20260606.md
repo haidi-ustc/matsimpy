@@ -61,6 +61,7 @@ Status markers:
 - [x] Storage optional dependency boundary tightened so missing Maggma is quiet on import and actionable when `DataStorage` is constructed.
 - [x] Interface builder module documentation now matches the implemented conservative z-stacking contract instead of advertising a placeholder.
 - [x] IO converter input validation now rejects unsupported MatSimPy input types before optional ASE/pymatgen imports, so caller errors are deterministic even in base installs.
+- [x] Storage public contract now has Maggma-free mocked tests for deterministic IDs, retrieve/delete/count/clear, and JSON close flushing.
 
 ### Accepted Deferred Scope
 
@@ -78,6 +79,8 @@ Status markers:
 - [x] Commit the checklist and follow-up stability fixes with Lore trailers.
 - [x] Targeted converter/interface follow-up tests passed: `19 passed`.
 - [x] `conda run -n pmg python -m compileall matsimpy/io matsimpy/builders/interface` passed.
+- [x] Targeted Maggma-free plus existing storage tests passed: `19 passed`.
+- [x] `conda run -n pmg python -m compileall matsimpy/storage` passed.
 
 ### Phase 0 — Baseline and Failure Inventory
 
