@@ -1,14 +1,17 @@
-"""
-Maggma-based data storage implementation.
+"""Maggma-based data storage implementation.
 
 Provides persistent storage for MatSimPy data using maggma stores.
+
+Reserved top-level keys: ``doc_id``, ``stored_at``, ``metadata``.
+User payloads containing reserved keys (other than matching the provided
+``metadata`` argument) will be rejected to prevent silent data loss.
 """
 
 import json
 import logging
 import hashlib
 from copy import deepcopy
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, List, Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -69,6 +72,7 @@ class DataStorage(MSONable):
         self,
         store_path: Optional[Union[str, Path]] = None,
         use_memory_store: bool = False,
+        auto_flush: bool = True,
         **kwargs,
     ):
         """
@@ -76,8 +80,9 @@ class DataStorage(MSONable):
 
         Args:
             store_path: Path for JSON store (if not using memory store).
-                       If None, uses config default or './materials_simulation_data.json'
+                        If None, uses config default or './materials_simulation_data.json'
             use_memory_store: Whether to use in-memory store (for testing)
+            auto_flush: If True (default), flush JSON stores after each write/delete/clear
             **kwargs: Additional arguments passed to store initialization
 
         Raises:
@@ -133,6 +138,8 @@ class DataStorage(MSONable):
             self.store.connect()
             logger.info(f"Initialized JSON data store at {store_path}")
 
+        self.auto_flush = auto_flush
+
     def store_data(
         self,
         data: Union[Dict[str, Any], MSONable],
@@ -147,6 +154,10 @@ class DataStorage(MSONable):
         - Dictionaries
         - Calculation results
         - Any MSONable object
+
+        Reserved top-level keys ``doc_id`` and ``stored_at`` in the input
+        dictionary are rejected.  The ``metadata`` key may only be provided
+        via the explicit *metadata* argument.
 
         Args:
             data: Data to store (dict or MSONable object)
@@ -169,13 +180,28 @@ class DataStorage(MSONable):
             else:
                 data_dict = data.copy() if isinstance(data, dict) else {"data": data}
 
+            # Reject reserved keys in user payload
+            _RESERVED = {"doc_id", "stored_at"}
+            if metadata is not None:
+                _RESERVED.add("metadata")
+            reserved_in_payload = _RESERVED & set(data_dict.keys())
+            if reserved_in_payload:
+                raise ValueError(
+                    f"Payload contains reserved key(s): {sorted(reserved_in_payload)}. "
+                    f"Use the explicit arguments instead."
+                )
+
             metadata_dict = deepcopy(metadata) if metadata else None
             if metadata_dict:
                 data_dict["metadata"] = metadata_dict
 
-            # Generate ID if not provided.  Include metadata because it is part
-            # of the persisted document; exclude only volatile storage fields.
-            if doc_id is None:
+            # Validate custom doc_id
+            if doc_id is not None:
+                if not isinstance(doc_id, str) or doc_id == "":
+                    raise ValueError(
+                        f"doc_id must be a non-empty string, got: {doc_id!r}"
+                    )
+            else:
                 doc_id = _stable_doc_id(data_dict)
 
             # Add storage fields after hashing so timestamps do not affect IDs.
@@ -184,6 +210,9 @@ class DataStorage(MSONable):
 
             # Store in database
             self.store.update(data_dict)
+
+            if self.auto_flush:
+                self._flush_store()
 
             logger.info(f"Stored data with ID: {doc_id}")
             return doc_id
@@ -218,7 +247,11 @@ class DataStorage(MSONable):
             >>> results = storage.retrieve_data(query={'metadata.calculator': 'LJ'})
         """
         try:
-            if doc_id:
+            if doc_id is not None:
+                if not isinstance(doc_id, str) or doc_id == "":
+                    raise ValueError(
+                        f"doc_id must be a non-empty string, got: {doc_id!r}"
+                    )
                 # Retrieve specific document
                 result = self.store.query_one(criteria={"doc_id": doc_id})
                 if result:
@@ -228,7 +261,7 @@ class DataStorage(MSONable):
                     logger.warning(f"No data found with ID: {doc_id}")
                     return {}
 
-            elif query:
+            elif query is not None:
                 # Query multiple documents
                 results = list(self.store.query(criteria=query, limit=limit))
                 logger.info(f"Retrieved {len(results)} documents matching query")
@@ -244,6 +277,40 @@ class DataStorage(MSONable):
             logger.error(f"Failed to retrieve data: {str(e)}")
             raise
 
+    def iter_data(
+        self,
+        query: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+        skip: int = 0,
+        properties: Optional[List[str]] = None,
+        sort: Optional[Dict[str, int]] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        Stream documents matching *query* without materializing all results.
+
+        Args:
+            query: Query criteria (e.g. ``{'metadata.calculator': 'LJ'}``).
+            limit: Maximum number of documents to yield.  ``None`` means
+                   unlimited (use with caution for large stores).
+            skip: Number of matching documents to skip before yielding.
+            properties: Optional list of fields to project.
+            sort: Optional sort specification (e.g. ``{'stored_at': -1}``).
+
+        Yields:
+            dict: Each matching document as it is retrieved.
+        """
+        criteria = query or {}
+        count = 0
+        skipped = 0
+        for doc in self.store.query(criteria=criteria, properties=properties, sort=sort):
+            if skipped < skip:
+                skipped += 1
+                continue
+            yield doc
+            count += 1
+            if limit is not None and count >= limit:
+                return
+
     def delete_data(self, doc_id: str) -> bool:
         """
         Delete data from the store.
@@ -255,6 +322,10 @@ class DataStorage(MSONable):
             bool: Success status
         """
         try:
+            if not isinstance(doc_id, str) or doc_id == "":
+                raise ValueError(
+                    f"doc_id must be a non-empty string, got: {doc_id!r}"
+                )
             # Check if document exists
             doc = self.store.query_one(criteria={"doc_id": doc_id})
             if not doc:
@@ -263,6 +334,10 @@ class DataStorage(MSONable):
 
             # Delete document
             self.store.remove_docs(criteria={"doc_id": doc_id})
+
+            if self.auto_flush:
+                self._flush_store()
+
             logger.info(f"Deleted data with ID: {doc_id}")
             return True
 
@@ -293,14 +368,26 @@ class DataStorage(MSONable):
         """
         logger.warning("Clearing all data from store")
         self.store.remove_docs(criteria={})
+        if self.auto_flush:
+            self._flush_store()
+
+    def flush(self) -> None:
+        """Force pending changes to durable storage immediately.
+
+        Has no effect for in-memory stores.
+        """
+        self._flush_store()
+
+    def _flush_store(self) -> None:
+        """Internal: flush JSON store to disk if applicable."""
+        if self.store_type == "json" and hasattr(self.store, "update_json_file"):
+            self.store.update_json_file()
 
     def close(self) -> None:
         """Close the data store connection."""
         if getattr(self, "_closed", False):
             return
-        # For JSONStore, ensure data is written to disk
-        if self.store_type == "json" and hasattr(self.store, "update_json_file"):
-            self.store.update_json_file()
+        self._flush_store()
         self.store.close()
         self._closed = True
         logger.info("Data store connection closed")
@@ -337,13 +424,22 @@ class DataStorage(MSONable):
 
 
 def _stable_doc_id(document: Dict[str, Any]) -> str:
-    """Return a deterministic ID for persisted document content."""
+    """Return a deterministic, type-aware ID for persisted document content.
+
+    Uses Monty's canonical JSON encoder to distinguish types that would
+    otherwise collide under str()-based fallback (e.g. numpy arrays vs
+    same-looking strings, numpy scalars vs Python scalars).
+    """
+    from monty.json import MontyEncoder
+
     stable_document = {
         key: value
         for key, value in document.items()
         if key not in {"doc_id", "stored_at"}
     }
-    serialized = json.dumps(stable_document, sort_keys=True, default=str)
+    serialized = json.dumps(
+        stable_document, sort_keys=True, cls=MontyEncoder
+    )
     return hashlib.md5(serialized.encode()).hexdigest()
 
 
