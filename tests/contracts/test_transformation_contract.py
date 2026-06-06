@@ -31,24 +31,40 @@ spec_ids = [s.name for s in all_specs]
 
 
 def _minimal_kwargs(spec):
-    """Try to build minimally valid kwargs from the spec's parameter_schema."""
+    """Build minimally valid kwargs from the spec's parameter_schema."""
     schema = spec.parameter_schema or {}
     props = schema.get("properties", {})
     kwargs = {}
     for name, prop in props.items():
         if "default" in prop:
             kwargs[name] = prop["default"]
-        elif prop.get("type") == "array" and "items" in prop:
-            kwargs[name] = [0.1] * prop.get("minItems", 1)
-        elif prop.get("type") == "number":
-            kwargs[name] = 0.1
-        elif prop.get("type") == "string":
-            kwargs[name] = "test"
-        elif prop.get("type") == "integer":
-            kwargs[name] = 0
-        elif prop.get("type") == "boolean":
-            kwargs[name] = False
+        elif "oneOf" in prop:
+            kwargs[name] = _value_from_schema(prop["oneOf"][0])
+        else:
+            kwargs[name] = _value_from_schema(prop)
     return kwargs
+
+
+def _value_from_schema(schema):
+    """Generate a minimal valid value for a JSON Schema fragment."""
+    if "default" in schema:
+        return schema["default"]
+    t = schema.get("type", "string")
+    if t == "string":
+        if "enum" in schema:
+            return schema["enum"][0]
+        return "test"
+    elif t == "number":
+        return 0.1
+    elif t == "integer":
+        return 0
+    elif t == "boolean":
+        return False
+    elif t == "array":
+        item_schema = schema.get("items", {"type": "number"})
+        min_items = schema.get("minItems", 1)
+        return [_value_from_schema(item_schema)] * min_items
+    return None
 
 
 @pytest.mark.parametrize("spec", all_specs, ids=spec_ids)

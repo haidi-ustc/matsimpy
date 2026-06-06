@@ -13,26 +13,49 @@ all_specs = registry.list_all()
 spec_ids = [s.name for s in all_specs]
 
 
+_STRUCTURE_PARAMS = frozenset({"structure", "substrate", "film", "bottom", "top", "layers", "other"})
+
+
 def _minimal_kwargs(spec):
-    kwargs = {}
+    """Build minimally valid kwargs from spec's parameter_schema, only required fields."""
     schema = spec.parameter_schema or {}
     props = schema.get("properties", {})
     required = schema.get("required", [])
+    kwargs = {}
     for name, prop in props.items():
         if name not in required:
             continue
-        if prop.get("type") == "string":
-            if "enum" in prop:
-                kwargs[name] = prop["enum"][0]
-            elif name == "prototype":
-                kwargs[name] = "fcc"
-            elif name == "element":
-                kwargs[name] = "Cu"
-            else:
-                kwargs[name] = "test"
-        elif prop.get("type") == "number":
-            kwargs[name] = 1.0
+        if name in _STRUCTURE_PARAMS:
+            continue  # needs actual Structure — caller provides
+        if "default" in prop:
+            kwargs[name] = prop["default"]
+        elif "oneOf" in prop:
+            kwargs[name] = _value_from_schema(prop["oneOf"][0])
+        else:
+            kwargs[name] = _value_from_schema(prop)
     return kwargs
+
+
+def _value_from_schema(schema):
+    """Generate a minimal valid value for a JSON Schema fragment."""
+    if "default" in schema:
+        return schema["default"]
+    t = schema.get("type", "string")
+    if t == "string":
+        if "enum" in schema:
+            return schema["enum"][0]
+        return "Cu"
+    elif t == "number":
+        return 1.0
+    elif t == "integer":
+        return 1
+    elif t == "boolean":
+        return False
+    elif t == "array":
+        item_schema = schema.get("items", {"type": "number"})
+        min_items = schema.get("minItems", 1)
+        return [_value_from_schema(item_schema)] * min_items
+    return None
 
 
 @pytest.mark.parametrize("spec", all_specs, ids=spec_ids)

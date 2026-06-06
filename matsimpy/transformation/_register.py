@@ -1,9 +1,4 @@
-"""
-Auto-register all built-in transformation functions with the registry.
-
-Imported once at package initialization to populate the singleton
-TransformationRegistry.
-"""
+"""Auto-register all built-in transformation functions with the registry."""
 
 from ..core import Crystal, Molecule
 from .registry import registry
@@ -19,7 +14,6 @@ from .atomic.organization import sort_atoms, center_structure, perturb_positions
 from .chemical.substitution import substitute, substitute_all
 from .structural.supercell import make_supercell
 
-# Lazy imports for molecular operations (may not exist)
 try:
     from .structural.molecular import (
         fragment_molecule, align_molecules, merge_molecules
@@ -36,151 +30,400 @@ _CHEMICAL = "chemical"
 _STRUCTURAL = "structural"
 _BOTH = (Crystal, Molecule)
 _CRYSTAL = (Crystal,)
-_BOTH_TYPES = (Crystal, Molecule)
+_MOLECULE = (Molecule,)
 
-
-def _v3():
-    return {
-        "type": "array",
-        "items": {"type": "number"},
-        "minItems": 3,
-        "maxItems": 3,
-    }
+_V3 = {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}
+_M3 = {"type": "array", "items": _V3, "minItems": 3, "maxItems": 3}
 
 
 def register_all():
     """Register all built-in transformations with the global registry."""
 
     # --- Geometric ---
-    for fn, name, desc, types in [
-        (translate, "translate", "Translate structure by a 3D vector", _BOTH),
-        (translate_to_origin, "translate_to_origin",
-         "Translate center of mass to origin", _BOTH),
-        (rotate, "rotate", "Rotate structure around an axis by angle (degrees)", _BOTH),
-        (rotate_around_axis, "rotate_around_axis",
-         "Rotate structure around an arbitrary axis", _BOTH),
-    ]:
-        spec = TransformationSpec(
-            name=name, category=_GEOMETRIC, callable=fn,
-            description=desc, applicable_types=types,
-            output_type=Crystal if Crystal in types else None,
-            preserves_composition=True, preserves_lattice=True,
-            preserves_site_properties=True, preserves_pbc=True,
-            parameter_schema={"type": "object"},
-            version="1.0.0",
-        )
-        registry.register(spec)
+    registry.register(TransformationSpec(
+        name="translate", category=_GEOMETRIC, callable=translate,
+        description="Translate structure by a 3D vector",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"vector": _V3},
+            "required": ["vector"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="translate_to_origin", category=_GEOMETRIC,
+        callable=translate_to_origin,
+        description="Translate center of mass to origin",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={"type": "object", "properties": {}},
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="rotate", category=_GEOMETRIC, callable=rotate,
+        description="Rotate structure around an axis by angle (degrees)",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "angle": {"type": "number", "description": "Rotation angle in degrees"},
+                "axis": _V3,
+            },
+            "required": ["angle", "axis"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="rotate_around_axis", category=_GEOMETRIC,
+        callable=rotate_around_axis,
+        description="Rotate structure around an arbitrary axis",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "angle": {"type": "number"},
+                "axis": _V3,
+            },
+            "required": ["angle", "axis"],
+        },
+        version="1.0.0",
+    ))
 
     # --- Lattice ---
-    for fn, name, desc in [
-        (apply_strain, "apply_strain",
-         "Apply strain tensor to crystal lattice"),
-        (apply_deformation, "apply_deformation",
-         "Apply deformation gradient to crystal"),
-        (perturb_lattice, "perturb_lattice",
-         "Apply random perturbations to lattice vectors"),
-        (scale_lattice, "scale_lattice",
-         "Scale lattice by isotropic or anisotropic factor"),
-        (set_volume, "set_volume",
-         "Scale lattice to achieve target volume"),
-        (optimize_lattice, "optimize_lattice",
-         "Optimize lattice angles while preserving volume"),
-        (rotate_lattice, "rotate_lattice",
-         "Rotate lattice by 3D rotation matrix"),
-        (transform_lattice, "transform_lattice",
-         "Apply arbitrary transformation matrix to lattice"),
-        (standardize_cell, "standardize_cell",
-         "Standardize unit cell to convention"),
-    ]:
-        spec = TransformationSpec(
-            name=name, category=_LATTICE, callable=fn,
-            description=desc, applicable_types=_CRYSTAL,
-            output_type=Crystal,
-            preserves_composition=True, preserves_lattice=False,
-            preserves_site_properties=True, preserves_pbc=True,
-            parameter_schema={"type": "object"},
-            version="1.0.0",
-        )
-        registry.register(spec)
+    registry.register(TransformationSpec(
+        name="apply_strain", category=_LATTICE, callable=apply_strain,
+        description="Apply strain tensor to crystal lattice",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"strain": _M3},
+            "required": ["strain"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="apply_deformation", category=_LATTICE, callable=apply_deformation,
+        description="Apply deformation gradient to crystal",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"deformation": _M3},
+            "required": ["deformation"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="perturb_lattice", category=_LATTICE, callable=perturb_lattice,
+        description="Apply random perturbations to lattice vectors",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"magnitude": {"type": "number", "default": 0.01}},
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="scale_lattice", category=_LATTICE, callable=scale_lattice,
+        description="Scale lattice by isotropic or anisotropic factor",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "scale": {
+                    "oneOf": [_V3, {"type": "number"}],
+                },
+            },
+            "required": ["scale"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="set_volume", category=_LATTICE, callable=set_volume,
+        description="Scale lattice to achieve target volume",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"volume": {"type": "number"}},
+            "required": ["volume"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="optimize_lattice", category=_LATTICE, callable=optimize_lattice,
+        description="Optimize lattice angles while preserving volume",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={"type": "object", "properties": {}},
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="rotate_lattice", category=_LATTICE, callable=rotate_lattice,
+        description="Rotate lattice by 3D rotation matrix",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"matrix": _M3},
+            "required": ["matrix"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="transform_lattice", category=_LATTICE, callable=transform_lattice,
+        description="Apply arbitrary transformation matrix to lattice",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"matrix": _M3},
+            "required": ["matrix"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="standardize_cell", category=_LATTICE, callable=standardize_cell,
+        description="Standardize unit cell to convention",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={"type": "object", "properties": {}},
+        version="1.0.0",
+    ))
 
     # --- Atomic ---
-    for fn, name, desc in [
-        (move_atoms, "move_atoms", "Move selected atoms by a displacement vector"),
-        (swap_atoms, "swap_atoms", "Swap positions of two atoms"),
-        (merge_atoms, "merge_atoms", "Merge two atoms into one at their midpoint"),
-        (split_atom, "split_atom", "Split one atom into two at displaced positions"),
-        (sort_atoms, "sort_atoms", "Sort atoms by specified criterion"),
-        (center_structure, "center_structure", "Center structure at origin"),
-        (perturb_positions, "perturb_positions", "Apply random perturbations to atomic positions"),
-    ]:
-        spec = TransformationSpec(
-            name=name, category=_ATOMIC, callable=fn,
-            description=desc, applicable_types=_BOTH,
-            output_type=Crystal,
-            preserves_composition=True,
-            preserves_lattice=True,
-            preserves_site_properties=True,
-            preserves_pbc=True,
-            parameter_schema={"type": "object"},
-            version="1.0.0",
-        )
-        registry.register(spec)
+    registry.register(TransformationSpec(
+        name="move_atoms", category=_ATOMIC, callable=move_atoms,
+        description="Move selected atoms by a displacement vector",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "indices": {
+                    "oneOf": [
+                        {"type": "integer"},
+                        {"type": "array", "items": {"type": "integer"}},
+                    ],
+                },
+                "displacement": _V3,
+            },
+            "required": ["indices", "displacement"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="swap_atoms", category=_ATOMIC, callable=swap_atoms,
+        description="Swap positions of two atoms",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "i": {"type": "integer"},
+                "j": {"type": "integer"},
+            },
+            "required": ["i", "j"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="merge_atoms", category=_ATOMIC, callable=merge_atoms,
+        description="Merge two atoms into one at their midpoint",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "i": {"type": "integer"},
+                "j": {"type": "integer"},
+            },
+            "required": ["i", "j"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="split_atom", category=_ATOMIC, callable=split_atom,
+        description="Split one atom into two at displaced positions",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "index": {"type": "integer"},
+                "displacement": _V3,
+            },
+            "required": ["index", "displacement"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="sort_atoms", category=_ATOMIC, callable=sort_atoms,
+        description="Sort atoms by specified criterion",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "default": "species"},
+            },
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="center_structure", category=_ATOMIC, callable=center_structure,
+        description="Center structure at origin",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={"type": "object", "properties": {}},
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="perturb_positions", category=_ATOMIC, callable=perturb_positions,
+        description="Apply random perturbations to atomic positions",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"magnitude": {"type": "number", "default": 0.01}},
+        },
+        version="1.0.0",
+    ))
 
     # --- Chemical ---
-    for fn, name, desc, types in [
-        (substitute, "substitute",
-         "Substitute specific atom(s) with new species", _BOTH),
-        (substitute_all, "substitute_all",
-         "Substitute all atoms of one species with another", _BOTH),
-    ]:
-        spec = TransformationSpec(
-            name=name, category=_CHEMICAL, callable=fn,
-            description=desc, applicable_types=types,
-            output_type=Crystal if Crystal in types else None,
-            preserves_composition=False, preserves_lattice=True,
-            preserves_site_properties=True, preserves_pbc=True,
-            parameter_schema={"type": "object"},
-            version="1.0.0",
-        )
-        registry.register(spec)
+    registry.register(TransformationSpec(
+        name="substitute", category=_CHEMICAL, callable=substitute,
+        description="Substitute specific atom(s) with new species",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=False, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "indices": {
+                    "oneOf": [
+                        {"type": "integer"},
+                        {"type": "array", "items": {"type": "integer"}},
+                    ],
+                },
+                "new_species": {"type": "string"},
+            },
+            "required": ["indices", "new_species"],
+        },
+        version="1.0.0",
+    ))
+    registry.register(TransformationSpec(
+        name="substitute_all", category=_CHEMICAL, callable=substitute_all,
+        description="Substitute all atoms of one species with another",
+        applicable_types=_BOTH, output_type=Crystal,
+        preserves_composition=False, preserves_lattice=True,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "old_species": {"type": "string"},
+                "new_species": {"type": "string"},
+            },
+            "required": ["old_species", "new_species"],
+        },
+        version="1.0.0",
+    ))
 
     # --- Structural ---
-    for fn, name, desc, types, preserves_lattice in [
-        (make_supercell, "make_supercell",
-         "Create supercell by repeating unit cell", _CRYSTAL, False),
-    ]:
-        spec = TransformationSpec(
-            name=name, category=_STRUCTURAL, callable=fn,
-            description=desc, applicable_types=types,
-            output_type=Crystal,
-            preserves_composition=True,
-            preserves_lattice=preserves_lattice,
-            preserves_site_properties=True,
-            preserves_pbc=True,
-            parameter_schema={"type": "object"},
-            version="1.0.0",
-        )
-        registry.register(spec)
+    registry.register(TransformationSpec(
+        name="make_supercell", category=_STRUCTURAL, callable=make_supercell,
+        description="Create supercell by repeating unit cell",
+        applicable_types=_CRYSTAL, output_type=Crystal,
+        preserves_composition=True, preserves_lattice=False,
+        preserves_site_properties=True, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "scaling_matrix": {
+                    "oneOf": [
+                        {"type": "integer"},
+                        _V3,
+                        _M3,
+                    ],
+                },
+            },
+            "required": ["scaling_matrix"],
+        },
+        version="1.0.0",
+    ))
 
-    # Register molecular operations if available
+    # --- Molecular ---
     if fragment_molecule is not None:
         registry.register(TransformationSpec(
             name="fragment_molecule", category=_STRUCTURAL,
             callable=fragment_molecule,
-            description="Fragment a molecule into pieces", applicable_types=(Molecule,),
-            output_type=Molecule, parameter_schema={"type": "object"}, version="1.0.0",
+            description="Fragment a molecule into pieces",
+            applicable_types=_MOLECULE, output_type=Molecule,
+            parameter_schema={
+                "type": "object",
+                "properties": {
+                    "indices": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                    },
+                },
+                "required": ["indices"],
+            },
+            version="1.0.0",
         ))
     if align_molecules is not None:
         registry.register(TransformationSpec(
             name="align_molecules", category=_STRUCTURAL,
             callable=align_molecules,
-            description="Align two molecules by atom mapping", applicable_types=(Molecule,),
-            output_type=Molecule, parameter_schema={"type": "object"}, version="1.0.0",
+            description="Align two molecules by atom mapping",
+            applicable_types=_MOLECULE, output_type=Molecule,
+            parameter_schema={
+                "type": "object",
+                "properties": {
+                    "ref_indices": {"type": "array", "items": {"type": "integer"}},
+                    "target_indices": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["ref_indices", "target_indices"],
+            },
+            version="1.0.0",
         ))
     if merge_molecules is not None:
         registry.register(TransformationSpec(
             name="merge_molecules", category=_STRUCTURAL,
             callable=merge_molecules,
-            description="Merge two molecules into one", applicable_types=(Molecule,),
-            output_type=Molecule, parameter_schema={"type": "object"}, version="1.0.0",
+            description="Merge two molecules into one",
+            applicable_types=_MOLECULE, output_type=Molecule,
+            parameter_schema={
+                "type": "object",
+                "properties": {"other": {}},
+                "required": ["other"],
+            },
+            version="1.0.0",
         ))
