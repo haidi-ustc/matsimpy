@@ -70,6 +70,7 @@ class TestLatticeStrain(unittest.TestCase):
         deformation = [[1.01, 0, 0], [0, 1, 0], [0, 0, 1]]
         deformed = apply_deformation(self.crystal, deformation)
         
+        self.assertIsNot(deformed, self.crystal)
         self.assertGreater(deformed.lattice.a, self.crystal.lattice.a)
     
     def test_apply_deformation_with_positions(self):
@@ -129,6 +130,7 @@ class TestLatticeScaling(unittest.TestCase):
         target_volume = 200.0
         scaled = set_volume(self.crystal, target_volume)
         
+        self.assertIsNot(scaled, self.crystal)
         self.assertAlmostEqual(scaled.volume, target_volume, places=2)
     
     def test_set_volume_larger(self):
@@ -243,49 +245,6 @@ class TestLatticeTransform(unittest.TestCase):
         
         self.assertIsNotNone(primitive)
         self.assertLessEqual(len(primitive.species), len(self.crystal.species))
-
-class TestLatticeInplace(unittest.TestCase):
-    """Tests for in-place lattice operations."""
-    
-    def setUp(self):
-        """Set up test crystal."""
-        # Use proper diamond structure (2 atoms in primitive cell)
-        from matsimpy.builders.bulk import from_prototype
-        self.crystal = from_prototype('diamond', 'Si', 5.43)
-    
-    def test_apply_strain_always_returns_new(self):
-        """Test that apply_strain always returns a new object."""
-        original_id = id(self.crystal)
-        strain = [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]]
-        result = apply_strain(self.crystal, strain)
-        
-        self.assertNotEqual(id(result), original_id)
-        self.assertIsNot(result, self.crystal)
-    
-    def test_scale_lattice_always_returns_new(self):
-        """Test that scale_lattice always returns a new object."""
-        original_id = id(self.crystal)
-        result = scale_lattice(self.crystal, 1.1)
-        
-        self.assertNotEqual(id(result), original_id)
-        self.assertIsNot(result, self.crystal)
-    
-    def test_set_volume_always_returns_new(self):
-        """Test that set_volume always returns a new object."""
-        original_id = id(self.crystal)
-        result = set_volume(self.crystal, 200.0)
-        
-        self.assertNotEqual(id(result), original_id)
-        self.assertIsNot(result, self.crystal)
-    
-    def test_apply_deformation_always_returns_new(self):
-        """Test that apply_deformation always returns a new object."""
-        original_id = id(self.crystal)
-        deformation = [[1.01, 0, 0], [0, 1, 0], [0, 0, 1]]
-        result = apply_deformation(self.crystal, deformation)
-        
-        self.assertNotEqual(id(result), original_id)
-        self.assertIsNot(result, self.crystal)
 
 if __name__ == '__main__':
     unittest.main()

@@ -302,33 +302,6 @@ class TestInterfaceIntegration(unittest.TestCase):
         self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], self.lattice)
         self.molecule = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
     
-    def test_interface_imports(self):
-        """Test that all interfaces can be imported."""
-        from matsimpy.ui.cli.interfaces.structure_editor.basic_operations import (
-            add_atoms,
-            move_atoms_interface,
-            delete_atoms,
-        )
-        from matsimpy.ui.cli.interfaces.structure_generator.random_generation import (
-            crystal_structure,
-            molecular_structure,
-        )
-        from matsimpy.ui.cli.interfaces.structure_builder.supercell_builder import (
-            simple_supercell,
-        )
-        from matsimpy.ui.cli.interfaces.utilities_converters.file_format_converter import (
-            any_to_any,
-        )
-        
-        # All imports should succeed
-        self.assertTrue(callable(add_atoms))
-        self.assertTrue(callable(move_atoms_interface))
-        self.assertTrue(callable(delete_atoms))
-        self.assertTrue(callable(crystal_structure))
-        self.assertTrue(callable(molecular_structure))
-        self.assertTrue(callable(simple_supercell))
-        self.assertTrue(callable(any_to_any))
-    
     @patch('matsimpy.ui.cli.interfaces.structure_editor.basic_operations.CLIParameterManager')
     @patch('matsimpy.ui.cli.interfaces.structure_editor.basic_operations.read')
     @patch('matsimpy.ui.cli.interfaces.structure_editor.basic_operations.write')

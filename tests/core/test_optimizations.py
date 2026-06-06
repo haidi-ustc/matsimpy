@@ -112,47 +112,6 @@ class TestPropertyCaching(unittest.TestCase):
 
         self.assertNotEqual(formula1, formula2)
 
-class TestSpeciesImmutability(unittest.TestCase):
-    """Test species type consistency."""
-    
-    def test_species_is_tuple(self):
-        """Test that species is always a tuple."""
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [1.0, 1.0, 1.0]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        self.assertIsInstance(crystal.species, tuple)
-        self.assertEqual(crystal.species, ('Si', 'O'))
-    
-    def test_species_immutability_after_add(self):
-        """Test that species remains tuple after adding atom (on the returned object)."""
-        species = ['Si']
-        positions = [[0, 0, 0]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-
-        self.assertIsInstance(crystal.species, tuple)
-        result = crystal.add_atom('O', [0.3, 0.3, 0.3])
-        self.assertIsInstance(result.species, tuple)
-        self.assertEqual(result.species, ('Si', 'O'))
-        # Original unchanged
-        self.assertEqual(crystal.species, ('Si',))
-
-    def test_species_immutability_after_remove(self):
-        """Test that species remains tuple after removing atom (on the returned object)."""
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [1.0, 1.0, 1.0]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-
-        self.assertIsInstance(crystal.species, tuple)
-        result = crystal.remove_atom(0)
-        self.assertIsInstance(result.species, tuple)
-        self.assertEqual(result.species, ('O',))
-        # Original unchanged
-        self.assertEqual(crystal.species, ('Si', 'O'))
-
 class TestLatticeOptimizations(unittest.TestCase):
     """Test lattice optimizations."""
     

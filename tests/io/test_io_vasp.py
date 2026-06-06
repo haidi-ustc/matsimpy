@@ -197,6 +197,55 @@ Cartesian
         finally:
             Path(temp_file).unlink()
 
+class TestSymbolSetVaspIntegration(unittest.TestCase):
+    def test_symbol_set_matches_vasp_format(self):
+        import tempfile
+        import os
+
+        crystal = Crystal(['Na', 'Cl', 'Na'],
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
+                         Lattice.cubic(5.64))
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file = f.name
+
+        try:
+            write_POSCAR(crystal, temp_file)
+            with open(temp_file, 'r') as f:
+                lines = f.readlines()
+                vasp_species = lines[5].strip().split()
+                self.assertEqual(list(crystal.symbol_set), vasp_species)
+        finally:
+            os.unlink(temp_file)
+
+    def test_sort_atoms_affects_vasp_output(self):
+        import tempfile
+        import os
+
+        crystal = Crystal(['Cl', 'Na', 'Cl'],
+                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
+                         Lattice.cubic(5.64))
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file1 = f.name
+        write_POSCAR(crystal, temp_file1)
+        with open(temp_file1, 'r') as f:
+            vasp_species_before = f.readlines()[5].strip().split()
+        self.assertEqual(vasp_species_before, ['Cl', 'Na'])
+
+        sorted_crystal = crystal.sort_atoms('element')
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
+            temp_file2 = f.name
+        write_POSCAR(sorted_crystal, temp_file2)
+        with open(temp_file2, 'r') as f:
+            vasp_species_after = f.readlines()[5].strip().split()
+        self.assertEqual(vasp_species_after, ['Na', 'Cl'])
+        self.assertEqual(list(sorted_crystal.symbol_set), vasp_species_after)
+
+        os.unlink(temp_file1)
+        os.unlink(temp_file2)
+
+
 if __name__ == '__main__':
     unittest.main()
 

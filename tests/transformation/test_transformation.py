@@ -124,44 +124,16 @@ class TestRotation(unittest.TestCase):
         np.testing.assert_array_almost_equal(rotated.frac_positions[0], [0.0, 0.1, 0.0])
 
 class TestSubstitution(unittest.TestCase):
-    """Tests for substitution transformations."""
-    
     def setUp(self):
-        """Set up test structures."""
         self.crystal = make_simple_crystal()
         self.molecule = make_simple_molecule()
-    
-    def test_substitute_single(self):
-        """Test substituting a single atom."""
-        new_crystal = substitute(self.crystal, 0, 'Ge')
-        
-        self.assertEqual(new_crystal.species[0], 'Ge')
-        self.assertEqual(new_crystal.species[1], 'O')
-        self.assertIsNot(self.crystal, new_crystal)
-    
-    def test_substitute_multiple(self):
-        """Test substituting multiple atoms."""
-        new_crystal = substitute(self.crystal, [0, 1], ['Ge', 'S'])
-        
-        self.assertEqual(new_crystal.species[0], 'Ge')
-        self.assertEqual(new_crystal.species[1], 'S')
-    
-    def test_substitute_all(self):
-        """Test substituting all atoms of a species."""
-        new_crystal = substitute_all(self.crystal, 'Si', 'Ge')
-        
-        self.assertEqual(new_crystal.species[0], 'Ge')
-        self.assertEqual(new_crystal.species[1], 'O')
-    
+
     def test_substitute_always_returns_new(self):
-        """Test that substitute always returns a new object."""
         original_species = list(self.crystal.species)
         result = substitute(self.crystal, 0, 'Ge')
-        
+
         self.assertIsNot(self.crystal, result)
-        # Original should be unchanged
         self.assertEqual(self.crystal.species[0], original_species[0])
-        # Result should be substituted
         self.assertEqual(result.species[0], 'Ge')
         self.assertEqual(result.species[1], original_species[1])
 

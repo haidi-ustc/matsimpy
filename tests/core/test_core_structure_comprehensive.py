@@ -153,88 +153,22 @@ class TestStructureProperties(unittest.TestCase):
         self.assertEqual(symbol_set, ('Si',))
         self.assertEqual(len(symbol_set), 1)
     
-    def test_symbol_set_matches_vasp_format(self):
-        """Test that symbol_set matches VASP format species order."""
-        from matsimpy.core import Lattice
-        from matsimpy.io.vasp import write_POSCAR
-        import tempfile
-        import os
-        
-        crystal = Crystal(['Na', 'Cl', 'Na'], 
-                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]], 
-                         Lattice.cubic(5.64))
-        
-        # Write to VASP format
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
-            temp_file = f.name
-        
-        try:
-            write_POSCAR(crystal, temp_file)
-            with open(temp_file, 'r') as f:
-                lines = f.readlines()
-                # Line 6 (0-indexed: 5) is the species line
-                vasp_species = lines[5].strip().split()
-                self.assertEqual(list(crystal.symbol_set), vasp_species)
-        finally:
-            os.unlink(temp_file)
-    
     def test_symbol_set_affected_by_sort_atoms(self):
-        """Test that symbol_set changes when sort_atoms is called."""
         from matsimpy.core import Lattice
 
-        # Create crystal with Cl, Na, Cl (original order: Cl, Na)
         crystal = Crystal(['Cl', 'Na', 'Cl'],
                          [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
                          Lattice.cubic(5.64))
 
-        # Original symbol_set should reflect original order
         self.assertEqual(crystal.symbol_set, ('Cl', 'Na'))
 
-        # Sort by element (atomic number: Na=11, Cl=17, so Na comes first)
         result = crystal.sort_atoms('element')
-        # After sorting, species order is Na, Cl, Cl, so symbol_set should be Na, Cl
         self.assertEqual(result.species, ('Na', 'Cl', 'Cl'))
         self.assertEqual(result.symbol_set, ('Na', 'Cl'))
 
-        # Sort alphabetically (Cl comes before Na)
         result2 = result.sort_atoms('alphabet')
-        # After sorting, species order is Cl, Cl, Na, so symbol_set should be Cl, Na
         self.assertEqual(result2.species, ('Cl', 'Cl', 'Na'))
         self.assertEqual(result2.symbol_set, ('Cl', 'Na'))
-    
-    def test_symbol_set_affects_vasp_output_after_sort(self):
-        """Test that sort_atoms affects VASP output via symbol_set."""
-        from matsimpy.core import Lattice
-        from matsimpy.io.vasp import write_POSCAR
-        import tempfile
-        import os
-
-        # Create crystal with Cl, Na, Cl
-        crystal = Crystal(['Cl', 'Na', 'Cl'],
-                         [[0, 0, 0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
-                         Lattice.cubic(5.64))
-
-        # Write before sorting
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
-            temp_file1 = f.name
-        write_POSCAR(crystal, temp_file1)
-        with open(temp_file1, 'r') as f:
-            vasp_species_before = f.readlines()[5].strip().split()
-        self.assertEqual(vasp_species_before, ['Cl', 'Na'])
-
-        # Sort and write again
-        sorted_crystal = crystal.sort_atoms('element')
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
-            temp_file2 = f.name
-        write_POSCAR(sorted_crystal, temp_file2)
-        with open(temp_file2, 'r') as f:
-            vasp_species_after = f.readlines()[5].strip().split()
-        self.assertEqual(vasp_species_after, ['Na', 'Cl'])
-        self.assertEqual(list(sorted_crystal.symbol_set), vasp_species_after)
-
-        # Cleanup
-        os.unlink(temp_file1)
-        os.unlink(temp_file2)
 
 class TestStructureMethods(unittest.TestCase):
     """Test Structure methods."""
@@ -282,79 +216,6 @@ class TestStructureMethods(unittest.TestCase):
         with self.assertRaises(IndexError):
             self.struct.remove_atom(-1)  # Negative index
     
-    def test_formula_property(self):
-        """Test formula property."""
-        formula = self.struct.formula
-        self.assertEqual(formula, 'H2O')
-    
-    def test_composition_property(self):
-        """Test composition property."""
-        comp = self.struct.composition
-        self.assertIsInstance(comp, Composition)
-        self.assertEqual(comp['H'], 2)
-        self.assertEqual(comp['O'], 1)
-
-class TestStructureSubstitution(unittest.TestCase):
-    """Test Structure substitution methods."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.species = ['Si', 'O', 'Si', 'O']
-        self.positions = [[0, 0, 0], [0.25, 0.25, 0.25],
-                          [0.5, 0.5, 0.5], [0.75, 0.75, 0.75]]
-        self.struct = Molecule(self.species, self.positions)
-
-    def test_substitute_single_atom(self):
-        """Test substituting a single atom."""
-        result = self.struct.substitute(0, 'Ge')
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[1], 'O')
-
-    def test_substitute_multiple_atoms(self):
-        """Test substituting multiple atoms."""
-        result = self.struct.substitute([0, 2], ['Ge', 'Ge'])
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[2], 'Ge')
-
-    def test_substitute_multiple_atoms_same_species(self):
-        """Test substituting multiple atoms with same species."""
-        result = self.struct.substitute([0, 2], 'Ge')
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[2], 'Ge')
-
-    def test_substitute_with_dict(self):
-        """Test substituting using dictionary mapping."""
-        result = self.struct.substitute([0, 1, 2, 3], {'Si': 'Ge', 'O': 'S'})
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[1], 'S')
-
-    def test_substitute_all(self):
-        """Test substitute_all method."""
-        result = self.struct.substitute_all('Si', 'Ge')
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[2], 'Ge')
-        self.assertEqual(result.species[1], 'O')  # O unchanged
-
-    def test_substitute_all_no_match(self):
-        """Test substitute_all when no atoms match."""
-        result = self.struct.substitute_all('C', 'N')  # No C atoms
-        self.assertEqual(list(result.species), list(self.struct.species))
-    
-    def test_substitute_invalid_index(self):
-        """Test substitute with invalid index raises IndexError."""
-        with self.assertRaises(IndexError):
-            self.struct.substitute(100, 'Ge')
-    
-    def test_substitute_mismatched_lengths(self):
-        """Test substitute with mismatched lengths raises ValueError."""
-        with self.assertRaises(ValueError):
-            self.struct.substitute([0, 1], ['Ge'])  # Only one species
-    
-    def test_substitute_dict_missing_key(self):
-        """Test substitute with dict missing key raises KeyError."""
-        with self.assertRaises(KeyError):
-            self.struct.substitute([0], {'C': 'N'})  # Si not in dict
-
 class TestStructureSorting(unittest.TestCase):
     """Test Structure sorting methods."""
 

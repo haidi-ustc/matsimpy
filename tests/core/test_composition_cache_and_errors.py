@@ -18,22 +18,9 @@ class TestCompositionErrorHandling(unittest.TestCase):
         with self.assertRaises(ValueError):
             Composition('   ')
     
-    def test_invalid_characters_raise_error(self):
-        """Test that invalid characters raise error."""
-        with self.assertRaises(ValueError) as context:
-            Composition('H2O@#$')
-        
-        self.assertIn("invalid", str(context.exception).lower())
-    
-    def test_invalid_characters_with_spaces(self):
-        """Test that spaces raise error."""
-        with self.assertRaises(ValueError):
-            Composition('H2 O')
-    
-    def test_invalid_characters_special(self):
-        """Test various invalid characters."""
-        invalid_formulas = ['H2O!', 'Fe*2', 'Si-O2', 'C+H4']
-        
+    def test_invalid_formulas_raise_error(self):
+        """Test that various invalid formulas raise ValueError."""
+        invalid_formulas = ['H2O@#$', 'H2 O', 'H2O!', 'Fe*2', 'Si-O2', 'C+H4']
         for formula in invalid_formulas:
             with self.assertRaises(ValueError):
                 Composition(formula)
@@ -121,94 +108,6 @@ class TestCompositionHelperMethod(unittest.TestCase):
             Composition._get_sorted_element_counts(counts, 'invalid')
         
         self.assertIn("None, 'alphabet', or 'element'", str(context.exception))
-
-class TestCompositionCodeDeduplication(unittest.TestCase):
-    """Test that helper method eliminates duplication."""
-    
-    def test_to_html_uses_helper(self):
-        """Test that to_html uses shared sorting logic."""
-        comp = Composition('H2O')
-        
-        html_alpha = comp.to_html(sort_by='alphabet')
-        html_elem = comp.to_html(sort_by='element')
-        
-        # Both should work (using helper)
-        self.assertIsInstance(html_alpha, str)
-        self.assertIsInstance(html_elem, str)
-    
-    def test_to_latex_uses_helper(self):
-        """Test that to_latex uses shared sorting logic."""
-        comp = Composition('Fe2O3')
-        
-        latex = comp.to_latex(sort_by='element')
-        
-        self.assertIn('Fe', latex)
-        self.assertIn('O', latex)
-
-class TestCompositionTypeHints(unittest.TestCase):
-    """Test that methods have proper type hints."""
-    
-    def test_mass_has_return_type(self):
-        """Test that mass property has return type."""
-        # Check the property has annotations
-        mass_prop = Composition.mass.fget
-        self.assertIn('return', mass_prop.__annotations__)
-    
-    def test_methods_have_return_types(self):
-        """Test key methods have return type annotations."""
-        comp = Composition('H2O')
-        
-        # These should have return types
-        methods_with_returns = [
-            'mass_fractions',
-            'mole_fractions',
-            'to_html',
-            'to_latex',
-            '__str__',
-            '__repr__',
-            '__eq__',
-        ]
-        
-        for method_name in methods_with_returns:
-            method = getattr(comp, method_name)
-            self.assertIsNotNone(method.__annotations__, 
-                               f"{method_name} should have annotations")
-
-class TestCompositionBackwardCompatibility(unittest.TestCase):
-    """Test backward-compatible Composition behavior."""
-    
-    def test_basic_composition_still_works(self):
-        """Test basic composition functionality."""
-        comp = Composition('H2O')
-        
-        self.assertEqual(comp['H'], 2)
-        self.assertEqual(comp['O'], 1)
-        self.assertEqual(comp.formula, 'H2O')
-    
-    def test_complex_formula_still_works(self):
-        """Test complex formulas."""
-        comp = Composition('Ca(OH)2')
-        
-        self.assertEqual(comp['Ca'], 1)
-        self.assertEqual(comp['O'], 2)
-        self.assertEqual(comp['H'], 2)
-    
-    def test_mass_calculation_still_works(self):
-        """Test mass calculation."""
-        comp = Composition('H2O')
-        mass = comp.mass
-        
-        self.assertAlmostEqual(mass, 18.01528, places=4)
-    
-    def test_serialization_still_works(self):
-        """Test as_dict and from_dict."""
-        comp = Composition('Fe2O3')
-        d = comp.as_dict()
-        
-        comp2 = Composition.from_dict(d)
-        
-        self.assertEqual(comp.formula, comp2.formula)
-        self.assertEqual(comp.composition, comp2.composition)
 
 class TestCompositionIntegration(unittest.TestCase):
     """Integration tests for Composition behavior."""

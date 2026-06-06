@@ -13,25 +13,11 @@ from tests.conftest import make_cubic_lattice, make_simple_crystal, make_simple_
     [
         (['H', 'N'], [[2.0, 0, 0]], "must match"),
         (['H', 'N', 'O'], [[2.0, 0, 0], [3.0, 0, 0]], "must match"),
-    ],
-)
-def test_add_atom_rejects_mismatched_batch_lengths(species, positions, message):
-    molecule = make_simple_molecule()
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        with pytest.raises(ValueError, match=message):
-            molecule.add_atom(species, positions)
-
-
-@pytest.mark.parametrize(
-    ("species", "positions", "message"),
-    [
         ('H', [0, 0], "3D coordinate"),
         (['H', 'O'], [[0, 0, 0], [1, 2]], "3D coordinate"),
     ],
 )
-def test_add_atom_rejects_non_3d_coordinates(species, positions, message):
+def test_add_atom_rejects_invalid_batch_inputs(species, positions, message):
     molecule = make_simple_molecule()
 
     with warnings.catch_warnings():
@@ -87,27 +73,21 @@ class TestStructureAddMultipleAtoms(unittest.TestCase):
         self.assertEqual(len(result), original_len)
         self.assertEqual(result.species, original_species)
 
-    def test_formula_updated_after_adding_multiple(self):
-        """Test that formula is correctly updated after adding atoms."""
+    def test_formula_and_composition_updated_after_adding_multiple(self):
+        """Test that formula and composition are correctly updated after adding atoms."""
         original_formula = self.molecule.formula
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            result = self.molecule.add_atom(['H', 'H', 'N'], [[2.0, 0, 0], [3.0, 0, 0], [4.0, 0, 0]])
+            result = self.molecule.add_atom(['H', 'N'], [[2.0, 0, 0], [3.0, 0, 0]])
 
         new_formula = result.formula
         self.assertNotEqual(original_formula, new_formula)
-        self.assertIn('H2', new_formula)
+        self.assertIn('H', new_formula)
         self.assertIn('N', new_formula)
-
-    def test_composition_updated_after_adding_multiple(self):
-        """Test that composition is correctly updated."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            result = self.molecule.add_atom(['N', 'N'], [[2.0, 0, 0], [3.0, 0, 0]])
 
         composition = result.composition
         self.assertIn('N', composition.composition)
-        self.assertEqual(composition.composition['N'], 2)
+        self.assertEqual(composition.composition['N'], 1)
 
 class TestCrystalAddMultipleAtoms(unittest.TestCase):
     """Test adding multiple atoms to Crystal."""

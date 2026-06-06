@@ -13,131 +13,71 @@ from matsimpy.io.latex import (
 
 class TestCrystalsToLatexTable(unittest.TestCase):
     """Test crystals_to_latex_table function."""
-    
+
     def setUp(self):
-        """Set up test crystals."""
         self.crystals = [
             Crystal(['Si'], [[0, 0, 0]], Lattice(5.43)),
             Crystal(['Fe'], [[0, 0, 0]], Lattice(2.87)),
             Crystal(['Al'], [[0, 0, 0]], Lattice(4.05)),
         ]
-    
-    def test_basic_table_generation(self):
-        """Test basic table generation."""
+
+    def test_table_content(self):
         latex = crystals_to_latex_table(self.crystals)
-        
-        # Check LaTeX structure
-        self.assertIn(r'\begin{table}', latex)
-        self.assertIn(r'\end{table}', latex)
-        self.assertIn(r'\begin{tabular}', latex)
-        self.assertIn(r'\end{tabular}', latex)
-        self.assertIn(r'\toprule', latex)
-        self.assertIn(r'\bottomrule', latex)
-    
-    def test_table_has_caption(self):
-        """Test that table has caption."""
-        latex = crystals_to_latex_table(self.crystals, caption="Test Caption")
-        
-        self.assertIn(r'\caption{Test Caption}', latex)
-    
-    def test_table_has_label(self):
-        """Test that table has label."""
-        latex = crystals_to_latex_table(self.crystals, label="tab:test")
-        
-        self.assertIn(r'\label{tab:test}', latex)
-    
-    def test_table_includes_formulas(self):
-        """Test that formulas are included."""
-        latex = crystals_to_latex_table(self.crystals)
-        
-        self.assertIn('Si', latex)
-        self.assertIn('Fe', latex)
-        self.assertIn('Al', latex)
-    
-    def test_table_includes_ids(self):
-        """Test that IDs are numbered correctly."""
-        latex = crystals_to_latex_table(self.crystals)
-        
-        # Should have IDs 1, 2, 3
+        expected_tokens = [
+            r'\begin{table}', r'\end{table}', r'\begin{tabular}', r'\end{tabular}',
+            r'\toprule', r'\bottomrule', 'Si', 'Fe', 'Al', '$a=', r'\AA',
+        ]
+        for token in expected_tokens:
+            self.assertIn(token, latex)
+
         lines = latex.split('\n')
-        data_lines = [l for l in lines if '&' in l and 'toprule' not in l.lower() and 'midrule' not in l.lower() and 'bottomrule' not in l.lower() and 'ID' not in l]
-        
+        data_lines = [l for l in lines if '&' in l and 'toprule' not in l.lower()
+                      and 'midrule' not in l.lower() and 'bottomrule' not in l.lower()
+                      and 'ID' not in l]
         self.assertGreaterEqual(len(data_lines), 3)
-    
-    def test_table_includes_lattice_params(self):
-        """Test that lattice parameters are included."""
-        latex = crystals_to_latex_table(self.crystals)
-        
-        # Should have lattice parameter 'a='
-        self.assertIn('$a=', latex)
-    
+
+    def test_caption_and_label(self):
+        latex = crystals_to_latex_table(self.crystals, caption="Test Caption", label="tab:test")
+        self.assertIn(r'\caption{Test Caption}', latex)
+        self.assertIn(r'\label{tab:test}', latex)
+
+    def test_custom_columns(self):
+        columns = ['ID', 'Formula', 'Atoms']
+        latex = crystals_to_latex_table(self.crystals, include_columns=columns)
+        for col in columns:
+            self.assertIn(col, latex)
+
+    def test_volume_column(self):
+        latex = crystals_to_latex_table(self.crystals, include_columns=['ID', 'Formula', 'Volume'])
+        self.assertIn('Volume', latex)
+
     def test_empty_list_raises_error(self):
-        """Test that empty list raises ValueError."""
         with self.assertRaises(ValueError) as context:
             crystals_to_latex_table([])
-        
         self.assertIn("empty", str(context.exception).lower())
-    
-    def test_custom_columns(self):
-        """Test custom column selection."""
-        latex = crystals_to_latex_table(
-            self.crystals, 
-            include_columns=['ID', 'Formula', 'Atoms']
-        )
-        
-        self.assertIn('Formula', latex)
-        self.assertIn('Atoms', latex)
-    
-    def test_volume_column(self):
-        """Test volume column."""
-        latex = crystals_to_latex_table(
-            self.crystals,
-            include_columns=['ID', 'Formula', 'Volume']
-        )
-        
-        self.assertIn('Volume', latex)
 
 class TestMoleculesToLatexTable(unittest.TestCase):
     """Test molecules_to_latex_table function."""
-    
+
     def setUp(self):
-        """Set up test molecules."""
         self.molecules = [
             Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]]),
             Molecule(['H', 'H', 'O'], [[0, 0, 0], [0.76, 0.59, 0], [-0.76, 0.59, 0]]),
             Molecule(['N', 'H', 'H', 'H'], [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]),
         ]
-    
-    def test_basic_table_generation(self):
-        """Test basic table generation."""
+
+    def test_table_content(self):
         latex = molecules_to_latex_table(self.molecules)
-        
-        # Check LaTeX structure
-        self.assertIn(r'\begin{table}', latex)
-        self.assertIn(r'\end{table}', latex)
-        self.assertIn(r'\toprule', latex)
-        self.assertIn(r'\bottomrule', latex)
-    
-    def test_table_includes_formulas(self):
-        """Test that molecular formulas are included."""
-        latex = molecules_to_latex_table(self.molecules)
-        
-        # Formulas should be in LaTeX format
-        self.assertIn('C', latex)
-        self.assertIn('O', latex)
-        self.assertIn('H', latex)
-    
+        expected_tokens = [r'\begin{table}', r'\end{table}', r'\toprule', r'\bottomrule',
+                           'C', 'O', 'H', 'N']
+        for token in expected_tokens:
+            self.assertIn(token, latex)
+
     def test_table_with_mass_column(self):
-        """Test table with mass column."""
-        latex = molecules_to_latex_table(
-            self.molecules,
-            include_columns=['ID', 'Formula', 'Mass']
-        )
-        
+        latex = molecules_to_latex_table(self.molecules, include_columns=['ID', 'Formula', 'Mass'])
         self.assertIn('Mass', latex)
-    
+
     def test_empty_list_raises_error(self):
-        """Test that empty list raises ValueError."""
         with self.assertRaises(ValueError):
             molecules_to_latex_table([])
 

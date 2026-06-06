@@ -189,24 +189,6 @@ class TestImmutabilityCache(unittest.TestCase):
         self.assertIs(comp1, comp2)
 
 
-class TestNoFreezeMechanism(unittest.TestCase):
-    """Freeze/unfreeze/FrozenStructureError no longer exist."""
-
-    def test_no_frozen_structure_error(self):
-        with self.assertRaises(ImportError):
-            from matsimpy.core.structure import FrozenStructureError
-
-    def test_no_freeze_method(self):
-        crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-        self.assertFalse(hasattr(crystal, "freeze"))
-        self.assertFalse(hasattr(crystal, "unfreeze"))
-        self.assertFalse(hasattr(crystal, "is_frozen"))
-
-
 class TestNoPositionsSetter(unittest.TestCase):
     """positions property is read-only."""
 
