@@ -41,6 +41,10 @@ from .graph import (
     get_graph_laplacian,
 )
 
+from .bonding import BondAnalyzer
+from .structure import StructureAnalyzer
+from .topology import TopologyAnalyzer
+
 __all__ = [
     "find_points_in_spheres",
     "validate_cutoff",
@@ -63,4 +67,7 @@ __all__ = [
     "structure_to_networkx",
     "get_rings",
     "get_graph_laplacian",
+    "BondAnalyzer",
+    "StructureAnalyzer",
+    "TopologyAnalyzer",
 ]
