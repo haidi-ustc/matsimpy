@@ -78,7 +78,10 @@ def apply_transformations(
     return chain(structure, list(transformations))
 
 
-# Import new pipeline class
+# Import plan classes
+from .plan import TransformationStep, TransformationPlan
+
+# Import execution strategies
 from .pipeline import TransformationPipeline
 from .sweep import ParameterSweep
 from .batch import BatchProcessor, BatchResult
@@ -86,6 +89,8 @@ from .batch import BatchProcessor, BatchResult
 __all__ = [
     "chain",
     "apply_transformations",
+    "TransformationStep",
+    "TransformationPlan",
     "TransformationPipeline",
     "ParameterSweep",
     "BatchProcessor",

@@ -92,6 +92,13 @@ __all__ = (
     + _nanostructure_all
 )
 
+# Registry
+from .registry import registry, BuilderSpec, BuilderRegistry
+
+# Auto-register built-in builders
+from ._register import register_all as _register_builders
+_register_builders()
+
 # Allow access to submodules
 from . import bulk
 from . import surface
