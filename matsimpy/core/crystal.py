@@ -59,7 +59,7 @@ from ._validation import (
 )
 
 if TYPE_CHECKING:
-    from ..utils.selection import AtomSelection
+    from ..analysis.selection import AtomSelection
     from ..calculator.base import Calculator
 
 
@@ -762,13 +762,13 @@ class Crystal(Structure):
             >>> new_crystal = crystal.substitute(0, 'Ge')  # Substitute atom at index 0
             >>> new_crystal = crystal.substitute([0, 1], ['Ge', 'Ge'])  # Substitute multiple
             >>> # Using AtomSelection
-            >>> from matsimpy.utils.selection import AtomSelection
+            >>> from matsimpy.analysis.selection import AtomSelection
             >>> sel = AtomSelection(crystal).by_species('Si')
             >>> new_crystal = crystal.substitute(sel, 'Ge')  # Substitute selected atoms
             >>> # Using dict mapping (maps old species to new species)
             >>> new_crystal = crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
         """
-        from ..utils.selection import AtomSelection
+        from ..analysis.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
             if indices.structure is not self:
@@ -1897,7 +1897,7 @@ class Crystal(Structure):
 
         Examples:
             >>> from matsimpy.builders.bulk import from_prototype
-            >>> from matsimpy.utils.selection import AtomSelection
+            >>> from matsimpy.analysis.selection import AtomSelection
             >>> crystal = from_prototype('diamond', 'Si', 5.43)
             >>>
             >>> # Perturb positions only
@@ -1922,7 +1922,7 @@ class Crystal(Structure):
             )
 
         # Handle AtomSelection object
-        from ..utils.selection import AtomSelection
+        from ..analysis.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
             if indices.structure is not self:

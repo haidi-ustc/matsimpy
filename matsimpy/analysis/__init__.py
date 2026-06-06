@@ -8,11 +8,25 @@ This module provides:
 - Graph properties (adjacency matrix, distance matrix, coordination numbers)
 - Structure analysis (distances, angles, etc.)
 - Bond analysis
+- Atom selection (select_by_species, AtomSelection, etc.)
 - Topological analysis
 
 Note:
 - Symmetry analysis is in matsimpy.symmetry module.
 """
+
+from .selection import (
+    select_by_species,
+    select_by_indices,
+    select_by_position,
+    select_by_box,
+    select_by_property,
+    select_by_custom,
+    combine_selections,
+    select_all,
+    select_none,
+    AtomSelection,
+)
 
 from .neighbors import (
     find_points_in_spheres,
@@ -67,6 +81,16 @@ __all__ = [
     "structure_to_networkx",
     "get_rings",
     "get_graph_laplacian",
+    "select_by_species",
+    "select_by_indices",
+    "select_by_position",
+    "select_by_box",
+    "select_by_property",
+    "select_by_custom",
+    "combine_selections",
+    "select_all",
+    "select_none",
+    "AtomSelection",
     "BondAnalyzer",
     "StructureAnalyzer",
     "TopologyAnalyzer",

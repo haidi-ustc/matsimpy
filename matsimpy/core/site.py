@@ -31,7 +31,8 @@ from typing import List, Optional, Union, Dict, Any
 from monty.json import MSONable
 from .lattice import Lattice
 from .periodic_table import Element
-from ._validation import copy_properties, normalize_species
+from ._validation import normalize_species
+from ..utils.dict_utils import copy_properties
 
 
 class Site(MSONable):

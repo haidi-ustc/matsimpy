@@ -1,32 +1,30 @@
 """
-Utility functions for MatSimPy.
+General-purpose utility functions for MatSimPy.
 
-This module provides atom selection utilities for flexible atom selection
-in Crystal and Molecule structures.
+This module provides:
+- validation: numeric vector/matrix/scalar validation
+- dict_utils: nested dictionary access and property copying
+- path_utils: filesystem path expansion
 """
 
-from .selection import (
-    select_by_species,
-    select_by_indices,
-    select_by_position,
-    select_by_box,
-    select_by_property,
-    select_by_custom,
-    combine_selections,
-    select_all,
-    select_none,
-    AtomSelection,
+from .validation import (
+    validate_vector3,
+    validate_positive_scalar,
+    validate_integer_matrix3,
 )
+from .dict_utils import (
+    get_nested_value,
+    set_nested_value,
+    copy_properties,
+)
+from .path_utils import expand_path
 
 __all__ = [
-    "select_by_species",
-    "select_by_indices",
-    "select_by_position",
-    "select_by_box",
-    "select_by_property",
-    "select_by_custom",
-    "combine_selections",
-    "select_all",
-    "select_none",
-    "AtomSelection",
+    "validate_vector3",
+    "validate_positive_scalar",
+    "validate_integer_matrix3",
+    "get_nested_value",
+    "set_nested_value",
+    "copy_properties",
+    "expand_path",
 ]

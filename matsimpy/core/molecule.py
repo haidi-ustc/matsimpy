@@ -48,7 +48,7 @@ from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
 if TYPE_CHECKING:
-    from ..utils.selection import AtomSelection
+    from ..analysis.selection import AtomSelection
     from ..calculator.base import Calculator
     from .crystal import Crystal
 
@@ -580,13 +580,13 @@ class Molecule(Structure):
             >>> new_mol = molecule.substitute(0, 'N')  # Substitute atom at index 0
             >>> new_mol = molecule.substitute([0, 1], ['N', 'O'])  # Substitute multiple
             >>> # Using AtomSelection
-            >>> from matsimpy.utils.selection import AtomSelection
+            >>> from matsimpy.analysis.selection import AtomSelection
             >>> sel = AtomSelection(molecule).by_species('H')
             >>> new_mol = molecule.substitute(sel, 'N')  # Substitute selected atoms
             >>> # Using dict mapping (maps old species to new species)
             >>> new_mol = molecule.substitute([0, 1, 2], {'H': 'F', 'O': 'S'})
         """
-        from ..utils.selection import AtomSelection
+        from ..analysis.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
             if indices.structure is not self:
@@ -1172,7 +1172,7 @@ class Molecule(Structure):
 
         Examples:
             >>> from matsimpy.core import Molecule
-            >>> from matsimpy.utils.selection import AtomSelection
+            >>> from matsimpy.analysis.selection import AtomSelection
             >>> molecule = Molecule(['H', 'O', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
             >>> # Perturb all atoms by up to 0.1 Angstrom
             >>> perturbed = molecule.perturb(0.1)
@@ -1182,7 +1182,7 @@ class Molecule(Structure):
             >>> sel = AtomSelection(molecule).by_species('H')
             >>> perturbed = molecule.perturb(0.1, indices=sel)
         """
-        from ..utils.selection import AtomSelection
+        from ..analysis.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
             if indices.structure is not self:

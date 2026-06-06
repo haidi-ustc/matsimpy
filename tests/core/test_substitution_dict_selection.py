@@ -2,7 +2,7 @@
 import unittest
 
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.utils.selection import AtomSelection
+from matsimpy.analysis.selection import AtomSelection
 
 class TestSubstitutionWithDict(unittest.TestCase):
     """Tests for dict-based substitution mapping."""
@@ -129,7 +129,7 @@ class TestSubstitutionTransformationModule(unittest.TestCase):
     def test_transformation_substitute_with_atom_selection_and_dict(self):
         """Test transformation.substitute with AtomSelection and dict."""
         from matsimpy.transformation import substitute
-        from matsimpy.utils.selection import AtomSelection
+        from matsimpy.analysis.selection import AtomSelection
 
         sel = AtomSelection(self.crystal).by_species('Si')
         new_crystal = substitute(self.crystal, sel, {'Si': 'Ge'})

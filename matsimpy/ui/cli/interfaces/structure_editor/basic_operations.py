@@ -17,7 +17,7 @@ from matsimpy.ui.cli.parameter_manager import CLIParameterManager, ParameterDefi
 from matsimpy.core import Element, Composition, Crystal, Molecule
 from matsimpy.io import read, write
 from matsimpy.transformation.atomic import move_atoms
-from matsimpy.utils.selection import AtomSelection
+from matsimpy.analysis.selection import AtomSelection
 
 
 # Interface code for menu registration

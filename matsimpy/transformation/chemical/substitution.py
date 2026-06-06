@@ -2,7 +2,7 @@
 Substitution transformations for structures.
 
 Replace atoms in structures with new species.
-Can use selection utilities from matsimpy.utils.selection for flexible atom selection.
+Can use selection utilities from matsimpy.analysis.selection for flexible atom selection.
 """
 
 from typing import List, Union, Dict
@@ -40,7 +40,7 @@ def substitute(
     Examples:
         >>> from matsimpy.core import Crystal, Lattice
         >>> from matsimpy.transformation import substitute
-        >>> from matsimpy.utils.selection import AtomSelection
+        >>> from matsimpy.analysis.selection import AtomSelection
         >>> crystal = Crystal(['Si', 'Si'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(10))
         >>> # Substitute one atom
         >>> new_crystal = substitute(crystal, 0, 'Ge')
@@ -55,7 +55,7 @@ def substitute(
     _validate_structure(structure)
 
     # Handle AtomSelection object
-    from ...utils.selection import AtomSelection
+    from ...analysis.selection import AtomSelection
 
     if isinstance(indices, AtomSelection):
         if indices.structure is not structure:

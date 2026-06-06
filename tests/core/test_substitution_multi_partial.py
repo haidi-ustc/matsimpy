@@ -2,7 +2,7 @@
 import unittest
 
 from matsimpy.core import Crystal, Lattice
-from matsimpy.utils.selection import AtomSelection
+from matsimpy.analysis.selection import AtomSelection
 
 class TestMultiplePartialSubstitutions(unittest.TestCase):
     """Tests for multiple partial substitutions on different species."""

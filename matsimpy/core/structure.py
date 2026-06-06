@@ -43,7 +43,7 @@ from ._validation import normalize_species
 from matsimpy.constants import POSITION_TOL, LATTICE_TOL
 
 if TYPE_CHECKING:
-    from ..utils.selection import AtomSelection
+    from ..analysis.selection import AtomSelection
     from ..calculator.base import Calculator
 
 
@@ -884,7 +884,7 @@ class Structure(ABC, MSONable):
             must override ``_filter_per_atom_data`` so that those lists are
             trimmed correctly.
         """
-        from ..utils.selection import AtomSelection
+        from ..analysis.selection import AtomSelection
 
         if isinstance(index, AtomSelection):
             if index.structure is not self:
@@ -923,7 +923,7 @@ class Structure(ABC, MSONable):
         indices: Union[int, List[int], "AtomSelection"],
         new_species: Union[str, List[str], Dict[str, str]],
     ) -> "Structure":
-        from ..utils.selection import AtomSelection
+        from ..analysis.selection import AtomSelection
 
         if isinstance(indices, AtomSelection):
             if indices.structure is not self:

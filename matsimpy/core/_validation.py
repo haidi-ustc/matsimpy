@@ -9,6 +9,8 @@ from typing import Any, Optional, Tuple
 
 import numpy as np
 
+from ..utils.dict_utils import copy_properties
+
 from .lattice import Lattice
 from .periodic_table import Element, DUMMY_ELEMENTS
 
@@ -63,15 +65,6 @@ def validate_pbc(pbc: Optional[Sequence[Any]]) -> Tuple[bool, bool, bool]:
     if not all(isinstance(value, (bool, np.bool_)) for value in pbc_values):
         raise ValueError("All PBC elements must be booleans.")
     return tuple(bool(value) for value in pbc_values)
-
-
-def copy_properties(properties: Optional[Mapping[str, Any]]) -> dict:
-    """Validate and deep-copy one site property mapping."""
-    if properties is None:
-        return {}
-    if not isinstance(properties, Mapping):
-        raise TypeError("Properties must be a dictionary or None.")
-    return copy.deepcopy(dict(properties))
 
 
 def validate_site_properties(

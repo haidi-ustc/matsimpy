@@ -66,7 +66,7 @@ class TestMoleculeConvenienceMethods(unittest.TestCase):
     
     def test_perturb_atom_selection(self):
         """Test perturb with AtomSelection object."""
-        from matsimpy.utils.selection import AtomSelection
+        from matsimpy.analysis.selection import AtomSelection
 
         # Create molecule with multiple species
         molecule = Molecule(
@@ -92,7 +92,7 @@ class TestMoleculeConvenienceMethods(unittest.TestCase):
     
     def test_perturb_atom_selection_wrong_structure(self):
         """Test that AtomSelection from different structure raises error."""
-        from matsimpy.utils.selection import AtomSelection
+        from matsimpy.analysis.selection import AtomSelection
         
         molecule1 = Molecule(['H', 'O', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
         molecule2 = Molecule(['H', 'O', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])

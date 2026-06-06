@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.utils.selection import (
+from matsimpy.analysis.selection import (
     select_by_species,
     select_by_indices,
     select_by_position,
@@ -214,7 +214,7 @@ class TestSelectionIntegration(unittest.TestCase):
     
     def test_select_and_substitute(self):
         """Test using selection for substitution."""
-        from matsimpy.utils.selection import select_by_species
+        from matsimpy.analysis.selection import select_by_species
 
         # Select all Si atoms
         si_indices = select_by_species(self.crystal, 'Si')
@@ -231,7 +231,7 @@ class TestSelectionIntegration(unittest.TestCase):
     
     def test_complex_selection(self):
         """Test complex selection combining multiple criteria."""
-        from matsimpy.utils.selection import (
+        from matsimpy.analysis.selection import (
             select_by_species, select_by_position, combine_selections
         )
         

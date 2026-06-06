@@ -2,7 +2,7 @@
 import unittest
 
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.utils.selection import AtomSelection
+from matsimpy.analysis.selection import AtomSelection
 
 class TestAtomSelectionBasic(unittest.TestCase):
     """Tests for basic AtomSelection functionality."""

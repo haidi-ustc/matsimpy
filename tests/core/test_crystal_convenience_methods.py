@@ -113,7 +113,7 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
 
     def test_perturb_atom_selection(self):
         """Test perturb with AtomSelection object."""
-        from matsimpy.utils.selection import AtomSelection
+        from matsimpy.analysis.selection import AtomSelection
 
         # Create crystal with multiple species
         crystal = Crystal(
@@ -140,7 +140,7 @@ class TestCrystalConvenienceMethods(unittest.TestCase):
 
     def test_perturb_atom_selection_wrong_structure(self):
         """Test that AtomSelection from different structure raises error."""
-        from matsimpy.utils.selection import AtomSelection
+        from matsimpy.analysis.selection import AtomSelection
 
         crystal1 = from_prototype('diamond', 'Si', 5.43)
         crystal2 = from_prototype('diamond', 'Si', 5.43)
