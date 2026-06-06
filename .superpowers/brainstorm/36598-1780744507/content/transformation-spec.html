@@ -1,0 +1,176 @@
+<h2>TransformationSpec &amp; Registry</h2>
+<p class="subtitle">Design Section 2: Structured metadata for every transformation</p>
+
+<div class="section">
+  <h3>TransformationSpec Dataclass</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/transformation/spec.py</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.5;">
+<pre style="margin:0;">@dataclass(frozen=True)
+class TransformationSpec:
+    """Metadata for a registered transformation."""
+
+    name: str                    # "translate", "create_vacancy", "make_supercell"
+    category: str                # "geometric" | "lattice" | "atomic" | "chemical" | "structural"
+    callable: Callable           # the actual function
+    description: str             # one-line human-readable
+
+    # Type constraints
+    applicable_types: tuple      # (Crystal,) | (Crystal, Molecule) | (Molecule,)
+    output_type: type            # Crystal | Molecule (usually same as input)
+
+    # Behavior metadata
+    preserves_composition: bool  # True for translate/rotate, False for substitution
+    preserves_lattice: bool      # True for translate, False for strain/scale
+    preserves_site_properties: bool
+    preserves_pbc: bool
+
+    # Parameter schema (for validation, UI generation, pipeline introspection)
+    parameter_schema: dict       # JSON Schema fragment for kwargs
+
+    # Versioning
+    version: str = "1.0.0"       # semver for this spec (not the function)</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Examples</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Simple: translate()</div>
+      <div class="mockup-body" style="font-size: 12px; font-family: monospace;">
+<pre style="margin:0;">TransformationSpec(
+    name="translate",
+    category="geometric",
+    callable=translate,
+    description="Translate structure by vector",
+    applicable_types=(Crystal, Molecule),
+    output_type=Crystal,  # or Molecule
+    preserves_composition=True,
+    preserves_lattice=True,
+    preserves_site_properties=True,
+    preserves_pbc=True,
+    parameter_schema={
+        "type": "object",
+        "properties": {
+            "vector": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 3, "maxItems": 3
+            }
+        },
+        "required": ["vector"]
+    }
+)</pre>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">Complex: create_vacancy()</div>
+      <div class="mockup-body" style="font-size: 12px; font-family: monospace;">
+<pre style="margin:0;">TransformationSpec(
+    name="create_vacancy",
+    category="atomic",
+    callable=create_vacancy,
+    description="Remove atom(s) to create vacancies",
+    applicable_types=(Crystal, Molecule),
+    output_type=Crystal,
+    preserves_composition=False,
+    preserves_lattice=True,
+    preserves_site_properties=True,
+    preserves_pbc=True,
+    parameter_schema={
+        "type": "object",
+        "properties": {
+            "indices": {
+                "oneOf": [
+                    {"type": "integer"},
+                    {"type": "array", "items": {"type": "integer"}}
+                ]
+            }
+        },
+        "required": ["indices"]
+    }
+)</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>TransformationRegistry</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/transformation/registry.py</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.6;">
+<pre style="margin:0;">class TransformationRegistry:
+    """Singleton registry for all transformation specs."""
+
+    _specs: dict[str, TransformationSpec]     # name → spec
+
+    def register(self, spec: TransformationSpec) -> None:
+        """Register a transformation spec. Raises ValueError on duplicate name."""
+
+    def get(self, name: str) -> TransformationSpec:
+        """Look up a spec by name. Raises KeyError if not found."""
+
+    def list_by_category(self, category: str) -> list[TransformationSpec]:
+        """Filter specs by category."""
+
+    def list_applicable(self, structure_type: type) -> list[TransformationSpec]:
+        """Filter specs applicable to a given structure type."""
+
+    def apply(self, name: str, structure, **kwargs) -> Structure:
+        """Look up spec, validate kwargs against parameter_schema, call fn."""
+
+    def apply_plan(self, plan: TransformationPlan, structure) -> Structure:
+        """Execute a sequence of registered transformations."""
+
+# Built-in registration happens at module import time
+# Plugin entry points: 'matsimpy.transformations' → discover and register()
+
+registry = TransformationRegistry()</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Migration: Old Functions Stay, New Specs Added</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <thead><tr style="background: #f3f4f6;"><th style="padding: 6px 8px; text-align: left;">Before (v0.3.0)</th><th style="padding: 6px 8px; text-align: left;">After (v0.4.0)</th></tr></thead>
+    <tbody>
+      <tr><td style="padding: 5px 8px; font-family: monospace;">translate(crystal, [1,0,0])</td><td style="padding: 5px 8px; font-family: monospace;">translate(crystal, [1,0,0])  ← still works</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px; font-family: monospace;">Pipeline([translate, rotate]).apply(crystal)</td><td style="padding: 5px 8px; font-family: monospace;">Pipeline plan + registry.apply_plan(plan, crystal)</td></tr>
+      <tr><td style="padding: 5px 8px; font-family: monospace;">(no typed metadata)</td><td style="padding: 5px 8px; font-family: monospace;">registry.get("translate") → TransformationSpec</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px; font-family: monospace;">(no param validation)</td><td style="padding: 5px 8px; font-family: monospace;">registry.apply("translate", crystal, vector=[1,0,0])  ← validates</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>Pipeline / Batch / Sweep → TransformationPlan</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/transformation/composite/plan.py</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.5;">
+<pre style="margin:0;">@dataclass
+class TransformationStep:
+    spec_name: str          # registry key, e.g. "translate"
+    params: dict            # kwargs passed to the callable
+    label: str | None       # optional human label
+
+@dataclass
+class TransformationPlan:
+    """A serializable, reproducible sequence of transformation steps."""
+    steps: list[TransformationStep]
+    name: str | None
+    description: str | None
+
+    def to_dict(self) -> dict: ...
+    def from_dict(cls, d: dict) -> TransformationPlan: ...
+
+# Execution strategies (separate from plan definition)
+PipelineExecutor.apply(plan, structure)     # sequential apply
+BatchExecutor.apply(plan, structures)       # parallel apply
+SweepExecutor.apply(plan, structure, sweep_params)  # grid search</pre>
+    </div>
+  </div>
+</div>

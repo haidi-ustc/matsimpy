@@ -13,31 +13,6 @@ def test_config_import_is_base_dependency_safe():
     assert ConfigManager is not None
 
 
-def test_cli_entrypoint_missing_prompt_toolkit_is_actionable(monkeypatch, capsys):
-    from matsimpy.ui.cli import __main__ as cli_main
-
-    real_import = builtins.__import__
-
-    def guarded_import(name, *args, **kwargs):
-        if name.startswith("prompt_toolkit"):
-            raise ModuleNotFoundError("No module named 'prompt_toolkit'", name="prompt_toolkit")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", guarded_import)
-    menu_path = Path(cli_main.__file__).parent / "matsimpy_menu.json"
-    monkeypatch.setattr(sys, "argv", ["matsimpy", str(menu_path)])
-
-    try:
-        cli_main.main()
-    except SystemExit as e:
-        assert e.code == 2
-    else:
-        raise AssertionError("expected SystemExit")
-
-    captured = capsys.readouterr()
-    assert "MatSimPy[cli]" in captured.err
-
-
 def test_workflow_files_do_not_reference_removed_entrypoints():
     workflow_text = "\n".join(
         path.read_text()

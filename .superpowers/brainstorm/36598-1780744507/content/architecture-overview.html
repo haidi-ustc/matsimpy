@@ -1,0 +1,115 @@
+<h2>MatSimPy Architecture Refactoring — Scope Overview</h2>
+<p class="subtitle">14 findings from the architecture review, organized by layer and priority</p>
+
+<div class="section">
+  <h3>Current vs. Recommended Architecture</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">⚠️ Current (Boundary Blur)</div>
+      <div class="mockup-body" style="font-size: 13px; line-height: 1.6;">
+        <div style="border: 2px solid #d97706; padding: 8px; margin: 4px; border-radius: 4px;">
+          <strong>core/</strong><br>
+          Domain model + IO convenience + graph + neighbors + serialization<br>
+          <span style="color:#d97706">→ 4449 lines, mixed responsibilities</span>
+        </div>
+        <div style="border: 2px solid #7c3aed; padding: 8px; margin: 8px 4px; border-radius: 4px;">
+          <strong>builders/</strong> → depends on <strong>transformation/</strong><br>
+          <span style="color:#7c3aed">Constructors + modifiers all mixed</span>
+        </div>
+        <div style="border: 2px solid #2563eb; padding: 8px; margin: 4px; border-radius: 4px;">
+          <strong>io/</strong><br>
+          Parsing + dispatch + converters + LaTeX + registry<br>
+          <span style="color:#2563eb">→ if/elif chain for format dispatch</span>
+        </div>
+        <div style="border: 2px solid #059669; padding: 8px; margin: 4px; border-radius: 4px;">
+          <strong>storage/</strong><br>
+          Backend + schema + ID generation + envelope + flush<br>
+          <span style="color:#059669">→ one class, many concerns</span>
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">✅ Recommended (Clean Boundaries)</div>
+      <div class="mockup-body" style="font-size: 13px; line-height: 1.6;">
+        <div style="border: 2px solid #059669; padding: 8px; margin: 4px; border-radius: 4px; background: #f0fdf4;">
+          <strong>core/model/</strong> — domain only<br>
+          Lattice, Composition, Site, Structure, Crystal, Molecule
+        </div>
+        <div style="border: 2px solid #2563eb; padding: 8px; margin: 4px; border-radius: 4px;">
+          <strong>transformation/</strong> — ops on existing structures<br>
+          + TransformationSpec + Registry
+        </div>
+        <div style="border: 2px solid #7c3aed; padding: 8px; margin: 4px; border-radius: 4px;">
+          <strong>builders/</strong> — from-scratch construction only<br>
+          constructors/ vs modifiers → transformations
+        </div>
+        <div style="display: flex; gap: 4px;">
+          <div style="flex:1; border: 2px solid #d97706; padding: 8px; border-radius: 4px;">
+            <strong>io/</strong><br>
+            FormatHandler registry<br>
+            adapters/ export/
+          </div>
+          <div style="flex:1; border: 2px solid #dc2626; padding: 8px; border-radius: 4px;">
+            <strong>storage/</strong><br>
+            schema/ codec/ backend/ facade
+          </div>
+        </div>
+        <div style="border: 2px dashed #0891b2; padding: 8px; margin: 4px; border-radius: 4px; text-align: center;">
+          <strong>analysis/ exceptions/ plugins/</strong> — new supporting modules
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>14 Findings by Priority &amp; Area</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <thead>
+      <tr style="background: #f3f4f6;">
+        <th style="padding: 6px 8px; text-align: left;">#</th>
+        <th style="padding: 6px 8px; text-align: left;">Area</th>
+        <th style="padding: 6px 8px; text-align: left;">Finding</th>
+        <th style="padding: 6px 8px; text-align: center; width: 70px;">Priority</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding: 5px 8px;">1</td><td style="padding: 5px 8px;">Core</td><td style="padding: 5px 8px;">Core not minimal enough — IO + graph in domain model</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">2</td><td style="padding: 5px 8px;">Builders</td><td style="padding: 5px 8px;">Builders + Transformations overlapping responsibilities</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr><td style="padding: 5px 8px;">4</td><td style="padding: 5px 8px;">API</td><td style="padding: 5px 8px;">Inconsistent mutability semantics</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">5</td><td style="padding: 5px 8px;">Transform</td><td style="padding: 5px 8px;">Function-centric — needs TransformationSpec + Registry</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr><td style="padding: 5px 8px;">8</td><td style="padding: 5px 8px;">IO</td><td style="padding: 5px 8px;">Format parsing + adapters + LaTeX + registry all mixed</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">9</td><td style="padding: 5px 8px;">Storage</td><td style="padding: 5px 8px;">Serialization vs persistence not separated</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr><td style="padding: 5px 8px;">10</td><td style="padding: 5px 8px;">Serial</td><td style="padding: 5px 8px;">Core/IO/Storage serialization schemas overlap</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">12</td><td style="padding: 5px 8px;">Errors</td><td style="padding: 5px 8px;">Inconsistent error handling across layers</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr><td style="padding: 5px 8px;">14</td><td style="padding: 5px 8px;">Plugin</td><td style="padding: 5px 8px;">No plugin architecture — no registries or entry points</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#dc2626;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">HIGH</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">3</td><td style="padding: 5px 8px;">Dep</td><td style="padding: 5px 8px;">Hidden coupling via convenience methods and wildcard exports</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#d97706;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">MED</span></td></tr>
+      <tr><td style="padding: 5px 8px;">6</td><td style="padding: 5px 8px;">Composite</td><td style="padding: 5px 8px;">Pipeline/Batch/Sweep mix execution + serialization</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#d97706;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">MED</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">7</td><td style="padding: 5px 8px;">Builders</td><td style="padding: 5px 8px;">Domain taxonomy mixes constructors + modifiers</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#d97706;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">MED</span></td></tr>
+      <tr><td style="padding: 5px 8px;">11</td><td style="padding: 5px 8px;">API</td><td style="padding: 5px 8px;">Wildcard exports make API evolution risky</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#d97706;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">MED</span></td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">13</td><td style="padding: 5px 8px;">Tests</td><td style="padding: 5px 8px;">Test suite too implementation-shape driven</td><td style="padding: 5px 8px; text-align: center;"><span style="background:#d97706;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">MED</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>Review's Recommended Phasing</h3>
+  <div style="display: flex; gap: 8px;">
+    <div style="flex:1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+      <div class="label">0–3 Months</div>
+      <p style="font-size:13px;">Layer policy, core cleanup, IO registry, storage schema, contract tests</p>
+    </div>
+    <div style="flex:1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+      <div class="label">3–6 Months</div>
+      <p style="font-size:13px;">Registries, pipeline conversion, builder/transform separation, schema versioning</p>
+    </div>
+    <div style="flex:1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+      <div class="label">6–12 Months</div>
+      <p style="font-size:13px;">Plugin entry points, backend protocols, integration tests, deprecate wildcards</p>
+    </div>
+    <div style="flex:1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+      <div class="label">12+ Months</div>
+      <p style="font-size:13px;">Plugin SDK, provenance, versioning policy, workflow engine</p>
+    </div>
+  </div>
+</div>

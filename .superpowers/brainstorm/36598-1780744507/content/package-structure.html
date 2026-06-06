@@ -1,0 +1,167 @@
+<h2>Target Architecture — Package Structure</h2>
+<p class="subtitle">Design Section 1: Where everything lives after refactoring</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Current Structure</div>
+    <div class="mockup-body" style="font-size: 12px; font-family: monospace; line-height: 1.6;">
+<pre style="margin:0;">
+matsimpy/
+├── core/           ← 4449 lines, 7 py files
+│   ├── structure.py   (1153)
+│   ├── crystal.py     (2020)
+│   ├── molecule.py    (1276)
+│   ├── lattice.py
+│   ├── composition.py
+│   ├── site.py
+│   ├── periodic_table.py
+│   ├── _validation.py
+│   ├── graph.py       ← analysis in core
+│   └── neighbors.py   ← analysis in core
+│
+├── builders/       ← constructor + modifier mix
+│   ├── bulk/       ← true constructors
+│   ├── surface/    ← both construct + modify
+│   ├── alloy/      ← modifies base structures
+│   ├── molecule/   ← true constructors
+│   ├── defects/    ← modifies structures
+│   ├── interface/  ← modifies structures
+│   └── nanostructure/ ← both
+│
+├── transformation/ ← function-only, no registry
+│   ├── geometric/
+│   ├── lattice/
+│   ├── atomic/
+│   ├── chemical/
+│   ├── structural/
+│   └── composite/  ← mixed exec + serial
+│
+├── io/             ← parsing + dispatch + LaTeX + adapters
+│   ├── core.py     ← if/elif dispatch chain
+│   ├── vasp/cif/xyz/pdb/xsf/mol/ase/json
+│   ├── converters.py
+│   ├── latex.py    ← presentation in IO
+│   └── utils.py
+│
+├── storage/        ← 1 file, many concerns
+│   └── maggma_store.py
+│
+├── analysis/       ← exists but small
+├── calculator/
+├── symmetry/
+├── config/
+├── constants.py
+├── ai/
+├── ui/
+└── visualization/
+</pre>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">✅ Target Structure</div>
+    <div class="mockup-body" style="font-size: 12px; font-family: monospace; line-height: 1.6;">
+<pre style="margin:0;">
+matsimpy/
+├── <strong>core/</strong>            ← domain model only
+│   ├── structure.py     ← trim IO + graph refs
+│   ├── crystal.py       ← remove from_file/to_file
+│   ├── molecule.py      ← remove from_file/to_file
+│   ├── lattice.py
+│   ├── composition.py
+│   ├── site.py
+│   ├── periodic_table.py
+│   ├── _validation.py
+│   └── protocols.py     ← <strong>NEW</strong> StructureLike, CrystalLike
+│
+├── <strong>exceptions.py</strong>      ← <strong>NEW</strong> domain exceptions
+│
+├── <strong>analysis/</strong>         ← expanded
+│   ├── graph.py          ← from core.graph
+│   ├── neighbors.py      ← from core.neighbors
+│   ├── bonding.py
+│   ├── topology.py
+│   └── structure.py
+│
+├── <strong>transformation/</strong>   ← + registry + spec
+│   ├── geometric/
+│   ├── lattice/
+│   ├── atomic/
+│   ├── chemical/
+│   ├── structural/
+│   ├── composite/
+│   ├── spec.py           ← <strong>NEW</strong> TransformationSpec
+│   └── registry.py       ← <strong>NEW</strong> TransformationRegistry
+│
+├── <strong>builders/</strong>         ← constructors only
+│   ├── bulk/              ← from_prototype, random_crystal
+│   ├── surface/           ← generate_slab (constructor)
+│   ├── molecule/          ← geometry, smiles
+│   ├── nanostructure/     ← nanotube, twisted
+│   └── registry.py        ← <strong>NEW</strong> BuilderRegistry
+│   (defects/alloy/interface → transformation)
+│
+├── <strong>io/</strong>               ← table-driven dispatch
+│   ├── registry.py        ← <strong>NEW</strong> FormatHandler registry
+│   ├── core.py            ← refactored: registry-driven
+│   ├── vasp/cif/xyz/pdb/xsf/mol/json/ase
+│   └── utils.py
+│   (converters.py → adapters/)
+│   (latex.py → export/)
+│
+├── <strong>adapters/</strong>          ← <strong>NEW</strong> external conversions
+│   └── pymatgen.py, ase.py
+│
+├── <strong>export/</strong>            ← <strong>NEW</strong> presentation
+│   └── latex.py
+│
+├── <strong>storage/</strong>          ← split concerns
+│   ├── schema.py          ← <strong>NEW</strong> DocumentEnvelope, IDs
+│   ├── codec.py           ← <strong>NEW</strong> DocumentCodec
+│   ├── backend.py         ← <strong>NEW</strong> StoreBackend protocol
+│   ├── memory_store.py    ← <strong>NEW</strong> MemoryBackend
+│   ├── maggma_store.py    ← refactored as backend
+│   └── facade.py          ← refactored DataStorage facade
+│
+├── calculator/    (unchanged)
+├── symmetry/      (unchanged)
+├── config/        (unchanged)
+├── ai/            (unchanged)
+├── ui/            (unchanged)
+├── visualization/ (unchanged)
+└── constants.py
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Key Changes</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <thead><tr style="background: #f3f4f6;"><th style="padding: 6px 8px; text-align: left;">Area</th><th style="padding: 6px 8px; text-align: left;">What Happens</th><th style="padding: 6px 8px; text-align: center; width: 80px;">New Files</th></tr></thead>
+    <tbody>
+      <tr><td style="padding: 5px 8px;">Core</td><td style="padding: 5px 8px;">Strip from_file/to_file, graph, neighbors → analysis. Add protocols.py. Must not import io/storage/builders/transformation.</td><td style="padding: 5px 8px; text-align: center;">1</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">Analysis</td><td style="padding: 5px 8px;">Receives graph.py + neighbors.py from core. Becomes the home for structure analysis.</td><td style="padding: 5px 8px; text-align: center;">0</td></tr>
+      <tr><td style="padding: 5px 8px;">Transformation</td><td style="padding: 5px 8px;">Receives defects, alloy modifiers, interface stacking, surface modification from builders. Add TransformationSpec + Registry.</td><td style="padding: 5px 8px; text-align: center;">2</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">Builders</td><td style="padding: 5px 8px;">Loses defects/, alloy/, interface/, adsorbate. Keeps bulk/, surface/slab, molecule/, nanostructure/. Add BuilderRegistry. Internally depends on transformation for modification steps.</td><td style="padding: 5px 8px; text-align: center;">1</td></tr>
+      <tr><td style="padding: 5px 8px;">IO</td><td style="padding: 5px 8px;">Add FormatHandler registry. Replace if/elif dispatch with table lookup. Move converters → adapters/. Move latex → export/.</td><td style="padding: 5px 8px; text-align: center;">1</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">Adapters</td><td style="padding: 5px 8px;">New package for pymatgen/ASE converters (from io/converters.py).</td><td style="padding: 5px 8px; text-align: center;">1</td></tr>
+      <tr><td style="padding: 5px 8px;">Export</td><td style="padding: 5px 8px;">New package for LaTeX table export (from io/latex.py). Presentation concern.</td><td style="padding: 5px 8px; text-align: center;">1</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding: 5px 8px;">Storage</td><td style="padding: 5px 8px;">Split into schema.py, codec.py, backend.py, memory_store.py, facade.py. Maggma file refactored as backend impl.</td><td style="padding: 5px 8px; text-align: center;">4</td></tr>
+      <tr><td style="padding: 5px 8px;">Exceptions</td><td style="padding: 5px 8px;">New top-level module with domain-specific exception classes.</td><td style="padding: 5px 8px; text-align: center;">1</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>Dependency Rules (Enforced)</h3>
+  <div style="border: 2px solid #059669; border-radius: 8px; padding: 12px; background: #f0fdf4; font-size: 13px; line-height: 1.8;">
+    <strong>core</strong> — imports nothing from matsimpy except constants.py<br>
+    <strong>transformation</strong> → core, exceptions, constants<br>
+    <strong>builders</strong> → core, transformation (for internal modification steps), exceptions<br>
+    <strong>analysis</strong> → core, exceptions<br>
+    <strong>io</strong> → core, adapters, exceptions<br>
+    <strong>adapters</strong> → core (lazy-import pymatgen/ase at use time)<br>
+    <strong>export</strong> → core<br>
+    <strong>storage</strong> → core (serialization), exceptions
+  </div>
+</div>

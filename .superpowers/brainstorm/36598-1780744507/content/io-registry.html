@@ -1,0 +1,162 @@
+<h2>IO FormatHandler Registry</h2>
+<p class="subtitle">Design Section 3: Table-driven dispatch replacing if/elif chains</p>
+
+<div class="section">
+  <h3>The Problem</h3>
+  <p style="font-size:13px;">Current <code>io/core.py</code> has a 100-line if/elif chain:</p>
+  <div class="mockup">
+    <div class="mockup-header">Current dispatch (matsimpy/io/core.py)</div>
+    <div class="mockup-body" style="font-size: 12px; font-family: monospace;">
+<pre style="margin:0; color: #dc2626;">if reader_name == "read_POSCAR":
+    from .vasp import read_POSCAR
+    return read_POSCAR(filename, **kwargs)
+elif reader_name == "read_CONTCAR":
+    from .vasp import read_CONTCAR
+    return read_CONTCAR(filename, **kwargs)
+elif reader_name == "read_CIF":
+    ...
+# ... 8 more elif blocks for reader
+# ... 9 more elif blocks for writer</pre>
+    </div>
+  </div>
+  <p style="font-size:13px; margin-top: 12px;">Adding a format requires editing core.py + utils.py + the new parser. A plugin can't add a format without monkeypatching.</p>
+</div>
+
+<div class="section">
+  <h3>FormatHandler Dataclass</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/io/registry.py</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.5;">
+<pre style="margin:0;">@dataclass(frozen=True)
+class FormatHandler:
+    """Describes a supported file format and its read/write functions."""
+
+    name: str                    # "vasp-poscar", "cif", "xyz"
+    extensions: tuple[str, ...]  # (".vasp", ".poscar", "POSCAR")
+    aliases: tuple[str, ...]     # ("poscar", "vasp")
+    description: str             # "VASP POSCAR format"
+
+    # Reader (None if format is write-only)
+    reader: Callable | None      # read_POSCAR(filename, **kwargs) -> Structure
+
+    # Writer (None if format is read-only)
+    writer: Callable | None      # write_POSCAR(structure, filename, **kwargs)
+
+    # Type compatibility
+    supports_crystal: bool       # True for VASP/CIF/XSF
+    supports_molecule: bool      # True for XYZ/PDB/MOL
+
+    # Options
+    strict_by_default: bool      # True = fail on malformed input
+    options_schema: dict         # JSON Schema for format-specific **kwargs</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>FormatRegistry</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/io/registry.py (continued)</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.5;">
+<pre style="margin:0;">class FormatRegistry:
+    """Registry of format handlers, keyed by name and extension."""
+
+    _by_name: dict[str, FormatHandler]     # "vasp-poscar" → handler
+    _by_extension: dict[str, FormatHandler] # ".vasp" → handler
+    _by_alias: dict[str, FormatHandler]    # "poscar" → handler
+
+    def register(self, handler: FormatHandler) -> None:
+        """Register handler under its name, extensions, and aliases.
+        Raises ValueError on duplicate extension/alias."""
+
+    def detect(self, filename: str) -> FormatHandler | None:
+        """Detect handler from file extension."""
+
+    def get(self, name: str) -> FormatHandler | None:
+        """Get handler by name or alias."""
+
+    def list_readers(self) -> list[str]: ...
+    def list_writers(self) -> list[str]: ...
+
+    def read(self, filename: str, format: str | None = None, **kwargs) -> Structure:
+        """Detect format → validate type compatibility → call reader."""
+
+    def write(self, structure, filename: str, format: str | None = None, **kwargs) -> None:
+        """Detect format → validate type compatibility → call writer."""
+
+
+# Module-level singleton
+registry = FormatRegistry()
+
+# Built-in handlers registered at import time
+# Plugin entry point: 'matsimpy.io_formats' → discover and register()</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Refactored io/core.py Becomes</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/io/core.py (refactored)</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.5;">
+<pre style="margin:0;">from .registry import registry
+from ..core import Crystal, Molecule
+from ..exceptions import FormatError, StructureTypeError
+
+def read(filename: str, format: str | None = None, **kwargs) -> Structure:
+    """Read a structure from file. Format detected from extension if not given."""
+    return registry.read(filename, format=format, **kwargs)
+
+def write(structure, filename: str, format: str | None = None, **kwargs) -> None:
+    """Write a structure to file. Format detected from extension if not given."""
+    registry.write(structure, filename, format=format, **kwargs)</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Example: Registering VASP POSCAR</h3>
+  <div class="mockup">
+    <div class="mockup-header">matsimpy/io/vasp.py (registration at bottom of file)</div>
+    <div class="mockup-body" style="font-size: 13px; font-family: monospace; line-height: 1.5;">
+<pre style="margin:0;">from .registry import registry, FormatHandler
+
+handler = FormatHandler(
+    name="vasp-poscar",
+    extensions=(".vasp", ".poscar", "POSCAR"),
+    aliases=("poscar", "vasp"),
+    description="VASP POSCAR format",
+    reader=read_POSCAR,
+    writer=write_POSCAR,
+    supports_crystal=True,
+    supports_molecule=False,
+    strict_by_default=True,
+    options_schema={
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "sort": {"type": "boolean", "default": False}
+        }
+    }
+)
+registry.register(handler)</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Also Moving: Converters → adapters/, LaTeX → export/</h3>
+  <div style="display: flex; gap: 8px;">
+    <div style="flex:1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+      <div class="label">io/converters.py → adapters/</div>
+      <p style="font-size:13px;"><code>adapters/pymatgen.py</code>: to_pymatgen(), from_pymatgen()<br>
+      <code>adapters/ase.py</code>: to_ase(), from_ase()<br>
+      Lazy-import pymatgen/ase at call time. Raises <code>ImportError</code> with install hint if missing.</p>
+    </div>
+    <div style="flex:1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+      <div class="label">io/latex.py → export/latex.py</div>
+      <p style="font-size:13px;">Presentation/export concern, not format parsing.<br>
+      Functions unchanged: crystals_to_latex_table(), save_latex_table(), etc.</p>
+    </div>
+  </div>
+</div>
