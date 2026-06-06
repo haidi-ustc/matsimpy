@@ -5,6 +5,17 @@ from matsimpy.core import Crystal, Lattice, Molecule
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.builders.surface import generate_slab, generate_symmetric_slab, add_adsorbate
 
+
+def _sorted_rows(values, decimals=8):
+    rounded = np.round(np.asarray(values, dtype=float), decimals)
+    return rounded[np.lexsort(rounded.T[::-1])]
+
+
+def _centered_cartesian_signature(positions):
+    centered = np.asarray(positions, dtype=float) - np.mean(positions, axis=0)
+    return _sorted_rows(centered)
+
+
 class TestSlabGeneration(unittest.TestCase):
     """Tests for slab generation."""
     
@@ -38,6 +49,15 @@ class TestSlabGeneration(unittest.TestCase):
         """The zero Miller index is invalid."""
         with self.assertRaises(ValueError):
             generate_slab(self.si_bulk, (0, 0, 0), 10, 15)
+
+    def test_generate_slab_validates_sizes(self):
+        """Slab and vacuum sizes must be physically meaningful."""
+        with self.assertRaises(ValueError):
+            generate_slab(self.si_bulk, (1, 0, 0), 0, 15)
+        with self.assertRaises(ValueError):
+            generate_slab(self.si_bulk, (1, 0, 0), 10, -1)
+        with self.assertRaises(ValueError):
+            generate_slab(self.si_bulk, (1, 0, 0), 10, 15, layers=0)
     
     def test_generate_slab_with_layers(self):
         """Test slab generation with specific number of layers."""
@@ -83,6 +103,87 @@ class TestSlabGeneration(unittest.TestCase):
         slab = generate_slab(self.si_bulk, (0, 0, 1), min_slab_size=10, min_vacuum_size=15)
         
         self.assertGreater(slab.volume, self.si_bulk.volume)
+
+    def test_slab_miller_orientation_matches_reference_invariants(self):
+        """Miller-index slab basis follows crystallographic reference invariants."""
+        from pymatgen.core import Structure
+        from pymatgen.core.surface import SlabGenerator
+
+        bulk = from_prototype('sc', 'Cu', 3.0)
+        original_positions = bulk.positions.copy()
+        hkl = np.array([1, 1, 1])
+        slab = generate_slab(bulk, tuple(hkl), min_slab_size=6, min_vacuum_size=8)
+
+        reference_structure = Structure(
+            bulk.lattice.lattice_vectors,
+            list(bulk.species),
+            bulk.frac_positions,
+        )
+        reference_slab = SlabGenerator(
+            reference_structure,
+            tuple(hkl),
+            6,
+            8,
+            center_slab=True,
+            primitive=False,
+        ).get_slab()
+
+        self.assertGreater(len(slab), 0)
+        self.assertGreater(len(reference_slab), 0)
+        self.assertEqual(slab.pbc, (True, True, False))
+        self.assertGreaterEqual(np.linalg.norm(slab.lattice.lattice_vectors[2]), 14.0)
+        np.testing.assert_array_almost_equal(bulk.positions, original_positions)
+
+        reciprocal_normal = np.linalg.solve(
+            bulk.lattice.lattice_vectors,
+            hkl.astype(float),
+        )
+        reciprocal_normal /= np.linalg.norm(reciprocal_normal)
+        for vector in slab.lattice.lattice_vectors[:2]:
+            self.assertAlmostEqual(np.dot(vector, reciprocal_normal), 0.0, places=6)
+        self.assertAlmostEqual(
+            abs(np.dot(
+                slab.lattice.lattice_vectors[2] / np.linalg.norm(slab.lattice.lattice_vectors[2]),
+                reciprocal_normal,
+            )),
+            1.0,
+            places=6,
+        )
+        np.testing.assert_allclose(
+            np.diff(sorted(np.unique(np.round(slab.cart_positions @ reciprocal_normal, 8)))),
+            np.diff(sorted(np.unique(np.round(reference_slab.cart_coords @ reciprocal_normal, 8)))),
+            rtol=1e-6,
+            atol=1e-6,
+        )
+
+    def test_slab_001_coordinates_match_pymatgen_reference(self):
+        """Simple cubic (001) slab coordinates should match reference geometry."""
+        from pymatgen.core import Structure
+        from pymatgen.core.surface import SlabGenerator
+
+        bulk = from_prototype('sc', 'Cu', 3.0)
+        hkl = (0, 0, 1)
+        slab = generate_slab(bulk, hkl, min_slab_size=6, min_vacuum_size=8)
+        reference_slab = SlabGenerator(
+            Structure(
+                bulk.lattice.lattice_vectors,
+                list(bulk.species),
+                bulk.frac_positions,
+            ),
+            hkl,
+            6,
+            8,
+            center_slab=True,
+            primitive=False,
+        ).get_slab()
+
+        self.assertEqual(len(slab), len(reference_slab))
+        np.testing.assert_allclose(
+            _centered_cartesian_signature(slab.cart_positions),
+            _centered_cartesian_signature(reference_slab.cart_coords),
+            rtol=1e-6,
+            atol=1e-6,
+        )
 
 class TestAdsorbate(unittest.TestCase):
     """Tests for adsorbate placement."""

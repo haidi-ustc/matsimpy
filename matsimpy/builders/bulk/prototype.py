@@ -23,8 +23,8 @@ CRYSTAL_PROTOTYPES = {
         "description": "Face-centered cubic (primitive)",
     },
     "bcc": {
-        "species": ["X", "X"],
-        "positions": [[0, 0, 0], [0.5, 0.5, 0.5]],
+        "species": ["X"],
+        "positions": [[0, 0, 0]],
         "lattice_type": "rhombohedral",  # BCC primitive cell is rhombohedral
         "description": "Body-centered cubic (primitive)",
     },

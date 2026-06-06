@@ -6,7 +6,8 @@ from matsimpy.builders.molecule import (
     build_linear,
     build_bent,
     build_trigonal_planar,
-    build_tetrahedral
+    build_tetrahedral,
+    build_from_smiles,
 )
 
 class TestLinearMolecule(unittest.TestCase):
@@ -68,6 +69,52 @@ class TestBentMolecule(unittest.TestCase):
         angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
         self.assertAlmostEqual(angle, 90.0, places=1)
 
+    def test_build_bent_chain_four_atoms(self):
+        """Test chain-like bent molecule with more than three atoms."""
+        mol = build_bent(['C', 'C', 'C', 'C'], [1.4, 1.5, 1.6], [120.0, 110.0])
+
+        self.assertIsInstance(mol, Molecule)
+        self.assertEqual(len(mol.species), 4)
+        for i, expected in enumerate([1.4, 1.5, 1.6]):
+            distance = np.linalg.norm(mol.positions[i + 1] - mol.positions[i])
+            self.assertAlmostEqual(distance, expected, places=6)
+
+        for center_idx, expected in [(1, 120.0), (2, 110.0)]:
+            v1 = mol.positions[center_idx - 1] - mol.positions[center_idx]
+            v2 = mol.positions[center_idx + 1] - mol.positions[center_idx]
+            angle = np.degrees(
+                np.arccos(
+                    np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                )
+            )
+            self.assertAlmostEqual(angle, expected, places=6)
+
+    def test_build_bent_uses_plane_normal(self):
+        """Test that plane_normal orients the generated molecule plane."""
+        mol = build_bent(['O', 'H', 'H'], [1.0, 1.0], [90.0], plane_normal=[0, 1, 0])
+
+        normal = np.cross(
+            mol.positions[1] - mol.positions[0],
+            mol.positions[2] - mol.positions[0],
+        )
+        normal = normal / np.linalg.norm(normal)
+        self.assertAlmostEqual(abs(np.dot(normal, [0, 1, 0])), 1.0, places=6)
+
+    def test_build_bent_validates_geometry_inputs(self):
+        """Test bent molecule input validation."""
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H'], [1.0], [])
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [1.0], [90.0])
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [1.0, 1.0], [])
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [0.0, 1.0], [90.0])
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [1.0, 1.0], [180.0])
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [1.0, 1.0], [90.0], plane_normal=[0, 0, 0])
+
 class TestTrigonalPlanar(unittest.TestCase):
     """Tests for trigonal planar molecule generation."""
     
@@ -120,6 +167,27 @@ class TestTetrahedral(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_tetrahedral('C', ['H', 'H', 'H'], 1.09)  # Only 3 H
 
+
+class TestSmilesMolecule(unittest.TestCase):
+    """Tests for RDKit-backed SMILES molecule generation."""
+
+    def test_build_from_smiles_water_matches_rdkit_atom_count(self):
+        """SMILES builder should return explicit-hydrogen RDKit geometry."""
+        from rdkit import Chem
+
+        water = build_from_smiles('O', optimize=True)
+        rdkit_water = Chem.AddHs(Chem.MolFromSmiles('O'))
+
+        self.assertIsInstance(water, Molecule)
+        self.assertEqual(len(water), rdkit_water.GetNumAtoms())
+        self.assertEqual(water.species.count('O'), 1)
+        self.assertEqual(water.species.count('H'), 2)
+        self.assertEqual(water.positions.shape, (3, 3))
+
+    def test_build_from_smiles_invalid(self):
+        """Invalid SMILES strings should fail cleanly."""
+        with self.assertRaises(ValueError):
+            build_from_smiles('not-a-smiles')
+
 if __name__ == '__main__':
     unittest.main()
-

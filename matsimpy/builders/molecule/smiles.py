@@ -45,10 +45,13 @@ def build_from_smiles(smiles: str, optimize: bool = True) -> Molecule:
     mol = Chem.AddHs(mol)
 
     # Generate 3D coordinates
-    AllChem.EmbedMolecule(mol, randomSeed=42)
+    embed_status = AllChem.EmbedMolecule(mol, randomSeed=42)
+    if embed_status != 0:
+        raise ValueError(f"Could not generate 3D coordinates for SMILES string: {smiles}")
 
     if optimize:
-        AllChem.MMFFOptimizeMolecule(mol)
+        if AllChem.MMFFHasAllMoleculeParams(mol):
+            AllChem.MMFFOptimizeMolecule(mol)
 
     # Extract coordinates
     conf = mol.GetConformer()

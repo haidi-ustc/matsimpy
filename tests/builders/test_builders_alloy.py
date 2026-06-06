@@ -67,11 +67,26 @@ class TestRandomAlloy(unittest.TestCase):
         with self.assertRaises(ValueError):
             # Concentration > 1.0 should fail
             generate_random_alloy(self.base, ['Cu'], 'Al', [1.2])
+        with self.assertRaises(ValueError):
+            generate_random_alloy(self.base, ['Cu'], 'Al', [-0.1])
+        with self.assertRaises(ValueError):
+            generate_random_alloy(self.base, [], 'Al')
     
     def test_generate_random_alloy_no_sites(self):
         """Test with species not in structure."""
         with self.assertRaises(ValueError):
             generate_random_alloy(self.base, ['Cu'], 'Fe', [0.5])
+
+    def test_generate_random_alloy_seed_does_not_reset_global_rng(self):
+        """Local alloy seeding should not mutate NumPy's global RNG state."""
+        np.random.seed(123)
+        expected = np.random.random(3)
+
+        np.random.seed(123)
+        generate_random_alloy(self.base, ['Cu'], 'Al', [0.5], seed=42)
+        actual = np.random.random(3)
+
+        np.testing.assert_allclose(actual, expected)
 
 class TestOrderedAlloy(unittest.TestCase):
     """Tests for ordered alloy generation."""
@@ -141,4 +156,3 @@ class TestIntermetallic(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

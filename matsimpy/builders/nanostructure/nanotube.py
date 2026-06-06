@@ -137,7 +137,7 @@ def build_nanotube(
             cell_offset_2d = i * a1 + j * a2
 
             # Process each atom in the base unit cell
-            for species, frac_pos in zip(base_2d.species, base_2d.positions):
+            for species, frac_pos in zip(base_2d.species, base_2d.frac_positions):
                 # Convert fractional to Cartesian in 2D
                 atom_pos_2d = cell_offset_2d + frac_pos[0] * a1 + frac_pos[1] * a2
 
@@ -149,6 +149,10 @@ def build_nanotube(
                 # Wrap to fundamental domain [0, 1) × [0, 1)
                 u = u % 1.0
                 v = v % 1.0
+                if np.isclose(u, 1.0, atol=tolerance):
+                    u = 0.0
+                if np.isclose(v, 1.0, atol=tolerance):
+                    v = 0.0
 
                 # Check for duplicates using rounded coordinates
                 pos_key = (round(u, 9), round(v, 9))
@@ -187,7 +191,11 @@ def build_nanotube(
 
     # Create the Crystal object
     nanotube = Crystal(
-        species_list, positions_list, nanotube_lattice, coords_are_cartesian=True
+        species_list,
+        positions_list,
+        nanotube_lattice,
+        coords_are_cartesian=True,
+        pbc=(False, False, periodic),
     )
 
     # Center the structure if requested

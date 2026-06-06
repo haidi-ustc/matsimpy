@@ -43,8 +43,9 @@ def generate_random_alloy(
         >>> # Al-Cu-Mg alloy: 40% Cu, 10% Mg, 50% Al
         >>> alloy = generate_random_alloy(base, ['Cu', 'Mg'], 'Al', [0.4, 0.1])
     """
-    if seed is not None:
-        np.random.seed(seed)
+    if not substitution_species:
+        raise ValueError("At least one substitution species must be provided")
+    rng = np.random.default_rng(seed)
 
     # Default equal concentrations if not specified
     if concentrations is None:
@@ -55,6 +56,9 @@ def generate_random_alloy(
         raise ValueError(
             "Number of concentrations must match number of substitution species"
         )
+
+    if any(conc < 0 for conc in concentrations):
+        raise ValueError("Concentrations must be non-negative")
 
     if sum(concentrations) > 1.0:
         raise ValueError(f"Concentrations cannot exceed 1.0, got {sum(concentrations)}")
@@ -80,12 +84,12 @@ def generate_random_alloy(
         substitution_list.extend([spec] * n)
 
     # Randomly select which sites to substitute
-    sites_to_substitute = np.random.choice(
+    sites_to_substitute = rng.choice(
         site_indices, size=total_to_substitute, replace=False
     )
 
     # Shuffle substitution list
-    np.random.shuffle(substitution_list)
+    rng.shuffle(substitution_list)
 
     # Use transformation function for substitution
     return substitute(

@@ -42,66 +42,105 @@ def generate_slab(
         >>> slab = generate_slab(bulk, (1,0,0), min_slab_size=10, min_vacuum_size=15)
         >>> slab = generate_slab(bulk, (1,1,1), layers=5, min_vacuum_size=15)
     """
+    if not isinstance(bulk, Crystal):
+        raise TypeError("bulk must be a Crystal")
     h, k, l = miller_index
     if h == 0 and k == 0 and l == 0:
         raise ValueError("Miller index cannot be (0, 0, 0)")
-
-    # Get the surface normal vector in Cartesian coordinates
-    lattice_matrix = bulk.lattice.lattice_vectors
-    surface_normal = np.dot(lattice_matrix.T, np.array([h, k, l]))
-    surface_normal = surface_normal / np.linalg.norm(surface_normal)
-
-    # Calculate d-spacing for this Miller index
-    # d = 1/|h*a* + k*b* + l*c*| where a*, b*, c* are reciprocal lattice vectors
-    # For simple case, approximate d-spacing
-    d_spacing = (
-        np.linalg.norm(lattice_matrix[0]) / np.sqrt(h**2 + k**2 + l**2)
-        if (h**2 + k**2 + l**2) > 0
-        else 1.0
-    )
-
-    # Determine number of layers if not specified
-    if layers is None:
-        layers = max(2, int(np.ceil(min_slab_size / d_spacing)))
-    if layers <= 0:
+    if min_slab_size <= 0:
+        raise ValueError("min_slab_size must be positive")
+    if min_vacuum_size < 0:
+        raise ValueError("min_vacuum_size must be non-negative")
+    if layers is not None and layers <= 0:
         raise ValueError("layers must be positive")
 
-    # Create new lattice for slab
-    # Simplified implementation: repeat the input cell along the third lattice
-    # direction and add vacuum.  The requested Miller index currently affects
-    # the layer-count estimate only; full surface reorientation should be added
-    # in a dedicated crystallographic slab builder.
-    c_len = np.linalg.norm(lattice_matrix[2])
-    slab_thickness = max(layers * c_len, min_slab_size)
-    total_c = slab_thickness + min_vacuum_size
+    lattice_matrix = bulk.lattice.lattice_vectors
+    hkl = np.array([h, k, l], dtype=int)
+    normal = np.linalg.solve(lattice_matrix, hkl.astype(np.float64))
+    normal = normal / np.linalg.norm(normal)
 
-    new_lattice_vectors = lattice_matrix.copy()
-    c_direction = new_lattice_vectors[2] / c_len
-    new_lattice_vectors[2] = c_direction * total_c
+    d_spacing = 1.0 / np.linalg.norm(np.linalg.solve(lattice_matrix, hkl.astype(np.float64)))
+    if layers is None:
+        layers = max(2, int(np.ceil(min_slab_size / d_spacing)))
+    slab_thickness = max(layers * d_spacing, min_slab_size)
+    total_normal_length = slab_thickness + min_vacuum_size
 
-    new_lattice = Lattice(new_lattice_vectors)
+    u, v = _miller_plane_basis(hkl)
+    a_vec = u @ lattice_matrix
+    b_vec = v @ lattice_matrix
+    slab_lattice_vectors = np.array(
+        [a_vec, b_vec, normal * total_normal_length],
+        dtype=np.float64,
+    )
+    selection_lattice_vectors = np.array(
+        [a_vec, b_vec, normal * slab_thickness],
+        dtype=np.float64,
+    )
 
-    # Transform atomic positions
+    new_lattice = Lattice(slab_lattice_vectors)
+    inv_selection_lattice = np.linalg.inv(selection_lattice_vectors)
+
     new_species = []
     new_positions = []
+    slab_fraction = slab_thickness / total_normal_length
+    z_offset = (min_vacuum_size / total_normal_length / 2.0) if center_slab else 0.0
 
-    slab_fraction = slab_thickness / total_c
-    z_offset = (min_vacuum_size / total_c / 2.0) if center_slab else 0.0
+    search_radius = int(max(np.max(np.abs(u)), np.max(np.abs(v)), np.max(np.abs(hkl)), layers) + 3)
+    seen = set()
+    tol = 1e-8
+    for i in range(-search_radius, search_radius + 1):
+        for j in range(-search_radius, search_radius + 1):
+            for k_shift in range(-search_radius, search_radius + 1):
+                shift = np.array([i, j, k_shift], dtype=np.float64)
+                for spec, frac_pos in zip(bulk.species, bulk.frac_positions):
+                    cart = (frac_pos + shift) @ lattice_matrix
+                    slab_frac = cart @ inv_selection_lattice
+                    if (
+                        -tol <= slab_frac[0] < 1.0 - tol
+                        and -tol <= slab_frac[1] < 1.0 - tol
+                        and -tol <= slab_frac[2] < 1.0 - tol
+                    ):
+                        final_frac = slab_frac.copy()
+                        final_frac[0] = final_frac[0] % 1.0
+                        final_frac[1] = final_frac[1] % 1.0
+                        final_frac[2] = final_frac[2] * slab_fraction + z_offset
+                        key = tuple(np.round(final_frac, 8)) + (spec,)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        new_species.append(spec)
+                        new_positions.append(final_frac.tolist())
 
-    for layer in range(layers):
-        for spec, pos in zip(bulk.species, bulk.positions):
-            pos = np.array(pos, dtype=np.float64)
-            new_frac = pos.copy()
-            new_frac[0] = new_frac[0] % 1.0
-            new_frac[1] = new_frac[1] % 1.0
-            # Repeat along the slab direction, compressing the repeated slab
-            # into the non-vacuum portion of the new cell.
-            new_frac[2] = ((pos[2] % 1.0) + layer) / layers
-            new_frac[2] = new_frac[2] * slab_fraction + z_offset
-            new_species.append(spec)
-            new_positions.append(new_frac.tolist())
+    if not new_positions:
+        raise ValueError(f"Failed to generate slab for Miller index {miller_index}")
 
     return Crystal(new_species, new_positions, new_lattice, pbc=[True, True, False])
+
+
+def _miller_plane_basis(hkl: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Return two reduced integer vectors lying in the Miller plane."""
+    h, k, l = [int(value) for value in hkl]
+    if h == 0 and k == 0:
+        u = np.array([1, 0, 0], dtype=int)
+    else:
+        u = np.array([k, -h, 0], dtype=int)
+    v = np.cross(hkl, u).astype(int)
+    return _reduce_integer_vector(u), _reduce_integer_vector(v)
+
+
+def _reduce_integer_vector(vector: np.ndarray) -> np.ndarray:
+    values = [abs(int(value)) for value in vector if int(value) != 0]
+    if not values:
+        return vector
+    divisor = values[0]
+    for value in values[1:]:
+        divisor = int(np.gcd(divisor, value))
+    if divisor > 1:
+        vector = vector // divisor
+    first_nonzero = next((int(value) for value in vector if int(value) != 0), 1)
+    if first_nonzero < 0:
+        vector = -vector
+    return vector
 
 
 def generate_symmetric_slab(

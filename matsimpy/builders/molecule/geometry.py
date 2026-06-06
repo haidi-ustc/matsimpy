@@ -68,22 +68,87 @@ def build_bent(
         >>> # Build H2O with HOH angle of 104.5°
         >>> h2o = build_bent(['O', 'H', 'H'], [0.96, 0.96], [104.5])
     """
-    if len(species) != 3:
-        raise NotImplementedError("Currently only supports triatomic bent molecules")
+    if len(species) < 3:
+        raise ValueError("Bent molecule requires at least 3 atoms")
+    if len(bond_lengths) != len(species) - 1:
+        raise ValueError(f"Need {len(species)-1} bond lengths for {len(species)} atoms")
+    if len(angles) != len(species) - 2:
+        raise ValueError(f"Need {len(species)-2} bond angles for {len(species)} atoms")
+    if any(length <= 0 for length in bond_lengths):
+        raise ValueError("bond lengths must be positive")
+    if any(angle <= 0 or angle >= 180 for angle in angles):
+        raise ValueError("bond angles must be between 0 and 180 degrees")
 
-    # Central atom at origin
-    positions = [np.array([0.0, 0.0, 0.0])]
+    plane_normal_array = np.array(plane_normal, dtype=np.float64)
+    if plane_normal_array.shape != (3,) or not np.all(np.isfinite(plane_normal_array)):
+        raise ValueError("plane_normal must be a finite 3D vector")
+    normal_norm = np.linalg.norm(plane_normal_array)
+    if normal_norm == 0:
+        raise ValueError("plane_normal cannot be zero")
+    plane_normal_array = plane_normal_array / normal_norm
 
-    # First bond along x-axis
-    positions.append(np.array([bond_lengths[0], 0.0, 0.0]))
+    if len(species) == 3:
+        # Backward-compatible central-atom model for bent triatomic molecules:
+        # species[0] is central, species[1:3] are bonded to it.
+        positions = [np.array([0.0, 0.0, 0.0])]
+        positions.append(np.array([bond_lengths[0], 0.0, 0.0]))
 
-    # Second bond at angle
-    angle_rad = np.radians(angles[0])
-    x = bond_lengths[1] * np.cos(angle_rad)
-    y = bond_lengths[1] * np.sin(angle_rad)
-    positions.append(np.array([x, y, 0.0]))
+        angle_rad = np.radians(angles[0])
+        x = bond_lengths[1] * np.cos(angle_rad)
+        y = bond_lengths[1] * np.sin(angle_rad)
+        positions.append(np.array([x, y, 0.0]))
+    else:
+        # Chain-like bent molecule using internal coordinates:
+        # bond_lengths[i] is the distance i -> i+1 and angles[i] is the
+        # angle at atom i+1 between atoms i, i+1, and i+2.
+        positions = [np.array([0.0, 0.0, 0.0])]
+        positions.append(np.array([bond_lengths[0], 0.0, 0.0]))
 
+        direction = np.array([1.0, 0.0])
+        for length, angle in zip(bond_lengths[1:], angles):
+            turn = np.pi - np.radians(angle)
+            rotation = np.array(
+                [
+                    [np.cos(turn), -np.sin(turn)],
+                    [np.sin(turn), np.cos(turn)],
+                ]
+            )
+            direction = rotation @ direction
+            direction = direction / np.linalg.norm(direction)
+            next_xy = positions[-1][:2] + direction * length
+            positions.append(np.array([next_xy[0], next_xy[1], 0.0]))
+
+    positions = np.array(positions, dtype=np.float64)
+    positions = _orient_plane(positions, plane_normal_array)
     return Molecule(species, positions)
+
+
+def _orient_plane(positions: np.ndarray, plane_normal: np.ndarray) -> np.ndarray:
+    """Rotate xy-plane positions so their normal matches ``plane_normal``."""
+    default_normal = np.array([0.0, 0.0, 1.0])
+    dot = float(np.clip(np.dot(default_normal, plane_normal), -1.0, 1.0))
+    if np.isclose(dot, 1.0):
+        return positions
+    if np.isclose(dot, -1.0):
+        rotation = np.diag([1.0, -1.0, -1.0])
+        return positions @ rotation.T
+
+    axis = np.cross(default_normal, plane_normal)
+    axis = axis / np.linalg.norm(axis)
+    angle = np.arccos(dot)
+    skew = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ]
+    )
+    rotation = (
+        np.eye(3)
+        + np.sin(angle) * skew
+        + (1.0 - np.cos(angle)) * (skew @ skew)
+    )
+    return positions @ rotation.T
 
 
 def build_trigonal_planar(

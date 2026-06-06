@@ -13,6 +13,20 @@ from matsimpy.builders.nanostructure import (
     build_twisted_multilayer,
 )
 
+
+def _sorted_rows(values, decimals=8):
+    rounded = np.round(np.asarray(values, dtype=float), decimals)
+    return rounded[np.lexsort(rounded.T[::-1])]
+
+
+def _cylindrical_signature(cart_positions, period):
+    xy = cart_positions[:, :2]
+    radii = np.linalg.norm(xy, axis=1)
+    angles = np.mod(np.arctan2(xy[:, 1], xy[:, 0]), 2 * np.pi)
+    z = np.mod(cart_positions[:, 2] - np.min(cart_positions[:, 2]), period)
+    return _sorted_rows(np.column_stack([radii, angles, z]))
+
+
 class TestNanotube:
     """Test nanotube builders."""
     
@@ -24,6 +38,24 @@ class TestNanotube:
         assert len(cnt.species) > 0
         assert all(s == 'C' for s in cnt.species)
         assert cnt.lattice is not None
+        assert cnt.pbc == (False, False, True)
+
+    def test_build_carbon_nanotube_matches_ase_radius_and_period(self):
+        """Carbon nanotube coordinates should match ASE reference geometry."""
+        from ase.build import nanotube
+
+        cnt = build_carbon_nanotube(5, 5, center=False)
+        reference = nanotube(5, 5, bond=1.42)
+
+        assert len(cnt) == len(reference)
+        assert np.isclose(cnt.lattice.c, reference.cell.lengths()[2], rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(
+            _cylindrical_signature(cnt.cart_positions, cnt.lattice.c),
+            _cylindrical_signature(reference.positions, reference.cell.lengths()[2]),
+            rtol=1e-6,
+            atol=1e-6,
+        )
+        assert cnt.pbc == (False, False, True)
     
     def test_build_carbon_nanotube_zigzag(self):
         """Test building zigzag carbon nanotube."""
@@ -32,6 +64,7 @@ class TestNanotube:
         assert isinstance(cnt, Crystal)
         assert len(cnt.species) > 0
         assert all(s == 'C' for s in cnt.species)
+        assert cnt.pbc == (False, False, True)
     
     def test_build_carbon_nanotube_chiral(self):
         """Test building chiral carbon nanotube."""
@@ -259,4 +292,3 @@ class TestTwistedMultilayer:
         
         with pytest.raises(ValueError, match="Number of twist angles"):
             build_twisted_multilayer(layer, 3, [1.1])  # Should be 2 angles for 3 layers
-
