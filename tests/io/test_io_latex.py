@@ -4,7 +4,7 @@ import unittest
 import tempfile
 
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.io.latex import (
+from matsimpy.export.latex import (
     crystals_to_latex_table,
     molecules_to_latex_table,
     structures_to_latex_table,

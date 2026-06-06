@@ -11,10 +11,19 @@ This module provides support for:
 - ASE format
 - MOL (MDL Molfile) format
 
-High-level interface:
+High-level interface::
+
     >>> from matsimpy.io import read, write
     >>> crystal = read('structure.vasp')  # Auto-detect format
     >>> write(crystal, 'output.cif')       # Auto-detect format
+
+For advanced use, import format-specific readers/writers::
+
+    >>> from matsimpy.io.vasp import read_POSCAR, write_POSCAR
+
+For the format registry (plugin extension point)::
+
+    >>> from matsimpy.io.registry import registry, FormatHandler
 """
 
 # High-level interface (recommended)
@@ -29,22 +38,12 @@ from .xsf import read_XSF, write_XSF
 from .json import to_json, from_json
 from .ase import read_ASE, write_ASE
 from .mol import read_MOL, write_MOL
-from .utils import (
-    detect_format,
-    get_reader_writer,
-    is_crystal_format,
-    is_molecule_format,
-)
-from .converters import to_pymatgen, from_pymatgen, to_ase, from_ase
-from .latex import (
-    crystals_to_latex_table,
-    molecules_to_latex_table,
-    structures_to_latex_table,
-    save_latex_table,
-)
+
+# Registry (for plugins and introspection)
+from .registry import registry, FormatHandler, FormatRegistry
 
 __all__ = [
-    # High-level interface (recommended)
+    # High-level
     "read",
     "write",
     # VASP
@@ -74,19 +73,8 @@ __all__ = [
     # MOL
     "read_MOL",
     "write_MOL",
-    # Utils
-    "detect_format",
-    "get_reader_writer",
-    "is_crystal_format",
-    "is_molecule_format",
-    # Converters
-    "to_pymatgen",
-    "from_pymatgen",
-    "to_ase",
-    "from_ase",
-    # LaTeX export
-    "crystals_to_latex_table",
-    "molecules_to_latex_table",
-    "structures_to_latex_table",
-    "save_latex_table",
+    # Registry
+    "registry",
+    "FormatHandler",
+    "FormatRegistry",
 ]

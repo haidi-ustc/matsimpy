@@ -56,7 +56,7 @@ def random_crystal(
             if hasattr(pyxtal_crystal, "to_pymatgen"):
                 pymatgen_struct = pyxtal_crystal.to_pymatgen()
                 # Convert pymatgen Structure to MatSimPy Crystal
-                from ...io.converters import from_pymatgen
+                from ...adapters.pymatgen import from_pymatgen
 
                 return from_pymatgen(pymatgen_struct)
         except (AttributeError, ImportError):

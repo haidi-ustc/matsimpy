@@ -1567,7 +1567,7 @@ class Crystal(Structure):
         Raises:
             ImportError: If pymatgen is not installed
         """
-        from ..io.converters import to_pymatgen
+        from ..adapters.pymatgen import to_pymatgen
 
         return to_pymatgen(self)
 
@@ -1581,7 +1581,7 @@ class Crystal(Structure):
         Raises:
             ImportError: If ASE is not installed
         """
-        from ..io.converters import to_ase
+        from ..adapters.ase import to_ase
 
         return to_ase(self)
 
@@ -1599,7 +1599,7 @@ class Crystal(Structure):
         Raises:
             ImportError: If pymatgen is not installed
         """
-        from ..io.converters import from_pymatgen
+        from ..adapters.pymatgen import from_pymatgen
 
         return from_pymatgen(pymatgen_structure)
 
@@ -1618,7 +1618,7 @@ class Crystal(Structure):
             ImportError: If ASE is not installed
             ValueError: If ASE Atoms doesn't have cell information
         """
-        from ..io.converters import from_ase
+        from ..adapters.ase import from_ase
 
         result = from_ase(ase_atoms)
         if not isinstance(result, Crystal):
