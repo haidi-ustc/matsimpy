@@ -74,7 +74,7 @@ class AIEngine:
         # Auto-load relevant skills
         loaded = self.skill_manager.auto_load(user_message)
         if loaded:
-            print(f"[loaded skills: {', '.join(loaded)}]")
+            print(f"📦 loaded: {', '.join(loaded)}")
 
         self._last_tool_results = []
         self._last_tool_calls = []
@@ -105,12 +105,12 @@ class AIEngine:
             if response.tool_calls:
                 for tc in response.tool_calls:
                     args_str = ", ".join(f"{k}={v}" for k, v in tc.arguments.items())
-                    print(f"[→ {tc.name}({args_str})]")
+                    print(f"🔧 {tc.name}({args_str})")
                     result = self.executor.execute(tc)
                     if "error" in result:
-                        print(f"[✗ {tc.name} failed: {result['error'][:100]}]")
+                        print(f"❌ {tc.name}: {result['error'][:100]}")
                     else:
-                        print(f"[✓ {tc.name} ok]")
+                        print(f"✅ {tc.name}")
                     self._last_tool_calls.append(tc.name)
                     self._last_tool_results.append(result)
                     self.conversation.append(ChatMessage.tool(
@@ -168,26 +168,26 @@ class AIEngine:
             load_mode="auto_choice",
             body=f"# {desc}\n\nAuto-saved from: _{user_message[:100]}_\n",
         )
-        print(f"[auto-saved skill: {path.name}]")
+        print(f"💾 auto-saved skill: {path.name}")
 
     def repl(self) -> None:
         """Interactive REPL loop with /commands."""
         self.workspace.enter()
         from .provider import MODELS
         model_desc = MODELS.get(self.provider.model, "")
-        print("=" * 60)
-        print(f"  MatSimPy AI REPL")
-        print(f"  Model: {self.provider.model} — {model_desc}")
-        print(f"  Workspace: {self.workspace.path}")
-        print(f"  Memory: {self.memory.dir}")
-        print("  Type /help for commands, Ctrl+D or /quit to exit")
-        print("=" * 60)
+        print("═" * 60)
+        print(f"  ⚛️  MatSimPy AI REPL")
+        print(f"  🧠 {self.provider.model} — {model_desc}")
+        print(f"  📁 {self.workspace.path}")
+        print(f"  💭 {self.memory.dir}")
+        print("  /help for commands  |  Ctrl+D to exit")
+        print("═" * 60)
 
         while True:
             try:
-                user_input = input("\n> ").strip()
+                user_input = input("\n👤 › ").strip()
             except (EOFError, KeyboardInterrupt):
-                print("\nGoodbye.")
+                print("\n👋 Goodbye.")
                 break
 
             if not user_input:
@@ -199,9 +199,9 @@ class AIEngine:
 
             try:
                 response = self.chat(user_input)
-                print(f"\n{response}")
+                print(f"\n🤖 › {response}")
             except Exception as e:
-                print(f"\nError: {e}")
+                print(f"\n⚠️ › Error: {e}")
 
     def _handle_command(self, cmd: str) -> None:
         """Handle REPL /commands."""
