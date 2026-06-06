@@ -1,12 +1,15 @@
 """CLI entry point for MatSimPy AI REPL."""
 
+import os
 from .engine import AIEngine
-from .skill import SkillManager, Skill, FunctionDef
+from .skill import SkillManager, Skill
+from .provider import MODELS, DEFAULT_MODEL
 
 
 def main():
     """Launch the AI REPL with all skills pre-registered."""
-    engine = AIEngine()
+    model = os.getenv("MATSIMPY_AI_MODEL", DEFAULT_MODEL)
+    engine = AIEngine(model=model)
     _register_all_skills(engine.skill_manager)
     engine.skill_manager.load("core")
     engine.repl()
@@ -14,7 +17,6 @@ def main():
 
 def _register_all_skills(sm: SkillManager) -> None:
     """Register all available skills with the SkillManager."""
-    # Import skill modules and register
     from .skills import core, builders, transformation, analysis, io, storage
 
     for mod in (core, builders, transformation, analysis, io, storage):

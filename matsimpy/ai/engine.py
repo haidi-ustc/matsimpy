@@ -26,10 +26,11 @@ class AIEngine:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "deepseek-chat",
+        model: str | None = None,
+        base_url: str | None = None,
         system_prompt: str | None = None,
     ):
-        self.provider = DeepSeekProvider(api_key, model)
+        self.provider = DeepSeekProvider(api_key, model, base_url)
         self.skill_manager = SkillManager()
         self.executor = FunctionExecutor(self.skill_manager)
         self.system_prompt = system_prompt or SYSTEM_PROMPT
@@ -76,8 +77,12 @@ class AIEngine:
 
     def repl(self) -> None:
         """Interactive REPL loop with /commands."""
+        from .provider import MODELS
+        model_desc = MODELS.get(self.provider.model, "")
         print("=" * 60)
-        print("  MatSimPy AI REPL")
+        print(f"  MatSimPy AI REPL")
+        print(f"  Model: {self.provider.model} — {model_desc}")
+        print(f"  Endpoint: {self.provider._endpoint}")
         print("  Type /help for commands, Ctrl+D or /quit to exit")
         print("=" * 60)
 
@@ -137,6 +142,18 @@ class AIEngine:
                 self.skill_manager.unload(name)
                 print(f"  Unloaded skill: {name}")
 
+        elif command == "/model":
+            from .provider import MODELS
+            print(f"  Current: {self.provider.model}")
+            print(f"  Available models:")
+            for name, desc in MODELS.items():
+                marker = " ← current" if name == self.provider.model else ""
+                print(f"    {name:22s} {desc}{marker}")
+            if arg and arg in MODELS:
+                self.provider.model = arg
+                self.provider._endpoint = f"{self.provider.base_url}/v1/chat/completions"
+                print(f"  Switched to {arg}")
+
         elif command == "/help":
             if arg:
                 fn = self.skill_manager.find_function(arg)
@@ -151,6 +168,7 @@ class AIEngine:
                 print("  Commands:")
                 print("  /skills           List all skills and load status")
                 print("  /load <name>      Load skill(s) by name")
+                print("  /model [name]     Show or switch model (v4-pro, v4-flash)")
                 print("  /unload <name>    Unload skill(s)")
                 print("  /help [function]  Show function help text")
                 print("  /system <text>    Set custom system prompt")
