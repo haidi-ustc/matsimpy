@@ -73,7 +73,7 @@ from .structural import *
 from .structural import __all__ as _structural_all
 
 # Import composite operations
-from .composite import chain, apply_transformations
+from .composite import chain, apply_transformations, TransformationStep, TransformationPlan
 
 # Combine all exports
 __all__ = (
@@ -82,12 +82,15 @@ __all__ = (
     + _atomic_all
     + _chemical_all
     + _structural_all
-    + ["chain", "apply_transformations"]
+    + ["chain", "apply_transformations", "TransformationStep", "TransformationPlan"]
 )
 
 # Registry and spec
 from .registry import registry, TransformationRegistry
 from .spec import TransformationSpec
+
+# Composite
+from .composite import TransformationStep, TransformationPlan
 
 # Auto-register built-in transformations
 from ._register import register_all
