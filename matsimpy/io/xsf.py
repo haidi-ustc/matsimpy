@@ -146,3 +146,19 @@ def write_XSF(crystal: Crystal, filename: str, title: Optional[str] = None) -> N
 
 
 __all__ = ["read_XSF", "write_XSF"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_XSF_HANDLER = FormatHandler(
+    name="xsf",
+    extensions=(".xsf",),
+    aliases=("xsf", "XSF"),
+    description="XCrySDen format",
+    reader=read_XSF,
+    writer=write_XSF,
+    supports_crystal=True,
+    supports_molecule=False,
+    strict_by_default=True,
+)
+registry.register(_XSF_HANDLER)

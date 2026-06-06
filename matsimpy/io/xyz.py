@@ -201,3 +201,19 @@ def read_XYZ_multiframe(filename: str, strict: bool = True) -> List[Molecule]:
 
 
 __all__ = ["read_XYZ", "write_XYZ", "read_XYZ_multiframe"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_XYZ_HANDLER = FormatHandler(
+    name="xyz",
+    extensions=(".xyz",),
+    aliases=("xyz", "XYZ"),
+    description="XYZ coordinate format (molecules)",
+    reader=read_XYZ,
+    writer=write_XYZ,
+    supports_crystal=False,
+    supports_molecule=True,
+    strict_by_default=True,
+)
+registry.register(_XYZ_HANDLER)

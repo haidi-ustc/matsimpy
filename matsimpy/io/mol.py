@@ -175,3 +175,19 @@ def write_MOL(molecule: Molecule, filename: str, title: Optional[str] = None) ->
 
 
 __all__ = ["read_MOL", "write_MOL"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_MOL_HANDLER = FormatHandler(
+    name="mol",
+    extensions=(".mol",),
+    aliases=("mol", "MOL"),
+    description="MDL Molfile format",
+    reader=read_MOL,
+    writer=write_MOL,
+    supports_crystal=False,
+    supports_molecule=True,
+    strict_by_default=True,
+)
+registry.register(_MOL_HANDLER)

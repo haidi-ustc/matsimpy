@@ -175,3 +175,19 @@ def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:
 
 
 __all__ = ["read_ASE", "write_ASE"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_ASE_HANDLER = FormatHandler(
+    name="ase",
+    extensions=(".ase",),
+    aliases=("ase", "ASE"),
+    description="Atomic Simulation Environment format (via converter)",
+    reader=read_ASE,
+    writer=write_ASE,
+    supports_crystal=True,
+    supports_molecule=True,
+    strict_by_default=True,
+)
+registry.register(_ASE_HANDLER)

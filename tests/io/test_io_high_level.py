@@ -94,15 +94,17 @@ class TestHighLevelIO(unittest.TestCase):
             read('/nonexistent/file.vasp')
     
     def test_write_incompatible_format_crystal(self):
-        """Test writing crystal to molecule-only format raises error."""
+        """Test writing crystal to molecule-only format raises errors."""
         filename = os.path.join(self.temp_dir, 'test.xyz')
-        with self.assertRaises(ValueError):
+        from matsimpy.exceptions import StructureTypeError
+        with self.assertRaises(StructureTypeError):
             write(self.crystal, filename)
-    
+
     def test_write_incompatible_format_molecule(self):
-        """Test writing molecule to crystal-only format raises error."""
+        """Test writing molecule to crystal-only format raises errors."""
         filename = os.path.join(self.temp_dir, 'test.vasp')
-        with self.assertRaises(ValueError):
+        from matsimpy.exceptions import StructureTypeError
+        with self.assertRaises(StructureTypeError):
             write(self.molecule, filename)
     
     def test_read_unknown_format(self):

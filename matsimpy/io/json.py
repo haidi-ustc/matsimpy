@@ -100,3 +100,29 @@ def from_json(
 
 
 __all__ = ["to_json", "from_json"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+def _read_json(filename, **kwargs):
+    """Adapter: calls from_json with filename as keyword argument."""
+    return from_json(filename=filename, **kwargs)
+
+
+def _write_json(structure, filename, **kwargs):
+    """Adapter: calls to_json with filename as keyword argument."""
+    return to_json(structure, filename=filename, **kwargs)
+
+
+_JSON_HANDLER = FormatHandler(
+    name="json",
+    extensions=(".json",),
+    aliases=("json", "JSON"),
+    description="MatSimPy JSON serialization format",
+    reader=_read_json,
+    writer=_write_json,
+    supports_crystal=True,
+    supports_molecule=True,
+    strict_by_default=True,
+)
+registry.register(_JSON_HANDLER)

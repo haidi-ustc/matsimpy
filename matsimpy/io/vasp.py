@@ -226,3 +226,31 @@ def write_CONTCAR(crystal: Crystal, filename: str, title: Optional[str] = None) 
 
 
 __all__ = ["read_POSCAR", "write_POSCAR", "read_CONTCAR", "write_CONTCAR"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_POSCAR_HANDLER = FormatHandler(
+    name="vasp-poscar",
+    extensions=(".vasp", ".poscar"),
+    aliases=("poscar", "vasp", "POSCAR"),
+    description="VASP POSCAR format (periodic crystal structures)",
+    reader=read_POSCAR,
+    writer=write_POSCAR,
+    supports_crystal=True,
+    supports_molecule=False,
+    strict_by_default=True,
+)
+_CONTCAR_HANDLER = FormatHandler(
+    name="vasp-contcar",
+    extensions=(".contcar",),
+    aliases=("contcar", "CONTCAR"),
+    description="VASP CONTCAR format (output structure)",
+    reader=read_CONTCAR,
+    writer=write_CONTCAR,
+    supports_crystal=True,
+    supports_molecule=False,
+    strict_by_default=True,
+)
+registry.register(_POSCAR_HANDLER)
+registry.register(_CONTCAR_HANDLER)

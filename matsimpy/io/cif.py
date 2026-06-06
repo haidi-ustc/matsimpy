@@ -344,3 +344,19 @@ def write_CIF(crystal: Crystal, filename: str, title: Optional[str] = None) -> N
 
 
 __all__ = ["read_CIF", "write_CIF"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_CIF_HANDLER = FormatHandler(
+    name="cif",
+    extensions=(".cif",),
+    aliases=("cif", "CIF"),
+    description="Crystallographic Information File format",
+    reader=read_CIF,
+    writer=write_CIF,
+    supports_crystal=True,
+    supports_molecule=False,
+    strict_by_default=True,
+)
+registry.register(_CIF_HANDLER)

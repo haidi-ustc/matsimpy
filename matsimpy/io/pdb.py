@@ -184,3 +184,19 @@ def write_PDB(
 
 
 __all__ = ["read_PDB", "write_PDB"]
+
+# --- Registry registration ---
+from .registry import registry, FormatHandler
+
+_PDB_HANDLER = FormatHandler(
+    name="pdb",
+    extensions=(".pdb",),
+    aliases=("pdb", "PDB"),
+    description="Protein Data Bank format",
+    reader=read_PDB,
+    writer=write_PDB,
+    supports_crystal=True,
+    supports_molecule=True,
+    strict_by_default=True,
+)
+registry.register(_PDB_HANDLER)
