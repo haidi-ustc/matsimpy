@@ -7,7 +7,7 @@
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-1462%20passed-brightgreen)](tests/)
 
-**Version**: v0.4.0
+**Version**: v0.5.0
 
 ## Table of Contents
 
@@ -32,6 +32,7 @@
 - **IO**: table-driven `FormatRegistry` with 8 built-in formats, plugin-ready
 - **Storage**: `DataStorage` facade with `MemoryBackend` + `MaggmaBackend`, content-addressed IDs
 - **Adaptability**: `adapters/` for pymatgen/ASE, `export/` for LaTeX, plugin entry points
+- **AI REPL**: LLM-powered materials science assistant — natural language → function calls (DeepSeek V4)
 - **Calculators**: classical + ML (optional)
 - **CLI**: interactive menu for structure editing and utilities
 
@@ -462,6 +463,42 @@ assert id1 == id2
 storage.close()
 ```
 
+### AI REPL
+
+Interactive LLM-powered assistant. Chat in natural language — the AI calls MatSimPy functions.
+
+```bash
+# Install with AI extras
+pip install -e .[ai]
+
+# Set API key
+export DEEPSEEK_API_KEY="sk-..."
+
+# Interactive REPL
+matsimpy
+matsimpy --workspace ~/my-project --model deepseek-v4-pro
+
+# Single-shot command
+matsimpy -c "create fcc Cu crystal and save to cu.vasp"
+matsimpy -v -c "analyze bonds in nacl.cif"
+```
+
+```python
+from matsimpy.ai import AIEngine, SkillManager, Skill
+from matsimpy.ai.skills import core, builders, analysis
+
+engine = AIEngine(model="deepseek-v4-pro")
+for mod in (core, builders, analysis):
+    engine.skill_manager.register(Skill(mod.SKILL_NAME, mod.SKILL_DESCRIPTION, mod.get_functions()))
+engine.skill_manager.load("core")
+
+# Natural language → function calls
+response = engine.chat("Create an FCC Cu crystal and analyze its structure")
+print(response)
+```
+
+Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
+
 ## Core Conventions
 
 ### Immutability
@@ -654,4 +691,4 @@ MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen)
 
 ---
 
-**Note**: v0.4.0 — architecture stabilized with registries, plugin entry points, and clean module boundaries.
+**Note**: v0.5.0 — AI REPL with LLM function calling, agent memory, auto-save skills.
