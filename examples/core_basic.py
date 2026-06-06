@@ -200,7 +200,7 @@ mixed_crystal = Crystal(
     Lattice.cubic(5.0)
 )
 
-from matsimpy.utils.selection import select_by_species, AtomSelection
+from matsimpy.analysis.selection import select_by_species, AtomSelection
 
 # Select by species
 si_indices = select_by_species(mixed_crystal, 'Si')

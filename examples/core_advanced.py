@@ -17,7 +17,7 @@ This example demonstrates:
 
 import numpy as np
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.utils.selection import AtomSelection
+from matsimpy.analysis.selection import AtomSelection
 from matsimpy.calculator import LennardJones
 
 print("=" * 70)
