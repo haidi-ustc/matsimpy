@@ -70,6 +70,10 @@ all = [
     "spglib",
 ]
 
+[project.scripts]
+matsimpy = "matsimpy.ai.cli:main"
+matsimpy-ai = "matsimpy.ai.cli:main"
+
 [tool.setuptools]
 # Automatically discover all packages (equivalent to find_packages())
 # This will find all packages under matsimpy/
