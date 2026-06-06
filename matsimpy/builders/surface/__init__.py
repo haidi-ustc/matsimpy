@@ -19,6 +19,5 @@ Examples:
 """
 
 from .slab import generate_slab, generate_symmetric_slab
-from .adsorbate import add_adsorbate
 
-__all__ = ["generate_slab", "generate_symmetric_slab", "add_adsorbate"]
+__all__ = ["generate_slab", "generate_symmetric_slab"]

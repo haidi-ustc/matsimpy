@@ -7,7 +7,7 @@ Generate random solid solution alloys with specified compositions.
 from typing import List, Optional
 import numpy as np
 from ...core import Crystal
-from ...transformation.chemical.substitution import substitute
+from .substitution import substitute
 
 
 def generate_random_alloy(

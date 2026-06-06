@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 from matsimpy.core import Crystal, Lattice
-from matsimpy.builders.defects import (
+from matsimpy.transformation.atomic import (
     create_vacancy,
     create_interstitial,
     create_substitution,
