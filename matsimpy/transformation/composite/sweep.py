@@ -5,9 +5,8 @@ Provides functionality to generate multiple structures by varying transformation
 parameters systematically.
 """
 
-import inspect
 import itertools
-from typing import List, Callable, Union, Any, Dict, Iterator, Tuple
+from typing import Callable, Iterable, List, Optional, Union, Any, Dict, Iterator, Tuple
 from ...core import Crystal, Molecule
 from ..base import _validate_structure
 
@@ -67,6 +66,12 @@ class ParameterSweep:
         base_structure: Union[Crystal, Molecule],
         transformations: Dict[str, Dict[str, Any]],
         mode: str = "cartesian",
+        custom_combinations: Optional[
+            Union[
+                Iterable[Dict[str, Dict[str, Any]]],
+                Callable[[Dict[str, Dict[str, Any]]], Iterable[Dict[str, Dict[str, Any]]]],
+            ]
+        ] = None,
     ):
         """
         Initialize parameter sweep.
@@ -80,7 +85,10 @@ class ParameterSweep:
             mode: Iteration mode:
                   - 'cartesian': All combinations (default)
                   - 'zip': Parallel iteration (one from each)
-                  - 'custom': User-defined (not yet implemented)
+                  - 'custom': Use caller-provided custom_combinations
+            custom_combinations: For custom mode, either an iterable of combination
+                                 dictionaries or a callable that receives
+                                 transformations and returns that iterable.
 
         Raises:
             ValueError: If mode is invalid or transformations are malformed
@@ -95,6 +103,7 @@ class ParameterSweep:
         self.base_structure = base_structure
         self.transformations = transformations
         self.mode = mode
+        self.custom_combinations = custom_combinations
 
         # Validate transformations
         self._validate_transformations()
@@ -135,7 +144,7 @@ class ParameterSweep:
         elif self.mode == "zip":
             return self._generate_zip()
         else:  # custom
-            raise NotImplementedError("Custom mode not yet implemented")
+            return self._generate_custom()
 
     def _generate_cartesian(self) -> List[Dict[str, Any]]:
         """Generate Cartesian product of all parameter combinations."""
@@ -204,6 +213,42 @@ class ParameterSweep:
             all_combinations.append(combo_dict)
 
         return all_combinations
+
+    def _generate_custom(self) -> List[Dict[str, Any]]:
+        """Use explicit caller-provided combinations."""
+        if self.custom_combinations is None:
+            raise ValueError(
+                "custom_combinations must be provided when mode='custom'"
+            )
+
+        if callable(self.custom_combinations):
+            combinations = list(self.custom_combinations(self.transformations))
+        else:
+            combinations = list(self.custom_combinations)
+
+        if not combinations:
+            raise ValueError("custom_combinations must contain at least one combination")
+
+        expected_names = set(self.transformations)
+        for index, combo in enumerate(combinations):
+            if not isinstance(combo, dict):
+                raise TypeError(
+                    f"custom combination {index} must be a dictionary"
+                )
+            combo_names = set(combo)
+            if combo_names != expected_names:
+                raise ValueError(
+                    f"custom combination {index} must include exactly these "
+                    f"transformations: {sorted(expected_names)}"
+                )
+            for transform_name, params in combo.items():
+                if not isinstance(params, dict):
+                    raise TypeError(
+                        f"custom combination {index} for '{transform_name}' "
+                        "must be a parameter dictionary"
+                    )
+
+        return combinations
 
     def __len__(self) -> int:
         """Return number of structures to generate."""

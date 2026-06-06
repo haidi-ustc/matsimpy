@@ -29,6 +29,7 @@ dependencies = [
     "scipy",
     "monty",
     "tabulate",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +40,6 @@ dev = [
     "pytest>=6.0",
     "pytest-cov>=2.12",
     "pytest-xdist",
-    "pyyaml",
     "prompt-toolkit",
 ]
 storage = [
@@ -112,4 +112,3 @@ markers = [
     "requires_pymatgen: marks tests that require pymatgen",
     "requires_storage: marks tests that require maggma",
 ]
-

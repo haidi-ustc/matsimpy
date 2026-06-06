@@ -230,9 +230,9 @@ class TestParameterSweep(unittest.TestCase):
         self.assertIn("cartesian", repr_str)
         self.assertIn("2", repr_str)  # Number of combinations
     
-    def test_custom_mode_not_implemented(self):
-        """Test that custom mode raises NotImplementedError."""
-        with self.assertRaises(NotImplementedError):
+    def test_custom_mode_requires_combinations(self):
+        """Test that custom mode requires explicit combinations."""
+        with self.assertRaises(ValueError):
             ParameterSweep(
                 base_structure=self.crystal,
                 transformations={
@@ -244,6 +244,28 @@ class TestParameterSweep(unittest.TestCase):
                 mode='custom'
             )
 
+    def test_custom_mode_uses_explicit_combinations(self):
+        """Test custom mode with caller-provided parameter combinations."""
+        sweep = ParameterSweep(
+            base_structure=self.crystal,
+            transformations={
+                'supercell': {
+                    'func': make_supercell,
+                    'params': {'scaling_matrix': [[2, 2, 2], [3, 3, 3]]}
+                }
+            },
+            mode='custom',
+            custom_combinations=[
+                {'supercell': {'scaling_matrix': [2, 1, 1]}},
+                {'supercell': {'scaling_matrix': [1, 2, 1]}},
+            ],
+        )
+
+        structures = list(sweep)
+
+        self.assertEqual(len(structures), 2)
+        self.assertEqual(len(structures[0][0]), len(self.crystal) * 2)
+        self.assertEqual(len(structures[1][0]), len(self.crystal) * 2)
+
 if __name__ == '__main__':
     unittest.main()
-

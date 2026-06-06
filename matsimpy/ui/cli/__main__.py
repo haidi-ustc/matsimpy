@@ -9,8 +9,21 @@ import os
 from pathlib import Path
 
 
+_CLI_EXTRA_HINT = (
+    "MatSimPy interactive CLI requires the optional 'cli' dependencies. "
+    "Install them with: pip install MatSimPy[cli]"
+)
+
+
 def main():
     """Main CLI entry point for MatSimPy."""
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        print("Usage: matsimpy [path_to_menu.json]")
+        print()
+        print("Launch the MatSimPy interactive CLI.")
+        print(_CLI_EXTRA_HINT)
+        return
+
     # Try to find the menu JSON file
     # First, check if provided as argument
     json_file = None
@@ -67,8 +80,15 @@ def main():
         print("  - Package directory")
         sys.exit(1)
 
-    # Import and run the menu
-    from matsimpy.ui.cli.menu import AdvancedInteractiveMenu
+    # Import and run the menu. Keep this import guarded so a base install can
+    # expose the console script without crashing on a missing optional extra.
+    try:
+        from matsimpy.ui.cli.menu import AdvancedInteractiveMenu
+    except ModuleNotFoundError as e:
+        if e.name and e.name.startswith("prompt_toolkit"):
+            print(f"Error: {_CLI_EXTRA_HINT}", file=sys.stderr)
+            sys.exit(2)
+        raise
 
     try:
         menu = AdvancedInteractiveMenu(json_file)

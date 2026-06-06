@@ -5,7 +5,7 @@ Provides operations specific to molecular structures like fragmentation,
 merging, and conformer generation.
 """
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import copy
 import numpy as np
 from ...core import Molecule
@@ -13,7 +13,9 @@ from .._helpers import copy_site_properties
 
 
 def fragment_molecule(
-    molecule: Molecule, break_indices: List[Tuple[int, int]]
+    molecule: Molecule,
+    break_indices: List[Tuple[int, int]],
+    cutoff: float = 1.8,
 ) -> List[Molecule]:
     """
     Fragment molecule by breaking bonds.
@@ -21,6 +23,7 @@ def fragment_molecule(
     Args:
         molecule: Molecule to fragment
         break_indices: List of (atom1, atom2) pairs to break
+        cutoff: Distance cutoff in Angstroms used to infer the molecular graph
 
     Returns:
         List of molecular fragments
@@ -30,11 +33,62 @@ def fragment_molecule(
         >>> # Break bond between atoms 1 and 2
         >>> fragments = fragment_molecule(mol, [(1, 2)])
     """
-    raise NotImplementedError(
-        "Molecule fragmentation is not implemented yet. A bond graph and "
-        "site-property remapping policy are required before this can return "
-        "chemically meaningful fragments."
-    )
+    n_atoms = len(molecule)
+    if n_atoms == 0:
+        return []
+    if cutoff <= 0:
+        raise ValueError("cutoff must be positive")
+
+    broken = set()
+    for atom1, atom2 in break_indices:
+        if not (0 <= atom1 < n_atoms and 0 <= atom2 < n_atoms):
+            raise IndexError("break_indices contain atom index outside molecule")
+        if atom1 == atom2:
+            raise ValueError("Cannot break a bond from an atom to itself")
+        broken.add(tuple(sorted((atom1, atom2))))
+
+    neighbors = molecule.get_neighbor_list(cutoff=cutoff)
+    graph: Dict[int, set[int]] = {i: set() for i in range(n_atoms)}
+    for atom, atom_neighbors in neighbors.items():
+        for neighbor, _distance in atom_neighbors:
+            edge = tuple(sorted((atom, neighbor)))
+            if edge in broken:
+                continue
+            graph[atom].add(neighbor)
+            graph[neighbor].add(atom)
+
+    fragments = []
+    seen = set()
+    source_site_properties = list(molecule.site_properties)
+    for start in range(n_atoms):
+        if start in seen:
+            continue
+        stack = [start]
+        component = []
+        seen.add(start)
+        while stack:
+            atom = stack.pop()
+            component.append(atom)
+            for neighbor in graph[atom]:
+                if neighbor not in seen:
+                    seen.add(neighbor)
+                    stack.append(neighbor)
+
+        component.sort()
+        site_properties = (
+            [source_site_properties[i] for i in component]
+            if source_site_properties
+            else None
+        )
+        fragments.append(
+            Molecule(
+                [molecule.species[i] for i in component],
+                molecule.positions[component].tolist(),
+                site_properties=site_properties,
+            )
+        )
+
+    return fragments
 
 
 def align_molecules(
@@ -112,10 +166,77 @@ def generate_conformers(
     Note:
         Requires RDKit for conformer generation.
     """
-    raise NotImplementedError(
-        "Conformer generation is not implemented yet. It requires a validated "
-        "Molecule-to-RDKit conversion and back-mapping of site metadata."
-    )
+    if n_conformers < 1:
+        raise ValueError("n_conformers must be at least 1")
+
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+    except ImportError as e:
+        raise ImportError(
+            "RDKit is required for conformer generation. "
+            "Install with: pip install rdkit or pip install MatSimPy[builders]"
+        ) from e
+
+    rdkit_mol = Chem.RWMol()
+    for symbol in molecule.species:
+        rdkit_mol.AddAtom(Chem.Atom(symbol))
+
+    for atom, atom_neighbors in molecule.get_neighbor_list(
+        kwargs.get("bond_cutoff", 1.8)
+    ).items():
+        for neighbor, _distance in atom_neighbors:
+            if atom < neighbor:
+                rdkit_mol.AddBond(atom, neighbor, Chem.BondType.SINGLE)
+
+    mol = rdkit_mol.GetMol()
+    Chem.SanitizeMol(mol, catchErrors=True)
+
+    params = AllChem.ETKDGv3()
+    params.randomSeed = int(kwargs.get("seed", 42))
+    params.pruneRmsThresh = float(kwargs.get("prune_rms", 0.1))
+    conformer_ids = list(AllChem.EmbedMultipleConfs(mol, numConfs=n_conformers, params=params))
+    if not conformer_ids:
+        raise RuntimeError("RDKit failed to generate any conformers")
+
+    energies = []
+    if kwargs.get("optimize", True):
+        try:
+            results = AllChem.MMFFOptimizeMoleculeConfs(mol)
+            energies = [energy for status, energy in results if status in (0, 1)]
+        except Exception:
+            try:
+                results = AllChem.UFFOptimizeMoleculeConfs(mol)
+                energies = [energy for status, energy in results if status in (0, 1)]
+            except Exception:
+                energies = []
+
+    keep_ids = conformer_ids
+    if energies and len(energies) == len(conformer_ids):
+        min_energy = min(energies)
+        keep_ids = [
+            conf_id
+            for conf_id, energy in zip(conformer_ids, energies)
+            if energy - min_energy <= energy_window
+        ]
+
+    conformers = []
+    site_properties = list(molecule.site_properties) if molecule.site_properties else None
+    for conf_id in keep_ids[:n_conformers]:
+        conf = mol.GetConformer(conf_id)
+        positions = []
+        for idx in range(mol.GetNumAtoms()):
+            pos = conf.GetAtomPosition(idx)
+            positions.append([pos.x, pos.y, pos.z])
+        conformers.append(
+            Molecule(
+                list(molecule.species),
+                positions,
+                site_properties=site_properties,
+            )
+        )
+
+    return conformers
 
 
 def merge_molecules(

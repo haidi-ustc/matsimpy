@@ -134,16 +134,49 @@ def test_perturb_lattice_does_not_reset_global_rng():
     np.testing.assert_allclose(actual_next, expected_next)
 
 
-def test_placeholder_apis_raise_not_implemented():
-    molecule = Molecule(["H", "H"], [[0, 0, 0], [0.74, 0, 0]])
-    crystal = Crystal(["He"], [[0, 0, 0]], Lattice.cubic(1.0))
+def test_fragment_molecule_breaks_inferred_bond_and_preserves_properties():
+    molecule = Molecule(
+        ["H", "H"],
+        [[0, 0, 0], [0.74, 0, 0]],
+        site_properties=[{"id": "left"}, {"id": "right"}],
+    )
 
-    with pytest.raises(NotImplementedError):
-        fragment_molecule(molecule, [(0, 1)])
-    with pytest.raises(NotImplementedError):
-        generate_conformers(molecule)
-    with pytest.raises(NotImplementedError):
-        get_niggli_reduced(crystal)
+    fragments = fragment_molecule(molecule, [(0, 1)])
+
+    assert len(fragments) == 2
+    assert [fragment.species for fragment in fragments] == [("H",), ("H",)]
+    assert fragments[0].site_properties == ({"id": "left"},)
+    assert fragments[1].site_properties == ({"id": "right"},)
+
+
+def test_optional_conformer_generation_requires_rdkit_or_returns_molecules():
+    molecule = Molecule(["H", "H"], [[0, 0, 0], [0.74, 0, 0]])
+    try:
+        conformers = generate_conformers(molecule, n_conformers=1)
+    except ImportError as e:
+        assert "RDKit is required" in str(e)
+    else:
+        assert len(conformers) == 1
+        assert isinstance(conformers[0], Molecule)
+
+
+def test_get_niggli_reduced_returns_new_crystal_and_preserves_metadata():
+    pytest.importorskip("spglib")
+    crystal = Crystal(
+        ["He"],
+        [[0.25, 0.25, 0.25]],
+        Lattice([[2.0, 0.1, 0.0], [0.0, 1.9, 0.2], [0.1, 0.0, 2.1]]),
+        site_properties=[{"tag": "kept"}],
+    )
+
+    reduced = get_niggli_reduced(crystal)
+
+    assert reduced is not crystal
+    assert isinstance(reduced, Crystal)
+    assert reduced.species == crystal.species
+    assert reduced.pbc == crystal.pbc
+    assert reduced.site_properties == crystal.site_properties
+    np.testing.assert_allclose(reduced.cart_positions, crystal.cart_positions, atol=1e-10)
 
 
 def test_standardize_cell_does_not_pass_stale_site_properties_when_cell_changes():

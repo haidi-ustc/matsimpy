@@ -1,7 +1,7 @@
 """Tests for surface builders."""
 import unittest
 import numpy as np
-from matsimpy.core import Crystal, Lattice
+from matsimpy.core import Crystal, Lattice, Molecule
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.builders.surface import generate_slab, generate_symmetric_slab, add_adsorbate
 
@@ -130,6 +130,24 @@ class TestAdsorbate(unittest.TestCase):
         self.assertEqual(len(self.slab.species), original_count)
         # New slab has more atoms
         self.assertEqual(len(with_ads.species), original_count + 1)
+
+    def test_add_adsorbate_molecule(self):
+        """Test adding a molecular adsorbate."""
+        adsorbate = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+        original_positions = self.slab.positions.copy()
+        slab_top = np.max(self.slab.cart_positions[:, 2])
+
+        with_ads = add_adsorbate(self.slab, adsorbate, (0.5, 0.5), height=2.0)
+
+        self.assertIsInstance(with_ads, Crystal)
+        self.assertEqual(len(with_ads.species), len(self.slab.species) + 2)
+        self.assertEqual(with_ads.species[-2:], ('C', 'O'))
+        self.assertAlmostEqual(
+            np.min(with_ads.cart_positions[-2:, 2]),
+            slab_top + 2.0,
+            places=6,
+        )
+        np.testing.assert_array_almost_equal(self.slab.positions, original_positions)
 
 if __name__ == '__main__':
     unittest.main()

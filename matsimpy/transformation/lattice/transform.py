@@ -92,7 +92,7 @@ def transform_lattice(
     )
 
 
-def get_niggli_reduced(crystal: Crystal) -> Crystal:
+def get_niggli_reduced(crystal: Crystal, eps: float = 1e-5) -> Crystal:
     """
     Get Niggli-reduced cell.
 
@@ -100,6 +100,7 @@ def get_niggli_reduced(crystal: Crystal) -> Crystal:
 
     Args:
         crystal: Crystal structure
+        eps: Numerical tolerance passed to spglib
 
     Returns:
         New Niggli-reduced crystal structure
@@ -109,11 +110,41 @@ def get_niggli_reduced(crystal: Crystal) -> Crystal:
         >>> reduced = get_niggli_reduced(crystal)
 
     Note:
-        Requires spglib for full implementation.
+        Requires spglib.
     """
-    raise NotImplementedError(
-        "Niggli reduction is not implemented yet. Install/use a reduction "
-        "backend and add explicit site metadata remapping before exposing this API."
+    try:
+        import spglib
+    except ImportError as e:
+        raise ImportError(
+            "spglib is required for Niggli reduction. "
+            "Install with: pip install spglib or pip install MatSimPy[analysis]"
+        ) from e
+
+    if eps <= 0:
+        raise ValueError("eps must be positive")
+
+    reduced_lattice_vectors = spglib.niggli_reduce(
+        crystal.lattice.lattice_vectors,
+        eps=eps,
+    )
+    if reduced_lattice_vectors is None:
+        raise ValueError("spglib failed to Niggli-reduce the lattice")
+
+    reduced_lattice = Lattice(reduced_lattice_vectors)
+    reduced_frac_positions = np.dot(
+        crystal.cart_positions,
+        np.linalg.inv(reduced_lattice_vectors),
+    )
+
+    return Crystal(
+        list(crystal.species),
+        reduced_frac_positions.tolist(),
+        lattice=reduced_lattice,
+        coords_are_cartesian=False,
+        pbc=list(crystal.pbc),
+        site_properties=(
+            list(crystal.site_properties) if crystal.site_properties else None
+        ),
     )
 
 
