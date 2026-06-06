@@ -32,6 +32,7 @@ Example:
 """
 
 import numpy as np
+from collections import deque
 from typing import Optional, Union, Dict, Any, List, Tuple, Set
 from scipy.spatial.distance import cdist
 from abc import ABC, abstractmethod
@@ -131,6 +132,8 @@ class StructureGraph(ABC):
             structure: Crystal or Molecule object.
             cutoff: Cutoff distance in Angstroms for defining edges.
         """
+        from .neighbors import validate_cutoff
+        validate_cutoff(cutoff)
         self.structure = structure
         self.cutoff = cutoff
         self._adjacency_matrix: Optional[np.ndarray] = None
@@ -278,11 +281,11 @@ class StructureGraph(ABC):
 
         # BFS
         visited = {0}
-        queue = [0]
+        queue = deque([0])
         adj = self.adjacency_matrix
 
         while queue:
-            node = queue.pop(0)
+            node = queue.popleft()
             for neighbor in range(self.num_nodes):
                 if adj[node, neighbor] == 1 and neighbor not in visited:
                     visited.add(neighbor)
@@ -319,11 +322,11 @@ class StructureGraph(ABC):
 
             # BFS
             component = []
-            queue = [start]
+            queue = deque([start])
             visited.add(start)
 
             while queue:
-                node = queue.pop(0)
+                node = queue.popleft()
                 component.append(node)
 
                 for neighbor in range(self.num_nodes):
@@ -360,10 +363,10 @@ class StructureGraph(ABC):
         # BFS with path tracking
         adj = self.adjacency_matrix
         visited = {start_idx}
-        queue = [(start_idx, [start_idx])]
+        queue = deque([(start_idx, [start_idx])])
 
         while queue:
-            node, path = queue.pop(0)
+            node, path = queue.popleft()
 
             for neighbor in range(self.num_nodes):
                 if adj[node, neighbor] == 1:
@@ -577,7 +580,7 @@ class StructureGraph(ABC):
                         rings.append(cycle)
 
             return rings
-        except:
+        except ImportError:
             return []
 
     def __repr__(self) -> str:
@@ -749,6 +752,7 @@ class CrystalGraph(StructureGraph):
                 adj = (dist_matrix < self.cutoff).astype(int)
                 np.fill_diagonal(adj, 0)
 
+            np.fill_diagonal(adj, 0)
             self._adjacency_matrix = adj
 
         return self._adjacency_matrix

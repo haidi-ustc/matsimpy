@@ -326,6 +326,9 @@ class Molecule(Structure):
         if self._cached_com is None:
             # Use .elements for better performance
             masses = np.array([elem.atomic_mass for elem in self.elements])
+            total_mass = np.sum(masses)
+            if total_mass == 0:
+                raise ValueError("Cannot compute center of mass for molecule with only zero-mass species")
             center_of_mass = np.average(self.positions, weights=masses, axis=0)
             self._cached_com = center_of_mass.tolist()
         return self._cached_com
@@ -879,6 +882,9 @@ class Molecule(Structure):
             1.234...
         """
         masses = np.array([elem.atomic_mass for elem in self.elements])
+        total_mass = np.sum(masses)
+        if total_mass == 0:
+            raise ValueError("Cannot compute moment of inertia for molecule with only zero-mass species")
         com = self.get_center_of_mass()
         positions = self.positions - com
         moment_tensor = np.zeros((3, 3))
@@ -926,6 +932,8 @@ class Molecule(Structure):
             >>> print(all_neighbors)  # {0: [(1, 1.2)], 1: [(0, 1.2)]}
         """
         n_atoms = len(self.positions)
+        from .neighbors import validate_cutoff
+        validate_cutoff(cutoff)
         if atom_index is not None:
             if not (0 <= atom_index < n_atoms):
                 raise IndexError(
@@ -1152,7 +1160,11 @@ class Molecule(Structure):
 
         result = from_ase(ase_atoms)
         if not isinstance(result, Molecule):
-            raise ValueError("ASE Atoms without cell/PBC will be converted to Molecule")
+            raise ValueError(
+                "Molecule.from_ase() requires non-periodic ASE Atoms (no cell/PBC). "
+                f"Got {type(result).__name__} instead. "
+                "Use Crystal.from_ase() for periodic structures."
+            )
         return result
 
     def to_code(self, code: str, filename: str, **kwargs) -> None:

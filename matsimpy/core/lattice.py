@@ -533,6 +533,13 @@ class Lattice(MSONable):
             if param <= 0:
                 raise ValueError(f"Lattice parameter must be positive, got {param}")
 
+        for angle_name, angle in [("alpha", alpha), ("beta", beta), ("gamma", gamma)]:
+            if not (0 < angle < 180):
+                raise ValueError(
+                    f"Invalid {angle_name} angle: {angle} degrees. "
+                    f"Angles must be between 0 and 180 degrees (exclusive)."
+                )
+
         alpha = np.radians(alpha)
         beta = np.radians(beta)
         gamma = np.radians(gamma)
@@ -765,39 +772,7 @@ class Lattice(MSONable):
         # Triclinic: all parameters can vary
         return cls.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
 
-    def __hash__(self) -> int:
-        """
-        Generate a hash for the lattice with consistent floating-point handling.
-
-        Lattice vectors are rounded to 8 decimal places to handle floating-point
-        precision issues, matching the approach used in Structure. This ensures
-        that lattices with very similar (but not identical) vectors hash to the
-        same value.
-
-        Returns:
-            int: Hash value for the lattice.
-
-        Note:
-            This method enables Lattice objects to be used as dictionary keys
-            or in sets.
-
-        Example:
-            >>> lat1 = Lattice.cubic(5.0)
-            >>> lat2 = Lattice.cubic(5.0)
-            >>> hash(lat1) == hash(lat2)
-            True
-        """
-        import hashlib
-
-        # Round to 5 decimal places so that any two lattices considered equal by
-        # __eq__ (atol=1e-6) map to the same rounded representation and thus the
-        # same hash.  The rounding bucket (5e-6) is strictly larger than the
-        # equality tolerance (1e-6), satisfying the hash contract.
-        rounded = np.round(self.lattice_vectors, decimals=5).tolist()
-        hash_str = str({"lattice_vectors": rounded}).encode("utf-8")
-        hash_bytes = hashlib.sha256(hash_str).digest()
-        # Use first 8 bytes for standard Python hash size (64-bit)
-        return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
+    __hash__ = None
 
     def __eq__(self, other: Any) -> bool:
         """

@@ -168,15 +168,14 @@ class TestStructureComprehensive(unittest.TestCase):
         self.assertEqual(len(struct), 3)
     
     def test_structure_hash(self):
-        """Test hashing."""
+        """Test that structures are unhashable (__hash__ = None)."""
         species = ['Si', 'O']
         positions = [[0, 0, 0], [1, 1, 1]]
         lattice = Lattice.cubic(10.0)
-        struct1 = Crystal(species, positions, lattice)
-        struct2 = Crystal(species, positions, lattice)
-        
-        # Same structure should have same hash
-        self.assertEqual(hash(struct1), hash(struct2))
+        struct = Crystal(species, positions, lattice)
+
+        with self.assertRaises(TypeError):
+            hash(struct)
     
     def test_structure_as_dict(self):
         """Test dictionary representation."""

@@ -104,7 +104,7 @@ class Calculator(ABC, MSONable):
         self._calculation_performed = False
         # Record the structure identity before running so that callers can
         # cheaply detect whether results are stale for a different structure.
-        self._last_structure_hash = hash(structure)
+        self._last_structure_hash = structure._structural_hash()
 
         # Perform the actual calculation (implemented by subclasses)
         self._compute()

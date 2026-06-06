@@ -392,6 +392,8 @@ class Composition(MSONable):
             self._composition.items(),
             key=lambda x: Element.get_element(x[0]).atomic_no,
         )
+        if len(sorted_elements) > 26:
+            raise ValueError("anonymous_formula supports at most 26 unique species")
         # Assign labels A, B, C, ...
         labels = {}
         for i, (element, _) in enumerate(sorted_elements):
@@ -683,6 +685,8 @@ class Composition(MSONable):
             1.0
         """
         total_mass = self.mass
+        if total_mass == 0:
+            raise ValueError("Cannot compute mass fractions for composition with zero total mass")
         fractions = {}
 
         for element, count in self._composition.items():

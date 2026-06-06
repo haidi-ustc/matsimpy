@@ -517,33 +517,9 @@ class Structure(ABC, MSONable):
         """
         return self.from_dict(self.as_dict())
 
-    def __hash__(self) -> int:
-        """
-        Generate a hash for the structure.
+    __hash__ = None
 
-        Positions are rounded to 8 decimal places to handle floating-point
-        precision issues. This ensures that structures with nearly identical
-        positions (within tolerance) hash to the same value.
-
-        Returns:
-            int: Hash value for the structure.
-
-        Note:
-            This method enables Structure objects to be used as dictionary keys
-            or in sets. The hash is based on species, positions, and lattice.
-
-        Example:
-            >>> crystal1 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
-            >>> crystal2 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
-            >>> hash(crystal1) == hash(crystal2)
-            True
-            >>> {crystal1: 'value'}  # Can use as dictionary key
-            {<Crystal object>: 'value'}
-        """
-        # Round positions to 7 decimal places (bucket = 5e-8).  The equality
-        # tolerance POSITION_TOL = 1e-8 is strictly less than 5e-8, so any two
-        # positions considered equal by __eq__ will round identically here and
-        # produce the same hash — satisfying the hash contract.
+    def _structural_hash(self) -> int:
         hash_dict = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
@@ -553,10 +529,8 @@ class Structure(ABC, MSONable):
         if self.lattice is not None:
             hash_dict["lattice"] = self.lattice.as_dict()
 
-        # Use hashlib to generate a SHA256 hash
         hash_str = str(hash_dict).encode("utf-8")
         hash_bytes = hashlib.sha256(hash_str).digest()
-        # Use first 8 bytes for standard Python hash size (64-bit)
         return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
 
     def __eq__(self, other: Any) -> bool:
@@ -687,7 +661,7 @@ class Structure(ABC, MSONable):
             return False
         return (
             not calc._calculation_performed
-            or getattr(calc, "_last_structure_hash", None) != hash(self)
+            or getattr(calc, "_last_structure_hash", None) != self._structural_hash()
         )
 
     def get_potential_energy(self) -> float:

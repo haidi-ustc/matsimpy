@@ -301,14 +301,13 @@ class TestStructureSerialization(unittest.TestCase):
         self.assertIsNone(new_struct.lattice)
     
     def test_hash(self):
-        """Test __hash__ method."""
-        hash1 = hash(self.struct)
-        hash2 = hash(self.struct)
-        self.assertEqual(hash1, hash2)  # Should be consistent
-        
-        # Different structure should have different hash
+        """Test that structures are unhashable (__hash__ = None)."""
+        with self.assertRaises(TypeError):
+            hash(self.struct)
+
         struct2 = Molecule(['H', 'H'], [[0, 0, 0], [1, 1, 1]])
-        self.assertNotEqual(hash(self.struct), hash(struct2))
+        with self.assertRaises(TypeError):
+            hash(struct2)
 
 class TestStructureEdgeCases(unittest.TestCase):
     """Test Structure edge cases and error handling."""

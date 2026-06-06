@@ -4,9 +4,38 @@ This module centralizes fixed-radius periodic neighbor lookup so runtime code
 does not depend directly on third-party neighbor modules.
 """
 
+import math
 from typing import Tuple
 
 import numpy as np
+
+
+def validate_cutoff(cutoff, *, allow_zero=True):
+    """Validate a neighbor-list cutoff radius.
+
+    Args:
+        cutoff: The cutoff value to validate.
+        allow_zero: Whether zero-radius queries are permitted.
+
+    Returns:
+        float: The validated cutoff.
+
+    Raises:
+        ValueError: If cutoff is negative, NaN, or infinite.
+        TypeError: If cutoff is not numeric.
+    """
+    if not isinstance(cutoff, (int, float, np.integer, np.floating)):
+        raise TypeError(f"cutoff must be a number, got {type(cutoff).__name__}")
+    value = float(cutoff)
+    if math.isnan(value):
+        raise ValueError("cutoff must not be NaN")
+    if math.isinf(value):
+        raise ValueError("cutoff must be finite")
+    if value < 0:
+        raise ValueError(f"cutoff must be non-negative, got {value}")
+    if value == 0 and not allow_zero:
+        raise ValueError("cutoff must be positive, got 0")
+    return value
 
 
 def find_points_in_spheres(
@@ -107,4 +136,4 @@ def _periodic_image_ranges(
     )
 
 
-__all__ = ["find_points_in_spheres"]
+__all__ = ["find_points_in_spheres", "validate_cutoff"]

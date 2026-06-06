@@ -461,22 +461,7 @@ class Site(MSONable):
             and self.properties == other.properties
         )
 
-    def __hash__(self) -> int:
-        """
-        Hash consistent with __eq__.
-
-        Based on species and position rounded to 7 decimal places, matching
-        the tolerance used in __eq__ (numpy.allclose default ~1e-8).
-        Properties are intentionally excluded to keep the hash cheap and to
-        mirror the common pattern of using sites as structural keys.
-
-        Returns:
-            int: Hash value for use in sets and as dict keys.
-        """
-        return hash((
-            self._specie,
-            tuple(np.round(self._position, decimals=7).tolist()),
-        ))
+    __hash__ = None
 
 
 class CrystalSite(Site):
@@ -937,19 +922,4 @@ class CrystalSite(Site):
             and self._coords_are_cartesian == other._coords_are_cartesian
         )
 
-    def __hash__(self) -> int:
-        """
-        Hash consistent with __eq__.
-
-        Uses fractional position (rounded to 7 d.p.) and the lattice hash so
-        that two sites at the same fractional location in the same lattice
-        produce identical hashes when they compare equal.
-
-        Returns:
-            int: Hash value for use in sets and as dict keys.
-        """
-        return hash((
-            self._specie,
-            tuple(np.round(self._frac_position, decimals=7).tolist()),
-            hash(self._lattice),
-        ))
+    __hash__ = None
