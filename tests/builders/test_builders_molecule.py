@@ -44,6 +44,22 @@ class TestLinearMolecule(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_linear(['H', 'H'], [0.74, 0.74])  # Too many bonds
 
+    def test_build_linear_zero_axis_raises(self):
+        with self.assertRaises(ValueError):
+            build_linear(['H', 'H'], [0.74], axis=[0, 0, 0])
+
+    def test_build_linear_nan_axis_raises(self):
+        with self.assertRaises(ValueError):
+            build_linear(['H', 'H'], [0.74], axis=[float('nan'), 0, 0])
+
+    def test_build_linear_negative_length_raises(self):
+        with self.assertRaises(ValueError):
+            build_linear(['H', 'H'], [-0.5])
+
+    def test_build_linear_wrong_axis_shape_raises(self):
+        with self.assertRaises(ValueError):
+            build_linear(['H', 'H'], [0.74], axis=[1, 0])
+
 class TestBentMolecule(unittest.TestCase):
     """Tests for bent molecule generation."""
     

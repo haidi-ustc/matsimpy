@@ -20,13 +20,13 @@ class TestFromSpaceGroup(unittest.TestCase):
             225,  # Fm-3m
             ['Na', 'Cl'],
             [[0, 0, 0], [0.5, 0.5, 0.5]],
-            lattice=lattice
+            lattice=lattice,
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
         self.assertGreater(len(crystal.species), 0)
         self.assertEqual(crystal.lattice.a, 5.0)
-        # Verify lattice parameters are correct
         self.assertAlmostEqual(crystal.lattice.b, 5.0, places=2)
         self.assertAlmostEqual(crystal.lattice.c, 5.0, places=2)
     
@@ -39,11 +39,11 @@ class TestFromSpaceGroup(unittest.TestCase):
                 'Fm-3m',
                 ['Na', 'Cl'],
                 [[0, 0, 0], [0.5, 0.5, 0.5]],
-                lattice=lattice
+                lattice=lattice,
+                validate_sg=False,
             )
             self.assertIsInstance(crystal, Crystal)
         except ValueError:
-            # May fail if symbol not in data
             pass
     
     def test_from_space_group_with_lattice_params(self):
@@ -52,11 +52,38 @@ class TestFromSpaceGroup(unittest.TestCase):
             221,  # Pm-3m
             ['Si'],
             [[0, 0, 0]],
-            lattice_params=5.43
+            lattice_params=5.43,
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
         self.assertAlmostEqual(crystal.lattice.a, 5.43, places=2)
+
+    def test_from_space_group_validates_requested_group_by_default(self):
+        """Default SG generation should reject inputs that detect as another group."""
+        lattice = Lattice.cubic(5.64)
+
+        with self.assertRaisesRegex(ValueError, "not requested 225"):
+            from_space_group(
+                225,
+                ['Na', 'Cl'],
+                [[0, 0, 0], [0.5, 0.5, 0.5]],
+                lattice=lattice,
+            )
+
+    def test_from_space_group_can_disable_exact_validation(self):
+        """Callers may still use the helper as a loose symmetry expansion path."""
+        lattice = Lattice.cubic(5.64)
+
+        crystal = from_space_group(
+            225,
+            ['Na', 'Cl'],
+            [[0, 0, 0], [0.5, 0.5, 0.5]],
+            lattice=lattice,
+            validate_sg=False,
+        )
+
+        self.assertIsInstance(crystal, Crystal)
     
     def test_from_space_group_invalid(self):
         """Test invalid space group."""
@@ -65,7 +92,8 @@ class TestFromSpaceGroup(unittest.TestCase):
                 999,  # Invalid
                 ['Si'],
                 [[0, 0, 0]],
-                lattice_params=5.43
+                lattice_params=5.43,
+                validate_sg=False,
             )
     
     def test_from_space_group_missing_params(self):
@@ -74,8 +102,8 @@ class TestFromSpaceGroup(unittest.TestCase):
             from_space_group(
                 225,
                 ['Si'],
-                [[0, 0, 0]]
-                # Missing lattice or lattice_params
+                [[0, 0, 0]],
+                validate_sg=False,
             )
     
     def test_from_space_group_generates_structure(self):
@@ -85,7 +113,8 @@ class TestFromSpaceGroup(unittest.TestCase):
             1,  # P1 - simplest space group
             ['Si'],
             [[0, 0, 0]],
-            lattice=lattice
+            lattice=lattice,
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
@@ -94,21 +123,21 @@ class TestFromSpaceGroup(unittest.TestCase):
     
     def test_from_space_group_different_systems(self):
         """Test space group generation for different crystal systems."""
-        # Test cubic
         crystal1 = from_space_group(
             221,  # Pm-3m
             ['Si'],
             [[0, 0, 0]],
-            lattice_params=5.43
+            lattice_params=5.43,
+            validate_sg=False,
         )
         self.assertIsInstance(crystal1, Crystal)
         
-        # Test tetragonal
         crystal2 = from_space_group(
             123,  # P4/mmm
             ['Ti'],
             [[0, 0, 0]],
-            lattice_params=[3.8, 9.6]
+            lattice_params=[3.8, 9.6],
+            validate_sg=False,
         )
         self.assertIsInstance(crystal2, Crystal)
 
@@ -121,7 +150,8 @@ class TestFromCrystalSystem(unittest.TestCase):
             'Cubic',
             ['Si'],
             [[0, 0, 0]],
-            5.43
+            5.43,
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
@@ -135,7 +165,8 @@ class TestFromCrystalSystem(unittest.TestCase):
             'Tetragonal',
             ['Ti', 'O'],
             [[0, 0, 0], [0.5, 0.5, 0.5]],
-            [3.8, 9.6]
+            [3.8, 9.6],
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
@@ -148,7 +179,8 @@ class TestFromCrystalSystem(unittest.TestCase):
             'Orthorhombic',
             ['Si'],
             [[0, 0, 0]],
-            [5.0, 6.0, 7.0]
+            [5.0, 6.0, 7.0],
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
@@ -162,9 +194,23 @@ class TestFromCrystalSystem(unittest.TestCase):
             'Hexagonal',
             ['Mg'],
             [[0, 0, 0]],
-            [3.21, 5.21]
+            [3.21, 5.21],
+            validate_sg=False,
         )
         
+        self.assertIsInstance(crystal, Crystal)
+        self.assertAlmostEqual(crystal.lattice.a, 3.21, places=2)
+        self.assertAlmostEqual(crystal.lattice.c, 5.21, places=2)
+
+    def test_from_crystal_system_implicit_default_does_not_require_exact_sg(self):
+        """Implicit SG defaults are lattice-system helpers, not exact requests."""
+        crystal = from_crystal_system(
+            'Hexagonal',
+            ['Mg'],
+            [[0, 0, 0]],
+            [3.21, 5.21],
+        )
+
         self.assertIsInstance(crystal, Crystal)
         self.assertAlmostEqual(crystal.lattice.a, 3.21, places=2)
         self.assertAlmostEqual(crystal.lattice.c, 5.21, places=2)
@@ -176,7 +222,8 @@ class TestFromCrystalSystem(unittest.TestCase):
             ['Si'],
             [[0, 0, 0]],
             5.43,
-            space_group=227  # Fd-3m
+            space_group=227,  # Fd-3m
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
@@ -187,7 +234,8 @@ class TestFromCrystalSystem(unittest.TestCase):
             'Monoclinic',
             ['Si'],
             [[0, 0, 0]],
-            [5.0, 6.0, 7.0, 90.0]
+            [5.0, 6.0, 7.0, 90.0],
+            validate_sg=False,
         )
         
         self.assertIsInstance(crystal, Crystal)
@@ -207,9 +255,8 @@ class TestListSpaceGroupsBySystem(unittest.TestCase):
         self.assertIn('Hexagonal', result)
         self.assertIn('Triclinic', result)
         
-        # Check cubic space groups
         cubic_sgs = result['Cubic']
-        self.assertEqual(len(cubic_sgs), 36)  # 195-230
+        self.assertEqual(len(cubic_sgs), 36)
         self.assertEqual(cubic_sgs[0], 195)
         self.assertEqual(cubic_sgs[-1], 230)
     
@@ -227,7 +274,7 @@ class TestListSpaceGroupsBySystem(unittest.TestCase):
         tetragonal_sgs = list_space_groups_by_system('Tetragonal')
         
         self.assertIsInstance(tetragonal_sgs, list)
-        self.assertEqual(len(tetragonal_sgs), 68)  # 75-142
+        self.assertEqual(len(tetragonal_sgs), 68)
         self.assertEqual(tetragonal_sgs[0], 75)
         self.assertEqual(tetragonal_sgs[-1], 142)
     
@@ -243,12 +290,10 @@ class TestHelperFunctions(unittest.TestCase):
         """Test space group number conversion."""
         from matsimpy.builders.bulk.symmetry import _get_space_group_number
         
-        # Test integer
         self.assertEqual(_get_space_group_number(225), 225)
         self.assertEqual(_get_space_group_number(1), 1)
         self.assertIsNone(_get_space_group_number(999))
         
-        # Test symbol (if data available)
         sg_num = _get_space_group_number('Fm-3m', use_data=True)
         if sg_num:
             self.assertIsInstance(sg_num, int)
@@ -266,24 +311,21 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(_get_default_space_group('Orthorhombic'), 47)
         self.assertEqual(_get_default_space_group('Tetragonal'), 123)
         self.assertEqual(_get_default_space_group('Trigonal'), 166)
-        self.assertEqual(_get_default_space_group('Invalid'), 221)  # Default
+        self.assertEqual(_get_default_space_group('Invalid'), 221)
     
     def test_create_lattice_from_system(self):
         """Test lattice creation from crystal system."""
         from matsimpy.builders.bulk.symmetry import _create_lattice_from_system_by_name
         
-        # Cubic
         lattice = _create_lattice_from_system_by_name('Cubic', 5.0)
         self.assertAlmostEqual(lattice.a, 5.0)
         self.assertAlmostEqual(lattice.b, 5.0)
         self.assertAlmostEqual(lattice.c, 5.0)
         
-        # Tetragonal
         lattice = _create_lattice_from_system_by_name('Tetragonal', [4.0, 6.0])
         self.assertAlmostEqual(lattice.a, 4.0)
         self.assertAlmostEqual(lattice.c, 6.0)
         
-        # Orthorhombic
         lattice = _create_lattice_from_system_by_name('Orthorhombic', [5.0, 6.0, 7.0])
         self.assertAlmostEqual(lattice.a, 5.0)
         self.assertAlmostEqual(lattice.b, 6.0)
@@ -293,7 +335,6 @@ class TestHelperFunctions(unittest.TestCase):
         """Test space group validation function."""
         from matsimpy.builders.bulk.symmetry import _validate_space_group
         
-        # Create a simple cubic structure
         lattice = Lattice.cubic(5.43)
         crystal = Crystal(
             ['Si', 'Si'],
@@ -301,15 +342,11 @@ class TestHelperFunctions(unittest.TestCase):
             lattice
         )
         
-        # Test validation (may return True or False depending on structure)
-        # The function should not raise an error
         result = _validate_space_group(crystal, 227, 1e-5, -1.0)
         self.assertIsInstance(result, bool)
         
-        # Test with different space group
         result2 = _validate_space_group(crystal, 1, 1e-5, -1.0)
         self.assertIsInstance(result2, bool)
 
 if __name__ == '__main__':
     unittest.main()
-

@@ -6,16 +6,9 @@ Generate crystal structures from space groups and crystal systems.
 
 from typing import List, Optional, Union, Dict, Any
 import numpy as np
+import spglib
 from ...core import Crystal, Lattice
 from ...symmetry import SymmetryAnalyzer
-
-try:
-    import spglib
-
-    HAS_SPGLIB = True
-except ImportError:
-    HAS_SPGLIB = False
-    spglib = None
 
 
 def from_space_group(
@@ -64,6 +57,7 @@ def from_space_group(
     """
     symprec = kwargs.get("symprec", 1e-5)
     angle_tolerance = kwargs.get("angle_tolerance", -1.0)
+    validate_sg = kwargs.pop("validate_sg", True)
     use_symmetry_data = kwargs.get("use_symmetry_data", True)
 
     # Convert space group to number if needed
@@ -77,22 +71,22 @@ def from_space_group(
             raise ValueError("Either 'lattice' or 'lattice_params' must be provided")
         lattice = _create_lattice_from_system(space_group_number, lattice_params)
 
-    # Generate structure using spglib
-    if HAS_SPGLIB:
-        return _generate_from_spglib(
-            space_group_number, species, positions, lattice, symprec, angle_tolerance
+    crystal = _generate_from_spglib(
+        space_group_number,
+        species,
+        positions,
+        lattice,
+        symprec,
+        angle_tolerance,
+        require_requested_group=validate_sg,
+    )
+
+    if validate_sg:
+        _raise_if_space_group_mismatch(
+            crystal, space_group_number, symprec, angle_tolerance
         )
-    else:
-        # Fallback: generate using symmetry operations from data
-        if use_symmetry_data:
-            return _generate_from_symmetry_data(
-                space_group_number, species, positions, lattice
-            )
-        else:
-            raise ImportError(
-                "spglib is required for space group generation. "
-                "Install with: pip install spglib"
-            )
+
+    return crystal
 
 
 def from_crystal_system(
@@ -140,7 +134,9 @@ def from_crystal_system(
         ...     [3.8, 9.6]
         ... )
     """
-    # Map crystal system to default space group if not provided
+    # Map crystal system to default space group if not provided. This default is
+    # only a lattice-system helper, not an exact space-group request by the user.
+    explicit_space_group = space_group is not None
     if space_group is None:
         space_group = _get_default_space_group(crystal_system)
 
@@ -148,6 +144,7 @@ def from_crystal_system(
     lattice = _create_lattice_from_system_by_name(crystal_system, lattice_params)
 
     # Generate using space group
+    kwargs.setdefault("validate_sg", explicit_space_group)
     return from_space_group(space_group, species, positions, lattice=lattice, **kwargs)
 
 
@@ -326,13 +323,17 @@ def _generate_from_spglib(
     lattice: Lattice,
     symprec: float,
     angle_tolerance: float,
+    require_requested_group: bool = True,
 ) -> Crystal:
     """
     Generate structure using spglib with requested space group.
 
-    First attempts to get symmetry operations from spglib by analyzing
-    a structure that should match the space group. Then applies those
-    operations and validates the result.
+    Gets symmetry operations from spglib by analyzing an input structure that
+    should already match the requested space group, then applies those
+    operations. If require_requested_group is True and spglib detects another
+    group, the caller's exact space-group contract cannot be satisfied and this
+    raises. Otherwise, the detected operations are used as a loose symmetry
+    expansion path.
     """
     # Convert species to atomic numbers
     analyzer = SymmetryAnalyzer()
@@ -351,9 +352,9 @@ def _generate_from_spglib(
     )
 
     if dataset is None:
-        # If spglib can't find symmetry, try using symmetry data
-        return _generate_from_symmetry_data(
-            space_group_number, species, positions, lattice
+        raise ValueError(
+            f"spglib could not detect symmetry for requested space group "
+            f"{space_group_number}"
         )
 
     # Get symmetry operations
@@ -368,12 +369,11 @@ def _generate_from_spglib(
         translations = dataset["translations"]
         detected_sg = dataset["number"]
 
-    # Check if detected space group matches requested
-    # If not, we need to use symmetry data instead
-    if int(detected_sg) != space_group_number:
-        # Space groups don't match - use symmetry data to enforce correct one
-        return _generate_from_symmetry_data(
-            space_group_number, species, positions, lattice
+    if require_requested_group and int(detected_sg) != space_group_number:
+        raise ValueError(
+            f"Input positions/lattice have space group {int(detected_sg)}, "
+            f"not requested {space_group_number}. Provide an asymmetric unit "
+            "compatible with the requested space group."
         )
 
     # Generate all equivalent positions using symmetry operations
@@ -409,108 +409,7 @@ def _generate_from_spglib(
             unique_positions.append(pos)
             unique_species.append(spec)
 
-    # Create crystal and validate
-    crystal = Crystal(unique_species, unique_positions, lattice)
-
-    # Validate that generated structure has correct space group
-    if not _validate_space_group(crystal, space_group_number, symprec, angle_tolerance):
-        # Validation failed - try using symmetry data
-        return _generate_from_symmetry_data(
-            space_group_number, species, positions, lattice
-        )
-
-    return crystal
-
-
-def _generate_from_symmetry_data(
-    space_group_number: int,
-    species: List[str],
-    positions: List[List[float]],
-    lattice: Lattice,
-) -> Crystal:
-    """
-    Generate structure using symmetry data (fallback when spglib doesn't match).
-
-    Uses generator matrices from symmetry data to build symmetry operations.
-    This is a simplified implementation - full decoding of encodings is complex.
-    """
-    analyzer = SymmetryAnalyzer()
-
-    # Get space group info
-    sg_info = None
-    if analyzer._symmetry_data and "space_group_encoding" in analyzer._symmetry_data:
-        for sg_symbol, info in analyzer._symmetry_data["space_group_encoding"].items():
-            if info.get("int_number") == space_group_number:
-                sg_info = info
-                break
-
-    if sg_info is None:
-        # Fallback: return structure with given positions
-        # This happens if space group not found in data
-        return Crystal(species, positions, lattice)
-
-    # Get generator matrices from symmetry data
-    generator_matrices = analyzer._symmetry_data.get("generator_matrices", {})
-    translations_map = analyzer._symmetry_data.get("translations", {})
-
-    # Build symmetry operations from generators
-    # This is a simplified approach - full implementation would decode the encoding string
-    # For now, we'll use spglib to get operations if available, or return basic structure
-    if HAS_SPGLIB:
-        # Try to create a structure that matches the space group
-        # Use common Wyckoff positions for the space group
-        positions_array = np.array(positions)
-
-        # Get symmetry operations by analyzing a structure that should match
-        # This is a workaround since spglib doesn't directly provide operations for a space group
-        numbers = [analyzer._element_to_number(spec) for spec in species]
-        lattice_matrix = lattice.lattice_vectors
-
-        # Try to get symmetry
-        dataset = spglib.get_symmetry_dataset(
-            (lattice_matrix, positions_array, numbers), symprec=1e-5
-        )
-
-        if dataset:
-            if hasattr(dataset, "rotations"):
-                rotations = dataset.rotations
-                translations = dataset.translations
-            else:
-                rotations = dataset["rotations"]
-                translations = dataset["translations"]
-
-            # Apply operations to generate full structure
-            all_positions = []
-            all_species = []
-
-            for i, pos in enumerate(positions_array):
-                species_atom = species[i]
-                for rot, trans in zip(rotations, translations):
-                    new_pos = rot @ pos + trans
-                    new_pos = new_pos % 1.0
-                    new_pos = new_pos % 1.0
-                    all_positions.append(new_pos.tolist())
-                    all_species.append(species_atom)
-
-            # Remove duplicates
-            unique_positions = []
-            unique_species = []
-            tolerance = 1e-5
-
-            for pos, spec in zip(all_positions, all_species):
-                is_duplicate = False
-                for existing_pos in unique_positions:
-                    if np.allclose(pos, existing_pos, atol=tolerance):
-                        is_duplicate = True
-                        break
-                if not is_duplicate:
-                    unique_positions.append(pos)
-                    unique_species.append(spec)
-
-            return Crystal(unique_species, unique_positions, lattice)
-
-    # Fallback: return structure with given positions
-    return Crystal(species, positions, lattice)
+    return Crystal(unique_species, unique_positions, lattice)
 
 
 def _validate_space_group(
@@ -528,9 +427,6 @@ def _validate_space_group(
     Returns:
         True if crystal matches requested space group, False otherwise
     """
-    if not HAS_SPGLIB:
-        return True  # Can't validate without spglib
-
     analyzer = SymmetryAnalyzer(symprec=symprec, angle_tolerance=angle_tolerance)
 
     try:
@@ -543,6 +439,25 @@ def _validate_space_group(
         return int(detected_sg) == space_group_number
     except Exception:
         return False
+
+
+def _raise_if_space_group_mismatch(
+    crystal: Crystal, space_group_number: int, symprec: float, angle_tolerance: float
+) -> None:
+    """Raise if spglib analysis does not match the requested space group."""
+    analyzer = SymmetryAnalyzer(symprec=symprec, angle_tolerance=angle_tolerance)
+    result = analyzer.analyze_crystal(crystal)
+    detected_sg = result.get("space_group_number")
+    if detected_sg is None:
+        raise ValueError(
+            f"Could not validate generated structure against requested space "
+            f"group {space_group_number}"
+        )
+    if int(detected_sg) != space_group_number:
+        raise ValueError(
+            f"Generated structure has space group {int(detected_sg)}, "
+            f"not requested {space_group_number}"
+        )
 
 
 def list_space_groups_by_system(

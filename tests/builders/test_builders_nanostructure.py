@@ -223,10 +223,38 @@ class TestMagicAngleTwisted:
         ]))
         layer = Crystal(species, positions, lattice_2d)
         
-        twisted = build_magic_angle_twisted(layer, n=1, m=1)
+        twisted = build_magic_angle_twisted(layer, n=1, m=2)
         
         assert isinstance(twisted, Crystal)
         assert len(twisted.species) == 4
+
+    def test_build_magic_angle_equal_indices_raises(self):
+        species = ['C', 'C']
+        positions = [[0, 0, 0], [1.42, 0, 0]]
+        lattice_2d = Lattice(np.array([
+            [2.46, 0, 0],
+            [1.23, 2.13, 0],
+            [0, 0, 10.0]
+        ]))
+        layer = Crystal(species, positions, lattice_2d)
+        with pytest.raises(ValueError, match="Equal indices"):
+            build_magic_angle_twisted(layer, n=1, m=1)
+
+    def test_build_magic_angle_invalid_n_m(self):
+        species = ['C', 'C']
+        positions = [[0, 0, 0], [1.42, 0, 0]]
+        lattice_2d = Lattice(np.array([
+            [2.46, 0, 0],
+            [1.23, 2.13, 0],
+            [0, 0, 10.0]
+        ]))
+        layer = Crystal(species, positions, lattice_2d)
+        with pytest.raises(ValueError, match="n must be"):
+            build_magic_angle_twisted(layer, n=-1, m=2)
+        with pytest.raises(ValueError, match="n must be"):
+            build_magic_angle_twisted(layer, n=0, m=2)
+        with pytest.raises(ValueError, match="m must be"):
+            build_magic_angle_twisted(layer, n=2, m=0)
 
 class TestTwistedMultilayer:
     """Test twisted multilayer builders."""
@@ -276,7 +304,7 @@ class TestTwistedMultilayer:
         ]))
         layer = Crystal(species, positions, lattice_2d)
         
-        with pytest.raises(ValueError, match="num_layers must be at least 2"):
+        with pytest.raises(ValueError, match="num_layers must be an integer"):
             build_twisted_multilayer(layer, 1, 1.1)
     
     def test_build_twisted_multilayer_invalid_angles(self):
@@ -292,3 +320,34 @@ class TestTwistedMultilayer:
         
         with pytest.raises(ValueError, match="Number of twist angles"):
             build_twisted_multilayer(layer, 3, [1.1])  # Should be 2 angles for 3 layers
+
+    def test_build_twisted_multilayer_layer_separations(self):
+        species = ['C', 'C']
+        positions = [[0, 0, 0], [1.42, 0, 0]]
+        lattice_2d = Lattice(np.array([
+            [2.46, 0, 0],
+            [1.23, 2.13, 0],
+            [0, 0, 10.0]
+        ]))
+        layer = Crystal(species, positions, lattice_2d)
+        spacing = 3.35
+        ml = build_twisted_multilayer(layer, 3, 1.1, layer_spacing=spacing)
+        cart = ml.cart_positions
+        z_range = np.max(cart[:, 2]) - np.min(cart[:, 2])
+        assert z_range < 50.0, f"z-range {z_range} is too large"
+
+    def test_build_twisted_multilayer_invalid_spacing(self):
+        species = ['C', 'C']
+        positions = [[0, 0, 0], [1.42, 0, 0]]
+        lattice_2d = Lattice(np.array([
+            [2.46, 0, 0],
+            [1.23, 2.13, 0],
+            [0, 0, 10.0]
+        ]))
+        layer = Crystal(species, positions, lattice_2d)
+        with pytest.raises(ValueError, match="layer_spacing"):
+            build_twisted_multilayer(layer, 3, 1.1, layer_spacing=0.0)
+        with pytest.raises(ValueError, match="layer_spacing"):
+            build_twisted_multilayer(layer, 3, 1.1, layer_spacing=-1.0)
+        with pytest.raises(ValueError, match="layer_spacing"):
+            build_twisted_multilayer(layer, 3, 1.1, layer_spacing=float('nan'))

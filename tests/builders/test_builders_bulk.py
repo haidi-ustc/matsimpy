@@ -218,6 +218,18 @@ class TestPrototypeProperties(unittest.TestCase):
         self.assertIn('Na', nacl.species)
         self.assertIn('Cl', nacl.species)
 
+    def test_single_site_prototype_multi_element_raises(self):
+        with self.assertRaises(ValueError):
+            from_prototype('fcc', 'CuNi', 3.6)
+
+    def test_single_site_prototype_multi_element_bcc_raises(self):
+        with self.assertRaises(ValueError):
+            from_prototype('bcc', 'FeCr', 3.0)
+
+    def test_single_site_prototype_single_element_works(self):
+        crystal = from_prototype('fcc', 'Cu', 3.61)
+        self.assertEqual(crystal.formula, 'Cu')
+
 
 class TestRandomCrystal(unittest.TestCase):
     """Tests for PyXtal-backed random crystal generation boundaries."""

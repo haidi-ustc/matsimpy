@@ -30,9 +30,18 @@ def build_linear(
     """
     if len(bond_lengths) != len(species) - 1:
         raise ValueError(f"Need {len(species)-1} bond lengths for {len(species)} atoms")
+    if any(not np.isfinite(b) or b <= 0 for b in bond_lengths):
+        raise ValueError("bond_lengths must be positive and finite")
 
     axis = np.array(axis, dtype=np.float64)
-    axis = axis / np.linalg.norm(axis)
+    if axis.shape != (3,):
+        raise ValueError(f"axis must be a 3-element vector, got shape {axis.shape}")
+    if not np.all(np.isfinite(axis)):
+        raise ValueError("axis must be finite")
+    axis_norm = np.linalg.norm(axis)
+    if axis_norm == 0:
+        raise ValueError("axis must be non-zero")
+    axis = axis / axis_norm
 
     positions = []
     current_pos = np.array([0.0, 0.0, 0.0])

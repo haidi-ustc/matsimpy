@@ -41,14 +41,21 @@ def add_adsorbate(
         raise TypeError("slab must be a Crystal")
     if len(position) != 2:
         raise ValueError("position must be a 2-tuple of fractional x/y coordinates")
+    if not np.isfinite(float(height)):
+        raise ValueError(f"height must be finite, got {height}")
+    if float(height) < 0:
+        raise ValueError(f"height must be non-negative, got {height}")
 
     slab_cart = slab.cart_positions.copy()
-    surface_z = float(np.max(slab_cart[:, 2]))
-    anchor = (
-        float(position[0]) * slab.lattice.lattice_vectors[0]
-        + float(position[1]) * slab.lattice.lattice_vectors[1]
-    )
-    anchor[2] = surface_z + float(height)
+    normal = slab.lattice.lattice_vectors[2].copy().astype(np.float64)
+    normal = normal / np.linalg.norm(normal)
+    projections = np.dot(slab_cart, normal)
+    surface_proj = float(np.max(projections))
+    a_vec = slab.lattice.lattice_vectors[0]
+    b_vec = slab.lattice.lattice_vectors[1]
+    in_plane = float(position[0]) * a_vec + float(position[1]) * b_vec
+    in_plane_proj = np.dot(in_plane, normal)
+    anchor = in_plane + normal * (surface_proj + float(height) - in_plane_proj)
 
     if isinstance(adsorbate, str):
         adsorbate_species = [adsorbate]
@@ -61,11 +68,12 @@ def add_adsorbate(
             if isinstance(adsorbate, Crystal)
             else adsorbate.positions.copy()
         )
-        adsorbate_xy_center = np.mean(adsorbate_cart[:, :2], axis=0)
-        adsorbate_min_z = float(np.min(adsorbate_cart[:, 2]))
-        adsorbate_cart[:, 0] += anchor[0] - adsorbate_xy_center[0]
-        adsorbate_cart[:, 1] += anchor[1] - adsorbate_xy_center[1]
-        adsorbate_cart[:, 2] += anchor[2] - adsorbate_min_z
+        adsorbate_center_xy = np.mean(adsorbate_cart[:, :2], axis=0)
+        adsorbate_cart[:, 0] += in_plane[0] - adsorbate_center_xy[0]
+        adsorbate_cart[:, 1] += in_plane[1] - adsorbate_center_xy[1]
+        ads_proj = np.dot(adsorbate_cart, normal)
+        ads_min_proj = float(np.min(ads_proj))
+        adsorbate_cart += normal * (surface_proj + float(height) - ads_min_proj)
         adsorbate_site_properties = (
             list(adsorbate.site_properties) if adsorbate.site_properties else None
         )

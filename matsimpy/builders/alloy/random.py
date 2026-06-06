@@ -73,7 +73,17 @@ def generate_random_alloy(
         raise ValueError(f"No sites with species '{site_species}' found")
 
     # Calculate number of each substitution
-    n_substitutions = [int(np.round(conc * n_sites)) for conc in concentrations]
+    n_substitutions = [int(conc * n_sites) for conc in concentrations]
+    remainder = [conc * n_sites - int(conc * n_sites) for conc in concentrations]
+    remaining = int(round(sum(conc * n_sites for conc in concentrations))) - sum(n_substitutions)
+    if remaining > 0:
+        sorted_indices = sorted(
+            range(len(remainder)), key=lambda i: remainder[i], reverse=True
+        )
+        for i in range(remaining):
+            n_substitutions[sorted_indices[i % len(sorted_indices)]] += 1
+    elif remaining < 0:
+        n_substitutions[-1] += remaining
 
     # Total sites to substitute
     total_to_substitute = sum(n_substitutions)

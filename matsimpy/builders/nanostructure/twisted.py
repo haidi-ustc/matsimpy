@@ -170,8 +170,8 @@ def build_twisted_bilayer(
 
 def build_magic_angle_twisted(
     layer: Crystal,
-    n: int = 1,
-    m: int = 1,
+    n: int,
+    m: int,
     layer_spacing: Optional[float] = None,
     **kwargs,
 ) -> Crystal:
@@ -207,22 +207,20 @@ def build_magic_angle_twisted(
         >>> twisted = build_magic_angle_twisted(graphene, n=1, m=1)
     """
     # Calculate twist angle from moiré indices
-    # For a more accurate calculation, we'd need to consider the lattice matching
-    # For now, use a simplified formula
+    if not isinstance(n, int) or n <= 0:
+        raise ValueError(f"n must be a positive integer, got {n}")
+    if not isinstance(m, int) or m <= 0:
+        raise ValueError(f"m must be a positive integer, got {m}")
     if n == m:
-        # Special case: gives approximately 21.8° for graphene
-        twist_angle = 21.8
-    else:
-        # Approximate formula for small angles
-        # For graphene, the magic angle is when the moiré pattern matches
-        # More sophisticated calculation would use lattice matching
-        twist_angle = (
-            360.0 / (n * n + n * m + m * m) if (n * n + n * m + m * m) > 0 else 1.1
+        raise ValueError(
+            "Equal indices (n == m) produce a large-angle bilayer (~21.8°), "
+            "not a magic-angle structure. Use build_twisted_bilayer with an "
+            "explicit angle parameter instead."
         )
 
-    # For true magic angle (~1.1°), we need specific (n, m) pairs
-    # This is a simplified version - a full implementation would calculate
-    # the exact angle based on lattice matching
+    twist_angle = (
+        360.0 / (n * n + n * m + m * m) if (n * n + n * m + m * m) > 0 else 1.1
+    )
 
     return build_twisted_bilayer(
         layer, twist_angle, layer_spacing=layer_spacing, **kwargs
@@ -262,8 +260,13 @@ def build_twisted_multilayer(
         >>> # Build with different angles between layers
         >>> custom = build_twisted_multilayer(graphene, 3, [1.1, 2.0])
     """
-    if num_layers < 2:
-        raise ValueError("num_layers must be at least 2")
+    if not isinstance(num_layers, int) or num_layers < 2:
+        raise ValueError("num_layers must be an integer >= 2")
+    if layer_spacing is not None:
+        if not np.isfinite(float(layer_spacing)) or float(layer_spacing) <= 0:
+            raise ValueError(
+                f"layer_spacing must be finite and positive, got {layer_spacing}"
+            )
 
     # Normalize twist angles
     if isinstance(twist_angles, float):
@@ -334,7 +337,10 @@ def build_twisted_multilayer(
                 )
                 new_lattice = Lattice(lattice_vectors)
 
-        result = Crystal(combined_species, combined_positions.tolist(), new_lattice)
+        result = Crystal(
+            combined_species, combined_positions.tolist(), new_lattice,
+            coords_are_cartesian=True,
+        )
 
     return result
 

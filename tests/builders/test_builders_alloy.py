@@ -154,5 +154,42 @@ class TestIntermetallic(unittest.TestCase):
         
         self.assertAlmostEqual(ni3al.lattice.a, 3.56, places=5)
 
+    def test_generate_intermetallic_unsupported_type_raises(self):
+        with self.assertRaises(NotImplementedError):
+            generate_intermetallic(['Fe', 'Pt'], 'AB', 'DO3', 3.85)
+
+    def test_generate_intermetallic_l10(self):
+        fept = generate_intermetallic(['Fe', 'Pt'], 'AB', 'L1_0', 3.85)
+        self.assertEqual(len(fept.species), 2)
+        self.assertIn('Fe', fept.species)
+        self.assertIn('Pt', fept.species)
+        self.assertAlmostEqual(fept.lattice.a, 3.85, places=5)
+
+    def test_generate_intermetallic_wrong_element_count_raises(self):
+        with self.assertRaises(ValueError):
+            generate_intermetallic(['Fe'], 'AB', 'L1_2', 3.85)
+
+    def test_generate_random_alloy_small_cell_deterministic(self):
+        base = Crystal(
+            ['Al', 'Al', 'Al'],
+            [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5]],
+            Lattice.cubic(4.0),
+        )
+        alloy = generate_random_alloy(base, ['Cu'], 'Al', [0.5], seed=1)
+        cu_count = sum(1 for s in alloy.species if s == 'Cu')
+        self.assertLessEqual(cu_count, 3)
+        self.assertIn(cu_count, (1, 2))
+        al_count = sum(1 for s in alloy.species if s == 'Al')
+        self.assertGreaterEqual(al_count, 1)
+
+    def test_generate_ordered_alloy_negative_index_raises(self):
+        base = Crystal(
+            ['A', 'A', 'A', 'A'],
+            [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+            Lattice.cubic(4.0),
+        )
+        with self.assertRaises(ValueError):
+            generate_ordered_alloy(base, {-1: 'Cu'})
+
 if __name__ == '__main__':
     unittest.main()

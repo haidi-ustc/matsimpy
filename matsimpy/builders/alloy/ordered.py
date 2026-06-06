@@ -35,7 +35,7 @@ def generate_ordered_alloy(
 
     # Validate indices
     for idx in indices:
-        if idx >= len(base_structure.species):
+        if idx < 0 or idx >= len(base_structure.species):
             raise ValueError(f"Site index {idx} out of range")
 
     # Use transformation function for substitution
@@ -69,26 +69,44 @@ def generate_intermetallic(
         >>> # Generate L1_2 Ni3Al
         >>> ni3al = generate_intermetallic(['Ni', 'Al'], 'A3B', 'L1_2', 3.56)
     """
-    from ..bulk import from_prototype
+    SUPPORTED_TYPES = {
+        "L1_2": {"n_elements": 2},
+        "B2": {"n_elements": 2},
+        "L1_0": {"n_elements": 2},
+    }
 
-    # Map structure types to prototypes
+    if structure_type not in SUPPORTED_TYPES:
+        raise NotImplementedError(
+            f"Intermetallic type '{structure_type}' is not supported. "
+            f"Supported: {list(SUPPORTED_TYPES.keys())}"
+        )
+
+    if len(elements) != SUPPORTED_TYPES[structure_type]["n_elements"]:
+        raise ValueError(
+            f"Structure type '{structure_type}' requires "
+            f"{SUPPORTED_TYPES[structure_type]['n_elements']} elements, "
+            f"got {len(elements)}"
+        )
+
     if structure_type == "L1_2":
-        # A3B in fcc
         species = [elements[0], elements[0], elements[0], elements[1]]
         positions = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
         lattice = Lattice.cubic(lattice_constant)
         return Crystal(species, positions, lattice)
 
     elif structure_type == "B2":
-        # AB in bcc-like
         species = [elements[0], elements[1]]
         positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
         lattice = Lattice.cubic(lattice_constant)
         return Crystal(species, positions, lattice)
 
-    else:
-        # Use base prototype
-        return from_prototype("fcc", elements[0], lattice_constant)
+    elif structure_type == "L1_0":
+        a = lattice_constant
+        c = kwargs.get("c", a * 0.974)
+        species = [elements[0], elements[1]]
+        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
+        lattice = Lattice.tetragonal(a, c)
+        return Crystal(species, positions, lattice)
 
 
 __all__ = ["generate_ordered_alloy", "generate_intermetallic"]

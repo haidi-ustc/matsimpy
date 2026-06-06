@@ -104,6 +104,18 @@ class TestSlabGeneration(unittest.TestCase):
         
         self.assertGreater(slab.volume, self.si_bulk.volume)
 
+    def test_slab_vacuum_satisfies_minimum_along_normal(self):
+        bulk = from_prototype('fcc', 'Cu', 3.61)
+        slab = generate_slab(bulk, (1, 1, 1), min_slab_size=8, min_vacuum_size=12)
+
+        c_vec = slab.lattice.lattice_vectors[2]
+        normal = c_vec / np.linalg.norm(c_vec)
+        cart = slab.cart_positions
+        projections = np.dot(cart, normal)
+        thickness = float(np.max(projections) - np.min(projections))
+        vacuum = np.linalg.norm(c_vec) - thickness
+        self.assertGreaterEqual(vacuum, 12.0 - 1e-6)
+
     def test_slab_miller_orientation_matches_reference_invariants(self):
         """Miller-index slab basis follows crystallographic reference invariants."""
         from pymatgen.core import Structure
@@ -236,19 +248,47 @@ class TestAdsorbate(unittest.TestCase):
         """Test adding a molecular adsorbate."""
         adsorbate = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
         original_positions = self.slab.positions.copy()
-        slab_top = np.max(self.slab.cart_positions[:, 2])
+        slab_cart = self.slab.cart_positions.copy()
+        normal = self.slab.lattice.lattice_vectors[2] / np.linalg.norm(self.slab.lattice.lattice_vectors[2])
+        projections = np.dot(slab_cart, normal)
+        surface_proj = float(np.max(projections))
 
         with_ads = add_adsorbate(self.slab, adsorbate, (0.5, 0.5), height=2.0)
 
         self.assertIsInstance(with_ads, Crystal)
         self.assertEqual(len(with_ads.species), len(self.slab.species) + 2)
         self.assertEqual(with_ads.species[-2:], ('C', 'O'))
+        ads_cart = with_ads.cart_positions[-2:, :]
+        ads_proj = np.dot(ads_cart, normal)
+        ads_cart = with_ads.cart_positions[-2:, :]
+        ads_proj = np.dot(ads_cart, normal)
         self.assertAlmostEqual(
-            np.min(with_ads.cart_positions[-2:, 2]),
-            slab_top + 2.0,
-            places=6,
+            np.min(ads_proj),
+            surface_proj + 2.0,
+            places=3,
         )
         np.testing.assert_array_almost_equal(self.slab.positions, original_positions)
+
+    def test_add_adsorbate_invalid_height(self):
+        with self.assertRaises(ValueError):
+            add_adsorbate(self.slab, 'O', (0.5, 0.5), height=-1.0)
+        with self.assertRaises(ValueError):
+            add_adsorbate(self.slab, 'O', (0.5, 0.5), height=float('nan'))
+        with self.assertRaises(ValueError):
+            add_adsorbate(self.slab, 'O', (0.5, 0.5), height=float('inf'))
+
+    def test_add_adsorbate_non_001_slab(self):
+        bulk = from_prototype('diamond', 'Si', 5.43)
+        slab = generate_slab(bulk, (1, 1, 1), min_slab_size=8, min_vacuum_size=10)
+        slab_cart = slab.cart_positions.copy()
+        normal = slab.lattice.lattice_vectors[2] / np.linalg.norm(slab.lattice.lattice_vectors[2])
+        projections = np.dot(slab_cart, normal)
+        surface_proj = float(np.max(projections))
+
+        with_ads = add_adsorbate(slab, 'H', (0.5, 0.5), height=2.5)
+        ads_cart = with_ads.cart_positions
+        ads_proj = np.dot(ads_cart[-1], normal)
+        self.assertAlmostEqual(ads_proj - surface_proj, 2.5, places=6)
 
 if __name__ == '__main__':
     unittest.main()

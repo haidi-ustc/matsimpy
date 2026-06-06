@@ -36,6 +36,7 @@ from .heusler import (
     build_full_heusler,
     build_half_heusler,
     build_inverse_heusler,
+    build_inverse_heusler_quaternary,
 )
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "build_full_heusler",
     "build_half_heusler",
     "build_inverse_heusler",
+    "build_inverse_heusler_quaternary",
 ]

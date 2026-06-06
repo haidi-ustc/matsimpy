@@ -114,7 +114,22 @@ def generate_slab(
     if not new_positions:
         raise ValueError(f"Failed to generate slab for Miller index {miller_index}")
 
-    return Crystal(new_species, new_positions, new_lattice, pbc=[True, True, False])
+    slab_crystal = Crystal(new_species, new_positions, new_lattice, pbc=[True, True, False])
+
+    c_vec = new_lattice.lattice_vectors[2]
+    c_norm = np.linalg.norm(c_vec)
+    normal = c_vec / c_norm
+    cart_positions = slab_crystal.cart_positions
+    projections = np.dot(cart_positions, normal)
+    projected_thickness = float(np.max(projections) - np.min(projections))
+    vacuum_thickness = c_norm - projected_thickness
+    if vacuum_thickness < min_vacuum_size - 1e-6:
+        raise ValueError(
+            f"Slab vacuum thickness {vacuum_thickness:.3f} is less than "
+            f"requested minimum {min_vacuum_size:.3f}"
+        )
+
+    return slab_crystal
 
 
 def _miller_plane_basis(hkl: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

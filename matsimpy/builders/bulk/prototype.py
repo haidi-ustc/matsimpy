@@ -156,7 +156,13 @@ def from_prototype(
         # Check if it's a compound formula (multiple elements) or single element
         parsed_elements = _parse_compound_formula(species)
         if len(parsed_elements) > 1:
-            # Binary or multi-element compound
+            template_species = template["species"]
+            if len(template_species) == 1:
+                raise ValueError(
+                    f"Multi-element formula '{species}' cannot be represented "
+                    f"on a single-site prototype '{prototype}'. "
+                    f"Use alloy builders for solid solutions."
+                )
             species = parsed_elements
         else:
             # Single element
@@ -169,6 +175,13 @@ def from_prototype(
     for s in template_species:
         if s not in unique_template:
             unique_template.append(s)
+
+    if len(species) > 1 and len(unique_template) == 1 and len(template_species) == 1:
+        raise ValueError(
+            f"Multi-element input cannot be represented "
+            f"on a single-site prototype '{prototype}'. "
+            f"Use alloy builders for solid solutions."
+        )
 
     # Validate species count
     # Allow 2 species for single-template types (for uniform binary distribution)
