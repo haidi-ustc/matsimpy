@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from matsimpy.core import Crystal, Lattice
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.transformation.chemical import (
+from matsimpy.builders.alloy import (
     generate_random_alloy,
     generate_ordered_alloy,
     generate_intermetallic

@@ -6,7 +6,7 @@ Generate ordered intermetallic compounds and structured alloys.
 
 from typing import Dict, List
 from ...core import Crystal, Lattice
-from .substitution import substitute
+from ...transformation.chemical.substitution import substitute
 
 
 def generate_ordered_alloy(

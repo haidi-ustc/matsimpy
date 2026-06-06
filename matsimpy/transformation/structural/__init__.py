@@ -12,13 +12,10 @@ from .molecular import (
     generate_conformers,
     merge_molecules,
 )
-from .interface import create_simple_interface
 
 __all__ = [
     # Supercell
     "make_supercell",
-    # Interface
-    "create_simple_interface",
     # Molecular
     "fragment_molecule",
     "align_molecules",

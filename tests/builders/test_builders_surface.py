@@ -4,7 +4,7 @@ import numpy as np
 from matsimpy.core import Crystal, Lattice, Molecule
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.builders.surface import generate_slab, generate_symmetric_slab
-from matsimpy.transformation.atomic import add_adsorbate
+from matsimpy.builders.surface import add_adsorbate
 
 
 def _sorted_rows(values, decimals=8):

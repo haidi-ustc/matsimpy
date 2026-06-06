@@ -1,7 +1,7 @@
 """Tests for Heusler alloy builders."""
 import unittest
 
-from matsimpy.transformation.chemical.alloy_heusler import (
+from matsimpy.builders.alloy.heusler import (
     build_heusler,
     build_full_heusler,
     build_half_heusler,

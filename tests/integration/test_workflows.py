@@ -8,7 +8,7 @@ import pytest
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.transformation.lattice import apply_strain
-from matsimpy.transformation.atomic import create_vacancy
+from matsimpy.builders.defects import create_vacancy
 from matsimpy.transformation.chemical import substitute
 from matsimpy.io import read, write
 from matsimpy.storage import DataStorage, MemoryBackend

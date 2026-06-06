@@ -7,7 +7,7 @@ Create various types of point defects in crystal structures.
 from typing import List, Optional, Union, Tuple
 import numpy as np
 from ...core import Crystal, Lattice
-from ..chemical.substitution import substitute
+from ...transformation.chemical.substitution import substitute
 
 
 def create_vacancy(

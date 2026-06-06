@@ -44,6 +44,62 @@ def register_all():
         output_type=Crystal,
     ))
 
+    from .surface.adsorbate import add_adsorbate
+    registry.register(BuilderSpec(
+        name="add_adsorbate", category="surface", callable=add_adsorbate,
+        description="Add adsorbate to a surface structure",
+        output_type=Crystal,
+    ))
+
+    # --- alloy ---
+    from .alloy.random import generate_random_alloy
+    from .alloy.ordered import generate_ordered_alloy, generate_intermetallic
+    from .alloy.heusler import (
+        build_heusler, build_full_heusler, build_half_heusler, build_inverse_heusler,
+    )
+    for fn, name in [
+        (generate_random_alloy, "generate_random_alloy"),
+        (generate_ordered_alloy, "generate_ordered_alloy"),
+        (generate_intermetallic, "generate_intermetallic"),
+        (build_heusler, "build_heusler"),
+        (build_full_heusler, "build_full_heusler"),
+        (build_half_heusler, "build_half_heusler"),
+        (build_inverse_heusler, "build_inverse_heusler"),
+    ]:
+        registry.register(BuilderSpec(
+            name=name, category="alloy", callable=fn,
+            description=f"Generate {name.replace('_', ' ')} structure",
+            output_type=Crystal,
+        ))
+
+    # --- defects ---
+    from .defects.point import (
+        create_vacancy, create_interstitial, create_substitution,
+        create_frenkel, create_schottky, create_antisite,
+    )
+    for fn, name in [
+        (create_vacancy, "create_vacancy"),
+        (create_interstitial, "create_interstitial"),
+        (create_substitution, "create_substitution"),
+        (create_frenkel, "create_frenkel"),
+        (create_schottky, "create_schottky"),
+        (create_antisite, "create_antisite"),
+    ]:
+        registry.register(BuilderSpec(
+            name=name, category="defects", callable=fn,
+            description=f"{name.replace('_', ' ').title()} in crystal structure",
+            output_type=Crystal,
+        ))
+
+    # --- interface ---
+    from .interface import create_simple_interface
+    registry.register(BuilderSpec(
+        name="create_simple_interface", category="interface",
+        callable=create_simple_interface,
+        description="Create a simple interface by stacking two crystals",
+        output_type=Crystal,
+    ))
+
     # --- molecule ---
     from .molecule.geometry import (
         build_linear, build_bent, build_tetrahedral,
