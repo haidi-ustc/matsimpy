@@ -20,20 +20,11 @@ try:
 
     __all__ = ["DataStorage"]
 except ImportError:
-    # If maggma is not available, provide informative error
-    import warnings
-
-    warnings.warn(
-        "maggma is not installed. Data storage functionality is not available. "
-        "Install with: pip install matsimpy[storage] or pip install maggma"
-    )
-
-    # Provide a placeholder class that raises informative error
     class DataStorage:
         def __init__(self, *args, **kwargs):
             raise ImportError(
                 "maggma is required for DataStorage. "
-                "Install with: pip install maggma or pip install matsimpy[storage]"
+                "Install with: pip install maggma or pip install MatSimPy[storage]"
             )
 
     __all__ = ["DataStorage"]

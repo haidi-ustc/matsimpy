@@ -86,7 +86,7 @@ class DataStorage(MSONable):
         if not MAGGMA_AVAILABLE:
             raise ImportError(
                 "maggma is required for DataStorage. "
-                "Install with: pip install maggma or pip install matsimpy[storage]"
+                "Install with: pip install maggma or pip install MatSimPy[storage]"
             )
 
         if use_memory_store:

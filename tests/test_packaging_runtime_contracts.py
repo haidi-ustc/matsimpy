@@ -1,7 +1,9 @@
 """Packaging and runtime contract tests that unit tests do not otherwise cover."""
 
 import builtins
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 
@@ -44,3 +46,43 @@ def test_workflow_files_do_not_reference_removed_entrypoints():
 
     assert "requirements.txt" not in workflow_text
     assert "python3 ./main.py" not in workflow_text
+
+
+def test_storage_import_without_maggma_is_quiet_and_actionable():
+    script = textwrap.dedent(
+        """
+        import builtins
+        import warnings
+
+        real_import = builtins.__import__
+
+        def guarded_import(name, *args, **kwargs):
+            if name == "maggma" or name.startswith("maggma."):
+                raise ImportError("blocked maggma")
+            return real_import(name, *args, **kwargs)
+
+        builtins.__import__ = guarded_import
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            from matsimpy.storage import DataStorage
+            assert not caught, [str(w.message) for w in caught]
+
+        try:
+            DataStorage(use_memory_store=True)
+        except ImportError as exc:
+            assert "maggma is required" in str(exc)
+            assert "MatSimPy[storage]" in str(exc)
+        else:
+            raise AssertionError("DataStorage should require maggma when invoked")
+        """
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

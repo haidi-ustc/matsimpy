@@ -3,7 +3,7 @@
 import numpy as np
 
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.builders.interface import create_simple_interface
+from matsimpy.builders import create_simple_interface
 from matsimpy.core import Crystal
 
 

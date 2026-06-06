@@ -31,7 +31,8 @@ organized by structure type:
   - create_schottky(): Create vacancy pairs
   - create_antisite(): Swap two atoms
 
-**interface/**   - Interface structures (placeholder)
+**interface/**   - Interface structures
+  - create_simple_interface(): Stack two crystals along the surface normal
 
 **nanostructure/** - Nanostructures
   - build_nanotube(): Build nanotubes from 2D sheets
@@ -68,6 +69,7 @@ from .surface import *
 from .alloy import *
 from .molecule import *
 from .defects import *
+from .interface import *
 from .nanostructure import *
 
 # Import submodule __all__ lists
@@ -76,6 +78,7 @@ from .surface import __all__ as _surface_all
 from .alloy import __all__ as _alloy_all
 from .molecule import __all__ as _molecule_all
 from .defects import __all__ as _defects_all
+from .interface import __all__ as _interface_all
 from .nanostructure import __all__ as _nanostructure_all
 
 # Combine all exports
@@ -85,6 +88,7 @@ __all__ = (
     + _alloy_all
     + _molecule_all
     + _defects_all
+    + _interface_all
     + _nanostructure_all
 )
 
