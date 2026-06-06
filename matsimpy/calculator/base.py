@@ -159,9 +159,13 @@ class Calculator(ABC, MSONable):
             raise ValueError("Forces not available in results.")
         return np.array(self.results["forces"])
 
-    def get_stress(self) -> np.ndarray:
+    def get_stress(self, voigt: bool = False) -> np.ndarray:
         """
         Get stress tensor from calculation results.
+
+        Args:
+            voigt: If True, return Voigt notation [xx, yy, zz, yz, xz, xy].
+                   If False, return the full 3x3 tensor.
 
         Returns:
             np.ndarray: Stress tensor of shape (3, 3) or (6,) in eV/Å³
@@ -173,7 +177,31 @@ class Calculator(ABC, MSONable):
             raise ValueError("Calculation not performed. Call calculate() first.")
         if "stress" not in self.results:
             raise ValueError("Stress not available in results.")
-        return np.array(self.results["stress"])
+        stress = np.array(self.results["stress"])
+        if voigt:
+            if stress.shape == (6,):
+                return stress
+            if stress.shape != (3, 3):
+                raise ValueError(f"Stress must have shape (3, 3), got {stress.shape}")
+            return np.array(
+                [
+                    stress[0, 0],
+                    stress[1, 1],
+                    stress[2, 2],
+                    stress[1, 2],
+                    stress[0, 2],
+                    stress[0, 1],
+                ]
+            )
+        if stress.shape == (6,):
+            return np.array(
+                [
+                    [stress[0], stress[5], stress[4]],
+                    [stress[5], stress[1], stress[3]],
+                    [stress[4], stress[3], stress[2]],
+                ]
+            )
+        return stress
 
     def get_result(self, key: str) -> Any:
         """

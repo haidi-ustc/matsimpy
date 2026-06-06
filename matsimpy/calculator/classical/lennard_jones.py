@@ -6,7 +6,7 @@ The LJ potential is commonly used for noble gases and simple molecular systems.
 """
 
 import numpy as np
-from typing import Optional, Dict, Tuple
+from typing import Optional, Tuple
 from scipy.spatial import cKDTree
 from ..base import Calculator
 from ...core import Crystal, Molecule
@@ -147,6 +147,7 @@ class LennardJones(Calculator):
         n_atoms = len(positions)
         energy = 0.0
         forces = np.zeros((n_atoms, 3))
+        e0 = 4.0 * epsilon * ((sigma / cutoff) ** 12 - (sigma / cutoff) ** 6)
 
         # Build KDTree for efficient neighbor finding
         tree = cKDTree(positions)
@@ -173,6 +174,8 @@ class LennardJones(Calculator):
                 sr6 = (sigma / r) ** 6
                 sr12 = sr6**2
                 v = 4.0 * epsilon * (sr12 - sr6) * f
+                if rc_smooth >= cutoff:
+                    v -= e0
                 energy += v
 
                 # Force: F = -dV/dr * r_hat
@@ -206,7 +209,7 @@ class LennardJones(Calculator):
         Uses minimum image convention for periodic boundary conditions.
 
         Args:
-            positions: Atomic positions in fractional coordinates
+            positions: Atomic positions in Cartesian coordinates
             lattice: Lattice object
             pbc: Periodic boundary conditions [x, y, z]
             sigma: LJ size parameter
@@ -222,107 +225,32 @@ class LennardJones(Calculator):
         forces = np.zeros((n_atoms, 3))
         stress = np.zeros((3, 3))
 
-        # Convert fractional to Cartesian for neighbor finding
-        # positions are in fractional, convert using lattice matrix
-        cart_positions = np.dot(positions, lattice.matrix)
+        positions = np.array(positions, dtype=float)
+        offsets = self._periodic_offsets(lattice, pbc, cutoff)
+        e0 = 4.0 * epsilon * ((sigma / cutoff) ** 12 - (sigma / cutoff) ** 6)
 
-        # For periodic systems, we need to check interactions with periodic images
-        # Generate all atom pairs: (i, j) where j can be in the same cell or periodic images
-        # Use minimum image convention to avoid double counting
+        for offset in offsets:
+            shift = np.dot(offset, lattice.matrix)
+            same_cell = tuple(int(x) for x in offset) == (0, 0, 0)
 
-        # Calculate how many unit cells we need to check in each direction
-        # based on cutoff distance
-        cell_lengths = np.array([lattice.a, lattice.b, lattice.c])
-        max_cells = np.ceil(cutoff / cell_lengths).astype(int) + 1
-
-        # Generate periodic image offsets (in fractional coordinates)
-        image_offsets = []
-        for nx in range(-max_cells[0], max_cells[0] + 1):
-            for ny in range(-max_cells[1], max_cells[1] + 1):
-                for nz in range(-max_cells[2], max_cells[2] + 1):
-                    # Skip (0,0,0) as it's the original cell
-                    if nx == 0 and ny == 0 and nz == 0:
-                        continue
-                    image_offsets.append([nx, ny, nz])
-        image_offsets = np.array(image_offsets)
-
-        # Compute interactions: for each atom i, check interactions with:
-        # 1. Other atoms j in the same cell (i < j to avoid double counting)
-        # 2. Periodic images of all atoms (including self-images)
-        for i in range(n_atoms):
-            # Interactions with other atoms in the same cell
-            for j in range(i + 1, n_atoms):
-                r_vec_cart = cart_positions[j] - cart_positions[i]
-                r = np.linalg.norm(r_vec_cart)
-
-                if r < cutoff and r > 1e-10:
-                    # Apply smoothing and compute LJ interaction
-                    if rc_smooth < cutoff and r > rc_smooth:
-                        f = 1.0 / (1.0 + np.exp((r - rc_smooth) / (cutoff - rc_smooth)))
-                        df_dr = -f * (1.0 - f) / (cutoff - rc_smooth)
-                    else:
-                        f = 1.0
-                        df_dr = 0.0
-
-                    sr6 = (sigma / r) ** 6
-                    sr12 = sr6**2
-                    v = 4.0 * epsilon * (sr12 - sr6) * f
-                    energy += v
-
-                    dv_dr = (
-                        4.0
-                        * epsilon
-                        * ((12.0 * sr12 - 6.0 * sr6) / r * f + (sr12 - sr6) * df_dr)
-                    )
-                    force_vec = dv_dr * r_vec_cart / r
-
-                    forces[i] -= force_vec
-                    forces[j] += force_vec
-
-                    stress += -np.outer(force_vec, r_vec_cart)
-
-            # Interactions with periodic images (including self-images)
-            for offset in image_offsets:
-                # For each atom j (including i itself for self-images)
+            for i in range(n_atoms):
                 for j in range(n_atoms):
-                    # Get position of atom j in the periodic image
-                    pos_j_frac = positions[j] + offset
-                    pos_j_cart = np.dot(pos_j_frac, lattice.matrix)
+                    if same_cell and i == j:
+                        continue
 
-                    # Distance vector in Cartesian
-                    r_vec_cart = pos_j_cart - cart_positions[i]
+                    r_vec_cart = positions[j] + shift - positions[i]
                     r = np.linalg.norm(r_vec_cart)
+                    if not (1e-10 < r < cutoff):
+                        continue
 
-                    if r < cutoff and r > 1e-10:
-                        # Apply smoothing
-                        if rc_smooth < cutoff and r > rc_smooth:
-                            f = 1.0 / (
-                                1.0 + np.exp((r - rc_smooth) / (cutoff - rc_smooth))
-                            )
-                            df_dr = -f * (1.0 - f) / (cutoff - rc_smooth)
-                        else:
-                            f = 1.0
-                            df_dr = 0.0
-
-                        # LJ potential
-                        sr6 = (sigma / r) ** 6
-                        sr12 = sr6**2
-                        v = 4.0 * epsilon * (sr12 - sr6) * f
-                        energy += v
-
-                        # Force (only on atom i, since j is an image)
-                        dv_dr = (
-                            4.0
-                            * epsilon
-                            * ((12.0 * sr12 - 6.0 * sr6) / r * f + (sr12 - sr6) * df_dr)
-                        )
-                        force_vec = dv_dr * r_vec_cart / r
-                        forces[i] -= force_vec
-
-                        # Stress contribution
-                        stress += -np.outer(force_vec, r_vec_cart)
-
-        # Forces are already in Cartesian
+                    pair_energy, force_vec = self._pair_energy_force(
+                        r_vec_cart, r, sigma, epsilon, cutoff, rc_smooth
+                    )
+                    if rc_smooth >= cutoff:
+                        pair_energy -= e0
+                    energy += 0.5 * pair_energy
+                    forces[i] -= force_vec
+                    stress += -0.5 * np.outer(force_vec, r_vec_cart)
 
         # Stress in eV/Å³ (volume is in Å³)
         volume = lattice.volume  # volume is a property
@@ -330,6 +258,51 @@ class LennardJones(Calculator):
             stress = stress / volume
 
         return energy, forces, stress
+
+    def _periodic_offsets(self, lattice, pbc: list, cutoff: float) -> np.ndarray:
+        """Return periodic image offsets covering neighbors within the cutoff."""
+        ranges = []
+        inv_matrix = lattice.inv_matrix
+        for axis, periodic in enumerate(pbc):
+            if not periodic:
+                ranges.append(np.array([0], dtype=int))
+                continue
+            plane_spacing = 1.0 / np.linalg.norm(inv_matrix[:, axis])
+            n_images = int(np.ceil(cutoff / plane_spacing)) + 1
+            ranges.append(np.arange(-n_images, n_images + 1, dtype=int))
+
+        offsets = []
+        for nx in ranges[0]:
+            for ny in ranges[1]:
+                for nz in ranges[2]:
+                    offset = (int(nx), int(ny), int(nz))
+                    offsets.append(offset)
+        return np.array(offsets, dtype=int)
+
+    @staticmethod
+    def _pair_energy_force(
+        r_vec: np.ndarray,
+        r: float,
+        sigma: float,
+        epsilon: float,
+        cutoff: float,
+        rc_smooth: float,
+    ) -> Tuple[float, np.ndarray]:
+        if rc_smooth < cutoff and r > rc_smooth:
+            f = 1.0 / (1.0 + np.exp((r - rc_smooth) / (cutoff - rc_smooth)))
+            df_dr = -f * (1.0 - f) / (cutoff - rc_smooth)
+        else:
+            f = 1.0
+            df_dr = 0.0
+
+        sr6 = (sigma / r) ** 6
+        sr12 = sr6**2
+        energy = 4.0 * epsilon * (sr12 - sr6) * f
+        dv_dr = 4.0 * epsilon * (
+            (12.0 * sr12 - 6.0 * sr6) / r * f + (sr12 - sr6) * df_dr
+        )
+        force_vec = dv_dr * r_vec / r
+        return energy, force_vec
 
 
 __all__ = ["LennardJones"]

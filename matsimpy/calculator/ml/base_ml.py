@@ -63,14 +63,8 @@ class BaseML(Calculator):
             device: Computation device ('cpu' or 'cuda'). If None, uses config default.
             **kwargs: Additional parameters
         """
-        # Get default device from config if not provided
         if device is None:
-            try:
-                from ...config import get_config
-
-                device = get_config("calculator.ml.default_device", "cpu")
-            except ImportError:
-                device = "cpu"
+            device = "cpu"
 
         super().__init__(model=model, model_path=model_path, device=device, **kwargs)
 
@@ -153,6 +147,9 @@ class BaseML(Calculator):
         self.results["forces"] = forces
         if lattice is not None:
             self.results["stress"] = stress
+        for key, value in predictions.items():
+            if key not in self.results:
+                self.results[key] = value
 
     def _prepare_model_input(
         self, positions: np.ndarray, species: list, lattice: Optional[Any], pbc: list
