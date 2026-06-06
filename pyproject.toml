@@ -77,7 +77,7 @@ all = [
 
 [project.scripts]
 matsimpy = "matsimpy.ai.cli:app"
-matsimpy-ai = "matsimpy.ai.cli:main"
+matsimpy-ai = "matsimpy.ai.cli:app"
 
 [tool.setuptools]
 # Automatically discover all packages (equivalent to find_packages())
