@@ -169,22 +169,23 @@ class TestCrystalComprehensive(unittest.TestCase):
             self.assertGreater(len(crystal), 0)
     
     def test_crystal_to_file_poscar(self):
-        """Test writing POSCAR file using to_file."""
+        """Test writing POSCAR file using io.write."""
         import tempfile
+        from matsimpy.io import read, write
         species = ['Si', 'O']
         positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
         lattice = Lattice.cubic(10.0)
         crystal = Crystal(species, positions, lattice)
-        
+
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
             temp_file = f.name
-        
+
         try:
-            crystal.to_file(temp_file)
+            write(crystal, temp_file)
             # Verify file was created
             self.assertTrue(Path(temp_file).exists())
             # Read back to verify
-            crystal2 = Crystal.from_file(temp_file)
+            crystal2 = read(temp_file)
             self.assertEqual(len(crystal2), len(crystal))
         finally:
             Path(temp_file).unlink()

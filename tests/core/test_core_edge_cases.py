@@ -61,10 +61,11 @@ class TestCrystalEdgeCases(unittest.TestCase):
             # We're just checking that the function exists and can be called
             pass
     
-    def test_crystal_from_file_file_not_found(self):
-        """Test from_file with non-existent file."""
+    def test_read_file_not_found(self):
+        """Test read() with non-existent file."""
+        from matsimpy.io import read
         with self.assertRaises(FileNotFoundError):
-            Crystal.from_file('nonexistent.vasp')
+            read('nonexistent.vasp')
 
     def test_crystal_neighbor_cache_distinguishes_pbc_mode(self):
         """Calling PBC and non-PBC neighbor queries in sequence should not reuse wrong trees."""
