@@ -4,10 +4,10 @@ Maggma-based data storage implementation.
 Provides persistent storage for MatSimPy data using maggma stores.
 """
 
-import os
 import json
 import logging
 import hashlib
+from copy import deepcopy
 from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +93,7 @@ class DataStorage(MSONable):
             self.store = MemoryStore(key="doc_id", **kwargs)
             self.store_type = "memory"
             self.store_path = None
+            self._closed = False
             self.store.connect()
             logger.info("Initialized in-memory data store")
         else:
@@ -126,6 +127,7 @@ class DataStorage(MSONable):
             self.store = JSONStore(str(store_path), key="doc_id", **kwargs)
             self.store_type = "json"
             self.store_path = store_path
+            self._closed = False
 
             # Connect to store
             self.store.connect()
@@ -167,18 +169,18 @@ class DataStorage(MSONable):
             else:
                 data_dict = data.copy() if isinstance(data, dict) else {"data": data}
 
-            # Generate ID if not provided
-            if doc_id is None:
-                # Use hash of serialized data for consistent IDs
-                serialized = json.dumps(data_dict, sort_keys=True, default=str)
-                doc_id = hashlib.md5(serialized.encode()).hexdigest()
+            metadata_dict = deepcopy(metadata) if metadata else None
+            if metadata_dict:
+                data_dict["metadata"] = metadata_dict
 
-            # Add metadata with doc_id as the key
+            # Generate ID if not provided.  Include metadata because it is part
+            # of the persisted document; exclude only volatile storage fields.
+            if doc_id is None:
+                doc_id = _stable_doc_id(data_dict)
+
+            # Add storage fields after hashing so timestamps do not affect IDs.
             data_dict["doc_id"] = doc_id
             data_dict["stored_at"] = datetime.now().isoformat()
-
-            if metadata:
-                data_dict["metadata"] = metadata
 
             # Store in database
             self.store.update(data_dict)
@@ -294,10 +296,13 @@ class DataStorage(MSONable):
 
     def close(self) -> None:
         """Close the data store connection."""
+        if getattr(self, "_closed", False):
+            return
         # For JSONStore, ensure data is written to disk
         if self.store_type == "json" and hasattr(self.store, "update_json_file"):
             self.store.update_json_file()
         self.store.close()
+        self._closed = True
         logger.info("Data store connection closed")
 
     def __enter__(self):
@@ -329,6 +334,17 @@ class DataStorage(MSONable):
         store_path = d.get("store_path")
 
         return cls(store_path=store_path, use_memory_store=(store_type == "memory"))
+
+
+def _stable_doc_id(document: Dict[str, Any]) -> str:
+    """Return a deterministic ID for persisted document content."""
+    stable_document = {
+        key: value
+        for key, value in document.items()
+        if key not in {"doc_id", "stored_at"}
+    }
+    serialized = json.dumps(stable_document, sort_keys=True, default=str)
+    return hashlib.md5(serialized.encode()).hexdigest()
 
 
 __all__ = ["DataStorage"]

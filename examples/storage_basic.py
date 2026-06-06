@@ -18,6 +18,8 @@ print("=" * 70)
 # Create temporary directory for testing
 temp_dir = tempfile.mkdtemp()
 store_path = Path(temp_dir) / 'test_storage.json'
+storage = None
+storage_mem = None
 
 try:
     # ======================================================================
@@ -173,8 +175,10 @@ try:
     
 finally:
     # Cleanup
-    storage.close()
-    storage_mem.close()
+    if storage is not None:
+        storage.close()
+    if storage_mem is not None:
+        storage_mem.close()
     if Path(temp_dir).exists():
         shutil.rmtree(temp_dir)
     print("\nTemporary storage files cleaned up")
@@ -182,4 +186,3 @@ finally:
 print("\n" + "=" * 70)
 print("Storage examples completed!")
 print("=" * 70)
-

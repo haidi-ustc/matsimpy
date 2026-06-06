@@ -15,16 +15,6 @@ Usage:
     >>> retrieved = storage.retrieve_data(doc_id)
 """
 
-try:
-    from .maggma_store import DataStorage
+from .maggma_store import DataStorage
 
-    __all__ = ["DataStorage"]
-except ImportError:
-    class DataStorage:
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "maggma is required for DataStorage. "
-                "Install with: pip install maggma or pip install MatSimPy[storage]"
-            )
-
-    __all__ = ["DataStorage"]
+__all__ = ["DataStorage"]

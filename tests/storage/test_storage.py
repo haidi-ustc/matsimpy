@@ -75,6 +75,25 @@ class TestDataStorage(unittest.TestCase):
         retrieved = storage.retrieve_data(doc_id)
         self.assertEqual(retrieved['metadata'], metadata)
         storage.close()
+
+    def test_metadata_changes_generated_doc_id(self):
+        """Generated IDs include metadata so distinct records do not collide."""
+        storage = DataStorage(use_memory_store=True)
+        data = {'energy': -10.5}
+
+        first_id = storage.store_data(data, metadata={'calculator': 'LJ'})
+        second_id = storage.store_data(data, metadata={'calculator': 'DFT'})
+
+        self.assertNotEqual(first_id, second_id)
+        self.assertEqual(
+            storage.retrieve_data(first_id)['metadata']['calculator'],
+            'LJ',
+        )
+        self.assertEqual(
+            storage.retrieve_data(second_id)['metadata']['calculator'],
+            'DFT',
+        )
+        storage.close()
     
     def test_store_with_custom_id(self):
         """Test storing data with custom document ID."""
@@ -199,6 +218,12 @@ class TestDataStorage(unittest.TestCase):
             retrieved = storage.retrieve_data(doc_id)
             self.assertEqual(retrieved['test'], 'data')
         # Store should be closed automatically
+
+    def test_close_is_idempotent(self):
+        """Closing storage more than once should be a no-op."""
+        storage = DataStorage(use_memory_store=True)
+        storage.close()
+        storage.close()
     
     def test_as_dict_from_dict(self):
         """Test serialization and deserialization."""
@@ -249,4 +274,3 @@ class TestDataStorage(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

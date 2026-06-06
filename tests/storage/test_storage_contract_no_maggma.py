@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from matsimpy.storage import maggma_store
 
 
@@ -88,19 +90,25 @@ def test_memory_store_contract_without_real_maggma(monkeypatch):
         metadata={"calculator": "mock"},
     )
     other_id = storage.store_data({"energy": -2.0})
+    different_metadata_id = storage.store_data(
+        {"energy": -1.0},
+        metadata={"calculator": "other"},
+    )
 
     assert first_id == second_id
+    assert first_id != different_metadata_id
     assert len(first_id) == 32
     assert storage.retrieve_data(first_id)["metadata"]["calculator"] == "mock"
     assert len(storage.retrieve_data(query={"metadata.calculator": "mock"})) == 1
-    assert storage.count_documents() == 2
+    assert storage.count_documents() == 3
 
     assert storage.delete_data(other_id) is True
     assert storage.delete_data("missing") is False
-    assert storage.count_documents() == 1
+    assert storage.count_documents() == 2
 
     storage.clear_store()
     assert storage.count_documents() == 0
+    storage.close()
     storage.close()
     assert storage.store.closed is True
 
@@ -118,3 +126,11 @@ def test_json_store_close_flushes_without_real_maggma(monkeypatch, tmp_path):
     storage.close()
     assert storage.store.updated_json is True
     assert storage.store.closed is True
+
+
+def test_datastorage_constructor_reports_missing_maggma(monkeypatch):
+    """Constructing DataStorage without maggma should keep a clear install hint."""
+    monkeypatch.setattr(maggma_store, "MAGGMA_AVAILABLE", False)
+
+    with pytest.raises(ImportError, match="pip install MatSimPy\\[storage\\]"):
+        maggma_store.DataStorage(use_memory_store=True)
