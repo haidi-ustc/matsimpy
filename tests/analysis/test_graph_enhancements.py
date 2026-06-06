@@ -4,7 +4,7 @@ import numpy as np
 
 from matsimpy.core import Molecule, Crystal, Lattice
 from tests.conftest import make_simple_crystal, make_simple_molecule
-from matsimpy.core.graph import (
+from matsimpy.analysis.graph import (
     get_adjacency_matrix,
     get_distance_matrix,
     get_edge_list,

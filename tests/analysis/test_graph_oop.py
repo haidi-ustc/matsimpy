@@ -4,7 +4,7 @@ import numpy as np
 
 from matsimpy.core import Molecule, Crystal, Lattice
 from tests.conftest import make_simple_crystal, make_simple_molecule
-from matsimpy.core.graph import (
+from matsimpy.analysis.graph import (
     MoleculeGraph,
     CrystalGraph,
     create_structure_graph,
@@ -196,21 +196,21 @@ class TestOOPvsFunctionalEquivalence(unittest.TestCase):
         self.cutoff = 1.5
 
     def test_adjacency_equivalence(self):
-        from matsimpy.core.graph import get_adjacency_matrix
+        from matsimpy.analysis.graph import get_adjacency_matrix
         graph = MoleculeGraph(self.mol, self.cutoff)
         adj_oop = graph.adjacency_matrix
         adj_func = get_adjacency_matrix(self.mol, self.cutoff)
         self.assertTrue(np.array_equal(adj_oop, adj_func))
 
     def test_coordination_equivalence(self):
-        from matsimpy.core.graph import get_coordination_numbers
+        from matsimpy.analysis.graph import get_coordination_numbers
         graph = MoleculeGraph(self.mol, self.cutoff)
         coord_oop = graph.coordination_numbers
         coord_func = get_coordination_numbers(self.mol, self.cutoff)
         self.assertEqual(coord_oop, coord_func)
 
     def test_statistics_equivalence(self):
-        from matsimpy.core.graph import get_graph_statistics
+        from matsimpy.analysis.graph import get_graph_statistics
         graph = MoleculeGraph(self.mol, self.cutoff)
         stats_oop = graph.statistics
         stats_func = get_graph_statistics(self.mol, self.cutoff)

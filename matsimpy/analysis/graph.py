@@ -13,7 +13,7 @@ The module provides:
 
 Example:
     >>> from matsimpy.core import Crystal, Molecule, Lattice
-    >>> from matsimpy.core.graph import MoleculeGraph, CrystalGraph, create_structure_graph
+    >>> from matsimpy.analysis.graph import MoleculeGraph, CrystalGraph, create_structure_graph
     >>>
     >>> # Create molecule graph
     >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
@@ -36,8 +36,8 @@ from collections import deque
 from typing import Optional, Union, Dict, Any, List, Tuple, Set
 from scipy.spatial.distance import cdist
 from abc import ABC, abstractmethod
-from .crystal import Crystal
-from .molecule import Molecule
+from ..core.crystal import Crystal
+from ..core.molecule import Molecule
 
 
 def _crystal_all_pairs_distance_matrix(crystal: Crystal, use_pbc: bool) -> np.ndarray:
@@ -132,7 +132,7 @@ class StructureGraph(ABC):
             structure: Crystal or Molecule object.
             cutoff: Cutoff distance in Angstroms for defining edges.
         """
-        from .neighbors import validate_cutoff
+        from ..core.neighbors import validate_cutoff
         validate_cutoff(cutoff)
         self.structure = structure
         self.cutoff = cutoff
