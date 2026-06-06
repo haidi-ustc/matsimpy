@@ -85,6 +85,14 @@ __all__ = (
     + ["chain", "apply_transformations"]
 )
 
+# Registry and spec
+from .registry import registry, TransformationRegistry
+from .spec import TransformationSpec
+
+# Auto-register built-in transformations
+from ._register import register_all
+register_all()
+
 # Allow direct access to submodules
 from . import geometric
 from . import lattice
