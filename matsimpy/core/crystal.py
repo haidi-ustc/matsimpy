@@ -1389,7 +1389,7 @@ class Crystal(Structure):
             >>> neighbors = crystal.get_neighbor_list(5.0, use_pbc=False)
         """
         # Check if we need to rebuild tree
-        from .neighbors import validate_cutoff
+        from ..analysis.neighbors import validate_cutoff
         validate_cutoff(cutoff)
         n_atoms = len(self.cart_positions)
         cache = self._neighbor_cache

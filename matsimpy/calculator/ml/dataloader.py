@@ -13,7 +13,7 @@ from typing import List, Optional, Union, Tuple, Any
 logger = logging.getLogger(__name__)
 
 from ...core import Crystal, Molecule
-from ...core.neighbors import find_points_in_spheres
+from ...analysis import find_points_in_spheres
 
 
 def _require_torch_geometric():

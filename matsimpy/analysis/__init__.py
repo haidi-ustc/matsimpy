@@ -2,6 +2,7 @@
 Analysis tools for structures.
 
 This module provides:
+- Neighbor finding (find_points_in_spheres, validate_cutoff)
 - Graph representations (StructureGraph, MoleculeGraph, CrystalGraph)
 - Graph algorithms (shortest path, connected components, rings)
 - Graph properties (adjacency matrix, distance matrix, coordination numbers)
@@ -12,6 +13,11 @@ This module provides:
 Note:
 - Symmetry analysis is in matsimpy.symmetry module.
 """
+
+from .neighbors import (
+    find_points_in_spheres,
+    validate_cutoff,
+)
 
 from .graph import (
     StructureGraph,
@@ -36,6 +42,8 @@ from .graph import (
 )
 
 __all__ = [
+    "find_points_in_spheres",
+    "validate_cutoff",
     "StructureGraph",
     "MoleculeGraph",
     "CrystalGraph",

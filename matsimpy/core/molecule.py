@@ -932,7 +932,7 @@ class Molecule(Structure):
             >>> print(all_neighbors)  # {0: [(1, 1.2)], 1: [(0, 1.2)]}
         """
         n_atoms = len(self.positions)
-        from .neighbors import validate_cutoff
+        from ..analysis.neighbors import validate_cutoff
         validate_cutoff(cutoff)
         if atom_index is not None:
             if not (0 <= atom_index < n_atoms):

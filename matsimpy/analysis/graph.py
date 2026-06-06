@@ -132,7 +132,7 @@ class StructureGraph(ABC):
             structure: Crystal or Molecule object.
             cutoff: Cutoff distance in Angstroms for defining edges.
         """
-        from ..core.neighbors import validate_cutoff
+        from .neighbors import validate_cutoff
         validate_cutoff(cutoff)
         self.structure = structure
         self.cutoff = cutoff
