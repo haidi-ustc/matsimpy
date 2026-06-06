@@ -23,17 +23,15 @@
 
 ## Features
 
-- **Core data model**: `Crystal`, `Molecule`, `Structure`, `Lattice`, `Composition`, `Site`, `Element`
-- **Immutable-by-default**: mutation returns new objects (safe caching, predictable pipelines)
-- **Coordinate system clarity**: `Structure.positions` is **always Cartesian**; `Crystal` also supports `frac_positions`
-- **Builders**: bulk/surface/alloy/molecule/defects/interface/nanostructures with `BuilderRegistry`
-- **Transformations**: geometric, lattice, atomic, chemical, structural with `TransformationRegistry` + `TransformationSpec`
-- **Analysis**: graph connectivity, neighbor finding, bond/angle/dihedral analysis, structure properties, topology, atom selection
-- **IO**: table-driven `FormatRegistry` with 8 built-in formats, plugin-ready
-- **Storage**: `DataStorage` facade with `MemoryBackend` + `MaggmaBackend`, content-addressed IDs
-- **Adaptability**: `adapters/` for pymatgen/ASE, `export/` for LaTeX, plugin entry points
-- **AI REPL**: LLM-powered materials science assistant — natural language → function calls (DeepSeek V4)
-- **Calculators**: classical + ML (optional)
+- **Core**: `Crystal` (periodic + lattice), `Molecule` (non-periodic), `Lattice` (14 Bravais types), `Composition`, `Site`, `Element` (118 elements). Immutable-return — `add_atom`, `remove_atom`, `substitute`, `sort_atoms` return new objects
+- **Builders** (7 domains, 27 functions): `from_prototype` (9 prototypes: fcc/bcc/hcp/diamond/rocksalt/perovskite/zincblende/sc/CsCl), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. Registered via `BuilderRegistry`
+- **Transformations** (5 categories, 26 functions): `translate`, `rotate`, `apply_strain`, `make_supercell`, `substitute`, `move_atoms`, `scale_lattice`, etc. Registered via `TransformationRegistry` with `TransformationSpec` metadata. `TransformationPlan` for reproducible pipelines
+- **Analysis** (6 modules): `BondAnalyzer` (bonds/angles/dihedrals/orders), `StructureAnalyzer` (COM/inertia/density), `TopologyAnalyzer` (connectivity/rings/paths), graph/neighbor functions, `AtomSelection` (9 selectors)
+- **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()` in 15 lines
+- **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
+- **Adapters**: pymatgen ↔ ASE bidirectional. LaTeX table export via `export/`. Plugin entry points for all registries
+- **AI REPL** (v0.5): LLM function calling via DeepSeek V4. 6 progressive skills (66 tools). `/commands`, workspace, agent memory with `user.md`/`soul.md`/`memory.md`, auto-save `.skill.md` files. `matsimpy -c "build fcc Cu"` single-shot mode
+- **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT (VASP/QE interfaces) — optional
 - **CLI**: interactive menu for structure editing and utilities
 
 ## Installation
