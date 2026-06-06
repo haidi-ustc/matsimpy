@@ -9,6 +9,26 @@ from typing import List, Union, Optional, Callable
 from ..core import Crystal, Molecule
 
 
+def _escape_latex(text: str) -> str:
+    """Escape special LaTeX characters in user-provided text."""
+    # Escape backslash first so subsequently inserted \ chars are left intact
+    text = text.replace('\\', r'\textbackslash{}')
+    # Remaining escapes (order-irrelevant once backslash is handled)
+    for char, replacement in [
+        ('&', r'\&'),
+        ('%', r'\%'),
+        ('$', r'\$'),
+        ('#', r'\#'),
+        ('_', r'\_'),
+        ('{', r'\{'),
+        ('}', r'\}'),
+        ('~', r'\textasciitilde{}'),
+        ('^', r'\textasciicircum{}'),
+    ]:
+        text = text.replace(char, replacement)
+    return text
+
+
 def crystals_to_latex_table(
     crystals: List[Crystal],
     caption: str = "Crystal Structures",
@@ -69,13 +89,13 @@ def crystals_to_latex_table(
     lines = []
     lines.append(r"\begin{table}[htbp]")
     lines.append(r"    \centering")
-    lines.append(f"    \\caption{{{caption}}}")
-    lines.append(f"    \\label{{{label}}}")
+    lines.append(f"    \\caption{{{_escape_latex(caption)}}}")
+    lines.append(f"    \\label{{{_escape_latex(label)}}}")
     lines.append(f"    \\begin{{tabular}}{{{col_spec}}}")
     lines.append(r"        \toprule")
 
     # Header row
-    header = " & ".join(include_columns) + r" \\"
+    header = " & ".join(_escape_latex(col) for col in include_columns) + r" \\"
     lines.append(f"        {header}")
     lines.append(r"        \midrule")
 
@@ -85,7 +105,7 @@ def crystals_to_latex_table(
 
         for col in include_columns:
             if custom_formatters and col in custom_formatters:
-                # Use custom formatter
+                # Custom formatters produce intentional LaTeX — not escaped
                 value = custom_formatters[col](crystal, idx)
             else:
                 # Use default formatters
@@ -164,13 +184,13 @@ def molecules_to_latex_table(
     lines = []
     lines.append(r"\begin{table}[htbp]")
     lines.append(r"    \centering")
-    lines.append(f"    \\caption{{{caption}}}")
-    lines.append(f"    \\label{{{label}}}")
+    lines.append(f"    \\caption{{{_escape_latex(caption)}}}")
+    lines.append(f"    \\label{{{_escape_latex(label)}}}")
     lines.append(f"    \\begin{{tabular}}{{{col_spec}}}")
     lines.append(r"        \toprule")
 
     # Header row
-    header = " & ".join(include_columns) + r" \\"
+    header = " & ".join(_escape_latex(col) for col in include_columns) + r" \\"
     lines.append(f"        {header}")
     lines.append(r"        \midrule")
 
@@ -180,7 +200,7 @@ def molecules_to_latex_table(
 
         for col in include_columns:
             if custom_formatters and col in custom_formatters:
-                # Use custom formatter
+                # Custom formatters produce intentional LaTeX — not escaped
                 value = custom_formatters[col](molecule, idx)
             else:
                 # Use default formatters
@@ -370,8 +390,8 @@ def structures_to_latex_table(
         lines = []
         lines.append(r"\begin{table}[htbp]")
         lines.append(r"    \centering")
-        lines.append(f"    \\caption{{{caption}}}")
-        lines.append(f"    \\label{{{label}}}")
+        lines.append(f"    \\caption{{{_escape_latex(caption)}}}")
+        lines.append(f"    \\label{{{_escape_latex(label)}}}")
         lines.append(f"    \\begin{{tabular}}{{cccc}}")
         lines.append(r"        \toprule")
         lines.append(r"        ID & Type & Formula & Atoms \\")

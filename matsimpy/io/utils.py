@@ -22,6 +22,20 @@ FORMAT_REGISTRY = {
     ".mol": ("read_MOL", "write_MOL"),
 }
 
+# Canonical alias mapping: user-facing format name -> standard extension
+FORMAT_ALIASES = {
+    "vasp": ".vasp",
+    "poscar": ".vasp",
+    "contcar": ".contcar",
+    "cif": ".cif",
+    "xsf": ".xsf",
+    "json": ".json",
+    "xyz": ".xyz",
+    "pdb": ".pdb",
+    "mol": ".mol",
+    "ase": ".ase",
+}
+
 
 def detect_format(filename: str) -> Optional[str]:
     """
@@ -79,16 +93,25 @@ def is_crystal_format(format_ext: str) -> bool:
 def is_molecule_format(format_ext: str) -> bool:
     """
     Check if format is for molecular structures.
-
-    Args:
-        format_ext: Format extension
-
-    Returns:
-        bool: True if format supports molecular structures
     """
-    # .json and .ase are dual-format (support both Crystal and Molecule)
     molecule_formats = {".xyz", ".pdb", ".mol", ".ase", ".json"}
     return format_ext in molecule_formats
+
+
+def normalize_format(format_spec: str) -> Optional[str]:
+    """
+    Normalize a format specification string to a standard extension.
+
+    Accepts user-facing names (``'vasp'``, ``'cif'``, etc.) and
+    extensions (``'.xyz'``, ``'.pdb'``, etc.) and returns the
+    canonical extension or None.
+    """
+    fmt = format_spec.lower().lstrip(".")
+    if fmt in FORMAT_ALIASES:
+        return FORMAT_ALIASES[fmt]
+    if f".{fmt}" in FORMAT_REGISTRY:
+        return f".{fmt}"
+    return None
 
 
 __all__ = [
@@ -97,4 +120,6 @@ __all__ = [
     "is_crystal_format",
     "is_molecule_format",
     "FORMAT_REGISTRY",
+    "FORMAT_ALIASES",
+    "normalize_format",
 ]

@@ -7,6 +7,7 @@ implementation focused on coordinate data, not full PDB specification.
 
 from pathlib import Path
 from typing import Optional, Union
+import re
 import numpy as np
 
 from ..core import Molecule, Crystal, Lattice
@@ -67,8 +68,18 @@ def read_PDB(filename: str, as_crystal: bool = False) -> Union[Molecule, Crystal
                 if len(line) > 77:
                     element = line[76:78].strip()
                 else:
-                    # Infer from atom name (first letter is usually element)
-                    element = atom_name[0] if atom_name else "X"
+                    cleaned = atom_name.strip()
+                    base = re.sub(r'[0-9+\-]', '', cleaned)
+                    if len(base) >= 2:
+                        two_letter = base[:2].upper()
+                        if two_letter[0].isalpha() and two_letter[1].islower():
+                            element = two_letter
+                        else:
+                            element = base[0].upper() if base and base[0].isalpha() else "X"
+                    elif base and base[0].isalpha():
+                        element = base[0].upper()
+                    else:
+                        element = "X"
 
                 # Extract coordinates
                 x = float(line[30:38])
@@ -78,18 +89,19 @@ def read_PDB(filename: str, as_crystal: bool = False) -> Union[Molecule, Crystal
                 species.append(element)
                 positions.append([x, y, z])
             except (ValueError, IndexError) as e:
-                # Skip invalid lines
-                continue
+                raise ValueError(f"Malformed PDB ATOM/HETATM line: {line.strip()}")
 
     if not species:
         raise ValueError("No valid ATOM or HETATM records found in PDB file")
 
-    if as_crystal and lattice is not None:
+    if as_crystal:
+        if lattice is None:
+            raise ValueError("as_crystal=True requires a valid CRYST1 record")
         # Convert to fractional coordinates
         frac_positions = []
         for pos in positions:
             cart_pos = np.array(pos)
-            frac_pos = np.dot(cart_pos, np.linalg.inv(lattice.matrix))
+            frac_pos = np.dot(cart_pos, lattice.inv_matrix)
             frac_positions.append(frac_pos.tolist())
         return Crystal(species, frac_positions, lattice, coords_are_cartesian=False)
     else:

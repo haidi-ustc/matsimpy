@@ -23,12 +23,13 @@ def read_ASE(filename: str) -> Crystal:
     - Format: "symbol x y z [properties]"
     - Cell information in comment line or properties
 
+    If no cell/lattice information is present, a Molecule is returned.
+
     Args:
         filename: Path to the ASE/XYZ file
 
     Returns:
-        Crystal: Crystal structure from the file (if cell info present)
-                Otherwise returns as Molecule (handled by caller)
+        Crystal or Molecule depending on whether lattice metadata is present.
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -50,18 +51,25 @@ def read_ASE(filename: str) -> Crystal:
     except ValueError:
         raise ValueError(f"Invalid atom count in ASE file: {lines[0]}")
 
+    if n_atoms <= 0:
+        raise ValueError(f"Invalid atom count in ASE file: {n_atoms}")
+
+    # Ensure we have enough coordinate lines (header=2 + n_atoms)
+    if len(lines) < 2 + n_atoms:
+        raise ValueError(
+            f"ASE file declares {n_atoms} atoms but only has "
+            f"{len(lines) - 2} coordinate line(s)"
+        )
+
     # Read properties line (line 1) - may contain cell information
     properties_line = lines[1] if len(lines) > 1 else ""
 
     # Try to extract cell information from properties
     lattice = None
-    cell_info = None
 
     # Look for Lattice or cell keywords in properties
     if "Lattice=" in properties_line:
-        # ASE format: Lattice="a1 b1 c1 a2 b2 c2 a3 b3 c3"
         import re
-
         match = re.search(r'Lattice="([^"]+)"', properties_line)
         if match:
             cell_values = [float(x) for x in match.group(1).split()]
@@ -72,7 +80,6 @@ def read_ASE(filename: str) -> Crystal:
     # Alternative: Look for cell parameters
     if lattice is None and "cell=" in properties_line.lower():
         import re
-
         match = re.search(r'cell="([^"]+)"', properties_line, re.IGNORECASE)
         if match:
             cell_values = [float(x) for x in match.group(1).split()]
@@ -80,34 +87,41 @@ def read_ASE(filename: str) -> Crystal:
                 lattice_matrix = np.array(cell_values).reshape(3, 3)
                 lattice = Lattice(lattice_matrix)
 
-    # Read atomic coordinates
+    # Read atomic coordinates - strict: every declared atom line must parse
     species = []
     positions = []
 
-    for i in range(2, min(2 + n_atoms, len(lines))):
+    for i in range(2, 2 + n_atoms):
         parts = lines[i].split()
         if len(parts) < 4:
-            continue
+            raise ValueError(
+                f"Malformed coordinate line {i+1}: expected at least 4 values "
+                f"(symbol x y z), got {len(parts)}"
+            )
 
         try:
             specie = parts[0]
             x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
             species.append(specie)
             positions.append([x, y, z])
-        except ValueError:
-            continue
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid coordinate format at line {i+1}: {e}"
+            )
 
     if not species:
         raise ValueError("No valid atomic coordinates found in ASE file")
 
-    # If we have lattice, return Crystal; otherwise raise (caller should handle)
+    if len(species) != n_atoms:
+        raise ValueError(
+            f"Parsed {len(species)} atoms but declared count is {n_atoms}"
+        )
+
+    # If we have lattice, return Crystal; otherwise return Molecule
     if lattice is not None:
-        # Positions are typically in cartesian for ASE
         return Crystal(species, positions, lattice, coords_are_cartesian=True)
     else:
-        raise ValueError(
-            "ASE file does not contain cell/lattice information. Use read_XYZ for molecules."
-        )
+        return Molecule(species, positions)
 
 
 def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:

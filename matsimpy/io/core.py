@@ -13,6 +13,7 @@ from .utils import (
     get_reader_writer,
     is_crystal_format,
     is_molecule_format,
+    normalize_format,
 )
 
 
@@ -63,26 +64,9 @@ def read(
                 f"Please specify format explicitly using format='...'"
             )
     else:
-        # Normalize format string to extension
-        format_map = {
-            "vasp": ".vasp",
-            "poscar": ".vasp",
-            "contcar": ".contcar",
-            "cif": ".cif",
-            "xsf": ".xsf",
-            "json": ".json",
-            "xyz": ".xyz",
-            "pdb": ".pdb",
-            "mol": ".mol",
-            "ase": ".ase",
-        }
-        format_ext = format_map.get(format.lower())
+        format_ext = normalize_format(format)
         if format_ext is None:
-            # Try as extension directly
-            if format.startswith("."):
-                format_ext = format.lower()
-            else:
-                raise ValueError(f"Unknown format: {format}")
+            raise ValueError(f"Unknown format: {format}")
 
     # Get reader function name
     reader_name, _ = get_reader_writer(format_ext)
@@ -182,26 +166,9 @@ def write(
                 f"Please specify format explicitly using format='...'"
             )
     else:
-        # Normalize format string to extension
-        format_map = {
-            "vasp": ".vasp",
-            "poscar": ".vasp",
-            "contcar": ".contcar",
-            "cif": ".cif",
-            "xsf": ".xsf",
-            "json": ".json",
-            "xyz": ".xyz",
-            "pdb": ".pdb",
-            "mol": ".mol",
-            "ase": ".ase",
-        }
-        format_ext = format_map.get(format.lower())
+        format_ext = normalize_format(format)
         if format_ext is None:
-            # Try as extension directly
-            if format.startswith("."):
-                format_ext = format.lower()
-            else:
-                raise ValueError(f"Unknown format: {format}")
+            raise ValueError(f"Unknown format: {format}")
 
     # Check format compatibility
     if isinstance(structure, Crystal):

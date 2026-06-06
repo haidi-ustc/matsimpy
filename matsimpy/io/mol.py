@@ -91,11 +91,11 @@ def read_MOL(filename: str) -> Molecule:
 
     for i in range(4, 4 + n_atoms):
         if i >= len(lines):
-            break
+            raise ValueError(f"Not enough lines for {n_atoms} atoms at line {i+1}")
 
         line = lines[i]
-        if len(line) < 30:  # Minimum line length for atom data
-            continue
+        if len(line) < 30:
+            raise ValueError(f"MOL atom line {i+1} is too short (minimum 30 characters): {line}")
 
         try:
             # MDL V2000 atom line (fixed-width):
@@ -122,8 +122,10 @@ def read_MOL(filename: str) -> Molecule:
         except (IndexError,) as e:
             raise ValueError(f"Malformed atom line {i+1}: {e}")
 
-    if not species:
-        raise ValueError("No valid atoms found in MOL file")
+    if len(species) != n_atoms:
+        raise ValueError(
+            f"MOL atom count mismatch: declared {n_atoms}, parsed {len(species)}"
+        )
 
     return Molecule(species, positions)
 

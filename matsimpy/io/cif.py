@@ -9,6 +9,7 @@ needed for crystal structure representation.
 from pathlib import Path
 from typing import Optional, Dict, List
 import re
+import shlex
 import numpy as np
 
 from ..core import Crystal, Lattice
@@ -163,10 +164,14 @@ def read_CIF(filename: str) -> Crystal:
             # This handles CIF files where a single row spans multiple lines.
             tokens = []
             for data_line in loop_data_lines:
-                tokens.extend(data_line.split())
+                tokens.extend(shlex.split(data_line))
 
             n_cols = len(loop_items)
             if n_cols > 0:
+                if len(tokens) % n_cols != 0:
+                    raise ValueError(
+                        f"Loop token count ({len(tokens)}) is not a multiple of column count ({n_cols})"
+                    )
                 for row_start in range(0, len(tokens), n_cols):
                     row = tokens[row_start : row_start + n_cols]
                     for j, item in enumerate(loop_items):
@@ -197,8 +202,23 @@ def read_CIF(filename: str) -> Crystal:
     # Create lattice from parameters
     lattice = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
 
-    # Extract atomic positions
-    # Look for atom site loop or individual site data
+    if "_atom_site_occupancy" in cif_data:
+        for occ in cif_data["_atom_site_occupancy"]:
+            occ_val = _parse_cif_value(occ)
+            if occ_val != 1.0:
+                raise ValueError(
+                    f"Non-1.0 occupancy detected in CIF file, not supported. Value: {occ_val}"
+                )
+
+    symm_keys = ["_symmetry_equiv_pos_as_xyz", "_space_group_symop_operation_xyz"]
+    for symm_key in symm_keys:
+        if symm_key in cif_data:
+            symm_count = len(cif_data[symm_key])
+            if symm_count > 1:
+                raise ValueError(
+                    f"CIF symmetry expansion is not supported. File contains {symm_count} symmetry operation(s). Only P1 CIFs with explicitly listed sites are supported."
+                )
+
     atom_species = []
     atom_positions = []
 

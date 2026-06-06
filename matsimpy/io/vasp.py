@@ -62,7 +62,16 @@ def read_POSCAR(filename: str) -> Crystal:
         except ValueError as e:
             raise ValueError(f"Invalid lattice vector format at line {i+1}: {e}")
 
-    lattice_matrix = np.array(lattice_vectors) * scale_factor
+    if scale_factor < 0:
+        raw = np.array(lattice_vectors)
+        vol = np.abs(np.linalg.det(raw))
+        if vol == 0:
+            raise ValueError("Lattice vectors have zero volume, cannot apply negative scale")
+        target_vol = abs(scale_factor)
+        scale = (target_vol / vol) ** (1 / 3)
+        lattice_matrix = raw * scale
+    else:
+        lattice_matrix = np.array(lattice_vectors) * scale_factor
     lattice = Lattice(lattice_matrix)
 
     # Read species (line 5)

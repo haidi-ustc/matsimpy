@@ -56,8 +56,9 @@ O 5.0 5.0 5.0
             temp_file = f.name
         
         try:
-            with self.assertRaises(ValueError):
-                read_ASE(temp_file)
+            result = read_ASE(temp_file)
+            self.assertIsInstance(result, Molecule)
+            self.assertEqual(len(result), 3)
         finally:
             Path(temp_file).unlink()
     
