@@ -56,6 +56,11 @@ builders = [
 analysis = [
     "spglib",
 ]
+ai = [
+    "typer",
+    "requests",
+    "pyyaml",
+]
 all = [
     "pytest>=6.0",
     "pytest-cov>=2.12",
@@ -71,7 +76,7 @@ all = [
 ]
 
 [project.scripts]
-matsimpy = "matsimpy.ai.cli:main"
+matsimpy = "matsimpy.ai.cli:app"
 matsimpy-ai = "matsimpy.ai.cli:main"
 
 [tool.setuptools]
