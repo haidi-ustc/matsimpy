@@ -149,6 +149,12 @@ class BatchProcessor:
         except Exception as e:
             return BatchResult(structure=None, success=False, error=str(e), index=index)
 
+    def _raise_failed_result(self, result: BatchResult) -> None:
+        """Raise the public error for a failed transformation result."""
+        raise RuntimeError(
+            f"Transformation failed at index {result.index}: {result.error}"
+        )
+
     def process(self, structures: List[Union[Crystal, Molecule]]) -> List[BatchResult]:
         """
         Process batch of structures.
@@ -204,9 +210,7 @@ class BatchProcessor:
 
             # Raise on error if error_handling is 'raise'
             if not result.success and self.error_handling == "raise":
-                raise RuntimeError(
-                    f"Transformation failed at index {result.index}: {result.error}"
-                )
+                self._raise_failed_result(result)
 
         return results
 
@@ -241,9 +245,7 @@ class BatchProcessor:
                                     and self.error_handling == "raise"
                                 ):
                                     pool.terminate()
-                                    raise RuntimeError(
-                                        f"Transformation failed at index {result.index}: {result.error}"
-                                    )
+                                    self._raise_failed_result(result)
                         return results
                 except ImportError:
                     # tqdm not available, use regular map
@@ -256,13 +258,14 @@ class BatchProcessor:
                 # Check for errors if error_handling is 'raise'
                 for result in results:
                     if not result.success and self.error_handling == "raise":
-                        raise RuntimeError(
-                            f"Transformation failed at index {result.index}: {result.error}"
-                        )
+                        self._raise_failed_result(result)
 
                 return results
 
         except Exception as e:
+            if self.error_handling == "raise":
+                raise
+
             # Fallback to sequential if parallel fails
             import warnings
 
@@ -301,24 +304,39 @@ class BatchProcessor:
             ...         process_structure(result.structure)
         """
         if self.n_workers > 1:
-            items = [(i, s) for i, s in enumerate(structures)]
-            # For parallel, we need to process all first
-            # Could be optimized with async processing in future
-            if len(items) > 1:
-                results = self._process_parallel(items)
-            else:
-                results = self._process_sequential(items)
-            for result in results:
-                yield result
+            import multiprocessing
+
+            ctx = multiprocessing.get_context("spawn")
+            try:
+                with ctx.Pool(self.n_workers) as pool:
+                    for result in pool.imap(
+                        self._process_single, enumerate(structures)
+                    ):
+                        if not result.success and self.error_handling == "raise":
+                            pool.terminate()
+                            self._raise_failed_result(result)
+                        yield result
+            except Exception as e:
+                if self.error_handling == "raise":
+                    raise
+
+                import warnings
+
+                warnings.warn(
+                    f"Parallel stream processing failed: {e}. "
+                    "Falling back to sequential.",
+                    UserWarning,
+                )
+                for item in enumerate(structures):
+                    result = self._process_single(item)
+                    yield result
         else:
             # Sequential processing - can yield immediately
             for item in enumerate(structures):
                 result = self._process_single(item)
 
                 if not result.success and self.error_handling == "raise":
-                    raise RuntimeError(
-                        f"Transformation failed at index {result.index}: {result.error}"
-                    )
+                    self._raise_failed_result(result)
 
                 yield result
 

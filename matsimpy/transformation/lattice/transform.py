@@ -2,7 +2,8 @@
 Lattice transformation and standardization operations.
 """
 
-from typing import List, Union
+import copy
+from typing import Dict, List, Optional, Union
 import numpy as np
 from ...core import Crystal, Lattice
 
@@ -148,6 +149,69 @@ def get_niggli_reduced(crystal: Crystal, eps: float = 1e-5) -> Crystal:
     )
 
 
+def _spglib_number_maps(species: List[str]) -> tuple[Dict[str, int], Dict[int, str]]:
+    """Build stable species-number maps for spglib cells."""
+    unique_species = []
+    for symbol in species:
+        if symbol not in unique_species:
+            unique_species.append(symbol)
+    species_to_number = {
+        symbol: index + 1 for index, symbol in enumerate(unique_species)
+    }
+    number_to_species = {
+        index + 1: symbol for index, symbol in enumerate(unique_species)
+    }
+    return species_to_number, number_to_species
+
+
+def _map_site_properties(
+    crystal: Crystal,
+    species: List[str],
+    frac_positions: np.ndarray,
+    lattice: Lattice,
+    tol: float = 1e-5,
+) -> Optional[List[dict]]:
+    """Map site properties when a standardized cell is only reordered."""
+    if not crystal.site_properties:
+        return None
+    if len(species) != len(crystal):
+        return None
+
+    old_cart = crystal.cart_positions
+    new_cart = np.asarray(frac_positions, dtype=np.float64) @ lattice.lattice_vectors
+    inv_lattice = np.linalg.inv(lattice.lattice_vectors)
+    pbc = np.asarray(crystal.pbc, dtype=bool)
+    used = set()
+    mapping = []
+
+    def periodic_distance(position1: np.ndarray, position2: np.ndarray) -> float:
+        delta_frac = (position1 - position2) @ inv_lattice
+        delta_frac[pbc] -= np.rint(delta_frac[pbc])
+        return float(np.linalg.norm(delta_frac @ lattice.lattice_vectors))
+
+    for new_symbol, new_position in zip(species, new_cart):
+        candidates = [
+            (
+                index,
+                periodic_distance(new_position, old_position),
+            )
+            for index, (old_symbol, old_position) in enumerate(
+                zip(crystal.species, old_cart)
+            )
+            if index not in used and old_symbol == new_symbol
+        ]
+        if not candidates:
+            return None
+
+        old_index, distance = min(candidates, key=lambda item: item[1])
+        if distance > tol:
+            return None
+        used.add(old_index)
+        mapping.append(old_index)
+
+    return [copy.deepcopy(crystal.site_properties[index]) for index in mapping]
+
+
 def standardize_cell(
     crystal: Crystal, to_primitive: bool = False
 ) -> Crystal:
@@ -168,39 +232,49 @@ def standardize_cell(
         >>> standardized = standardize_cell(crystal)
         >>> primitive = standardize_cell(crystal, to_primitive=True)
     """
-    # Placeholder - full implementation would use spglib
     try:
         import spglib
 
+        species_to_number, number_to_species = _spglib_number_maps(
+            list(crystal.species)
+        )
         cell = (
             crystal.lattice.lattice_vectors,
             crystal.frac_positions,
-            [crystal.species.index(s) + 1 for s in crystal.species],
+            [species_to_number[s] for s in crystal.species],
         )
 
         if to_primitive:
             prim_cell = spglib.find_primitive(cell)
             if prim_cell is not None:
                 lattice, positions, numbers = prim_cell
-                species = [crystal.species[n - 1] for n in numbers]
+                new_lattice = Lattice(lattice)
+                species = [number_to_species[int(n)] for n in numbers]
+                site_properties = _map_site_properties(
+                    crystal, species, positions, new_lattice
+                )
                 return Crystal(
                     species, positions.tolist(),
-                    lattice=Lattice(lattice),
+                    lattice=new_lattice,
                     coords_are_cartesian=False,
                     pbc=list(crystal.pbc),
-                    site_properties=None,
+                    site_properties=site_properties,
                 )
         else:
             std_cell = spglib.standardize_cell(cell)
             if std_cell is not None:
                 lattice, positions, numbers = std_cell
-                species = [crystal.species[n - 1] for n in numbers]
+                new_lattice = Lattice(lattice)
+                species = [number_to_species[int(n)] for n in numbers]
+                site_properties = _map_site_properties(
+                    crystal, species, positions, new_lattice
+                )
                 return Crystal(
                     species, positions.tolist(),
-                    lattice=Lattice(lattice),
+                    lattice=new_lattice,
                     coords_are_cartesian=False,
                     pbc=list(crystal.pbc),
-                    site_properties=None,
+                    site_properties=site_properties,
                 )
 
     except ImportError:

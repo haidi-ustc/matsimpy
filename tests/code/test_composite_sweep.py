@@ -8,6 +8,11 @@ from matsimpy.transformation import apply_strain, make_supercell, translate
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
 
+
+def identity_with_kwargs(structure, **kwargs):
+    return structure.copy()
+
+
 class TestParameterSweep(unittest.TestCase):
     """Test cases for ParameterSweep."""
     
@@ -266,6 +271,54 @@ class TestParameterSweep(unittest.TestCase):
         self.assertEqual(len(structures), 2)
         self.assertEqual(len(structures[0][0]), len(self.crystal) * 2)
         self.assertEqual(len(structures[1][0]), len(self.crystal) * 2)
+
+    def test_cartesian_sweep_does_not_materialize_all_combinations(self):
+        """Large Cartesian sweeps should construct and yield lazily."""
+        values = list(range(100))
+        sweep = ParameterSweep(
+            base_structure=self.molecule,
+            transformations={
+                'identity': {
+                    'func': identity_with_kwargs,
+                    'params': {
+                        'p0': values,
+                        'p1': values,
+                        'p2': values,
+                        'p3': values,
+                        'p4': values,
+                        'p5': values,
+                    }
+                }
+            },
+            mode='cartesian',
+        )
+
+        self.assertEqual(len(sweep), 100 ** 6)
+        _structure, params = next(iter(sweep))
+        self.assertEqual(params['identity']['p0'], 0)
+        self.assertEqual(params['identity']['p5'], 0)
+
+    def test_generator_custom_sweep_has_unknown_length(self):
+        """Custom generator sweeps can be iterated without being materialized."""
+        def combinations(_transformations):
+            yield {'identity': {'label': 'first'}}
+
+        sweep = ParameterSweep(
+            base_structure=self.molecule,
+            transformations={
+                'identity': {
+                    'func': identity_with_kwargs,
+                    'params': {'label': ['fallback']}
+                }
+            },
+            mode='custom',
+            custom_combinations=combinations,
+        )
+
+        with self.assertRaises(TypeError):
+            len(sweep)
+        _structure, params = next(iter(sweep))
+        self.assertEqual(params['identity']['label'], 'first')
 
 if __name__ == '__main__':
     unittest.main()

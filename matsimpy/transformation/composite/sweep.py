@@ -107,9 +107,19 @@ class ParameterSweep:
 
         # Validate transformations
         self._validate_transformations()
+        if self.mode == "custom" and self.custom_combinations is None:
+            raise ValueError(
+                "custom_combinations must be provided when mode='custom'"
+            )
+        if (
+            self.mode == "custom"
+            and not callable(self.custom_combinations)
+            and hasattr(self.custom_combinations, "__len__")
+            and len(self.custom_combinations) == 0
+        ):
+            raise ValueError("custom_combinations must contain at least one combination")
 
-        # Pre-compute parameter combinations
-        self._combinations = self._generate_combinations()
+        self._length = self._compute_length()
 
     def _validate_transformations(self) -> None:
         """Validate transformation configurations."""
@@ -137,65 +147,52 @@ class ParameterSweep:
                         f"Transformation '{name}' param '{param_name}' is empty"
                     )
 
-    def _generate_combinations(self) -> List[Dict[str, Any]]:
-        """Generate all parameter combinations based on mode."""
+    def _iter_combinations(self) -> Iterator[Dict[str, Any]]:
+        """Iterate over parameter combinations based on mode."""
         if self.mode == "cartesian":
-            return self._generate_cartesian()
+            yield from self._iter_cartesian()
         elif self.mode == "zip":
-            return self._generate_zip()
+            yield from self._iter_zip()
         else:  # custom
-            return self._generate_custom()
+            yield from self._iter_custom()
 
-    def _generate_cartesian(self) -> List[Dict[str, Any]]:
-        """Generate Cartesian product of all parameter combinations."""
-        # Get all transformation names and their parameter combinations
+    def _iter_transformation_combinations(
+        self, transform_name: str
+    ) -> Iterator[Dict[str, Any]]:
+        """Iterate over one transformation's parameter combinations."""
+        param_dict = self.transformations[transform_name]["params"]
+        param_names = list(param_dict.keys())
+        param_value_lists = [param_dict[pname] for pname in param_names]
+
+        for param_combo in itertools.product(*param_value_lists):
+            yield {
+                param_names[index]: param_combo[index]
+                for index in range(len(param_names))
+            }
+
+    def _iter_cartesian(self) -> Iterator[Dict[str, Any]]:
+        """Generate Cartesian product of all parameter combinations lazily."""
         transform_names = list(self.transformations.keys())
 
-        # For each transformation, create list of (param_name, param_value) tuples
-        transform_param_lists = []
-        for name in transform_names:
-            config = self.transformations[name]
-            param_dict = config["params"]
+        def recurse(index: int, combo: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+            if index == len(transform_names):
+                yield dict(combo)
+                return
 
-            # Create list of all parameter combinations for this transformation
-            param_names = list(param_dict.keys())
-            param_value_lists = [param_dict[pname] for pname in param_names]
+            transform_name = transform_names[index]
+            for params in self._iter_transformation_combinations(transform_name):
+                combo[transform_name] = params
+                yield from recurse(index + 1, combo)
+            combo.pop(transform_name, None)
 
-            # Cartesian product of all parameters for this transformation
-            transform_combinations = []
-            for param_combo in itertools.product(*param_value_lists):
-                combo_dict = {
-                    param_names[i]: param_combo[i] for i in range(len(param_names))
-                }
-                transform_combinations.append(combo_dict)
+        yield from recurse(0, {})
 
-            transform_param_lists.append(transform_combinations)
-
-        # Cartesian product across all transformations
-        all_combinations = []
-        for combo in itertools.product(*transform_param_lists):
-            combo_dict = {}
-            for i, name in enumerate(transform_names):
-                combo_dict[name] = combo[i]
-            all_combinations.append(combo_dict)
-
-        return all_combinations
-
-    def _generate_zip(self) -> List[Dict[str, Any]]:
+    def _iter_zip(self) -> Iterator[Dict[str, Any]]:
         """Generate zip-style combinations (parallel iteration)."""
         transform_names = list(self.transformations.keys())
-
-        # Get maximum length across all transformations
-        max_length = 0
-        for name in transform_names:
-            config = self.transformations[name]
-            param_dict = config["params"]
-            # Get max length across all parameters in this transformation
-            for param_values in param_dict.values():
-                max_length = max(max_length, len(param_values))
+        max_length = self._length or 0
 
         # Generate combinations by zipping
-        all_combinations = []
         for idx in range(max_length):
             combo_dict = {}
             for name in transform_names:
@@ -210,11 +207,9 @@ class ParameterSweep:
                     ]
                 combo_dict[name] = param_combo
 
-            all_combinations.append(combo_dict)
+            yield combo_dict
 
-        return all_combinations
-
-    def _generate_custom(self) -> List[Dict[str, Any]]:
+    def _iter_custom(self) -> Iterator[Dict[str, Any]]:
         """Use explicit caller-provided combinations."""
         if self.custom_combinations is None:
             raise ValueError(
@@ -222,41 +217,75 @@ class ParameterSweep:
             )
 
         if callable(self.custom_combinations):
-            combinations = list(self.custom_combinations(self.transformations))
+            combinations = self.custom_combinations(self.transformations)
         else:
-            combinations = list(self.custom_combinations)
+            combinations = self.custom_combinations
 
-        if not combinations:
+        yielded = False
+        for index, combo in enumerate(combinations):
+            self._validate_custom_combo(combo, index)
+            yielded = True
+            yield combo
+
+        if not yielded:
             raise ValueError("custom_combinations must contain at least one combination")
 
+    def _validate_custom_combo(self, combo: Dict[str, Any], index: int) -> None:
+        """Validate one custom parameter combination."""
         expected_names = set(self.transformations)
-        for index, combo in enumerate(combinations):
-            if not isinstance(combo, dict):
+        if not isinstance(combo, dict):
+            raise TypeError(
+                f"custom combination {index} must be a dictionary"
+            )
+        combo_names = set(combo)
+        if combo_names != expected_names:
+            raise ValueError(
+                f"custom combination {index} must include exactly these "
+                f"transformations: {sorted(expected_names)}"
+            )
+        for transform_name, params in combo.items():
+            if not isinstance(params, dict):
                 raise TypeError(
-                    f"custom combination {index} must be a dictionary"
+                    f"custom combination {index} for '{transform_name}' "
+                    "must be a parameter dictionary"
                 )
-            combo_names = set(combo)
-            if combo_names != expected_names:
-                raise ValueError(
-                    f"custom combination {index} must include exactly these "
-                    f"transformations: {sorted(expected_names)}"
-                )
-            for transform_name, params in combo.items():
-                if not isinstance(params, dict):
-                    raise TypeError(
-                        f"custom combination {index} for '{transform_name}' "
-                        "must be a parameter dictionary"
-                    )
 
-        return combinations
+    def _compute_length(self) -> Optional[int]:
+        """Compute length when it is knowable without materializing combinations."""
+        if self.mode == "cartesian":
+            length = 1
+            for config in self.transformations.values():
+                for param_values in config["params"].values():
+                    length *= len(param_values)
+            return length
+
+        if self.mode == "zip":
+            return max(
+                len(param_values)
+                for config in self.transformations.values()
+                for param_values in config["params"].values()
+            )
+
+        if self.custom_combinations is None:
+            return None
+        if callable(self.custom_combinations):
+            return None
+        try:
+            return len(self.custom_combinations)  # type: ignore[arg-type]
+        except TypeError:
+            return None
 
     def __len__(self) -> int:
         """Return number of structures to generate."""
-        return len(self._combinations)
+        if self._length is None:
+            raise TypeError(
+                "ParameterSweep length is unavailable for this custom combination iterable"
+            )
+        return self._length
 
     def __iter__(self) -> Iterator[Tuple[Union[Crystal, Molecule], Dict[str, Any]]]:
         """Iterate over generated structures."""
-        for combo in self._combinations:
+        for combo in self._iter_combinations():
             # Start with base structure
             structure = self.base_structure.copy()
 
@@ -288,7 +317,8 @@ class ParameterSweep:
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"ParameterSweep(mode='{self.mode}', combinations={len(self)})"
+        combinations = self._length if self._length is not None else "unknown"
+        return f"ParameterSweep(mode='{self.mode}', combinations={combinations})"
 
 
 __all__ = ["ParameterSweep"]

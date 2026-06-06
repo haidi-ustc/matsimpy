@@ -5,6 +5,7 @@ Provides operations specific to molecular structures like fragmentation,
 merging, and conformer generation.
 """
 
+from numbers import Integral
 from typing import Dict, List, Optional, Tuple
 import copy
 import numpy as np
@@ -111,12 +112,31 @@ def align_molecules(
         >>> # Align using atoms 0,1,2 of each molecule
         >>> aligned = align_molecules(mol1, mol2, [0,1,2], [0,1,2])
     """
+    indices1 = list(indices1)
+    indices2 = list(indices2)
     if len(indices1) != len(indices2):
         raise ValueError("Must have same number of indices")
+    if not indices1:
+        raise ValueError("Must provide at least one atom pair for alignment")
+    if len(set(indices1)) != len(indices1) or len(set(indices2)) != len(indices2):
+        raise ValueError("Alignment indices must not contain duplicates")
+
+    for name, indices, molecule in (
+        ("indices1", indices1, molecule1),
+        ("indices2", indices2, molecule2),
+    ):
+        for index in indices:
+            if not isinstance(index, Integral):
+                raise TypeError(f"{name} must contain integer atom indices")
+            if index < 0 or index >= len(molecule):
+                raise IndexError(f"{name} contains atom index outside molecule")
+
+    index_array1 = np.array(indices1, dtype=int)
+    index_array2 = np.array(indices2, dtype=int)
 
     # Get coordinates
-    coords1 = molecule1.positions[indices1]
-    coords2 = molecule2.positions[indices2]
+    coords1 = molecule1.positions[index_array1]
+    coords2 = molecule2.positions[index_array2]
 
     # Center both sets
     center1 = np.mean(coords1, axis=0)

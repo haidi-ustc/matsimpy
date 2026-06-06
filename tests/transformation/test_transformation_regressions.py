@@ -7,8 +7,29 @@ from matsimpy.core import Crystal, Lattice, Molecule
 from matsimpy.transformation import translate
 from matsimpy.transformation.atomic import merge_atoms, perturb_positions, sort_atoms, split_atom, swap_atoms
 from matsimpy.transformation.composite import BatchProcessor, TransformationPipeline
-from matsimpy.transformation.lattice import get_niggli_reduced, perturb_lattice, standardize_cell
-from matsimpy.transformation.structural import fragment_molecule, generate_conformers, make_supercell
+from matsimpy.transformation.lattice import (
+    get_niggli_reduced,
+    perturb_lattice,
+    scale_lattice,
+    set_volume,
+    standardize_cell,
+)
+from matsimpy.transformation.structural import (
+    align_molecules,
+    fragment_molecule,
+    generate_conformers,
+    make_supercell,
+)
+
+
+class _SideEffectThenFail:
+    def __init__(self, marker):
+        self.marker = marker
+
+    def __call__(self, structure):
+        marker_text = self.marker.read_text() if self.marker.exists() else ""
+        self.marker.write_text(marker_text + "x")
+        raise ValueError("boom")
 
 
 def test_swap_atoms_reindexes_site_properties():
@@ -194,6 +215,57 @@ def test_standardize_cell_does_not_pass_stale_site_properties_when_cell_changes(
     assert len(standardized.site_properties) in (0, len(standardized))
 
 
+def test_standardize_cell_preserves_site_properties_when_sites_reorder(monkeypatch):
+    spglib = pytest.importorskip("spglib")
+    crystal = Crystal(
+        ["Na", "Cl"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        Lattice.cubic(5.64),
+        site_properties=[{"id": "Na"}, {"id": "Cl"}],
+    )
+
+    def fake_standardize_cell(cell):
+        lattice, positions, numbers = cell
+        return lattice, positions[[1, 0]], np.array(numbers)[[1, 0]]
+
+    monkeypatch.setattr(spglib, "standardize_cell", fake_standardize_cell)
+
+    standardized = standardize_cell(crystal)
+
+    assert standardized.species == ("Cl", "Na")
+    assert standardized.site_properties == ({"id": "Cl"}, {"id": "Na"})
+
+
+def test_scale_lattice_rejects_invalid_scale_factors():
+    crystal = Crystal(["He"], [[0, 0, 0]], Lattice.cubic(1.0))
+
+    invalid_values = [0, -1, float("nan"), [1, 1], [1, -1, 1], [1, float("inf"), 1]]
+    for value in invalid_values:
+        with pytest.raises(ValueError):
+            scale_lattice(crystal, value)
+
+
+def test_set_volume_rejects_non_positive_target_volume():
+    crystal = Crystal(["He"], [[0, 0, 0]], Lattice.cubic(1.0))
+
+    with pytest.raises(ValueError, match="target_volume"):
+        set_volume(crystal, -100)
+
+
+def test_align_molecules_rejects_empty_selections_early():
+    molecule = Molecule(["H"], [[0, 0, 0]])
+
+    with pytest.raises(ValueError, match="at least one"):
+        align_molecules(molecule, molecule, [], [])
+
+
+def test_align_molecules_rejects_out_of_range_indices():
+    molecule = Molecule(["H"], [[0, 0, 0]])
+
+    with pytest.raises(IndexError, match="outside molecule"):
+        align_molecules(molecule, molecule, [0], [1])
+
+
 def test_pipeline_round_trips_numpy_kwargs(tmp_path):
     pipeline = TransformationPipeline("array_kwargs")
     pipeline.add_step(translate, displacement=np.array([0.0, 0.0, 0.0]))
@@ -228,3 +300,19 @@ def test_process_stream_is_lazy_for_sequential_processors():
     assert first.success
     with pytest.raises(AssertionError, match="advanced beyond"):
         next(stream)
+
+
+def test_parallel_raise_mode_does_not_retry_failed_transform(tmp_path):
+    marker = tmp_path / "calls.txt"
+
+    processor = BatchProcessor(
+        [_SideEffectThenFail(marker)],
+        n_workers=2,
+        progress=False,
+        error_handling="raise",
+    )
+
+    with pytest.raises(RuntimeError, match="Transformation failed"):
+        processor.process([Molecule(["He"], [[0, 0, 0]])])
+
+    assert marker.read_text() == "x"
