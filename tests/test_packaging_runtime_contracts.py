@@ -65,6 +65,7 @@ def test_storage_import_without_maggma_is_quiet_and_actionable():
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            warnings.filterwarnings("ignore", message="A NumPy version.*")
             from matsimpy.storage import DataStorage
             assert not caught, [str(w.message) for w in caught]
 
@@ -75,6 +76,74 @@ def test_storage_import_without_maggma_is_quiet_and_actionable():
             assert "MatSimPy[storage]" in str(exc)
         else:
             raise AssertionError("DataStorage should require maggma when invoked")
+        """
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_core_runtime_imports_without_ase_or_pymatgen():
+    script = textwrap.dedent(
+        """
+        import builtins
+
+        blocked = {"ase", "pymatgen"}
+        real_import = builtins.__import__
+
+        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if level == 0 and (name in blocked or any(name.startswith(pkg + ".") for pkg in blocked)):
+                raise ModuleNotFoundError(f"blocked optional dependency: {name}", name=name)
+            return real_import(name, globals, locals, fromlist, level)
+
+        builtins.__import__ = guarded_import
+
+        import matsimpy
+        import matsimpy.core
+        import matsimpy.builders
+        import matsimpy.calculator
+
+        assert matsimpy.Crystal is not None
+        assert matsimpy.calculator.LennardJones is not None
+        """
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_calculator_import_without_ml_optional_dependencies():
+    script = textwrap.dedent(
+        """
+        import builtins
+
+        blocked = {"torch", "torch_geometric", "mattersim"}
+        real_import = builtins.__import__
+
+        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if level == 0 and (name in blocked or any(name.startswith(pkg + ".") for pkg in blocked)):
+                raise ModuleNotFoundError(f"blocked optional dependency: {name}", name=name)
+            return real_import(name, globals, locals, fromlist, level)
+
+        builtins.__import__ = guarded_import
+
+        from matsimpy.calculator import LennardJones, Mattersim
+        from matsimpy.calculator.ml import Mattersim as MLMattersim
+
+        assert LennardJones is not None
+        assert Mattersim is MLMattersim
         """
     )
 

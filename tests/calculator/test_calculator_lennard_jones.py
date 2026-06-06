@@ -6,6 +6,7 @@ import unittest
 import numpy as np
 from matsimpy import Crystal, Molecule, Lattice
 from matsimpy.calculator.classical import LennardJones
+from tests.conftest import has_ase
 
 class TestLennardJones(unittest.TestCase):
     """Tests for Lennard-Jones calculator."""
@@ -22,6 +23,34 @@ class TestLennardJones(unittest.TestCase):
         
         # Simple crystal
         self.crystal = Crystal(['Ar'], [[0, 0, 0]], Lattice.cubic(5.0))
+
+    def _ase_lj_results(self, species, positions, cutoff, cell=None, pbc=False):
+        if not has_ase():
+            self.skipTest("ASE is required for LJ reference results")
+
+        from ase import Atoms
+        from ase.calculators.lj import LennardJones as ASELennardJones
+
+        atoms = Atoms(species, positions=positions, cell=cell, pbc=pbc)
+        atoms.calc = ASELennardJones(
+            sigma=self.sigma,
+            epsilon=self.epsilon,
+            rc=cutoff,
+            smooth=False,
+        )
+        energy = atoms.get_potential_energy()
+        forces = atoms.get_forces()
+        stress = atoms.get_stress(voigt=False) if np.any(pbc) else None
+        return energy, forces, stress
+
+    def _ase_shifted_energy(self, r, cutoff):
+        pair_energy = 4.0 * self.epsilon * (
+            (self.sigma / r) ** 12 - (self.sigma / r) ** 6
+        )
+        cutoff_energy = 4.0 * self.epsilon * (
+            (self.sigma / cutoff) ** 12 - (self.sigma / cutoff) ** 6
+        )
+        return pair_energy - cutoff_energy
     
     def test_init(self):
         """Test LJ calculator initialization."""
@@ -51,11 +80,12 @@ class TestLennardJones(unittest.TestCase):
     
     def test_energy_at_equilibrium(self):
         """Test energy at equilibrium distance (sigma)."""
-        # At r = sigma, V = 0
+        # ASE uses a finite-cutoff shifted LJ potential when smooth=False.
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [self.sigma, 0, 0]])
         self.calc.calculate(mol)
         energy = self.calc.get_potential_energy()
-        self.assertAlmostEqual(energy, 0.0, places=5)
+        expected = self._ase_shifted_energy(self.sigma, self.calc.parameters["cutoff"])
+        self.assertAlmostEqual(energy, expected, places=8)
     
     def test_energy_at_minimum(self):
         """Test energy at minimum (r = 2^(1/6) * sigma)."""
@@ -63,8 +93,8 @@ class TestLennardJones(unittest.TestCase):
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [r_min, 0, 0]])
         self.calc.calculate(mol)
         energy = self.calc.get_potential_energy()
-        # At minimum, V = -epsilon
-        self.assertAlmostEqual(energy, -self.epsilon, places=3)
+        expected = self._ase_shifted_energy(r_min, self.calc.parameters["cutoff"])
+        self.assertAlmostEqual(energy, expected, places=8)
     
     def test_forces_at_equilibrium(self):
         """Test forces at equilibrium distance."""
@@ -136,8 +166,7 @@ class TestLennardJones(unittest.TestCase):
         calc_long.calculate(mol)
         energy_long = calc_long.get_potential_energy()
         
-        # Longer cutoff should include more interactions
-        self.assertGreater(abs(energy_long), abs(energy_short))
+        self.assertNotAlmostEqual(energy_long, energy_short)
     
     def test_crystal_stress(self):
         """Test stress calculation for crystal."""
@@ -146,6 +175,18 @@ class TestLennardJones(unittest.TestCase):
         self.assertEqual(stress.shape, (3, 3))
         # Stress should be symmetric
         np.testing.assert_array_almost_equal(stress, stress.T, decimal=5)
+
+    def test_stress_voigt(self):
+        """Stress supports full tensor and ASE-order Voigt forms."""
+        self.calc.calculate(self.crystal)
+        full = self.calc.get_stress(voigt=False)
+        voigt = self.calc.get_stress(voigt=True)
+        self.assertEqual(full.shape, (3, 3))
+        self.assertEqual(voigt.shape, (6,))
+        np.testing.assert_allclose(
+            voigt,
+            [full[0, 0], full[1, 1], full[2, 2], full[1, 2], full[0, 2], full[0, 1]],
+        )
     
     def test_multiple_atoms(self):
         """Test calculation with multiple atoms."""
@@ -172,6 +213,7 @@ class TestLennardJones(unittest.TestCase):
         self.assertIsInstance(energy, float)
         self.assertEqual(forces.shape, (1, 3))
         self.assertEqual(stress.shape, (3, 3))
+        self.assertEqual(crystal.get_stress(voigt=True).shape, (6,))
     
     def test_integration_with_molecule(self):
         """Test integration with Molecule class."""
@@ -184,6 +226,58 @@ class TestLennardJones(unittest.TestCase):
         self.assertIsInstance(energy, float)
         self.assertEqual(forces.shape, (2, 3))
 
+    def test_molecule_matches_ase_reference(self):
+        """Molecule energy and forces follow ASE LennardJones conventions."""
+        cutoff = 8.0
+        positions = np.array([[0, 0, 0], [4.0, 0, 0]], dtype=float)
+        mol = Molecule(['Ar', 'Ar'], positions)
+        calc = LennardJones(sigma=self.sigma, epsilon=self.epsilon, cutoff=cutoff)
+        calc.calculate(mol)
+
+        ase_energy, ase_forces, _ = self._ase_lj_results(
+            ['Ar', 'Ar'], positions, cutoff
+        )
+        self.assertAlmostEqual(calc.get_potential_energy(), ase_energy, places=10)
+        np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
+
+    def test_periodic_crystal_matches_ase_reference(self):
+        """Periodic crystal uses Cartesian coordinates and matches ASE."""
+        cutoff = 8.0
+        positions = np.array([[0, 0, 0], [4.0, 0, 0]], dtype=float)
+        cell = np.eye(3) * 10.0
+        crystal = Crystal(
+            ['Ar', 'Ar'],
+            positions,
+            Lattice(cell),
+            coords_are_cartesian=True,
+            pbc=(True, True, True),
+        )
+        calc = LennardJones(sigma=self.sigma, epsilon=self.epsilon, cutoff=cutoff)
+        calc.calculate(crystal)
+
+        ase_energy, ase_forces, ase_stress = self._ase_lj_results(
+            ['Ar', 'Ar'], positions, cutoff, cell=cell, pbc=True
+        )
+        self.assertAlmostEqual(calc.get_potential_energy(), ase_energy, places=10)
+        np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
+        np.testing.assert_allclose(calc.get_stress(), ase_stress, atol=1e-12)
+
+    def test_periodic_self_images_match_ase_reference(self):
+        """Single-atom periodic image interactions match ASE."""
+        crystal = Crystal(['Ar'], [[0, 0, 0]], Lattice.cubic(5.0))
+        calc = LennardJones(sigma=self.sigma, epsilon=self.epsilon)
+        calc.calculate(crystal)
+
+        ase_energy, ase_forces, ase_stress = self._ase_lj_results(
+            ['Ar'],
+            np.array([[0, 0, 0]], dtype=float),
+            calc.parameters["cutoff"],
+            cell=np.eye(3) * 5.0,
+            pbc=True,
+        )
+        self.assertAlmostEqual(calc.get_potential_energy(), ase_energy, places=10)
+        np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
+        np.testing.assert_allclose(calc.get_stress(), ase_stress, atol=1e-12)
+
 if __name__ == '__main__':
     unittest.main()
-

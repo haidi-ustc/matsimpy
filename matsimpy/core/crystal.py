@@ -1786,12 +1786,16 @@ class Crystal(Structure):
     # Calculator results (Crystal overrides)
     # ======================================================================
 
-    def get_stress(self) -> np.ndarray:
+    def get_stress(self, voigt: bool = False) -> np.ndarray:
         """
         Get stress tensor from attached calculator.
 
         Computes the stress tensor using the attached calculator. If the
         calculation hasn't been performed yet, it will be triggered automatically.
+
+        Args:
+            voigt: If True, return Voigt notation [xx, yy, zz, yz, xz, xy].
+                If False, return the full 3x3 tensor.
 
         Returns:
             np.ndarray: Stress tensor. Can be:
@@ -1817,7 +1821,7 @@ class Crystal(Structure):
             )
         if self._needs_calculation():
             self.calc.calculate(self)
-        return self.calc.get_stress()
+        return self.calc.get_stress(voigt=voigt)
 
     def get_symmetry_info(
         self, symprec: float = 1e-5, angle_tolerance: float = -1.0

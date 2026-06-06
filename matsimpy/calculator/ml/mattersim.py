@@ -13,6 +13,8 @@ from .base_ml import BaseML
 from .dataloader import build_dataloader
 from ...core import Crystal, Molecule
 
+GPA_TO_EV_PER_A3 = 0.006241509125883258
+
 
 class Mattersim(BaseML):
     """
@@ -65,29 +67,13 @@ class Mattersim(BaseML):
             ValueError: If neither model_path nor model is provided
             FileNotFoundError: If model file doesn't exist
         """
-        # Check if mattersim is available
-        try:
-            from mattersim.forcefield.m3gnet.m3gnet import M3Gnet
-            from mattersim.forcefield.potential import Potential
-        except ImportError:
-            raise ImportError(
-                "MatterSim library is required. Install with: pip install mattersim"
-            )
-
-        # Store MatterSim classes
-        self._Potential = Potential
+        self._Potential = None
 
         # Set model_type for compatibility (MatterSim uses M3GNet)
         self.model_type = "m3gnet"
 
-        # Get device from config if not provided
         if device is None:
-            try:
-                from ...config import get_config
-
-                device = get_config("calculator.ml.default_device", "cpu")
-            except ImportError:
-                device = "cpu"
+            device = "cpu"
 
         # Store additional parameters before super() call
         self.compute_stress = compute_stress
@@ -123,6 +109,15 @@ class Mattersim(BaseML):
         """
         if self.model_path is None:
             raise ValueError("Model path not provided")
+        if self._Potential is None:
+            try:
+                from mattersim.forcefield.potential import Potential
+            except ImportError as exc:
+                raise ImportError(
+                    "MatterSim library is required for loading MatterSim models. "
+                    "Install with: pip install mattersim"
+                ) from exc
+            self._Potential = Potential
 
         # Convert to Path object
         model_path = Path(self.model_path)
@@ -263,6 +258,17 @@ class Mattersim(BaseML):
         Returns:
             dict: Dictionary with 'energy', 'forces', 'stress' keys
         """
+        if hasattr(self.potential, "predict"):
+            return self._normalize_prediction(self.potential.predict(model_input))
+
+        if not hasattr(self.potential, "ema"):
+            if not hasattr(self.potential, "forward"):
+                raise AttributeError("MatterSim potential must provide forward() or predict()")
+            result = self.potential.forward(
+                model_input, include_forces=True, include_stresses=self.compute_stress
+            )
+            return self._normalize_prediction(result)
+
         # Convert graph batch to input dictionary
         # batch_to_dict is defined in mattersim.forcefield.potential module
         try:
@@ -283,22 +289,57 @@ class Mattersim(BaseML):
                 input_dict, include_forces=True, include_stresses=self.compute_stress
             )
 
-        # Extract results
-        energy = result["total_energy"].detach().cpu().numpy()[0]
-        forces = result["forces"].detach().cpu().numpy()
+        return self._normalize_prediction(result)
 
-        # Convert stress if needed
-        stress = None
-        if self.compute_stress and "stresses" in result:
-            # MatterSim returns stress in eV/Å³, convert to 3x3 tensor
-            stress_3x3 = result["stresses"].detach().cpu().numpy()[0]
-            stress = stress_3x3
+    def _normalize_prediction(self, result: Dict[str, Any]) -> Dict[str, np.ndarray]:
+        """Normalize MatterSim-style outputs to MatSimPy calculator results."""
+        energy_value = result.get("energy", result.get("total_energy", 0.0))
+        forces_value = result.get("forces", np.zeros((0, 3)))
+        stress_value = result.get("stress", result.get("stresses", np.zeros((3, 3))))
 
-        return {
-            "energy": float(energy),
+        energy_array = self._to_numpy(energy_value)
+        forces = self._to_numpy(forces_value)
+        stress = self._to_numpy(stress_value)
+
+        if energy_array.shape:
+            energy = float(energy_array.reshape(-1)[0])
+        else:
+            energy = float(energy_array)
+
+        if stress.ndim == 3 and stress.shape[0] == 1:
+            stress = stress[0]
+        if stress.size == 0:
+            stress = np.zeros((3, 3))
+        else:
+            stress = stress * GPA_TO_EV_PER_A3
+
+        normalized = {
+            "energy": energy,
+            "free_energy": energy,
             "forces": forces,
-            "stress": stress if stress is not None else np.zeros((3, 3)),
+            "stress": stress,
         }
+        if "energy_per_atom" in result:
+            normalized["energy_per_atom"] = float(
+                self._to_numpy(result["energy_per_atom"]).reshape(-1)[0]
+            )
+        elif forces.ndim == 2 and len(forces) > 0:
+            normalized["energy_per_atom"] = energy / len(forces)
+        return normalized
+
+    @staticmethod
+    def _to_numpy(value: Any) -> np.ndarray:
+        if hasattr(value, "detach"):
+            value = value.detach()
+        if hasattr(value, "cpu"):
+            value = value.cpu()
+        if hasattr(value, "numpy"):
+            return value.numpy()
+        return np.asarray(value)
+
+    def set_model(self, model: Any) -> None:
+        super().set_model(model)
+        self.potential = model
 
     def as_dict(self) -> Dict[str, Any]:
         """

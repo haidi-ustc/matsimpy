@@ -6,18 +6,27 @@ using native MatSimPy capabilities. No ASE dependency required.
 """
 
 import numpy as np
-import torch
 import warnings
 import logging
-from typing import List, Optional, Union, Tuple, Dict, Any
+from typing import List, Optional, Union, Tuple, Any
 
 logger = logging.getLogger(__name__)
-from torch_geometric.loader import DataLoader as DataLoader_pyg
-from torch_geometric.data import Data
 
 from ...core import Crystal, Molecule
-from ...core.graph import create_structure_graph, MoleculeGraph, CrystalGraph
-from ...core.periodic_table import Element
+from ...core.neighbors import find_points_in_spheres
+
+
+def _require_torch_geometric():
+    try:
+        import torch
+        from torch_geometric.data import Data
+        from torch_geometric.loader import DataLoader as DataLoader_pyg
+    except ImportError as exc:
+        raise ImportError(
+            "torch and torch_geometric are required for ML graph conversion. "
+            "Install with: pip install 'MatSimPy[ml]'"
+        ) from exc
+    return torch, Data, DataLoader_pyg
 
 
 class MatSimPyGraphConvertor:
@@ -102,9 +111,11 @@ class MatSimPyGraphConvertor:
             min_coords = np.min(positions, axis=0)
             max_coords = np.max(positions, axis=0)
 
-            # Create large cell (10x the molecule size, minimum 25 Å)
-            box_size = np.maximum((max_coords - min_coords) * 10, 25.0)
-            cell = np.diag(box_size)
+            max_len = np.max(
+                (max_coords - min_coords)
+                + max(self.twobody_cutoff, self.threebody_cutoff) * 5
+            )
+            cell = np.eye(3) * max_len
             pbc = np.array([True, True, True], dtype=bool)  # Use PBC with large cell
 
             if not MatSimPyGraphConvertor._no_pbc_warned:
@@ -140,26 +151,28 @@ class MatSimPyGraphConvertor:
             (center_indices, neighbor_indices, images, distances)
         """
         if isinstance(structure, Crystal):
-            # Use Crystal's optimized neighbor finding
-            neighbors_dict = structure.get_neighbor_list(cutoff, use_pbc=True)
-
-            center_indices = []
-            neighbor_indices = []
-            distances = []
-
-            for i, neighbor_list in neighbors_dict.items():
-                for j, dist in neighbor_list:
-                    center_indices.append(i)
-                    neighbor_indices.append(j)
-                    distances.append(dist)
-
-            center_indices = np.array(center_indices, dtype=np.int64)
-            neighbor_indices = np.array(neighbor_indices, dtype=np.int64)
-            distances = np.array(distances, dtype=np.float64)
-
-            # Images are not directly available from MatSimPy neighbor list
-            # Set to zero for now (sufficient for most ML models)
-            images = np.zeros((len(center_indices), 3), dtype=np.int64)
+            (
+                center_indices,
+                neighbor_indices,
+                images,
+                distances,
+            ) = find_points_in_spheres(
+                center_coords=positions,
+                all_coords=positions,
+                r=cutoff,
+                pbc=pbc,
+                lattice=cell,
+                tol=1e-8,
+            )
+            center_indices = center_indices.astype(np.int64)
+            neighbor_indices = neighbor_indices.astype(np.int64)
+            images = images.astype(np.int64)
+            distances = distances.astype(float)
+            exclude_self = (center_indices != neighbor_indices) | (distances > 1e-8)
+            center_indices = center_indices[exclude_self]
+            neighbor_indices = neighbor_indices[exclude_self]
+            images = images[exclude_self]
+            distances = distances[exclude_self]
 
         else:
             # Molecule: use simple distance-based approach
@@ -187,6 +200,56 @@ class MatSimPyGraphConvertor:
 
         return center_indices, neighbor_indices, images, distances
 
+    def _get_edges_with_native_images(
+        self,
+        positions: np.ndarray,
+        cell: np.ndarray,
+        pbc: np.ndarray,
+        cutoff: float,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        center_indices = []
+        neighbor_indices = []
+        images = []
+        distances = []
+        ranges = self._periodic_image_ranges(cell, pbc, cutoff)
+
+        for nx in ranges[0]:
+            for ny in ranges[1]:
+                for nz in ranges[2]:
+                    image = np.array([nx, ny, nz], dtype=np.int64)
+                    shift = np.dot(image, cell)
+                    for i, center in enumerate(positions):
+                        for j, neighbor in enumerate(positions):
+                            r_vec = neighbor + shift - center
+                            dist = np.linalg.norm(r_vec)
+                            if (i != j or dist > 1e-8) and dist <= cutoff + 1e-8:
+                                center_indices.append(i)
+                                neighbor_indices.append(j)
+                                images.append(image.copy())
+                                distances.append(dist)
+
+        return (
+            np.array(center_indices, dtype=np.int64),
+            np.array(neighbor_indices, dtype=np.int64),
+            np.array(images, dtype=np.int64).reshape(-1, 3),
+            np.array(distances, dtype=np.float64),
+        )
+
+    @staticmethod
+    def _periodic_image_ranges(
+        cell: np.ndarray, pbc: np.ndarray, cutoff: float
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        inv_matrix = np.linalg.inv(cell)
+        ranges = []
+        for axis, periodic in enumerate(pbc):
+            if not periodic:
+                ranges.append(np.array([0], dtype=np.int64))
+                continue
+            plane_spacing = 1.0 / np.linalg.norm(inv_matrix[:, axis])
+            n_images = int(np.ceil(cutoff / plane_spacing)) + 1
+            ranges.append(np.arange(-n_images, n_images + 1, dtype=np.int64))
+        return tuple(ranges)
+
     def _compute_threebody_indices(
         self,
         edge_index: np.ndarray,
@@ -206,11 +269,46 @@ class MatSimPyGraphConvertor:
         Returns:
             (triple_bond_indices, n_triple_ij, n_triple_i, n_triple_s)
         """
-        # Use MatterSim's implementation
-        from mattersim.datasets.utils.threebody_indices import compute_threebody
-
         n_bonds = edge_index.shape[1]
         bond_atom_indices = edge_index.T  # [n_bonds, 2]
+
+        try:
+            from mattersim.datasets.utils.threebody_indices import compute_threebody
+
+            n_atoms_array = np.array(n_atoms).reshape(1)
+            atomic_numbers = atomic_numbers.reshape(-1, 1)
+            if n_bonds > 0 and self.threebody_cutoff is not None:
+                valid_three_body = edge_distances <= self.threebody_cutoff
+                ij_reverse_map = np.where(valid_three_body)[0]
+                original_index = np.arange(n_bonds)[valid_three_body]
+                filtered_bonds = bond_atom_indices[valid_three_body, :]
+            else:
+                ij_reverse_map = None
+                original_index = np.arange(n_bonds)
+                filtered_bonds = bond_atom_indices
+
+            if filtered_bonds.shape[0] > 0:
+                bond_indices, n_triple_ij, n_triple_i, n_triple_s = compute_threebody(
+                    np.ascontiguousarray(filtered_bonds, dtype="int32"),
+                    np.array(n_atoms_array, dtype="int32"),
+                )
+                if ij_reverse_map is not None:
+                    n_triple_ij_full = np.zeros(shape=(n_bonds,), dtype="int32")
+                    n_triple_ij_full[ij_reverse_map] = n_triple_ij
+                    n_triple_ij = n_triple_ij_full
+                bond_indices = original_index[bond_indices]
+                bond_indices = np.array(bond_indices, dtype="int32")
+            else:
+                bond_indices = np.reshape(np.array([], dtype="int32"), [-1, 2])
+                if n_bonds == 0:
+                    n_triple_ij = np.array([], dtype="int32")
+                else:
+                    n_triple_ij = np.array([0] * n_bonds, dtype="int32")
+                n_triple_i = np.array([0] * len(atomic_numbers), dtype="int32")
+                n_triple_s = np.array([0], dtype="int32")
+            return bond_indices, n_triple_ij, n_triple_i, n_triple_s
+        except ImportError:
+            pass
 
         # Filter by threebody cutoff
         if n_bonds > 0 and self.threebody_cutoff is not None:
@@ -224,10 +322,21 @@ class MatSimPyGraphConvertor:
             bond_atom_indices_filtered = bond_atom_indices
 
         if bond_atom_indices_filtered.shape[0] > 0:
-            bond_indices, n_triple_ij, n_triple_i, n_triple_s = compute_threebody(
-                np.ascontiguousarray(bond_atom_indices_filtered, dtype="int32"),
-                np.array([n_atoms], dtype="int32"),
-            )
+            triples = []
+            n_triple_ij = np.zeros(len(bond_atom_indices_filtered), dtype="int32")
+            n_triple_i = np.zeros(n_atoms, dtype="int32")
+
+            for atom_index in range(n_atoms):
+                bond_ids = np.where(bond_atom_indices_filtered[:, 0] == atom_index)[0]
+                n_triple_i[atom_index] = len(bond_ids) * max(len(bond_ids) - 1, 0)
+                for first in bond_ids:
+                    n_triple_ij[first] = max(len(bond_ids) - 1, 0)
+                    for second in bond_ids:
+                        if first != second:
+                            triples.append([first, second])
+
+            bond_indices = np.array(triples, dtype="int32").reshape(-1, 2)
+            n_triple_s = np.array([len(bond_indices)], dtype="int32")
 
             if ij_reverse_map is not None:
                 n_triple_ij_full = np.zeros(shape=(n_bonds,), dtype="int32")
@@ -255,7 +364,7 @@ class MatSimPyGraphConvertor:
         forces: Optional[np.ndarray] = None,
         stress: Optional[np.ndarray] = None,
         **kwargs,
-    ) -> Data:
+    ) -> Any:
         """
         Convert MatSimPy structure to PyTorch Geometric Data object.
 
@@ -272,6 +381,8 @@ class MatSimPyGraphConvertor:
         Raises:
             ValueError: If structure is invalid or unsupported model type.
         """
+        torch, Data, _ = _require_torch_geometric()
+
         # Prepare structure (handles both Crystal and Molecule)
         positions, cell, pbc = self._prepare_structure(structure)
 
@@ -335,11 +446,7 @@ class MatSimPyGraphConvertor:
 
             return Data(**args)
 
-        elif self.model_type == "graphormer":
-            raise NotImplementedError("Graphormer support coming soon")
-
-        else:
-            raise ValueError(f"Unsupported model type: {self.model_type}")
+        raise ValueError(f"Unsupported model type: {self.model_type}")
 
 
 def build_dataloader(
@@ -356,7 +463,7 @@ def build_dataloader(
     num_workers: int = 0,
     pin_memory: bool = False,
     **kwargs,
-) -> DataLoader_pyg:
+) -> Any:
     """
     Build PyTorch Geometric DataLoader from MatSimPy structures.
 
@@ -403,6 +510,8 @@ def build_dataloader(
         ...     only_inference=False
         ... )
     """
+    _, _, DataLoader_pyg = _require_torch_geometric()
+
     if not structures:
         raise ValueError("Structure list cannot be empty")
 
@@ -469,7 +578,7 @@ def structure_to_graph(
     cutoff: float = 5.0,
     threebody_cutoff: float = 4.0,
     model_type: str = "m3gnet",
-) -> Data:
+) -> Any:
     """
     Convert single structure to PyTorch Geometric Data object.
 
