@@ -16,8 +16,21 @@ def _read_structure(path, format=None):
     }
 
 
-def _write_structure(path, formula_hint=None):
-    return {"error": "write requires a live structure object — use in combination with a builder"}
+def _save_structure(path, format=None):
+    """Save the last created/modified structure to a file."""
+    from matsimpy.ai.executor import get_last_structure
+    structure = get_last_structure()
+
+    if structure is None:
+        return {"error": "No structure to save. Create or modify a structure first (e.g., from_prototype, create_vacancy, make_supercell)."}
+
+    write(structure, path, format=format)
+    return {
+        "saved_to": path,
+        "formula": structure.formula,
+        "num_atoms": len(structure),
+        "format": format or "auto-detected",
+    }
 
 
 def get_functions() -> list[FunctionDef]:
@@ -37,6 +50,23 @@ def get_functions() -> list[FunctionDef]:
             skill=SKILL_NAME,
             help_text="Read a structure file. Format auto-detected from extension.\n"
                       "Supported: VASP, CIF, XYZ, PDB, XSF, MOL, JSON, ASE.",
+        ),
+        FunctionDef(
+            name="save_structure",
+            description="Save the last created/modified structure to a file. Use after creating or modifying a structure with builders or transformations.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Output file path (.vasp, .cif, .xyz, etc.)"},
+                    "format": {"type": "string", "description": "Output format (vasp, cif, xyz, json, etc.). Auto-detected from extension if omitted."},
+                },
+                "required": ["path"],
+            },
+            callable=_save_structure,
+            skill=SKILL_NAME,
+            help_text="Save the last structure to a file. Creates/overwrites the file.\n"
+                      "Format is auto-detected from extension (e.g., .vasp → VASP, .cif → CIF).\n"
+                      "Works with the most recently created or modified structure.",
         ),
         FunctionDef(
             name="list_formats",

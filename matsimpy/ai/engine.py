@@ -104,7 +104,13 @@ class AIEngine:
 
             if response.tool_calls:
                 for tc in response.tool_calls:
+                    args_str = ", ".join(f"{k}={v}" for k, v in tc.arguments.items())
+                    print(f"[→ {tc.name}({args_str})]")
                     result = self.executor.execute(tc)
+                    if "error" in result:
+                        print(f"[✗ {tc.name} failed: {result['error'][:100]}]")
+                    else:
+                        print(f"[✓ {tc.name} ok]")
                     self._last_tool_calls.append(tc.name)
                     self._last_tool_results.append(result)
                     self.conversation.append(ChatMessage.tool(
@@ -338,6 +344,51 @@ class AIEngine:
             with open(path, "w") as f:
                 json.dump(data, f, indent=2, default=str)
             print(f"  Saved to {path}")
+
+        elif command == "/save-storage":
+            try:
+                from matsimpy.storage import DataStorage, MemoryBackend
+                store = DataStorage(backend=MemoryBackend())
+                meta = arg or ""
+                doc_id = store.store_data({
+                    "system_prompt": self.system_prompt,
+                    "messages": [m.to_dict() for m in self.conversation],
+                    "model": self.provider.model,
+                }, metadata={"tag": meta, "type": "conversation"})
+                store.close()
+                print(f"  Saved to storage: {doc_id[:16]}...")
+                print(f"  Use /load-storage {doc_id[:8]} to retrieve later.")
+            except Exception as e:
+                print(f"  Storage error: {e}")
+
+        elif command == "/load-storage":
+            if not arg:
+                print("  Usage: /load-storage <doc_id_prefix>")
+                return
+            try:
+                from matsimpy.storage import DataStorage, MemoryBackend
+                store = DataStorage(backend=MemoryBackend())
+                results = store.query({"metadata.type": "conversation"}, limit=50)
+                store.close()
+                for r in results:
+                    if hasattr(r, 'formula'):
+                        continue
+                    mid = str(r.get("doc_id", "")) if isinstance(r, dict) else ""
+                    if mid.startswith(arg):
+                        # Load messages back
+                        msgs = r.get("payload", r).get("messages", []) if isinstance(r, dict) else []
+                        raw = r.get("payload", r) if isinstance(r, dict) else {}
+                        msgs = raw.get("messages", [])
+                        if msgs:
+                            self.conversation = [
+                                ChatMessage(**m) if isinstance(m, dict) else m
+                                for m in msgs
+                            ]
+                            print(f"  Loaded {len(msgs)} messages from {mid[:16]}...")
+                            return
+                print(f"  No conversation found with prefix '{arg}'")
+            except Exception as e:
+                print(f"  Storage error: {e}")
 
         else:
             print(f"  Unknown: {command}. Try /help.")

@@ -6,6 +6,19 @@ import numpy as np
 from .skill import SkillManager, FunctionDef
 from .conversation import ToolCall
 
+# Module-level store for the last live structure (used by IO skill)
+_last_structure = None
+
+
+def get_last_structure():
+    global _last_structure
+    return _last_structure
+
+
+def set_last_structure(s):
+    global _last_structure
+    _last_structure = s
+
 
 class FunctionExecutor:
     """Validates parameters and executes function calls from LLM tool use."""
@@ -63,7 +76,12 @@ class FunctionExecutor:
         return errors
 
     def _serialize(self, result) -> dict:
-        """Convert matsimpy objects to JSON-serializable dicts."""
+        """Convert matsimpy objects to JSON-serializable dicts. Store live structure."""
+        # Store live structure object for write operations (module-level)
+        if hasattr(result, "formula") and hasattr(result, "species"):
+            global _last_structure
+            _last_structure = result
+
         if result is None:
             return {"result": None}
         if isinstance(result, (str, int, float, bool)):
