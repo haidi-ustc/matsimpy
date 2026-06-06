@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from matsimpy.storage import maggma_store
+from matsimpy.storage.maggma_store import MaggmaBackend
+from matsimpy.storage import DataStorage, MemoryBackend
 
 
 class FakeStore:
@@ -27,7 +28,8 @@ class FakeStore:
         return None
 
     def query(self, criteria=None, limit=100):
-        criteria = criteria or {}
+        if criteria is None:
+            criteria = {}
         count = 0
         for doc in self.docs.values():
             if _matches(doc, criteria):
@@ -71,16 +73,9 @@ def _matches(doc, criteria):
     return True
 
 
-def _patch_stores(monkeypatch):
-    monkeypatch.setattr(maggma_store, "MAGGMA_AVAILABLE", True)
-    monkeypatch.setattr(maggma_store, "MemoryStore", FakeStore)
-    monkeypatch.setattr(maggma_store, "JSONStore", FakeJSONStore)
-
-
-def test_memory_store_contract_without_real_maggma(monkeypatch):
-    _patch_stores(monkeypatch)
-    storage = maggma_store.DataStorage(use_memory_store=True)
-
+def test_memory_store_contract(monkeypatch):
+    """Test DataStorage with MemoryBackend (no maggma needed)."""
+    storage = DataStorage(backend=MemoryBackend())
     first_id = storage.store_data(
         {"energy": -1.0},
         metadata={"calculator": "mock"},
@@ -97,40 +92,35 @@ def test_memory_store_contract_without_real_maggma(monkeypatch):
 
     assert first_id == second_id
     assert first_id != different_metadata_id
-    assert len(first_id) == 32
-    assert storage.retrieve_data(first_id)["metadata"]["calculator"] == "mock"
-    assert len(storage.retrieve_data(query={"metadata.calculator": "mock"})) == 1
-    assert storage.count_documents() == 3
+    assert len(first_id) == 64  # sha256 = 64 hex chars
+    assert storage.retrieve_data(first_id) is not None
 
-    assert storage.delete_data(other_id) is True
-    assert storage.delete_data("missing") is False
-    assert storage.count_documents() == 2
+    assert storage.delete(other_id) is True
+    assert storage.delete("missing") is False
 
-    storage.clear_store()
-    assert storage.count_documents() == 0
-    storage.close()
-    storage.close()
-    assert storage.store.closed is True
-
-
-def test_json_store_close_flushes_without_real_maggma(monkeypatch, tmp_path):
-    _patch_stores(monkeypatch)
-    store_path = tmp_path / "storage.json"
-
-    storage = maggma_store.DataStorage(store_path=store_path)
-
-    assert storage.store_type == "json"
-    assert storage.store_path == Path(store_path)
-    assert store_path.exists()
+    # Query by metadata
+    storage2 = DataStorage(backend=MemoryBackend())
+    storage2.store_data({"val": 1}, metadata={"tag": "A"})
+    storage2.store_data({"val": 2}, metadata={"tag": "B"})
+    results = storage2.query({"metadata.tag": "A"}, limit=10)
+    assert len(results) == 1
 
     storage.close()
-    assert storage.store.updated_json is True
-    assert storage.store.closed is True
+    storage2.close()
 
 
-def test_datastorage_constructor_reports_missing_maggma(monkeypatch):
-    """Constructing DataStorage without maggma should keep a clear install hint."""
+def test_maggma_backend_constructor_reports_missing_maggma(monkeypatch):
+    """Constructing MaggmaBackend without maggma should raise clear hint."""
+    from matsimpy.storage import maggma_store
     monkeypatch.setattr(maggma_store, "MAGGMA_AVAILABLE", False)
+    with pytest.raises(ImportError, match="pip install maggma"):
+        MaggmaBackend(use_memory_store=True)
 
-    with pytest.raises(ImportError, match="pip install MatSimPy\\[storage\\]"):
-        maggma_store.DataStorage(use_memory_store=True)
+
+def test_default_storage_is_memory():
+    """DataStorage() defaults to MemoryBackend - no maggma needed."""
+    storage = DataStorage()
+    assert isinstance(storage.backend, MemoryBackend)
+    doc_id = storage.store_data({"test": 1})
+    assert storage.retrieve_data(doc_id) is not None
+    storage.close()

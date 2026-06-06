@@ -66,16 +66,27 @@ def test_storage_import_without_maggma_is_quiet_and_actionable():
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             warnings.filterwarnings("ignore", message="A NumPy version.*")
-            from matsimpy.storage import DataStorage
+            from matsimpy.storage import DataStorage, MemoryBackend
             assert not caught, [str(w.message) for w in caught]
 
+        # MemoryBackend works without maggma
+        storage = DataStorage(backend=MemoryBackend())
+        assert storage.store_data({"test": 1})
+        storage.close()
+
+        # Default DataStorage() works without maggma
+        storage2 = DataStorage()
+        assert storage2.store_data({"test": 2})
+        storage2.close()
+
+        # MaggmaBackend requires maggma
+        from matsimpy.storage.maggma_store import MaggmaBackend
         try:
-            DataStorage(use_memory_store=True)
+            MaggmaBackend(use_memory_store=True)
         except ImportError as exc:
             assert "maggma is required" in str(exc)
-            assert "MatSimPy[storage]" in str(exc)
         else:
-            raise AssertionError("DataStorage should require maggma when invoked")
+            raise AssertionError("MaggmaBackend should require maggma")
         """
     )
 

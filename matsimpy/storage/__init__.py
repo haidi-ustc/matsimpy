@@ -1,20 +1,30 @@
 """
 Data storage module for MatSimPy.
 
-Provides persistent storage for computation results, structures, and workflows
-using maggma stores.
+Provides persistent storage for computation results, structures, and workflows.
 
-Usage:
+Architecture::
+
+    DataStorage (facade) ──► DocumentCodec ──► DocumentEnvelope
+         │
+         └──► StoreBackend (protocol)
+               ├── MemoryBackend  (in-memory, for testing)
+               └── MaggmaBackend  (file-based, for production)
+
+Usage::
+
     >>> from matsimpy.storage import DataStorage
-    >>> from matsimpy import Crystal, Lattice
-    >>>
-    >>> storage = DataStorage()
-    >>> from matsimpy.builders.bulk import from_prototype
-    >>> crystal = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
+    >>> storage = DataStorage()  # defaults to MemoryBackend
     >>> doc_id = storage.store_data(crystal)
-    >>> retrieved = storage.retrieve_data(doc_id)
+    >>> crystal = storage.retrieve_data(doc_id)
 """
 
-from .maggma_store import DataStorage
+from .facade import DataStorage
+from .memory_store import MemoryBackend
 
-__all__ = ["DataStorage"]
+try:
+    from .maggma_store import MaggmaBackend
+except ImportError:
+    MaggmaBackend = None  # type: ignore
+
+__all__ = ["DataStorage", "MemoryBackend", "MaggmaBackend"]
