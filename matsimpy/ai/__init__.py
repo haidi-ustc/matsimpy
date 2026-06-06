@@ -1,63 +1,45 @@
 """
-AI module for MatSimPy.
+AI module for MatSimPy — LLM function calling + interactive REPL.
 
-Provides AI interfaces and operations for structure generation,
-prediction, analysis, and optimization.
+Provides:
+- AIEngine: orchestrates LLM conversation with tool execution
+- DeepSeekProvider: OpenAI-compatible client for DeepSeek API
+- SkillManager: progressive skill loading (like Claude skills)
+- FunctionDef/Skill: metadata for LLM-callable functions
+- FunctionExecutor: validates parameters and executes tool calls
+- Interactive REPL with /commands
 
-This module supports multiple AI protocols:
-- MCP (Model Context Protocol) - Primary interface
-- (Future: OpenAI, Anthropic, Local models)
+Usage::
 
-Examples:
-    >>> from matsimpy.ai import MCPInterface, AIGeneration, get_ai_interface
-    >>>
-    >>> # Direct usage
-    >>> mcp = MCPInterface(transport="stdio")
-    >>> mcp.connect({"command": "python", "args": ["server.py"]})
-    >>> gen = AIGeneration(mcp)
-    >>> structure = gen.generate_from_composition("TiO2")
-    >>> mcp.disconnect()
-    >>>
-    >>> # Factory pattern
-    >>> ai = get_ai_interface("mcp", transport="stdio")
-    >>> ai.connect({"command": "python", "args": ["server.py"]})
-    >>> gen = AIGeneration(ai)
-    >>> structure = gen.generate_from_description("diamond silicon")
+    >>> from matsimpy.ai import AIEngine
+    >>> engine = AIEngine()
+    >>> engine.skill_manager.load("builders")
+    >>> response = engine.chat("Create an FCC copper crystal")
+    >>> print(response)
+
+    # Or launch the interactive REPL:
+    >>> from matsimpy.ai.cli import main
+    >>> main()
+
+Requirements:
+    - requests
+    - DEEPSEEK_API_KEY environment variable (or pass api_key= to AIEngine)
 """
 
-# Base classes
-from .base import AIInterface, AIOperation
-
-# Protocol interfaces
-from .interfaces import MCPInterface
-
-# Operations
-from .operations import AIGeneration, PropertyPrediction, AIAnalysis, AIOptimization
-
-# Utilities
-from .utils import get_ai_interface, list_available_protocols, prompts, formatting
-
-# Models
-from .models import ModelRegistry, ResponseCache, cached
+from .conversation import ChatMessage, ToolCall, ChatResponse
+from .skill import FunctionDef, Skill, SkillManager
+from .provider import DeepSeekProvider
+from .executor import FunctionExecutor
+from .engine import AIEngine
 
 __all__ = [
-    # Base classes
-    "AIInterface",
-    "AIOperation",
-    # Interfaces
-    "MCPInterface",
-    # Operations
-    "AIGeneration",
-    "PropertyPrediction",
-    "AIAnalysis",
-    "AIOptimization",
-    # Utilities
-    "get_ai_interface",
-    "list_available_protocols",
-    "prompts",
-    "formatting",
-    # Models
-    "ModelRegistry",
-    "ResponseCache",
-    "cached",
+    "AIEngine",
+    "DeepSeekProvider",
+    "SkillManager",
+    "FunctionDef",
+    "Skill",
+    "FunctionExecutor",
+    "ChatMessage",
+    "ToolCall",
+    "ChatResponse",
 ]
