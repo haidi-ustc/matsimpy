@@ -35,17 +35,21 @@ class Calculator(ABC, MSONable):
         >>> energy = calc.get_potential_energy()
     """
 
-    def __init__(self, **parameters):
+    def __init__(self, run: bool = True, **parameters):
         """
         Initialize calculator with parameters.
 
         Args:
+            run: If True (default), execute external code and parse output.
+                 If False, only write input files. Call read_results() later
+                 to parse output files manually.
             **parameters: Calculator-specific parameters
         """
         self.parameters = parameters.copy()
         self.results: Dict[str, Any] = {}
         self.structure: Optional[Union[Crystal, Molecule]] = None
         self._calculation_performed = False
+        self.run = run
         # Hash of the structure last passed to calculate().  Used by Structure
         # to detect when the calculator's cached results are stale (i.e. the
         # attached structure has changed since the last calculate() call).
@@ -86,8 +90,14 @@ class Calculator(ABC, MSONable):
         """
         Perform calculation on the given structure.
 
-        This is the main entry point for calculations. It stores the structure,
-        performs the calculation, and stores results in self.results.
+        For pure-Python calculators that override _compute() (e.g. LJ, MatterSim),
+        the legacy _compute() path is used directly.
+
+        For external-code calculators (VASP, Gaussian, LAMMPS), this writes input
+        files, optionally executes the external program, and parses output.
+
+        When run=True (default): write_input → _execute → _parse_output
+        When run=False: write_input only. User calls read_results() later.
 
         Args:
             structure: Crystal or Molecule structure to calculate
@@ -106,26 +116,73 @@ class Calculator(ABC, MSONable):
         # cheaply detect whether results are stale for a different structure.
         self._last_structure_hash = structure._structural_hash()
 
-        # Perform the actual calculation (implemented by subclasses)
-        self._compute()
+        # Detect which path to take:
+        # - Legacy: subclass overrides _compute() (pure-Python calculators)
+        # - Run-mode: subclass overrides write_input() (external-code calculators)
+        if type(self)._compute is not Calculator._compute:
+            # Legacy path: pure-Python calculators (LJ, MatterSim)
+            self._compute()
+        else:
+            # Run-mode path: external-code calculators
+            self.write_input(structure)
+            if self.run:
+                self._execute()
+                self._parse_output()
 
         self._calculation_performed = True
 
-    @abstractmethod
     def _compute(self) -> None:
         """
-        Perform the actual calculation.
+        Perform the actual calculation (legacy path for pure-Python calculators).
 
-        This method should:
-        1. Compute energy and store in self.results['energy']
-        2. Compute forces and store in self.results['forces'] (if applicable)
-        3. Compute stress and store in self.results['stress'] (if applicable)
-        4. Store any other relevant results
+        Pure-Python calculators (LJ, MatterSim) override this method to compute
+        energy, forces, and stress directly without file I/O or subprocess calls.
 
-        Raises:
-            NotImplementedError: Must be implemented by subclasses
+        External-code calculators (VASP, Gaussian, LAMMPS) should NOT override
+        this — they use write_input() / _execute() / _parse_output() instead.
         """
-        raise NotImplementedError("Subclasses must implement _compute()")
+        # Default no-op: external-code calculators use the run-mode pipeline
+        pass
+
+    def write_input(self, structure: Union[Crystal, Molecule]) -> None:
+        """
+        Write input files for external code.
+
+        Default implementation does nothing. Subclasses for external-code
+        calculators (VASP, Gaussian, LAMMPS) should override this.
+
+        Args:
+            structure: Crystal or Molecule to write inputs for
+        """
+        pass
+
+    def read_results(self) -> None:
+        """
+        Read and parse pre-existing output files.
+
+        Called by user after run=False calculate() and manual execution.
+        Calls _parse_output() internally; subclasses override _parse_output().
+        """
+        self._parse_output()
+        self._calculation_performed = True
+
+    def _execute(self) -> None:
+        """
+        Execute external code via subprocess.
+
+        Default implementation does nothing. Subclasses for external-code
+        calculators override this to run the relevant command.
+        """
+        pass
+
+    def _parse_output(self) -> None:
+        """
+        Parse output files produced by external code.
+
+        Default implementation does nothing. Subclasses override this
+        to parse output files and populate self.results.
+        """
+        pass
 
     def get_potential_energy(self) -> float:
         """
