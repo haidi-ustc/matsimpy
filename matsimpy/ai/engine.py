@@ -174,14 +174,31 @@ class AIEngine:
         """Interactive REPL loop with /commands."""
         self.workspace.enter()
         from .provider import MODELS
+        from .skill_loader import discover_builtin_skills
+
+        discovered = discover_builtin_skills()
         model_desc = MODELS.get(self.provider.model, "")
-        print("═" * 60)
+        loaded_count = len(self.skill_manager._active)
+        total_count = len(discovered)
+
+        print("═" * 50)
         print(f"  ⚛️  MatSimPy AI REPL")
         print(f"  🧠 {self.provider.model} — {model_desc}")
         print(f"  📁 {self.workspace.path}")
-        print(f"  💭 {self.memory.dir}")
-        print("  /help for commands  |  Ctrl+D to exit")
-        print("═" * 60)
+        if total_count > 0:
+            print(f"  📦 {total_count} skills ready ({loaded_count} loaded) | /skills to see all")
+        print(f"  💡 Try: \"create fcc Cu and save to cu.vasp\"")
+        print(f"  /help for commands  |  Ctrl+D to exit")
+        print("═" * 50)
+
+        if self.verbose:
+            from .skill_loader import SKILLS_PKG
+            print(f"  📂 skills path: {SKILLS_PKG}")
+            for p in sorted(SKILLS_PKG.glob("*.py")):
+                if not p.name.startswith("_"):
+                    marker = "✓" if p.stem in self.skill_manager._active else " "
+                    print(f"     [{marker}] {p.name}")
+            print()
 
         while True:
             try:
@@ -228,17 +245,29 @@ class AIEngine:
                         print(f"  ... +{len(files)-10} more")
 
         elif command == "/skills":
-            # Show builtin skills
-            for s in self.skill_manager.list_skills():
-                status = "✓ loaded" if s["loaded"] else "  ready"
-                print(f"  [builtin] {s['name']:20s} {status:10s}  {s['functions']:3d} funcs")
+            from .skill_loader import discover_builtin_skills
+            discovered = discover_builtin_skills()
+            for s in discovered:
+                status = "✓ loaded" if s["name"] in self.skill_manager._active else "  ready"
+                kw_preview = " ".join(s["keywords"][:5])
+                if len(s["keywords"]) > 5:
+                    kw_preview += " ..."
+                if not s["keywords"]:
+                    kw_preview = "always"
+                print(f"  [{s['name']:20s}] {status:10s} {len(s['functions']):3d} funcs  {kw_preview}")
             # Show generated skills
             generated = list_generated_skills()
             if generated:
-                print(f"\n  Generated skills ({len(generated)}):")
-                for s in generated:
-                    mode = s.get("load_mode", "auto_choice")
-                    print(f"  [generated] {s['name']:20s}  mode={mode:12s}  {s.get('description', '')[:50]}")
+                print(f"\n  Generated ({len(generated)}):")
+                for g in generated:
+                    mode = g.get("load_mode", "auto_choice")
+                    print(f"  [{g['name']:20s}] mode={mode:12s}  {g.get('description', '')[:50]}")
+            if self.verbose:
+                from .skill_loader import SKILLS_PKG
+                print(f"\n  📂 builtin from: {SKILLS_PKG}")
+                for p in sorted(SKILLS_PKG.glob("*.py")):
+                    if not p.name.startswith("_"):
+                        print(f"     {p.name}")
 
         elif command == "/load":
             if not arg:
@@ -274,6 +303,27 @@ class AIEngine:
                 self.skill_manager.unload(name)
                 print(f"  Unloaded: {name}")
 
+        elif command == "/reload":
+            from .skill_loader import discover_builtin_skills
+            from .skill import Skill
+
+            discovered = discover_builtin_skills()
+            new_names = set()
+            for s in discovered:
+                if s["name"] not in self.skill_manager._skills:
+                    skill = Skill(s["name"], s["description"], s["functions"])
+                    skill.keywords = s["keywords"]
+                    self.skill_manager.register(skill)
+                    new_names.add(s["name"])
+                    if self.verbose:
+                        print(f"  ✓ registered: {s['name']} ({len(s['functions'])} funcs)")
+                elif self.verbose:
+                    print(f"  · unchanged: {s['name']}")
+            if new_names:
+                print(f"  📦 {len(new_names)} new skill(s): {', '.join(sorted(new_names))}")
+            else:
+                print(f"  📦 all {len(discovered)} skills up to date")
+
         elif command == "/model":
             from .provider import MODELS
             print(f"  Current: {self.provider.model}")
@@ -299,22 +349,42 @@ class AIEngine:
                     print(f"  Parameters: {json.dumps(fn.parameters, indent=2)}")
                     print(f"  Help: {fn.get_help()[:500]}")
                 else:
-                    print(f"  Function '{arg}' not found.")
+                    # Search all registered functions for partial matches
+                    all_fns = []
+                    for skill in self.skill_manager._skills.values():
+                        for f in skill.functions:
+                            all_fns.append(f)
+                    matches = [f.name for f in all_fns if arg.lower() in f.name.lower()]
+                    if matches:
+                        print(f"  Function '{arg}' not found. Did you mean: {', '.join(matches[:8])}?")
+                    else:
+                        loaded = self.skill_manager._active
+                        print(f"  Function '{arg}' not found.")
+                        print(f"  💡 Try /skills to see available skills, then /load one and use /help <fn>")
+                        if loaded:
+                            print(f"  Currently loaded: {', '.join(sorted(loaded))}")
             else:
-                print("  Commands:")
-                print("  /skills           List skills (builtin + generated)")
-                print("  /load <name>      Load builtin skill(s)")
-                print("  /load-skill <name> Load a generated skill as context")
-                print("  /unload <name>    Unload skill(s)")
-                print("  /model [name]     Show or switch model")
-                print("  /workspace [dir]  Show or change workspace")
-                print("  /memory           Show memory file sizes")
-                print("  /help [fn]        Show function help")
-                print("  /system <text>    Set custom system prompt")
-                print("  /history          Show conversation")
-                print("  /clear            Reset conversation")
-                print("  /save <path>      Save conversation as JSON")
-                print("  /quit             Exit REPL")
+                print("  📦 Skills")
+                print("    /skills               List all skills (builtin + generated)")
+                print("    /load <name>          Load a builtin skill")
+                print("    /load-skill <name>    Load a generated skill as context")
+                print("    /unload <name>        Unload a skill")
+                print("    /reload               Rescan skill directory (hot reload)")
+                print()
+                print("  🔧 Session")
+                print("    /model [name]         Show or switch model")
+                print("    /workspace [dir]      Show or change workspace")
+                print("    /memory               Show memory file sizes")
+                print("    /system <text>        Set custom system prompt")
+                print("    /history              Show conversation")
+                print("    /clear                Reset conversation")
+                print()
+                print("  💾 Data")
+                print("    /save <path>          Save conversation as JSON")
+                print("    /save-storage         Save to matsimpy storage backend")
+                print("    /load-storage <id>    Load from storage backend")
+                print()
+                print("  🚪 /quit, /q, /exit     Exit REPL")
 
         elif command == "/system":
             if arg:
