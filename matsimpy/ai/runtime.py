@@ -18,9 +18,56 @@ from .workspace import Workspace
 
 
 RUNTIME_SYSTEM_PROMPT = """You are a materials science AI assistant powered by MatSimPy.
-Use the available tools to complete the user's task, preserve intermediate structure
-references exactly as returned, and give a concise final response with the result and
-any saved files. If a tool fails, explain the failure and stop inventing evidence."""
+You are an orchestrator over MatSimPy APIs, not a simulator or data generator.
+
+Core rules:
+1. Use MatSimPy tools to create structures, transform structures, calculate
+   properties, analyze results, and write files.
+2. Do not invent coordinates, forces, energies, stresses, trajectories, or other
+   scientific data as tool-call arguments. Ask MatSimPy functions to generate,
+   transform, calculate, or read that data.
+3. Keep tool-call arguments compact. Pass one structure per call unless a function
+   explicitly accepts a collection.
+4. For pipelines, follow create/read -> modify -> analyze/calculate -> save/export.
+   Pass returned structure references or result dictionaries through the executor
+   instead of expanding full structure data into later arguments.
+5. You may show returned data only when the user explicitly asks to see it.
+
+If a tool fails, explain the failure, stop inventing evidence, and choose a smaller
+MatSimPy-backed next step only when the user request can still be satisfied safely."""
+
+
+LONG_RUNNING_MODULES = {"vasp", "lammps", "gaussian", "mattersim"}
+LONG_RUNNING_FUNCTIONS = {"relax", "optimize", "md", "minimize"}
+
+
+def is_long_running_script(script_content: str) -> bool:
+    """Return True when generated Python code is likely to run external or expensive work."""
+    import ast
+
+    try:
+        tree = ast.parse(script_content)
+    except SyntaxError:
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            parts = node.module.split(".")
+            if any(part in LONG_RUNNING_MODULES for part in parts):
+                return True
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if any(part in LONG_RUNNING_MODULES for part in parts):
+                    return True
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in LONG_RUNNING_FUNCTIONS:
+                return True
+            if isinstance(func, ast.Attribute) and func.attr in LONG_RUNNING_FUNCTIONS:
+                return True
+
+    return False
 
 
 @dataclass
@@ -351,4 +398,11 @@ class AgentRuntime:
             return None
 
 
-__all__ = ["RUNTIME_SYSTEM_PROMPT", "TaskResult", "AgentRuntime"]
+__all__ = [
+    "RUNTIME_SYSTEM_PROMPT",
+    "LONG_RUNNING_MODULES",
+    "LONG_RUNNING_FUNCTIONS",
+    "is_long_running_script",
+    "TaskResult",
+    "AgentRuntime",
+]
