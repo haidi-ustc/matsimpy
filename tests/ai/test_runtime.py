@@ -723,3 +723,40 @@ def test_runtime_defers_persistence_until_loop_ends(tmp_path):
     traces = store.search_traces("structure")
     assert len(traces) == 1
     assert traces[0]["validation_status"] == "success"
+
+
+def test_runtime_prompt_forbids_invented_scientific_tool_arguments():
+    from matsimpy.ai.runtime import RUNTIME_SYSTEM_PROMPT
+
+    prompt = RUNTIME_SYSTEM_PROMPT.lower()
+
+    assert "orchestrator" in prompt
+    assert "do not invent coordinates" in prompt
+    assert "forces" in prompt
+    assert "energies" in prompt
+    assert "tool-call arguments" in prompt
+    assert "pass returned structure references" in prompt
+
+
+def test_runtime_initial_prompt_keeps_memory_after_core_rules(tmp_path):
+    memory = AgentMemory(tmp_path / "memory")
+    memory.append_learning({
+        "user_intent": "create a large generated crystal",
+        "outcome": "failure",
+        "tools_used": ["create_crystal"],
+        "insight": "Prefer builder functions over generated coordinate arrays.",
+    })
+    runtime = AgentRuntime(
+        provider=FakeProvider([]),
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=memory,
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    system_message = runtime._initial_messages()[0].content.lower()
+
+    assert "do not invent coordinates" in system_message
+    assert "relevant memory" in system_message
+    assert "prefer builder functions" in system_message
