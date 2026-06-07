@@ -1,7 +1,13 @@
-"""Gaussian calculator — ASE-style binding."""
+"""Gaussian calculator — ASE-style binding.
+
+Uses the run-mode pipeline from Calculator base class:
+  run=True:  write_input → _execute → _parse_output
+  run=False: write_input only → user calls read_results()
+"""
 
 from __future__ import annotations
-import os, subprocess
+
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -35,8 +41,22 @@ class GaussianCalculator(Calculator):
         gaussian_cmd: str = "g09",
         nproc: int = 1,
         mem: str = "1GB",
+        run: bool = True,
     ):
-        super().__init__()
+        """Initialize Gaussian calculator.
+
+        Args:
+            directory: Working directory for Gaussian files.
+            route: Gaussian route line.
+            charge: Net charge of the system.
+            spin: Spin multiplicity (2S+1).
+            gaussian_cmd: Path or name of Gaussian executable.
+            nproc: Number of processors.
+            mem: Memory allocation.
+            run: If True (default), execute Gaussian and parse output.
+                 If False, only write input file.
+        """
+        super().__init__(run=run)
         self.directory = Path(directory)
         self.route = route
         self.charge = charge
@@ -45,33 +65,34 @@ class GaussianCalculator(Calculator):
         self.nproc = nproc
         self.mem = mem
 
-    def write_input(self, structure: Crystal | Molecule) -> str:
-        """Write Gaussian input file (.gjf). Returns path."""
+    def write_input(self, structure: Crystal | Molecule) -> None:
+        """Write Gaussian input file (.gjf)."""
         self.directory.mkdir(parents=True, exist_ok=True)
         path = self.directory / "input.gjf"
 
         lines = [f"%NProcShared={self.nproc}", f"%Mem={self.mem}"]
         lines.append(self.route)
         lines.append("")
-        lines.append(f"MatSimPy Gaussian calculation")
+        lines.append("MatSimPy Gaussian calculation")
         lines.append("")
         lines.append(f"{self.charge} {self.spin}")
 
         for species, pos in zip(structure.species, structure.positions):
-            lines.append(f" {species:2s}  {pos[0]:12.6f}  {pos[1]:12.6f}  {pos[2]:12.6f}")
+            lines.append(
+                f" {species:2s}  {pos[0]:12.6f}  {pos[1]:12.6f}  {pos[2]:12.6f}"
+            )
 
         lines.append("")
         path.write_text("\n".join(lines))
-        return str(path)
 
-    def _compute(self) -> None:
-        """Run Gaussian: write input → execute → parse output."""
-        input_path = self.write_input(self.structure)
+    def _execute(self) -> None:
+        """Run Gaussian executable."""
+        input_path = self.directory / "input.gjf"
         output_path = self.directory / "output.log"
 
         with open(output_path, "w") as f:
             result = subprocess.run(
-                [self.gaussian_cmd, input_path],
+                [self.gaussian_cmd, str(input_path)],
                 cwd=str(self.directory),
                 stdout=f,
                 stderr=subprocess.PIPE,
@@ -82,12 +103,16 @@ class GaussianCalculator(Calculator):
         if result.returncode != 0:
             raise RuntimeError(f"Gaussian failed:\n{result.stderr[-500:]}")
 
-        self._parse_output(output_path)
-
-    def _parse_output(self, path: Path) -> None:
+    def _parse_output(self) -> None:
         """Parse Gaussian output for energy and forces."""
+        path = self.directory / "output.log"
+        if not path.exists():
+            return
+
         text = path.read_text()
         import re
+
+        # SCF Done energy
         energy_pattern = r"SCF Done:\s+E\(\w+\)\s+=\s+([-\d.]+)"
         matches = re.findall(energy_pattern, text)
         if matches:
@@ -98,11 +123,9 @@ class GaussianCalculator(Calculator):
             if matches:
                 self.results["energy"] = float(matches[-1])
 
-    def get_potential_energy(self) -> float:
-        return self.results.get("energy", None)
-
-    def get_forces(self) -> np.ndarray:
-        return self.results.get("forces", None)
+    def read_results(self) -> None:
+        """Parse existing output files (offline mode)."""
+        super().read_results()
 
 
 __all__ = ["GaussianCalculator"]

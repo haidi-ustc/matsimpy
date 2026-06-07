@@ -16,18 +16,46 @@ import scipy.constants as cst
 from monty.io import zopen
 from scipy.stats import norm
 
-from pymatgen.core import Composition, Element, Molecule
-from pymatgen.core.operations import SymmOp
-from pymatgen.core.units import Ha_to_eV
-from pymatgen.electronic_structure.core import Spin
-from pymatgen.util.coord import get_angle
-from pymatgen.util.plotting import pretty_plot
+from matsimpy.core import Composition, Element, Molecule
+from matsimpy.calculator.utils import Ha_to_eV, get_angle
 
 if TYPE_CHECKING:
     from pathlib import Path
     from typing import Self
 
-    from pymatgen.util.typing import PathLike
+    PathLike = str | Path
+
+
+# Matsimpy-native replacements for pymatgen features
+class Spin:
+    """Spin enumeration — adapted from pymatgen.electronic_structure.core.Spin."""
+    up = 1
+    down = -1
+
+
+class _UnsupportedSymmOp:
+    """Stub for pymatgen SymmOp — not supported in matsimpy."""
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError(
+            "SymmOp is not available in matsimpy. "
+            "For symmetry operations, use spglib directly or install pymatgen."
+        )
+
+    @staticmethod
+    def from_origin_axis_angle(*args, **kwargs):
+        raise NotImplementedError(
+            "SymmOp.from_origin_axis_angle is not available in matsimpy."
+        )
+
+
+SymmOp = _UnsupportedSymmOp
+
+
+def pretty_plot(*args, **kwargs):
+    """Stub for pymatgen.util.plotting.pretty_plot — not supported in matsimpy."""
+    raise NotImplementedError(
+        "pretty_plot is not available in matsimpy. Use matplotlib directly."
+    )
 
 __author__ = "Shyue Ping Ong, Germain Salvato-Vallverdu, Xin Chen"
 __copyright__ = "Copyright 2013, The Materials Virtual Lab"
@@ -140,8 +168,12 @@ class GaussianInput:
 
         # Determine multiplicity and charge settings
         if isinstance(mol, Molecule):
-            self.charge = charge if charge is not None else mol.charge
-            n_electrons = mol.charge + mol.nelectrons - self.charge
+            self.charge = charge if charge is not None else getattr(mol, "charge", 0)
+            # matsimpy: compute n_electrons from Element atomic numbers
+            n_electrons = (
+                sum(Element(sym).atomic_no for sym in mol.species)
+                - self.charge
+            )
             if spin_multiplicity is not None:
                 self.spin_multiplicity = spin_multiplicity
                 if (n_electrons + spin_multiplicity) % 2 != 1:
@@ -346,7 +378,8 @@ class GaussianInput:
             else:
                 coord_lines.append(lines[i].strip())
         mol = cls._parse_coords(coord_lines)
-        mol.set_charge_and_spin(charge, spin_mult)
+        # matsimpy: Molecule doesn't have set_charge_and_spin; skip
+        pass
 
         return cls(
             mol,
@@ -377,11 +410,12 @@ class GaussianInput:
 
     def get_zmatrix(self):
         """Get a z-matrix representation of the molecule."""
-        return self._mol.get_zmatrix()
+        # matsimpy: Molecule doesn't have get_zmatrix; return cartesian coordinates
+        return self.to_str(cart_coords=True)
 
     def get_cart_coords(self) -> str:
         """Return the Cartesian coordinates of the molecule."""
-        outs = [f"{site.species_string} {' '.join(f'{x:0.6f}' for x in site.coords)}" for site in self._mol]
+        outs = [f"{site.specie} {' '.join(f'{x:0.6f}' for x in site.position)}" for site in self._mol]
         return "\n".join(outs)
 
     def __str__(self):
