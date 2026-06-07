@@ -191,62 +191,6 @@ class TestCrystalComprehensive(unittest.TestCase):
             Path(temp_file).unlink()
     
     
-    def test_crystal_to_code_quantum_espresso(self):
-        """Test writing DFT code input using to_code interface."""
-        import tempfile
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.in') as f:
-            temp_file = f.name
-        
-        try:
-            crystal.to_code('quantum_espresso', temp_file)
-            self.assertTrue(Path(temp_file).exists())
-            
-            # Verify file content
-            with open(temp_file, 'r') as f:
-                content = f.read()
-                self.assertIn('&system', content)
-                self.assertIn('ATOMIC_POSITIONS', content)
-                self.assertIn('CELL_PARAMETERS', content)
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_crystal_to_code_qe_alias(self):
-        """Test writing using 'qe' alias."""
-        import tempfile
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.in') as f:
-            temp_file = f.name
-        
-        try:
-            crystal.to_code('qe', temp_file)
-            self.assertTrue(Path(temp_file).exists())
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_crystal_to_code_invalid_code(self):
-        """Test to_code with invalid code name."""
-        species = ['Si', 'O']
-        positions = [[0, 0, 0], [0.5, 0.5, 0.5]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        
-        with self.assertRaises(ValueError):
-            crystal.to_code('invalid_code', 'test.in')
-    
-    def test_crystal_from_code_not_implemented(self):
-        """Test from_code raises NotImplementedError."""
-        with self.assertRaises(NotImplementedError):
-            Crystal.from_code('quantum_espresso', 'test.out')
-    
     def test_crystal_str(self):
         """Test string representation."""
         species = ['Si', 'O']

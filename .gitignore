@@ -89,3 +89,4 @@ configs
 
 # Git worktrees
 .worktrees/
+thirds

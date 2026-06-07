@@ -5,7 +5,7 @@ Tests for Lennard-Jones calculator.
 import unittest
 import numpy as np
 from matsimpy import Crystal, Molecule, Lattice
-from matsimpy.calculator.classical import LennardJones
+from matsimpy.calculator.lj import LennardJones
 from tests.conftest import has_ase
 
 class TestLennardJones(unittest.TestCase):
