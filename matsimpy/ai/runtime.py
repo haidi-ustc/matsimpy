@@ -63,18 +63,21 @@ class AgentRuntime:
 
     def run(self, user_message: str) -> TaskResult:
         """Execute one user task and return persisted runtime evidence."""
+        self.messages = self._initial_messages()
         self.workspace.enter()
-        session_id = self.session_store.start_session(
-            source=self.source,
-            workspace=str(self.workspace.path),
-            model=getattr(self.provider, "model", "unknown"),
-            provider=type(self.provider).__name__,
-        )
+        session_id: int | None = None
         tool_records: list[dict] = []
         final_response = ""
         max_turns_reached = False
+        trace_id: int | None = None
 
         try:
+            session_id = self.session_store.start_session(
+                source=self.source,
+                workspace=str(self.workspace.path),
+                model=getattr(self.provider, "model", "unknown"),
+                provider=type(self.provider).__name__,
+            )
             self.skill_manager.auto_load(user_message)
             self.messages.append(ChatMessage.user(user_message))
             self.session_store.add_message(session_id, "user", user_message)
@@ -114,18 +117,18 @@ class AgentRuntime:
                 validation_status = "failure"
             status = "success" if validation_status == "success" else "failure"
             plan_summary = self._plan_summary(tool_records, max_turns_reached)
+            draft_skill = EvolutionManager(self.session_store).draft_from_trace(
+                session_id=session_id,
+                user_request=user_message,
+                final_response=final_response,
+                validation_status=validation_status,
+            )
             trace_id = self.session_store.add_task_trace(
                 session_id=session_id,
                 user_request=user_message,
                 plan_summary=plan_summary,
                 validation_status=validation_status,
                 final_response=final_response,
-            )
-            draft_skill = EvolutionManager(self.session_store).draft_from_trace(
-                session_id=session_id,
-                user_request=user_message,
-                final_response=final_response,
-                validation_status=validation_status,
             )
             self.session_store.end_session(session_id, status)
 
@@ -137,6 +140,15 @@ class AgentRuntime:
                 trace_id=trace_id,
                 tool_calls=tool_records,
                 draft_skill=draft_skill,
+            )
+            return self.last_result
+        except Exception as exc:
+            self.last_result = self._finalize_runtime_failure(
+                session_id=session_id,
+                user_message=user_message,
+                tool_records=tool_records,
+                trace_id=trace_id,
+                exc=exc,
             )
             return self.last_result
         finally:
@@ -224,6 +236,63 @@ class AgentRuntime:
             return "Answered without tool execution."
         tools = ", ".join(record["name"] for record in records)
         return f"Executed tools: {tools}."
+
+    def _finalize_runtime_failure(
+        self,
+        session_id: int | None,
+        user_message: str,
+        tool_records: list[dict],
+        trace_id: int | None,
+        exc: Exception,
+    ) -> TaskResult:
+        final_response = f"Runtime error: {type(exc).__name__}: {exc}"
+        if session_id is None:
+            return TaskResult(
+                status="failure",
+                final_response=final_response,
+                validation_status="failure",
+                session_id=-1,
+                tool_calls=tool_records,
+            )
+
+        if trace_id is None:
+            trace_id = self._try_add_failure_trace(
+                session_id=session_id,
+                user_message=user_message,
+                tool_records=tool_records,
+                final_response=final_response,
+            )
+        try:
+            self.session_store.end_session(session_id, "failure")
+        except Exception:
+            pass
+
+        return TaskResult(
+            status="failure",
+            final_response=final_response,
+            validation_status="failure",
+            session_id=session_id,
+            trace_id=trace_id,
+            tool_calls=tool_records,
+        )
+
+    def _try_add_failure_trace(
+        self,
+        session_id: int,
+        user_message: str,
+        tool_records: list[dict],
+        final_response: str,
+    ) -> int | None:
+        try:
+            return self.session_store.add_task_trace(
+                session_id=session_id,
+                user_request=user_message,
+                plan_summary=self._plan_summary(tool_records, max_turns_reached=False),
+                validation_status="failure",
+                final_response=final_response,
+            )
+        except Exception:
+            return None
 
 
 __all__ = ["RUNTIME_SYSTEM_PROMPT", "TaskResult", "AgentRuntime"]

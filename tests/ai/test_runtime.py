@@ -1,5 +1,6 @@
 """Tests for the agent runtime loop."""
 
+import os
 from pathlib import Path
 
 from matsimpy.ai.conversation import ChatMessage, ChatResponse, ToolCall
@@ -25,6 +26,13 @@ class FakeProvider:
             }
         )
         return self._responses.pop(0)
+
+
+class RaisingProvider:
+    model = "fake-runtime-model"
+
+    def chat(self, messages, tools=None, tool_choice="auto"):
+        raise RuntimeError("provider unavailable")
 
 
 class TinyStructure:
@@ -171,3 +179,68 @@ def test_runtime_reports_tool_error_as_failure(tmp_path):
 
     traces = store.search_traces("missing")
     assert [trace["validation_status"] for trace in traces] == ["failure"]
+
+
+def test_runtime_finalizes_session_and_restores_cwd_when_provider_raises(tmp_path):
+    original_cwd = os.getcwd()
+    store = SessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=RaisingProvider(),
+        skill_manager=SkillManager(),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("trigger provider failure")
+
+    assert result.status == "failure"
+    assert result.validation_status == "failure"
+    assert result.final_response == "Runtime error: RuntimeError: provider unavailable"
+    assert result.trace_id is not None
+    assert result.draft_skill is None
+    assert os.getcwd() == original_cwd
+    rows = store.conn.execute("SELECT status, ended_at FROM sessions").fetchall()
+    assert [(row["status"], row["ended_at"] is not None) for row in rows] == [
+        ("failure", True)
+    ]
+    traces = store.search_traces("provider")
+    assert [trace["validation_status"] for trace in traces] == ["failure"]
+
+
+def test_runtime_starts_each_run_without_prior_task_messages(tmp_path):
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("First task done."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Second task done."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    runtime.run("first task unique content")
+    runtime.run("second task unique content")
+
+    second_messages = provider.calls[1]["messages"]
+    assert [message.role for message in second_messages] == ["system", "user"]
+    assert [message.content for message in second_messages] == [
+        second_messages[0].content,
+        "second task unique content",
+    ]
+    assert all("first task unique content" not in message.content for message in second_messages)
+    assert all("First task done." not in message.content for message in second_messages)
