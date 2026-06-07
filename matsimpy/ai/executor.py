@@ -82,16 +82,15 @@ class FunctionExecutor:
         if not ("crystal" in msg or "molecule" in msg or "structure" in msg):
             return {"error": f"TypeError: {error}"}
 
-        # Find dict arguments that look like they could be structures
+        # Find arguments (dicts or bare ints) that could be structure references
         resolved = dict(tool_call.arguments)
         adapted_keys: set[str] = set()
 
         for key, value in tool_call.arguments.items():
-            if isinstance(value, dict):
-                obj = self._try_resolve_structure(value)
-                if obj is not None:
-                    resolved[key] = obj
-                    adapted_keys.add(key)
+            obj = self._try_resolve_structure(value)
+            if obj is not None:
+                resolved[key] = obj
+                adapted_keys.add(key)
 
         if not adapted_keys:
             return {"error": f"TypeError: {error} — couldn't auto-resolve, pass a live structure"}
@@ -112,7 +111,14 @@ class FunctionExecutor:
         return self._serialize(result)
 
     def _try_resolve_structure(self, value: dict):
-        """Try to resolve a dict to a live Crystal or Molecule. Returns None if not a structure."""
+        """Try to resolve a dict (or bare int) to a live Crystal or Molecule.
+        Returns None if not a structure. Bare integers are looked up in the registry
+        (LLM might extract just the ref number from _obj_ref)."""
+        # Bare integer → look up in registry (LLM extracted the _obj_ref number)
+        if isinstance(value, int) and value in self._registry:
+            return self._registry[value]
+        if not isinstance(value, dict):
+            return None
         # Check _obj_ref first
         if "_obj_ref" in value:
             ref = value["_obj_ref"]
@@ -130,7 +136,7 @@ class FunctionExecutor:
             return args
         result = dict(args)
         for key in self._adaptations[fn_name]:
-            if key in result and isinstance(result[key], dict):
+            if key in result:
                 obj = self._try_resolve_structure(result[key])
                 if obj is not None:
                     result[key] = obj
@@ -152,9 +158,6 @@ class FunctionExecutor:
             obj = self._registry.get(ref)
             if obj is not None:
                 return obj
-        # Handle bare integer — LLM might extract just the ref number
-        if isinstance(value, int) and value in self._registry:
-            return self._registry[value]
         # Also handle legacy serialized dicts without _obj_ref
         if isinstance(value, dict) and "@module" in value and "@class" in value:
             return self._from_dict(value)
