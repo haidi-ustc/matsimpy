@@ -19,11 +19,16 @@ FILES = {
 }
 
 
+class MemoryValidationError(ValueError):
+    """Raised when a memory entry is invalid or unsafe."""
+
+
 class AgentMemory:
     """Persistent agent memory across sessions."""
 
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(self, base_dir: Path | None = None, max_entry_chars: int = 2000):
         self.dir = Path(base_dir) if base_dir else MEMORY_DIR
+        self.max_entry_chars = max_entry_chars
         self.dir.mkdir(parents=True, exist_ok=True)
         self._ensure_files()
 
@@ -56,6 +61,59 @@ class AgentMemory:
         existing = path.read_text() if path.exists() else ""
         path.write_text(existing + content + "\n")
 
+    def _validate_entry(self, content: str) -> str:
+        entry = content.strip()
+        if not entry:
+            raise MemoryValidationError("memory entry is empty")
+
+        unsafe_phrases = (
+            "ignore previous instructions",
+            "reveal secrets",
+            "print environment",
+            "show api key",
+            "show token",
+        )
+        normalized = entry.casefold()
+        if any(phrase in normalized for phrase in unsafe_phrases):
+            raise MemoryValidationError("memory entry is unsafe")
+        if len(entry) > self.max_entry_chars:
+            raise MemoryValidationError("memory entry is too large")
+
+        return entry
+
+    def add(self, name: str, content: str) -> None:
+        """Add a validated memory entry as a markdown bullet."""
+        entry = self._validate_entry(content)
+        existing = self.read(name)
+        bullet = f"- {entry}"
+        if any(line.strip() == bullet for line in existing.splitlines()):
+            raise MemoryValidationError("duplicate memory entry")
+        self.append(name, bullet)
+
+    def replace(self, name: str, old_text: str, content: str) -> None:
+        """Replace the first occurrence of old text with validated content."""
+        entry = self._validate_entry(content)
+        existing = self.read(name)
+        if old_text not in existing:
+            raise MemoryValidationError("memory text not found")
+        self.write(name, existing.replace(old_text, entry, 1))
+
+    def remove(self, name: str, old_text: str) -> None:
+        """Remove the first occurrence of old text from a memory file."""
+        existing = self.read(name)
+        if old_text not in existing:
+            raise MemoryValidationError("memory text not found")
+
+        bullet = f"- {old_text}"
+        lines = existing.splitlines(keepends=True)
+        for index, line in enumerate(lines):
+            if line.strip() == bullet:
+                del lines[index]
+                self.write(name, "".join(lines))
+                return
+
+        self.write(name, existing.replace(old_text, "", 1))
+
     def append_learning(self, entry: dict) -> None:
         """Append a learning entry to memory.md."""
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -85,4 +143,4 @@ class AgentMemory:
         }
 
 
-__all__ = ["AgentMemory"]
+__all__ = ["AgentMemory", "MemoryValidationError"]
