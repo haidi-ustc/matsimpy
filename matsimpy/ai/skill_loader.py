@@ -37,6 +37,7 @@ def save_skill_md(
     trigger_keywords: list[str],
     body: str = "",
     load_mode: str = "auto_choice",
+    status: str = "approved",
 ) -> Path:
     """Save a skill as .skill.md file."""
     import yaml
@@ -53,6 +54,7 @@ def save_skill_md(
         "category": "ai-generated",
         "version": "1.0.0",
         "load_mode": load_mode,
+        "status": status,
         "trigger_keywords": trigger_keywords,
         "tools": tools,
         "created_at": datetime.now().isoformat(),
@@ -76,13 +78,13 @@ def save_skill_md(
     return path
 
 
-def list_generated_skills() -> list[dict]:
-    """List all .skill.md files in the generated directory."""
+def list_generated_skills(status: str | None = "approved") -> list[dict]:
+    """List generated .skill.md files, optionally filtered by status."""
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
     skills = []
     for path in sorted(SKILLS_DIR.glob("*.skill.md")):
         parsed = parse_skill_md(path)
-        if parsed:
+        if parsed and (status is None or parsed.get("status", "approved") == status):
             skills.append(parsed)
     return skills
 

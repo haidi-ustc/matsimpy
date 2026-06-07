@@ -163,3 +163,83 @@ def get_functions():
             assert len(s["functions"]) == 2
             return
     pytest.fail("Valid temp skill should be discovered")
+
+
+def test_generated_skill_status_filter(tmp_path, monkeypatch):
+    from matsimpy.ai import skill_loader
+
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    monkeypatch.setattr(skill_loader, "SKILLS_DIR", generated)
+
+    skill_loader.save_skill_md(
+        name="approved-skill",
+        description="Approved skill",
+        tools=[{"function": "from_prototype"}],
+        trigger_keywords=["approved"],
+        body="# Approved\n",
+        load_mode="auto_choice",
+    )
+    skill_loader.save_skill_md(
+        name="draft-skill",
+        description="Draft skill",
+        tools=[{"function": "from_prototype"}],
+        trigger_keywords=["draft"],
+        body="# Draft\n",
+        load_mode="manual",
+        status="draft",
+    )
+
+    approved = skill_loader.list_generated_skills(status="approved")
+    drafts = skill_loader.list_generated_skills(status="draft")
+
+    assert [s["name"] for s in approved] == ["approved-skill"]
+    assert [s["name"] for s in drafts] == ["draft-skill"]
+
+
+def test_generated_skill_missing_status_defaults_to_approved(tmp_path, monkeypatch):
+    from matsimpy.ai import skill_loader
+
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    monkeypatch.setattr(skill_loader, "SKILLS_DIR", generated)
+
+    legacy_skill = generated / "legacy.skill.md"
+    legacy_skill.write_text(
+        "---\n"
+        "name: legacy\n"
+        "description: Legacy generated skill\n"
+        "tools: []\n"
+        "---\n\n"
+        "# Legacy\n"
+    )
+
+    approved = skill_loader.list_generated_skills(status="approved")
+
+    assert [s["name"] for s in approved] == ["legacy"]
+
+
+def test_generated_skill_status_none_returns_all(tmp_path, monkeypatch):
+    from matsimpy.ai import skill_loader
+
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    monkeypatch.setattr(skill_loader, "SKILLS_DIR", generated)
+
+    skill_loader.save_skill_md(
+        name="approved-skill",
+        description="Approved skill",
+        tools=[],
+        trigger_keywords=[],
+    )
+    skill_loader.save_skill_md(
+        name="draft-skill",
+        description="Draft skill",
+        tools=[],
+        trigger_keywords=[],
+        status="draft",
+    )
+
+    skills = skill_loader.list_generated_skills(status=None)
+
+    assert [s["name"] for s in skills] == ["approved-skill", "draft-skill"]
