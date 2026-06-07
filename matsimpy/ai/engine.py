@@ -40,6 +40,8 @@ class AIEngine:
         self.provider = DeepSeekProvider(api_key, model, base_url)
         self.skill_manager = SkillManager()
         self.executor = FunctionExecutor(self.skill_manager)
+        from .executor import _set_active_executor
+        _set_active_executor(self.executor)
         self.workspace = Workspace(workspace_path)
         self.memory = AgentMemory()
 
