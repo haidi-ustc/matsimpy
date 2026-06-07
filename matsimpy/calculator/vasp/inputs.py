@@ -39,10 +39,44 @@ from monty.os.path import zpath
 from monty.serialization import dumpfn, loadfn
 from tabulate import tabulate
 
-from pymatgen.core import SETTINGS, Element, Lattice, Structure, get_el_sp
-from pymatgen.electronic_structure.core import Magmom
-from pymatgen.util.io_utils import clean_lines
-from pymatgen.util.string import str_delimited
+from matsimpy.core import Element, Lattice, Crystal
+from matsimpy.calculator.utils import clean_lines, str_delimited
+
+# Structure is Crystal in matsimpy
+Structure = Crystal
+
+
+def _is_valid_symbol(symbol: str) -> bool:
+    """Check if a string is a valid element symbol."""
+    try:
+        Element(symbol)
+        return True
+    except ValueError:
+        return False
+
+# get_el_sp: simple Element lookup
+def get_el_sp(el):
+    """Get Element from string — matsimpy equivalent of pymatgen get_el_sp."""
+    if isinstance(el, Element):
+        return el
+    return Element(el)
+
+# Magmom: simple local class (adapted from pymatgen)
+class Magmom:
+    """Simple magnetic moment wrapper. Adapted from pymatgen."""
+    def __init__(self, magmom):
+        if isinstance(magmom, (list, tuple, np.ndarray)):
+            self.moment = list(magmom)
+        else:
+            self.moment = [float(magmom)]
+    def __getitem__(self, i):
+        return self.moment[i]
+    def __repr__(self):
+        return f"Magmom({self.moment})"
+    def __eq__(self, other):
+        if isinstance(other, Magmom):
+            return self.moment == other.moment
+        return NotImplemented
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -50,9 +84,8 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike, NDArray
 
-    from pymatgen.core.structure import IStructure
-    from pymatgen.symmetry.bandstructure import HighSymmKpath
-    from pymatgen.util.typing import Kpoint, PathLike
+    Kpoint = tuple  # simplified type alias
+    PathLike = str | Path
 
 
 __author__ = "Shyue Ping Ong, Geoffroy Hautier, Rickard Armiento, Vincent L Chevrier, Stephen Dacek"
@@ -141,8 +174,8 @@ class Poscar(MSONable):
             sort_structure (bool, optional): Whether to sort the structure. Useful if species
                 are not grouped properly together. Defaults to False.
         """
-        if not structure.is_ordered:
-            raise ValueError("Disordered structure with partial occupancies cannot be converted into POSCAR!")
+        if len(structure) == 0:
+            raise ValueError("Empty structure cannot be converted into POSCAR!")
 
         site_properties: dict[str, Any] = {}
 
@@ -161,26 +194,49 @@ class Poscar(MSONable):
             if predictor_corrector.any():
                 site_properties["predictor_corrector"] = predictor_corrector
 
-        structure = Structure.from_sites(structure)
-        self.structure = structure.copy(site_properties=site_properties)
-        if sort_structure:
-            self.structure = self.structure.get_sorted_structure()
+        # Build site_properties list for Crystal constructor if any exist
+        if site_properties:
+            n_sites = len(structure)
+            sp_list = [{} for _ in range(n_sites)]
+            for key, val_array in site_properties.items():
+                for i in range(n_sites):
+                    sp_list[i][key] = val_array[i]
+            self.structure = Crystal(
+                list(structure.species),
+                structure.cart_positions.tolist(),
+                structure.lattice,
+                pbc=structure.pbc,
+                coords_are_cartesian=True,
+                site_properties=sp_list,
+            )
+        else:
+            self.structure = structure.copy()
 
+        if sort_structure:
+            self.structure = self.structure.sort_atoms()
+
+        # Store properties that don't map to Crystal site_properties
+        self._extra_properties: dict[str, Any] = {}
         if predictor_corrector_preamble:
-            self.structure.properties["predictor_corrector_preamble"] = predictor_corrector_preamble
+            self._extra_properties["predictor_corrector_preamble"] = predictor_corrector_preamble
 
         if lattice_velocities and np.any(lattice_velocities):
-            self.structure.properties["lattice_velocities"] = np.asarray(lattice_velocities)
+            self._extra_properties["lattice_velocities"] = np.asarray(lattice_velocities)
 
         self.true_names: bool = true_names
         self.comment: str = structure.formula if comment is None else comment
         self.temperature: float = -1.0
 
+        # Backing fields for settable properties
+        self._velocities: ArrayLike | None = velocities
+        self._selective_dynamics: ArrayLike | None = selective_dynamics
+        self._predictor_corrector: ArrayLike | None = predictor_corrector
+
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in {"selective_dynamics", "velocities"} and value is not None and len(value) > 0:
+        if name in {"selective_dynamics", "velocities", "predictor_corrector"} and value is not None and len(value) > 0:
             value = np.asarray(value)
             dim = value.shape
-            if dim[1] != 3 or dim[0] != len(self.structure):
+            if hasattr(self, "structure") and (dim[1] != 3 or dim[0] != len(self.structure)):
                 raise ValueError(f"{name} array must be same length as the structure.")
 
         super().__setattr__(name, value)
@@ -195,52 +251,56 @@ class Poscar(MSONable):
     @property
     def velocities(self) -> ArrayLike | None:
         """Velocities in Poscar."""
-        return self.structure.site_properties.get("velocities")
+        return self._velocities
 
     @velocities.setter
     def velocities(self, velocities: NDArray) -> None:
-        self.structure.add_site_property("velocities", velocities)
+        self._velocities = np.asarray(velocities) if velocities is not None else None
 
     @property
     def selective_dynamics(self) -> ArrayLike | None:
         """Selective dynamics in Poscar."""
-        return self.structure.site_properties.get("selective_dynamics")
+        return self._selective_dynamics
 
     @selective_dynamics.setter
     def selective_dynamics(self, selective_dynamics: NDArray) -> None:
-        self.structure.add_site_property("selective_dynamics", selective_dynamics)
+        self._selective_dynamics = np.asarray(selective_dynamics) if selective_dynamics is not None else None
 
     @property
     def predictor_corrector(self) -> ArrayLike | None:
         """Predictor corrector in Poscar."""
-        return self.structure.site_properties.get("predictor_corrector")
+        return self._predictor_corrector
 
     @predictor_corrector.setter
     def predictor_corrector(self, predictor_corrector: NDArray) -> None:
-        self.structure.add_site_property("predictor_corrector", predictor_corrector)
+        self._predictor_corrector = np.asarray(predictor_corrector) if predictor_corrector is not None else None
 
     @property
     def predictor_corrector_preamble(self) -> str | None:
         """Predictor corrector preamble in Poscar."""
-        return self.structure.properties.get("predictor_corrector_preamble")
+        return self._extra_properties.get("predictor_corrector_preamble")
 
     @predictor_corrector_preamble.setter
     def predictor_corrector_preamble(self, predictor_corrector_preamble: str | None) -> None:
-        self.structure.properties["predictor_corrector"] = predictor_corrector_preamble
+        if not hasattr(self, "_extra_properties"):
+            self._extra_properties = {}
+        self._extra_properties["predictor_corrector_preamble"] = predictor_corrector_preamble
 
     @property
     def lattice_velocities(self) -> ArrayLike | None:
         """Lattice velocities in Poscar (including the current lattice vectors)."""
-        return self.structure.properties.get("lattice_velocities")
+        return self._extra_properties.get("lattice_velocities") if hasattr(self, "_extra_properties") else None
 
     @lattice_velocities.setter
     def lattice_velocities(self, lattice_velocities: ArrayLike | None) -> None:
-        self.structure.properties["lattice_velocities"] = np.asarray(lattice_velocities)
+        if not hasattr(self, "_extra_properties"):
+            self._extra_properties = {}
+        self._extra_properties["lattice_velocities"] = np.asarray(lattice_velocities) if lattice_velocities is not None else None
 
     @property
     def site_symbols(self) -> list[str]:
         """Sequence of symbols associated with the Poscar. Similar to 6th line in VASP 5+ POSCAR."""
-        syms: list[str] = [site.specie.symbol for site in self.structure]
+        syms: list[str] = [str(s) for s in self.structure.species]
         return [a[0] for a in itertools.groupby(syms)]
 
     @property
@@ -248,7 +308,7 @@ class Poscar(MSONable):
         """Sequence of number of sites of each type associated with the Poscar.
         Similar to 7th line in VASP 5+ POSCAR or the 6th line in VASP 4 POSCAR.
         """
-        syms: list[str] = [site.specie.symbol for site in self.structure]
+        syms: list[str] = [str(site.specie) for site in self.structure]
         return [len(tuple(a[1])) for a in itertools.groupby(syms)]
 
     @classmethod
@@ -486,7 +546,7 @@ class Poscar(MSONable):
                 # Check if names are appended at the end of the coordinates
                 atomic_symbols = [line.split()[ind] for line in lines[ipos + 1 : ipos + 1 + n_sites]]
                 # Ensure symbols are valid elements
-                if not all(Element.is_valid_symbol(sym) for sym in atomic_symbols):
+                if not all(_is_valid_symbol(sym) for sym in atomic_symbols):
                     raise ValueError("Non-valid symbols detected.")
                 vasp5or6_symbols = True
 
@@ -550,12 +610,10 @@ class Poscar(MSONable):
                 stacklevel=2,
             )
 
-        struct = Structure(
-            lattice,
+        struct = Crystal(
             atomic_symbols,
             coords,
-            to_unit_cell=False,
-            validate_proximity=False,
+            Lattice(lattice),
             coords_are_cartesian=cart,
         )
 
@@ -655,12 +713,12 @@ class Poscar(MSONable):
 
         # Add ion positions and selective dynamics
         for idx, site in enumerate(self.structure):
-            coords: ArrayLike = site.frac_coords if direct else site.coords
+            coords: ArrayLike = site.frac_position if direct else site.cart_position
             line: str = " ".join(format_str.format(c) for c in coords)
             if self.selective_dynamics is not None:
                 sd: list[str] = ["T" if j else "F" for j in self.selective_dynamics[idx]]  # type:ignore[index]
                 line += f" {sd[0]} {sd[1]} {sd[2]}"
-            line += f" {site.species_string}"
+            line += f" {site.specie}"
             lines.append(line)
 
         if self.lattice_velocities is not None:
@@ -762,7 +820,7 @@ class Poscar(MSONable):
         velocities = np.random.default_rng().standard_normal((len(self.structure), 3))
 
         # In AMU, (N, 1) array
-        atomic_masses = np.array([site.specie.atomic_mass.to("kg") for site in self.structure])
+        atomic_masses = np.array([Element(str(site.specie)).atomic_mass for site in self.structure])
         dof = 3 * len(self.structure) - 3
 
         # Remove linear drift (net momentum)
@@ -1483,7 +1541,7 @@ class Kpoints(MSONable):
         if abs((math.floor(kppa ** (1 / 3) + 0.5)) ** 3 - kppa) < 1:
             kppa += kppa * 0.01
         lattice = structure.lattice
-        lengths: tuple[float, float, float] = lattice.abc
+        lengths: tuple[float, float, float] = tuple(np.linalg.norm(lattice.matrix, axis=1))
         ngrid = kppa / len(structure)
         mult: float = (ngrid * lengths[0] * lengths[1] * lengths[2]) ** (1 / 3)
 
@@ -1491,7 +1549,7 @@ class Kpoints(MSONable):
             "tuple[int, int, int]", [math.floor(max(mult / length, 1)) for length in lengths]
         )
 
-        is_hexagonal: bool = lattice.is_hexagonal()
+        is_hexagonal: bool = lattice.hexagonal
         is_face_centered: bool = structure.get_space_group_info()[0][0] == "F"
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
@@ -1530,11 +1588,11 @@ class Kpoints(MSONable):
             comment = f"pymatgen with grid density = {kppa:.0f} / number of atoms"
 
         lattice = structure.lattice
-        a, b, c = lattice.abc
+        a, b, c = np.linalg.norm(lattice.matrix, axis=1)
         n_grid = kppa / len(structure)
 
         multip = (n_grid * a * b * c) ** (1 / 3)
-        n_div: list[int] = cast("list[int]", [round(multip / length) for length in lattice.abc])
+        n_div: list[int] = cast("list[int]", [round(multip / length) for length in np.linalg.norm(lattice.matrix, axis=1)])
 
         # Ensure that all num_div[i] > 0
         n_div = [idx if idx > 0 else 1 for idx in n_div]
@@ -1614,10 +1672,10 @@ class Kpoints(MSONable):
 
         lattice = structure.lattice
 
-        abc = lattice.abc
+        abc = np.linalg.norm(lattice.matrix, axis=1)
         num_div: tuple[int, int, int] = tuple(math.ceil(ld / abc[idx]) for idx, ld in enumerate(length_densities))  # type:ignore[assignment]
 
-        is_hexagonal: bool = lattice.is_hexagonal()
+        is_hexagonal: bool = lattice.hexagonal
         is_face_centered: bool = structure.get_space_group_info()[0][0] == "F"
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:

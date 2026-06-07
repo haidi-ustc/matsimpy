@@ -31,23 +31,53 @@ from monty.os.path import zpath
 from monty.re import regrep
 from tqdm import tqdm
 
-from pymatgen.core import Composition, Element, Lattice, Structure
-from pymatgen.core.entries import ComputedEntry, ComputedStructureEntry
-from pymatgen.core.trajectory import Trajectory
-from pymatgen.core.units import unitized
-from pymatgen.electronic_structure.bandstructure import (
-    BandStructure,
-    BandStructureSymmLine,
-    get_reconstructed_band_structure,
-)
-from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
-from pymatgen.electronic_structure.dos import CompleteDos, Dos
-from pymatgen.io.common import VolumetricData as BaseVolumetricData
-from pymatgen.io.core import ParseError
-from pymatgen.io.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
-from pymatgen.io.wannier90 import Unk
-from pymatgen.util.io_utils import clean_lines, micro_pyawk
-from pymatgen.util.num import make_symmetric_matrix_from_upper_tri
+from matsimpy.core import Composition, Element, Lattice, Crystal
+from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
+from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
+
+# Structure is Crystal in matsimpy
+Structure = Crystal
+
+# micro_pyawk: inline the tiny helper
+def micro_pyawk(filename, search, results=None, debug=None, postdebug=None):
+    """Simple file scanning helper. Adapted from pymatgen.util.io_utils.micro_pyawk."""
+    if results is None:
+        results = {}
+    with zopen(filename, "rt") as f:
+        for line in f:
+            for key, pattern in search.items():
+                if match := re.search(pattern, line):
+                    results[key] = match
+                    if debug:
+                        import pdb; pdb.set_trace()
+            if postdebug is not None:
+                import pdb; pdb.set_trace()
+    return results
+
+# Advanced pymatgen types — optional, guarded by _HAS_PYMATGEN_ES
+try:
+    from pymatgen.core.entries import ComputedEntry, ComputedStructureEntry
+    from pymatgen.core.trajectory import Trajectory
+    from pymatgen.core.units import unitized
+    from pymatgen.electronic_structure.bandstructure import (
+        BandStructure, BandStructureSymmLine, get_reconstructed_band_structure,
+    )
+    from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
+    from pymatgen.electronic_structure.dos import CompleteDos, Dos
+    from pymatgen.io.common import VolumetricData as BaseVolumetricData
+    from pymatgen.io.core import ParseError
+    from pymatgen.io.wannier90 import Unk
+    _HAS_PYMATGEN_ES = True
+except ImportError:
+    _HAS_PYMATGEN_ES = False
+    ComputedEntry = ComputedStructureEntry = Trajectory = None
+    unitized = None
+    BandStructure = BandStructureSymmLine = None
+    get_reconstructed_band_structure = None
+    Magmom = Orbital = OrbitalType = Spin = None
+    CompleteDos = Dos = BaseVolumetricData = None
+    ParseError = None
+    Unk = None
 
 try:
     import h5py
@@ -1315,7 +1345,10 @@ class Vasprun(MSONable):
         steps = self.md_data or self.ionic_steps
         for step in steps:
             struct = step["structure"].copy()
-            struct.add_site_property("forces", step["forces"])
+            # Crystal does not support add_site_property; store in extra dict
+            if not hasattr(struct, "_extra_properties"):
+                struct._extra_properties = {}
+            struct._extra_properties["forces"] = step["forces"]
             structs.append(struct)
         return Trajectory.from_structures(structs, constant_lattice=False)
 
@@ -1593,11 +1626,15 @@ class Vasprun(MSONable):
         """Parse Structure with lattice, positions and selective dynamics info."""
         lattice = _parse_vasp_array(elem.find("crystal").find("varray"))  # type: ignore[union-attr]
         pos = _parse_vasp_array(elem.find("varray"))
-        struct = Structure(lattice, self.atomic_symbols, pos)
+        struct = Crystal(self.atomic_symbols, pos, Lattice(lattice))
         selective_dyn = elem.find("varray/[@name='selective']")
 
         if selective_dyn is not None:
-            struct.add_site_property("selective_dynamics", _parse_vasp_array(selective_dyn))
+            # Crystal does not support add_site_property; store in extra dict
+            sd_data = _parse_vasp_array(selective_dyn)
+            if not hasattr(struct, "_extra_properties"):
+                struct._extra_properties = {}
+            struct._extra_properties["selective_dynamics"] = sd_data
         return struct
 
     @staticmethod
@@ -6144,11 +6181,11 @@ class Vaspout(Vasprun):
         if positions["selective_dynamics"] == 1:
             site_properties["selective_dynamics"] = []
 
-        return Structure(
-            lattice=Lattice(positions["scale"] * np.array(positions["lattice_vectors"])),
+        return Crystal(
             species=species,
-            coords=positions["position_ions"],
-            coords_are_cartesian=(positions["direct_coordinates"] == 1),
+            positions=positions["position_ions"],
+            lattice=Lattice(positions["scale"] * np.array(positions["lattice_vectors"])),
+            coords_are_cartesian=(positions["direct_coordinates"] != 1),
         )
 
     @staticmethod
@@ -6298,10 +6335,10 @@ class Vaspout(Vasprun):
                     for ivalue, value in enumerate(ion_dynamics["energies"][istep])
                 },
                 **{key: ion_dynamics[key][istep] for key in ionic_step_keys},
-                "structure": Structure(
-                    lattice=Lattice(ion_dynamics["lattice_vectors"][istep]),
+                "structure": Crystal(
                     species=self.initial_structure.species,
-                    coords=ion_dynamics["position_ions"][istep],
+                    positions=ion_dynamics["position_ions"][istep],
+                    lattice=Lattice(ion_dynamics["lattice_vectors"][istep]),
                     coords_are_cartesian=False,  # TODO check this is always False
                 ),
                 # Placeholder - there's currently no info about electronic steps
@@ -6333,7 +6370,9 @@ class Vaspout(Vasprun):
                         ]
                         for iion in range(len(self.poscar.structure)):
                             site_prop[iion]["tot"] = sum(site_prop[iion].values())
-                        step["structure"].add_site_property(_to_outcar_tag.get(k), site_prop)
+                        if not hasattr(step["structure"], "_extra_properties"):
+                            step["structure"]._extra_properties = {}
+                        step["structure"]._extra_properties[_to_outcar_tag.get(k)] = site_prop
 
             self.ionic_steps += [step]
 

@@ -49,14 +49,35 @@ from monty.dev import deprecated
 from monty.json import MSONable
 from monty.serialization import loadfn
 
-from pymatgen.core import Element, PeriodicSite, SiteCollection, Species, Structure
-from pymatgen.core.structure_matcher import StructureMatcher
-from pymatgen.io.core import InputGenerator
-from pymatgen.io.vasp.inputs import Incar, Kpoints, PmgVaspPspDirError, Poscar, Potcar, VaspInput
-from pymatgen.io.vasp.outputs import Outcar, Vasprun
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.symmetry.bandstructure import HighSymmKpath
-from pymatgen.util.due import Doi, due
+from matsimpy.core import Element, Crystal, Lattice
+from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
+from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
+
+# Structure → Crystal alias
+Structure = Crystal
+
+# Optional symmetry features — require pymatgen/spglib
+try:
+    from pymatgen.core.structure_matcher import StructureMatcher
+    from pymatgen.io.core import InputGenerator
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+    from pymatgen.symmetry.bandstructure import HighSymmKpath
+    from pymatgen.util.due import Doi, due
+    _HAS_SYMMETRY = True
+except ImportError:
+    _HAS_SYMMETRY = False
+    StructureMatcher = None
+    InputGenerator = None
+    SpacegroupAnalyzer = None
+    HighSymmKpath = None
+    Doi = due = None
+
+# PeriodicSite / SiteCollection / Species — used less frequently,
+# gate them behind pymatgen availability
+try:
+    from pymatgen.core import PeriodicSite, SiteCollection, Species
+except ImportError:
+    PeriodicSite = SiteCollection = Species = None
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -577,7 +598,10 @@ class VaspInputSet(InputGenerator, abc.ABC):
         # Generate INCAR
         structure = self.structure
         comp = structure.composition
-        elements = sorted((el for el in comp.elements if comp[el] > 0), key=lambda e: e.X)
+        elements = sorted(
+            (Element(sym) for sym, amt in comp.composition.items() if amt > 0),
+            key=lambda e: e.X,
+        )
         most_electro_neg = elements[-1].symbol
         poscar = Poscar(structure)
         hubbard_u = settings.get("LDAU", False)
@@ -660,10 +684,10 @@ class VaspInputSet(InputGenerator, abc.ABC):
         # Thanks to Andrew Rosen for investigating and reporting.
         if "LMAXMIX" not in settings:
             # contains f-electrons
-            if any(el.Z > 56 for el in structure.composition):
+            if any(Element(sym).atomic_no > 56 for sym in structure.composition.composition):
                 incar["LMAXMIX"] = 6
             # contains d-electrons
-            elif any(el.Z > 20 for el in structure.composition):
+            elif any(Element(sym).atomic_no > 20 for sym in structure.composition.composition):
                 incar["LMAXMIX"] = 4
 
         # Warn user about LASPH for +U, meta-GGAs, hybrids, and vdW-DF
@@ -771,7 +795,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
         ismear = incar.get("ISMEAR", 1)
         sigma = incar.get("SIGMA", 0.2)
         if (
-            all(elem.is_metal for elem in structure.composition)
+            all(Element(sym).is_metal for sym in structure.composition.composition)
             and incar.get("NSW", 0) > 0
             and (ismear < 0 or (ismear == 0 and sigma > 0.05))
         ):
@@ -794,13 +818,14 @@ class VaspInputSet(InputGenerator, abc.ABC):
         if self.structure is None:
             raise RuntimeError("No structure is associated with the input set!")
 
-        site_properties = self.structure.site_properties
+        # matsimpy Crystal uses tuple for site_properties, store extra properties on Poscar
+        extra = getattr(self.structure, "_extra_properties", {}) or {}
         return Poscar(
             self.structure,
-            velocities=site_properties.get("velocities"),
-            predictor_corrector=site_properties.get("predictor_corrector"),
-            predictor_corrector_preamble=self.structure.properties.get("predictor_corrector_preamble"),
-            lattice_velocities=self.structure.properties.get("lattice_velocities"),
+            velocities=extra.get("velocities"),
+            predictor_corrector=extra.get("predictor_corrector"),
+            predictor_corrector_preamble=extra.get("predictor_corrector_preamble"),
+            lattice_velocities=extra.get("lattice_velocities"),
         )
 
     @property
@@ -816,7 +841,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
 
         n_electrons_by_element = {p.element: p.nelectrons for p in self.potcar}
         n_elect = sum(
-            num_atoms * n_electrons_by_element[el.symbol] for el, num_atoms in self.structure.composition.items()
+            num_atoms * n_electrons_by_element[str(el)] for el, num_atoms in self.structure.composition.items()
         )
 
         return n_elect - (self.structure.charge if self.use_structure_charge else 0)
@@ -1149,7 +1174,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             raise ValueError(f"{PREC=} does not exist. If this is no longer correct, please update this code.")
 
         CUTOFF = [
-            np.sqrt(encut / _RYTOEV) / (2 * np.pi / (anorm / _AUTOA)) for anorm in self.poscar.structure.lattice.abc
+            np.sqrt(encut / _RYTOEV) / (2 * np.pi / (anorm / _AUTOA)) for anorm in np.linalg.norm(self.poscar.structure.lattice.matrix, axis=1)
         ]
 
         # TODO This only works in VASP 6.x
@@ -2463,12 +2488,13 @@ class MVLSlabSet(VaspInputSet):
         # Check if self.structure is not None
         if self.structure is not None:
             # Determine non-adsorbate elements
-            if self.structure.site_properties and self.structure.site_properties.get("surface_properties"):
+            extra = getattr(self.structure, "_extra_properties", {}) or {}
+            if extra and extra.get("surface_properties"):
                 non_adsorbate_elts = {
-                    s.specie.symbol for s in self.structure if s.properties["surface_properties"] != "adsorbate"
+                    str(s.specie) for i, s in enumerate(self.structure) if extra.get("surface_properties", [])[i] != "adsorbate"
                 }
             else:
-                non_adsorbate_elts = {s.specie.symbol for s in self.structure}
+                non_adsorbate_elts = {str(s.specie) for s in self.structure}
 
         # Determine if LDA+U should be applied
         ldau = bool(non_adsorbate_elts & ldau_elts)
@@ -2512,7 +2538,7 @@ class MVLSlabSet(VaspInputSet):
         # use k_product to calculate kpoints, k_product = kpts[0][0] * a
         if self.structure is None:
             raise ValueError("structure is None")
-        lattice_abc = self.structure.lattice.abc
+        lattice_abc = np.linalg.norm(self.structure.lattice.matrix, axis=1)
         kpt_calc = [
             int(self.k_product / lattice_abc[0] + 0.5),
             int(self.k_product / lattice_abc[1] + 0.5),
@@ -2573,7 +2599,7 @@ class MVLGBSet(VaspInputSet):
         in bulk calculations Automatic mesh & Gamma is the default setting.
         """
         # use k_product to calculate kpoints, k_product = kpts[0][0] * a
-        lengths = self.structure.lattice.abc  # type: ignore[union-attr]
+        lengths = np.linalg.norm(self.structure.lattice.matrix, axis=1)  # type: ignore[union-attr]
         kpt_calc = [
             int(self.k_product / lengths[0] + 0.5),
             int(self.k_product / lengths[1] + 0.5),
@@ -3257,11 +3283,10 @@ def batch_write_input(
         )
 
 
-_dummy_structure = Structure(
-    [1, 0, 0, 0, 1, 0, 0, 0, 1],
+_dummy_structure = Crystal(
     ["I"],
     [[0, 0, 0]],
-    site_properties={"magmom": [[0, 0, 1]]},
+    Lattice.from_parameters(1, 1, 1, 90, 90, 90),
 )
 
 
