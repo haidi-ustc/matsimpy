@@ -101,6 +101,19 @@ class AgentMemory:
         if not old_text.strip():
             raise MemoryValidationError("memory selector is empty")
 
+    def _sanitize_learning_field(
+        self,
+        value: object,
+        max_chars: int | None = None,
+    ) -> str:
+        """Render automatic learning fields as safe single-line markdown text."""
+        text = " ".join(str(value).split())
+        text = text.replace("#", "").replace("- ", "")
+        text = " ".join(text.split()).strip()
+        if max_chars is not None:
+            return text[:max_chars].strip()
+        return text
+
     def add(self, name: str, content: str) -> None:
         """Add a validated memory entry as a markdown bullet."""
         target = self._validate_target(name)
@@ -133,10 +146,13 @@ class AgentMemory:
     def append_learning(self, entry: dict) -> None:
         """Append a learning entry to memory.md."""
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        outcome = entry.get("outcome", "unknown")
-        insight = entry.get("insight", "")
-        tools = ", ".join(entry.get("tools_used", []))
-        intent = entry.get("user_intent", "")[:150]
+        outcome = self._sanitize_learning_field(entry.get("outcome", "unknown"), 40)
+        insight = self._sanitize_learning_field(entry.get("insight", ""))
+        tools = ", ".join(
+            self._sanitize_learning_field(tool)
+            for tool in entry.get("tools_used", [])
+        )
+        intent = self._sanitize_learning_field(entry.get("user_intent", ""), 150)
 
         markdown = f"\n## {ts} — {outcome}\n"
         markdown += f"- **Intent**: {intent}\n"
