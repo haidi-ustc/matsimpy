@@ -64,6 +64,8 @@ class AgentRuntime:
     def run(self, user_message: str) -> TaskResult:
         """Execute one user task and return persisted runtime evidence."""
         self.messages = self._initial_messages()
+        self.executor = FunctionExecutor(self.skill_manager)
+        _set_active_executor(self.executor)
         self.workspace.enter()
         session_id: int | None = None
         tool_records: list[dict] = []
@@ -72,13 +74,13 @@ class AgentRuntime:
         trace_id: int | None = None
 
         try:
+            self.skill_manager.auto_load(user_message)
             session_id = self.session_store.start_session(
                 source=self.source,
                 workspace=str(self.workspace.path),
                 model=getattr(self.provider, "model", "unknown"),
                 provider=type(self.provider).__name__,
             )
-            self.skill_manager.auto_load(user_message)
             self.messages.append(ChatMessage.user(user_message))
             self.session_store.add_message(session_id, "user", user_message)
 
@@ -117,12 +119,6 @@ class AgentRuntime:
                 validation_status = "failure"
             status = "success" if validation_status == "success" else "failure"
             plan_summary = self._plan_summary(tool_records, max_turns_reached)
-            draft_skill = EvolutionManager(self.session_store).draft_from_trace(
-                session_id=session_id,
-                user_request=user_message,
-                final_response=final_response,
-                validation_status=validation_status,
-            )
             trace_id = self.session_store.add_task_trace(
                 session_id=session_id,
                 user_request=user_message,
@@ -131,6 +127,12 @@ class AgentRuntime:
                 final_response=final_response,
             )
             self.session_store.end_session(session_id, status)
+            draft_skill = EvolutionManager(self.session_store).draft_from_trace(
+                session_id=session_id,
+                user_request=user_message,
+                final_response=final_response,
+                validation_status=validation_status,
+            )
 
             self.last_result = TaskResult(
                 status=status,

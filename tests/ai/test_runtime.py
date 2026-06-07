@@ -95,6 +95,44 @@ def _runtime_skill_manager(workspace):
     return manager
 
 
+def _isolated_executor_skill_manager():
+    structure = TinyStructure()
+
+    def create_structure():
+        return structure
+
+    def consume_structure(structure):
+        if not isinstance(structure, TinyStructure):
+            raise TypeError("expected TinyStructure")
+        return {"consumed": structure.formula}
+
+    skill = Skill(
+        "runtime-isolation-test",
+        "Runtime isolation test tools",
+        [
+            FunctionDef(
+                name="create_structure",
+                description="Create a test structure",
+                parameters={"type": "object", "properties": {}},
+                callable=create_structure,
+            ),
+            FunctionDef(
+                name="consume_structure",
+                description="Consume a live test structure",
+                parameters={
+                    "type": "object",
+                    "properties": {"structure": {"type": "object"}},
+                    "required": ["structure"],
+                },
+                callable=consume_structure,
+            ),
+        ],
+    )
+    manager = SkillManager({"runtime-isolation-test": skill})
+    manager.load("runtime-isolation-test")
+    return manager
+
+
 def test_runtime_executes_tools_persists_trace_and_drafts_skill(tmp_path):
     create_call = ToolCall(id="call-create", name="create_structure", arguments={})
     save_call = ToolCall(id="call-save", name="save_structure", arguments={"path": "si.txt"})
@@ -244,3 +282,53 @@ def test_runtime_starts_each_run_without_prior_task_messages(tmp_path):
     ]
     assert all("first task unique content" not in message.content for message in second_messages)
     assert all("First task done." not in message.content for message in second_messages)
+
+
+def test_runtime_does_not_reuse_executor_object_refs_across_runs(tmp_path):
+    create_call = ToolCall(id="call-create", name="create_structure", arguments={})
+    consume_call = ToolCall(
+        id="call-consume",
+        name="consume_structure",
+        arguments={"structure": {"_obj_ref": 1}},
+    )
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(create_call),
+                tool_calls=[create_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Created structure."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+            ChatResponse(
+                message=_assistant_tool_message(consume_call),
+                tool_calls=[consume_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Could not consume stale ref."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_isolated_executor_skill_manager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    first = runtime.run("create isolated structure")
+    second = runtime.run("consume stale structure ref")
+
+    assert first.status == "success"
+    assert first.tool_calls[0]["result"]["_obj_ref"] == 1
+    assert second.status == "failure"
+    assert second.tool_calls[0]["status"] == "failure"
+    assert "couldn't auto-resolve" in second.tool_calls[0]["result"]["error"]
