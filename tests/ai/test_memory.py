@@ -30,6 +30,28 @@ def test_memory_remove_removes_first_occurrence_before_bullet(tmp_path):
     assert memory.read("memory") == "prefix \n- foo\n"
 
 
+@pytest.mark.parametrize(
+    ("operation", "old_text", "content"),
+    [
+        ("replace", "", "fact"),
+        ("replace", "   ", "fact"),
+        ("remove", "", None),
+        ("remove", "   ", None),
+    ],
+)
+def test_memory_replace_and_remove_reject_empty_selectors(
+    tmp_path, operation, old_text, content
+):
+    memory = AgentMemory(tmp_path, max_entry_chars=200)
+    method = getattr(memory, operation)
+
+    with pytest.raises(MemoryValidationError, match="memory selector is empty"):
+        if content is None:
+            method("memory", old_text)
+        else:
+            method("memory", old_text, content)
+
+
 def test_memory_rejects_large_and_injection_entries(tmp_path):
     memory = AgentMemory(tmp_path, max_entry_chars=20)
 

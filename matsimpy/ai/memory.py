@@ -81,6 +81,10 @@ class AgentMemory:
 
         return entry
 
+    def _validate_selector(self, old_text: str) -> None:
+        if not old_text.strip():
+            raise MemoryValidationError("memory selector is empty")
+
     def add(self, name: str, content: str) -> None:
         """Add a validated memory entry as a markdown bullet."""
         entry = self._validate_entry(content)
@@ -93,6 +97,7 @@ class AgentMemory:
     def replace(self, name: str, old_text: str, content: str) -> None:
         """Replace the first occurrence of old text with validated content."""
         entry = self._validate_entry(content)
+        self._validate_selector(old_text)
         existing = self.read(name)
         if old_text not in existing:
             raise MemoryValidationError("memory text not found")
@@ -100,6 +105,7 @@ class AgentMemory:
 
     def remove(self, name: str, old_text: str) -> None:
         """Remove the first occurrence of old text from a memory file."""
+        self._validate_selector(old_text)
         existing = self.read(name)
         if old_text not in existing:
             raise MemoryValidationError("memory text not found")
