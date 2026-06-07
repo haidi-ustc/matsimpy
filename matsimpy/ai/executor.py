@@ -35,6 +35,8 @@ class FunctionExecutor:
         self._registry: dict[int, object] = {}   # _obj_ref → live object
         self._next_id = 1
         self._adaptations: dict[str, set[str]] = {}  # fn_name → {arg_keys to deserialize}
+        self._retry_count: dict[str, int] = {}        # fn_name → auto-retry attempts
+        self._max_retries: int = 3                    # max auto-retries per function per session
 
     # ── public API ──────────────────────────────────────────────────
 
@@ -66,7 +68,16 @@ class FunctionExecutor:
 
     def _auto_retry(self, fn_def: FunctionDef, tool_call: ToolCall, error: TypeError) -> dict:
         """If a TypeError mentions Crystal/Molecule, try resolving dict args to
-        live objects and retry. On success, record the adaptation."""
+        live objects and retry. On success, record the adaptation.
+        Limited to _max_retries per function per session."""
+        fn_name = tool_call.name
+
+        # Retry limit — prevent infinite loops when the LLM can't produce valid args
+        count = self._retry_count.get(fn_name, 0)
+        if count >= self._max_retries:
+            return {"error": f"TypeError: {error} — auto-retry limit reached ({self._max_retries})"}
+        self._retry_count[fn_name] = count + 1
+
         msg = str(error).lower()
         if not ("crystal" in msg or "molecule" in msg or "structure" in msg):
             return {"error": f"TypeError: {error}"}
@@ -91,12 +102,13 @@ class FunctionExecutor:
         except Exception as e:
             return {"error": f"TypeError: {error} — auto-retry also failed: {e}"}
 
-        # Success! Record the adaptation
-        if tool_call.name not in self._adaptations:
-            self._adaptations[tool_call.name] = set()
-        self._adaptations[tool_call.name] |= adapted_keys
+        # Success! Record the adaptation, reset retry count
+        if fn_name not in self._adaptations:
+            self._adaptations[fn_name] = set()
+        self._adaptations[fn_name] |= adapted_keys
+        self._retry_count[fn_name] = 0  # reset on success
 
-        print(f"  🔄 learned: {tool_call.name}({', '.join(adapted_keys)}) auto-deserialized")
+        print(f"  🔄 learned: {fn_name}({', '.join(adapted_keys)}) auto-deserialized")
         return self._serialize(result)
 
     def _try_resolve_structure(self, value: dict):
@@ -140,6 +152,9 @@ class FunctionExecutor:
             obj = self._registry.get(ref)
             if obj is not None:
                 return obj
+        # Handle bare integer — LLM might extract just the ref number
+        if isinstance(value, int) and value in self._registry:
+            return self._registry[value]
         # Also handle legacy serialized dicts without _obj_ref
         if isinstance(value, dict) and "@module" in value and "@class" in value:
             return self._from_dict(value)
@@ -184,8 +199,13 @@ class FunctionExecutor:
         return {"result": str(result)}
 
     def _structure_summary(self, obj, ref: int | None = None) -> dict:
-        """Build a human-readable summary dict. If ref is given, include _obj_ref."""
+        """Build a human-readable summary dict. If ref is given, include _obj_ref.
+
+        The dict is designed so the LLM passes it AS-IS to the next function.
+        The _note field tells the LLM NOT to extract individual values.
+        """
         d: dict = {
+            "_note": "⚠️ pass this entire dict as the structure argument — do NOT extract values",
             "formula": str(obj.formula),
             "num_atoms": len(obj),
         }
