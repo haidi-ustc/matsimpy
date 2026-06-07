@@ -62,6 +62,7 @@ class AIEngine:
             workspace_path=self.workspace.path,
             source="engine",
             system_prompt=self._build_system_prompt(),
+            verbose_hook=print,
         )
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
@@ -90,9 +91,6 @@ class AIEngine:
         self._last_tool_results = []
         self._last_tool_calls = []
 
-        self.runtime.skill_manager = self.skill_manager
-        self.runtime.memory = self.memory
-        self.runtime.system_prompt = self._build_system_prompt()
         result = self.runtime.run(
             user_message,
             extra_messages=self._explicit_context_messages(),
@@ -110,12 +108,8 @@ class AIEngine:
         return result.final_response
 
     def _explicit_context_messages(self) -> list[ChatMessage]:
-        """Return deliberate REPL context without carrying prior task history."""
-        return [
-            message
-            for message in self.conversation[1:]
-            if message.role == "system"
-        ]
+        """Return prior conversation for continuity across turns."""
+        return list(self.conversation[1:])
 
     def _chat_loop(self, tools: list[dict]) -> str:
         """Core loop: LLM → tool_calls → execute → repeat until stop."""
