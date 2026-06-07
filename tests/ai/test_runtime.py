@@ -336,7 +336,7 @@ def test_runtime_starts_each_run_without_prior_task_messages(tmp_path):
     assert all("First task done." not in message.content for message in second_messages)
 
 
-def test_runtime_does_not_reuse_executor_object_refs_across_runs(tmp_path):
+def test_runtime_reuses_executor_object_refs_across_runs(tmp_path):
     create_call = ToolCall(id="call-create", name="create_structure", arguments={})
     consume_call = ToolCall(
         id="call-consume",
@@ -361,7 +361,7 @@ def test_runtime_does_not_reuse_executor_object_refs_across_runs(tmp_path):
                 finish_reason="tool_calls",
             ),
             ChatResponse(
-                message=ChatMessage.assistant("Could not consume stale ref."),
+                message=ChatMessage.assistant("Consumed structure successfully."),
                 tool_calls=[],
                 finish_reason="stop",
             ),
@@ -377,13 +377,13 @@ def test_runtime_does_not_reuse_executor_object_refs_across_runs(tmp_path):
     )
 
     first = runtime.run("create isolated structure")
-    second = runtime.run("consume stale structure ref")
+    second = runtime.run("consume structure ref from prior run")
 
     assert first.status == "success"
     assert first.tool_calls[0]["result"]["_obj_ref"] == 1
-    assert second.status == "failure"
-    assert second.tool_calls[0]["status"] == "failure"
-    assert "couldn't auto-resolve" in second.tool_calls[0]["result"]["error"]
+    assert second.status == "success"
+    assert second.tool_calls[0]["status"] == "success"
+    assert "consumed" in second.tool_calls[0]["result"]
 
 
 def test_engine_chat_uses_runtime_with_fake_provider(tmp_path):
@@ -551,3 +551,175 @@ def test_engine_chat_auto_loads_user_message_once(tmp_path):
 
     assert response == "Loaded once."
     assert skill_manager.auto_load_messages == ["trigger one auto load"]
+
+
+def test_runtime_calls_verbose_hook_for_skill_loading_and_tool_execution(tmp_path):
+    create_call = ToolCall(id="call-create", name="create_structure", arguments={})
+    save_call = ToolCall(id="call-save", name="save_structure", arguments={"path": "si.txt"})
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(create_call, save_call),
+                tool_calls=[create_call, save_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Created and saved silicon."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    emitted: list[str] = []
+
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+        verbose_hook=emitted.append,
+    )
+
+    result = runtime.run("create silicon and save it")
+
+    assert result.status == "success"
+    assert any("loaded:" in msg for msg in emitted), f"expected skill loading message, got: {emitted}"
+    assert any("create_structure" in msg for msg in emitted), f"expected create_structure call, got: {emitted}"
+    assert any("save_structure" in msg for msg in emitted), f"expected save_structure call, got: {emitted}"
+
+
+def test_runtime_verbose_hook_reports_failures(tmp_path):
+    bad_call = ToolCall(id="call-bad", name="missing_tool", arguments={})
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(bad_call),
+                tool_calls=[bad_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Failed."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    emitted: list[str] = []
+
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+        verbose_hook=emitted.append,
+    )
+
+    result = runtime.run("run missing tool")
+
+    assert result.status == "failure"
+    assert any("missing_tool" in msg for msg in emitted)
+    assert any("❌ missing_tool" in msg for msg in emitted)
+
+
+def test_runtime_does_not_emit_when_verbose_hook_is_none(tmp_path):
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("Silent response."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+        verbose_hook=None,
+    )
+
+    result = runtime.run("silent task")
+    assert result.status == "success"
+
+
+def test_runtime_reuses_executor_across_runs(tmp_path):
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("First run done."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Second run done."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+    executor_before = runtime.executor
+
+    runtime.run("first task")
+    assert runtime.executor is executor_before
+
+    runtime.run("second task")
+    assert runtime.executor is executor_before
+
+
+def test_runtime_defers_persistence_until_loop_ends(tmp_path):
+    create_call = ToolCall(id="call-create", name="create_structure", arguments={})
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(create_call),
+                tool_calls=[create_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Structure created."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    store = SessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("create silicon structure")
+
+    assert result.status == "success"
+    messages = store.conn.execute(
+        "SELECT role FROM messages WHERE session_id = ? ORDER BY id",
+        (result.session_id,),
+    ).fetchall()
+    tool_calls = store.conn.execute(
+        "SELECT tool_name FROM tool_calls WHERE session_id = ? ORDER BY id",
+        (result.session_id,),
+    ).fetchall()
+    assert [m["role"] for m in messages] == ["user", "assistant", "tool", "assistant"]
+    assert [t["tool_name"] for t in tool_calls] == ["create_structure"]
+    traces = store.search_traces("structure")
+    assert len(traces) == 1
+    assert traces[0]["validation_status"] == "success"

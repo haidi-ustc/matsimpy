@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .conversation import ChatMessage, ToolCall
 from .evolution import EvolutionManager
@@ -47,6 +47,7 @@ class AgentRuntime:
         source: str = "cli",
         system_prompt: str = RUNTIME_SYSTEM_PROMPT,
         max_turns: int = 10,
+        verbose_hook: Callable[[str], None] | None = None,
     ):
         self.provider = provider
         self.skill_manager = skill_manager
@@ -56,10 +57,16 @@ class AgentRuntime:
         self.source = source
         self.system_prompt = system_prompt
         self.max_turns = max_turns
+        self.verbose_hook = verbose_hook
         self.executor = FunctionExecutor(skill_manager)
         _set_active_executor(self.executor)
         self.messages = self._initial_messages()
         self.last_result: TaskResult | None = None
+
+    def _emit(self, message: str) -> None:
+        """Emit a progress message via the verbose hook, if configured."""
+        if self.verbose_hook:
+            self.verbose_hook(message)
 
     def run(
         self,
@@ -70,7 +77,7 @@ class AgentRuntime:
         self.messages = self._initial_messages()
         if extra_messages:
             self.messages.extend(extra_messages)
-        self.executor = FunctionExecutor(self.skill_manager)
+        self.executor._call_count = 0
         _set_active_executor(self.executor)
         self.workspace.enter()
         session_id: int | None = None
@@ -78,25 +85,22 @@ class AgentRuntime:
         final_response = ""
         max_turns_reached = False
         trace_id: int | None = None
+        pending_messages: list[dict] = []
+        pending_tool_calls: list[dict] = []
 
         try:
-            self.skill_manager.auto_load(user_message)
+            loaded = self.skill_manager.auto_load(user_message)
+            if loaded:
+                self._emit(f"\U0001f4e6 loaded: {', '.join(loaded)}")
+
             session_id = self.session_store.start_session(
                 source=self.source,
                 workspace=str(self.workspace.path),
                 model=getattr(self.provider, "model", "unknown"),
                 provider=type(self.provider).__name__,
             )
-            for message in extra_messages or []:
-                self.session_store.add_message(
-                    session_id=session_id,
-                    role=message.role,
-                    content=message.content,
-                    tool_calls=message.tool_calls,
-                    tool_call_id=message.tool_call_id,
-                )
             self.messages.append(ChatMessage.user(user_message))
-            self.session_store.add_message(session_id, "user", user_message)
+            pending_messages.append({"role": "user", "content": user_message})
 
             for _ in range(self.max_turns):
                 tools = self.skill_manager.get_tools()
@@ -106,17 +110,17 @@ class AgentRuntime:
                     tool_choice="auto",
                 )
                 self.messages.append(response.message)
-                self.session_store.add_message(
-                    session_id=session_id,
-                    role=response.message.role,
-                    content=response.message.content,
-                    tool_calls=response.message.tool_calls,
-                    tool_call_id=response.message.tool_call_id,
-                )
+                pending_messages.append({
+                    "role": response.message.role,
+                    "content": response.message.content,
+                    "tool_calls": response.message.tool_calls,
+                })
 
                 if response.tool_calls:
                     for tool_call in response.tool_calls:
-                        record = self._execute_tool_call(session_id, tool_call)
+                        record = self._execute_tool_call(
+                            session_id, tool_call, pending_messages, pending_tool_calls
+                        )
                         tool_records.append(record)
                     continue
 
@@ -133,12 +137,17 @@ class AgentRuntime:
                 validation_status = "failure"
             status = "success" if validation_status == "success" else "failure"
             plan_summary = self._plan_summary(tool_records, max_turns_reached)
+
+            self.session_store.add_messages_batch(session_id, pending_messages)
+            self.session_store.add_tool_calls_batch(session_id, pending_tool_calls)
+            tool_names = [r["name"] for r in tool_records]
             trace_id = self.session_store.add_task_trace(
                 session_id=session_id,
                 user_request=user_message,
                 plan_summary=plan_summary,
                 validation_status=validation_status,
                 final_response=final_response,
+                tool_names=tool_names,
             )
             self.session_store.end_session(session_id, status)
             draft_skill = self._try_draft_skill_from_trace(
@@ -194,28 +203,42 @@ class AgentRuntime:
         lines = [line.rstrip() for line in text.splitlines() if line.strip()]
         return "\n".join(lines[-max_lines:])
 
-    def _execute_tool_call(self, session_id: int, tool_call: ToolCall) -> dict:
+    def _execute_tool_call(
+        self,
+        session_id: int,
+        tool_call: ToolCall,
+        pending_messages: list[dict],
+        pending_tool_calls: list[dict],
+    ) -> dict:
+        args_str = ", ".join(f"{k}={v}" for k, v in tool_call.arguments.items())
+        self._emit(f"\U0001f527 {tool_call.name}({args_str})")
+
         result = self.executor.execute(tool_call)
         status = self._validate_tool_result(result)
-        self.session_store.add_tool_call(
-            session_id=session_id,
-            tool_name=tool_call.name,
-            arguments=tool_call.arguments,
-            result=result,
-            status=status,
-        )
+
+        if status == "failure":
+            error_msg = result.get("error", "unknown error")
+            self._emit(f"❌ {tool_call.name}: {error_msg[:100]}")
+        else:
+            self._emit(f"✅ {tool_call.name}")
+
+        pending_tool_calls.append({
+            "tool_name": tool_call.name,
+            "arguments": tool_call.arguments,
+            "result": result,
+            "status": status,
+        })
         self.messages.append(
             ChatMessage.tool(
                 content=json.dumps(result, default=str),
                 tool_call_id=tool_call.id,
             )
         )
-        self.session_store.add_message(
-            session_id=session_id,
-            role="tool",
-            content=json.dumps(result, default=str),
-            tool_call_id=tool_call.id,
-        )
+        pending_messages.append({
+            "role": "tool",
+            "content": json.dumps(result, default=str),
+            "tool_call_id": tool_call.id,
+        })
         return {
             "id": tool_call.id,
             "name": tool_call.name,
