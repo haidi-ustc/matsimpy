@@ -33,7 +33,7 @@ from monty.json import MSONable
 from monty.serialization import loadfn
 from ruamel.yaml import YAML
 
-from matsimpy.core import Element, Lattice, Crystal, Molecule
+from matsimpy.core import Element, Lattice, Crystal, Molecule, SymmOp
 from matsimpy.calculator.utils import clean_lines
 
 # Matsimpy alias

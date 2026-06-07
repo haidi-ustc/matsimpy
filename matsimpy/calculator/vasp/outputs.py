@@ -71,12 +71,18 @@ try:
 except ImportError:
     _HAS_PYMATGEN_ES = False
     ComputedEntry = ComputedStructureEntry = Trajectory = None
-    unitized = None
+    # No-op unitized decorator (returns function unchanged)
+    def unitized(unit):
+        def decorator(func):
+            return func
+        return decorator
     BandStructure = BandStructureSymmLine = None
     get_reconstructed_band_structure = None
     Magmom = Orbital = OrbitalType = Spin = None
-    CompleteDos = Dos = BaseVolumetricData = None
-    ParseError = None
+    CompleteDos = Dos = None
+    # Dummy base classes so subclasses don't fail on import
+    BaseVolumetricData = type("BaseVolumetricData", (), {})
+    ParseError = type("ParseError", (Exception,), {})
     Unk = None
 
 try:

@@ -18,15 +18,14 @@ import numpy as np
 from monty.dev import deprecated
 from monty.tempfile import ScratchDir
 
-from matsimpy.core import Molecule
+from matsimpy.core import Molecule, SymmOp
 from matsimpy.calculator.utils import get_angle
 
 # Not supported in matsimpy — raise clear errors
 class _UnsupportedFeature:
     def __init__(self, *args, **kwargs):
-        raise NotImplementedError("SymmOp/BabelMolAdaptor/PackmolBoxGen not available in matsimpy")
+        raise NotImplementedError("BabelMolAdaptor/PackmolBoxGen not available in matsimpy")
 
-SymmOp = _UnsupportedFeature
 BabelMolAdaptor = _UnsupportedFeature
 PackmolBoxGen = _UnsupportedFeature
 

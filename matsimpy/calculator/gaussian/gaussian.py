@@ -33,22 +33,7 @@ class Spin:
     down = -1
 
 
-class _UnsupportedSymmOp:
-    """Stub for pymatgen SymmOp — not supported in matsimpy."""
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "SymmOp is not available in matsimpy. "
-            "For symmetry operations, use spglib directly or install pymatgen."
-        )
-
-    @staticmethod
-    def from_origin_axis_angle(*args, **kwargs):
-        raise NotImplementedError(
-            "SymmOp.from_origin_axis_angle is not available in matsimpy."
-        )
-
-
-SymmOp = _UnsupportedSymmOp
+from matsimpy.core import SymmOp
 
 
 def pretty_plot(*args, **kwargs):

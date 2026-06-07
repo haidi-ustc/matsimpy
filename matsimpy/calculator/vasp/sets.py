@@ -67,10 +67,15 @@ try:
 except ImportError:
     _HAS_SYMMETRY = False
     StructureMatcher = None
-    InputGenerator = None
+    InputGenerator = type("InputGenerator", (), {})
     SpacegroupAnalyzer = None
     HighSymmKpath = None
-    Doi = due = None
+    class _NoOpDue:
+        @staticmethod
+        def dcite(*args, **kwargs):
+            return lambda f: f
+    due = _NoOpDue()
+    Doi = lambda x: x  # no-op stub for pymatgen.util.due.Doi
 
 # PeriodicSite / SiteCollection / Species — used less frequently,
 # gate them behind pymatgen availability

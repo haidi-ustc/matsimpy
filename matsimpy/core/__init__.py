@@ -15,6 +15,7 @@ from .molecule import Molecule
 from .crystal import Crystal
 from .site import Site, CrystalSite
 from .periodic_table import Element
+from .symmop import SymmOp
 
 __all__ = [
     "Lattice",
@@ -25,4 +26,5 @@ __all__ = [
     "Crystal",
     "Molecule",
     "Element",
+    "SymmOp",
 ]
