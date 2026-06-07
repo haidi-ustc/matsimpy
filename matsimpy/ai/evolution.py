@@ -33,7 +33,7 @@ class EvolutionManager:
             return None
 
         tools = [call["tool_name"] for call in tool_calls]
-        name = _slug(user_request)
+        name = self._unique_draft_name(_slug(user_request))
         trigger_keywords = _keywords(user_request)
         body = self._draft_body(user_request, final_response, validation_status, tool_calls)
         metadata = {
@@ -52,7 +52,7 @@ class EvolutionManager:
             metadata=metadata,
         )
 
-        drafts = self.store.list_skill_drafts("draft")
+        drafts = self.store.list_skill_drafts(None)
         for draft in drafts:
             if draft["name"] == name:
                 return draft
@@ -64,6 +64,16 @@ class EvolutionManager:
             "body": body,
             "metadata": metadata,
         }
+
+    def _unique_draft_name(self, base_name: str) -> str:
+        existing_names = {draft["name"] for draft in self.store.list_skill_drafts(None)}
+        if base_name not in existing_names:
+            return base_name
+
+        suffix = 2
+        while f"{base_name}-{suffix}" in existing_names:
+            suffix += 1
+        return f"{base_name}-{suffix}"
 
     def approve(self, name: str) -> None:
         """Approve a generated skill draft."""
