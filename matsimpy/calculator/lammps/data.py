@@ -33,16 +33,19 @@ from monty.json import MSONable
 from monty.serialization import loadfn
 from ruamel.yaml import YAML
 
-from pymatgen.core import Element, Lattice, Molecule, Structure
-from pymatgen.core.operations import SymmOp
-from pymatgen.util.io_utils import clean_lines
+from matsimpy.core import Element, Lattice, Crystal, Molecule
+from matsimpy.calculator.utils import clean_lines
+
+# Matsimpy alias
+Structure = Crystal
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Any, Literal, Self
 
-    from pymatgen.core.sites import Site
-    from pymatgen.core.structure import IStructure, SiteCollection
+    from typing import Any
+
+    from matsimpy.core.site import CrystalSite as Site
 
 __author__ = "Kiran Mathew, Zhi Deng, Tingzheng Hou"
 __copyright__ = "Copyright 2018, The Materials Virtual Lab"
@@ -211,7 +214,7 @@ def lattice_2_lmpbox(lattice: Lattice, origin: Sequence = (0, 0, 0)) -> tuple[La
     Returns:
         tuple[LammpsBox, SymmOp]
     """
-    a, b, c = lattice.abc
+    a, b, c = np.linalg.norm(lattice.matrix, axis=1)
     xlo, ylo, zlo = origin
     xhi = a + xlo
     matrix = lattice.matrix

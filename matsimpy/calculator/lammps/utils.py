@@ -18,11 +18,17 @@ import numpy as np
 from monty.dev import deprecated
 from monty.tempfile import ScratchDir
 
-from pymatgen.core.operations import SymmOp
-from pymatgen.core.structure import Molecule
-from pymatgen.io.babel import BabelMolAdaptor
-from pymatgen.io.packmol import PackmolBoxGen
-from pymatgen.util.coord import get_angle
+from matsimpy.core import Molecule
+from matsimpy.calculator.utils import get_angle
+
+# Not supported in matsimpy — raise clear errors
+class _UnsupportedFeature:
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError("SymmOp/BabelMolAdaptor/PackmolBoxGen not available in matsimpy")
+
+SymmOp = _UnsupportedFeature
+BabelMolAdaptor = _UnsupportedFeature
+PackmolBoxGen = _UnsupportedFeature
 
 try:
     from openbabel import pybel

@@ -25,16 +25,13 @@ from monty.dev import deprecated
 from monty.io import zopen
 from monty.json import MSONable
 
-from pymatgen.core import __version__ as CURRENT_VER
-from pymatgen.io.core import InputFile
-from pymatgen.io.lammps.data import CombinedData, LammpsData
-from pymatgen.io.template import TemplateInputGen
+from matsimpy import __version__ as CURRENT_VER
+from matsimpy.calculator.lammps.data import CombinedData, LammpsData
 
 if TYPE_CHECKING:
     from typing import Self
 
-    from pymatgen.io.core import InputSet
-    from pymatgen.util.typing import PathLike
+    PathLike = str | Path
 
 __author__ = "Kiran Mathew, Brandon Wood, Zhi Deng, Manas Likhit, Guillaume Brunin (Matgenix)"
 __copyright__ = "Copyright 2018, The Materials Virtual Lab"
@@ -45,6 +42,16 @@ __date__ = "Nov 2022"
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = f"{MODULE_DIR}/templates"
+
+
+# Matsimpy-native InputFile base (replaces pymatgen.io.core.InputFile)
+class InputFile:
+    """Base class for input files — write themselves to a file."""
+    def write_file(self, filename: str | Path) -> None:
+        raise NotImplementedError
+
+    def get_str(self) -> str:
+        raise NotImplementedError
 
 
 class LammpsInputFile(InputFile):
@@ -970,6 +977,12 @@ class LammpsRun(MSONable):
             data=data,
             script_filename=script_filename,
         )
+
+
+# Matsimpy-native stub for pymatgen.io.template.TemplateInputGen
+class TemplateInputGen:
+    """Base class for template-based input generation."""
+    pass
 
 
 class LammpsTemplateGen(TemplateInputGen):

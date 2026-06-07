@@ -20,7 +20,7 @@ import pandas as pd
 from monty.io import zopen
 from monty.json import MSONable
 
-from pymatgen.io.lammps.data import LammpsBox
+from matsimpy.calculator.lammps.data import LammpsBox
 
 if TYPE_CHECKING:
     from typing import Any, Self

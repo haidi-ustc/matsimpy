@@ -17,14 +17,14 @@ For additional flexibility and automation, use the atomate2-lammps implementatio
 import os
 from typing import TYPE_CHECKING
 
-from pymatgen.io.core import InputSet
-from pymatgen.io.lammps.data import CombinedData, LammpsData
-from pymatgen.io.lammps.inputs import LammpsInputFile
+from matsimpy.calculator.lammps.data import CombinedData, LammpsData
+from matsimpy.calculator.lammps.inputs import LammpsInputFile
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from typing import Self
 
-    from pymatgen.util.typing import PathLike
+    PathLike = str | Path
 
 __author__ = "Ryan Kingsbury, Guillaume Brunin (Matgenix)"
 __copyright__ = "Copyright 2021, The Materials Project"

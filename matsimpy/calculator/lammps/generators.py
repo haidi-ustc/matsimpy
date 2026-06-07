@@ -20,11 +20,10 @@ from string import Template
 
 from monty.io import zopen
 
-from pymatgen.core import Structure
-from pymatgen.io.core import InputGenerator
-from pymatgen.io.lammps.data import CombinedData, LammpsData
-from pymatgen.io.lammps.inputs import LammpsInputFile
-from pymatgen.io.lammps.sets import LammpsInputSet
+from matsimpy.core import Crystal as Structure
+from matsimpy.calculator.lammps.data import CombinedData, LammpsData
+from matsimpy.calculator.lammps.inputs import LammpsInputFile
+from matsimpy.calculator.lammps.sets import LammpsInputSet
 
 __author__ = "Ryan Kingsbury, Guillaume Brunin (Matgenix)"
 __copyright__ = "Copyright 2021, The Materials Project"
