@@ -5,6 +5,8 @@ Pipeline design:
                → LLM receives dict with _obj_ref + human-readable summary
   Deserialize: LLM passes dict to next function → executor resolves _obj_ref
                → live object injected before function call
+  Auto-retry:  TypeError about Crystal/Molecule → auto-resolve dict args, retry,
+               learn the adaptation for future calls
 """
 
 from __future__ import annotations
@@ -20,6 +22,10 @@ class FunctionExecutor:
     Maintains a session-scoped object registry so that Crystal/Molecule
     objects survive the serialize→LLM→deserialize round-trip without
     losing their identity.
+
+    Learns from TypeError failures: when a function receives a serialized
+    dict instead of a live Crystal/Molecule, the executor auto-retries
+    with resolved args and remembers the adaptation for the session.
     """
 
     def __init__(self, skill_manager: SkillManager):
@@ -28,6 +34,7 @@ class FunctionExecutor:
         self._max_calls = 50
         self._registry: dict[int, object] = {}   # _obj_ref → live object
         self._next_id = 1
+        self._adaptations: dict[str, set[str]] = {}  # fn_name → {arg_keys to deserialize}
 
     # ── public API ──────────────────────────────────────────────────
 
@@ -47,10 +54,75 @@ class FunctionExecutor:
 
         try:
             resolved = self._resolve_refs(tool_call.arguments)
+            resolved = self._apply_adaptations(tool_call.name, resolved)
             result = fn_def.callable(**resolved)
             return self._serialize(result)
+        except TypeError as e:
+            return self._auto_retry(fn_def, tool_call, e)
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    # ── auto-retry + skill evolution ─────────────────────────────────
+
+    def _auto_retry(self, fn_def: FunctionDef, tool_call: ToolCall, error: TypeError) -> dict:
+        """If a TypeError mentions Crystal/Molecule, try resolving dict args to
+        live objects and retry. On success, record the adaptation."""
+        msg = str(error).lower()
+        if not ("crystal" in msg or "molecule" in msg or "structure" in msg):
+            return {"error": f"TypeError: {error}"}
+
+        # Find dict arguments that look like they could be structures
+        resolved = dict(tool_call.arguments)
+        adapted_keys: set[str] = set()
+
+        for key, value in tool_call.arguments.items():
+            if isinstance(value, dict):
+                obj = self._try_resolve_structure(value)
+                if obj is not None:
+                    resolved[key] = obj
+                    adapted_keys.add(key)
+
+        if not adapted_keys:
+            return {"error": f"TypeError: {error} — couldn't auto-resolve, pass a live structure"}
+
+        # Retry with resolved args
+        try:
+            result = fn_def.callable(**resolved)
+        except Exception as e:
+            return {"error": f"TypeError: {error} — auto-retry also failed: {e}"}
+
+        # Success! Record the adaptation
+        if tool_call.name not in self._adaptations:
+            self._adaptations[tool_call.name] = set()
+        self._adaptations[tool_call.name] |= adapted_keys
+
+        print(f"  🔄 learned: {tool_call.name}({', '.join(adapted_keys)}) auto-deserialized")
+        return self._serialize(result)
+
+    def _try_resolve_structure(self, value: dict):
+        """Try to resolve a dict to a live Crystal or Molecule. Returns None if not a structure."""
+        # Check _obj_ref first
+        if "_obj_ref" in value:
+            ref = value["_obj_ref"]
+            obj = self._registry.get(ref)
+            if obj is not None:
+                return obj
+        # Check MSONable dict
+        if "@module" in value and "@class" in value:
+            return self._from_dict(value)
+        return None
+
+    def _apply_adaptations(self, fn_name: str, args: dict) -> dict:
+        """Pre-emptively resolve args that were previously learned to need deserialization."""
+        if fn_name not in self._adaptations:
+            return args
+        result = dict(args)
+        for key in self._adaptations[fn_name]:
+            if key in result and isinstance(result[key], dict):
+                obj = self._try_resolve_structure(result[key])
+                if obj is not None:
+                    result[key] = obj
+        return result
 
     # ── reference resolution (deserialize) ──────────────────────────
 
