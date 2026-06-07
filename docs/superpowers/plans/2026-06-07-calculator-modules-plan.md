@@ -2,15 +2,30 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement five calculators (LJ, MatterSim, VASP, Gaussian, LAMMPS) under a unified ASE-style Calculator base class with `run=True/False` dual mode, IO classes adapted from pymatgen with matsimpy-native imports, and comprehensive tests.
+**Goal:** Implement five calculators (LJ, MatterSim, VASP, Gaussian, LAMMPS) under a unified ASE-style Calculator base class with `run=True/False` dual mode, IO classes adapted from pymatgen with matsimpy-native imports/APIs, and comprehensive tests.
 
 **Architecture:** Each calculator lives in its own subpackage under `matsimpy/calculator/`. IO classes (input generators, output parsers) stay alongside their calculator driver. The base Calculator ABC gains `write_input()` / `_execute()` / `_parse_output()` / `read_results()` as the standard pipeline. Pure-Python calculators (LJ, MatterSim) use `_compute()` directly. External-code calculators (VASP, Gaussian, LAMMPS) use the run-mode pipeline.
 
-**Tech Stack:** Python 3.10+, numpy, scipy, monty (MSONable), torch (optional, MatterSim), pymatgen (optional, for advanced electronic structure parsing in VASP outputs). Conda env: `pmg`.
+**Tech Stack:** Python 3.10+, numpy, scipy, monty (MSONable), torch (optional, MatterSim). Runtime calculator modules must not depend on pymatgen after copied/adapted code is integrated. Pymatgen may be used only in tests as an optional reference oracle. Conda env: `pmg`.
 
 **Spec:** `docs/superpowers/specs/2026-06-07-calculator-modules-design.md`
 
 **Conda environment:** All commands use `conda run -n pmg` prefix.
+
+**Current-state note:** The referenced spec was last checked against the repository on 2026-06-07 and marks the implementation as partial. Treat this plan as an implementation checklist from the current partial state, not as a description of completed functionality.
+
+**Safety notes for implementers:**
+- Do not overwrite user-owned uncommitted changes. Check `git status --short` before each task and stage only files intentionally changed for that phase.
+- Every implementation phase must end with a real commit after its verification step. Use the repository Lore Commit Protocol for each commit message.
+- A task is not finished after `git add`; it is finished only after `git commit` succeeds and the resulting commit hash is recorded in the task log.
+- Task 0 is the only non-code baseline phase; create no commit there unless the baseline task intentionally records a documentation or fixture update.
+- Prefer tests and fixture/sample-output parsing over invoking real VASP, Gaussian, or LAMMPS binaries in CI.
+- For adapted pymatgen IO, preserve attribution docstrings and MIT license notices while replacing runtime dependencies with matsimpy-native modules/APIs.
+- After copied modules are integrated, `matsimpy/calculator/**` must not import pymatgen. If a copied module needs a dependency surface that matsimpy does not yet provide, add that surface gracefully to matsimpy as a coherent module/API rather than adding one-off patches, adapters, or private shim classes in copied files.
+- Electronic helper surfaces may be copied/adapted from pymatgen when that is the cleanest source, but the copied code must live in matsimpy-owned modules, keep required attribution/license notices, and must not import pymatgen at runtime.
+- If a pymatgen feature is outside matsimpy's supported scope, mark that feature unsupported with a clear matsimpy error; do not keep runtime pymatgen fallback imports.
+- Tests may import pymatgen only as an optional reference source and must skip gracefully when it is unavailable.
+- Related IO tests may be copied from `thirds/pymatgen-core/tests/io`, but must be rewritten into matsimpy style, use matsimpy objects/imports, preserve only relevant fixtures/assertions, and keep pymatgen only as an optional reference oracle.
 
 ---
 
@@ -20,27 +35,30 @@
 |------|--------|----------------|
 | `matsimpy/calculator/base.py` | Modify | Add `run` param, `write_input`/`_execute`/`_parse_output`/`read_results` pipeline |
 | `matsimpy/calculator/utils.py` | **Create** | Shared utility functions (Ha_to_eV, clean_lines, make_symmetric_matrix, get_angle) |
+| `matsimpy/calculator/electronic.py` | Create as needed | Matsimpy-owned electronic helper types, copied/adapted from pymatgen when useful, e.g. Magmom/Spin |
+| `matsimpy/calculator/io.py` | Create as needed | Matsimpy-native IO protocols/support types formerly imported from pymatgen.io |
+| `matsimpy/calculator/symmetry.py` | Create as needed | Matsimpy-native or spglib-backed symmetry support formerly imported from pymatgen |
 | `matsimpy/calculator/lj/calculator.py` | Modify | Multi-species Lorentz-Berthelot mixing |
 | `matsimpy/calculator/mattersim/__init__.py` | **Create** | Exports MatterSim |
 | `matsimpy/calculator/mattersim/calculator.py` | **Create** | MatterSim calculator (restored from v0.4 `845e79e`) |
 | `matsimpy/calculator/mattersim/dataloader.py` | **Create** | Graph convertor + dataloader (restored from v0.4) |
-| `matsimpy/calculator/vasp/inputs.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/vasp/outputs.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/vasp/sets.py` | Modify | Replace direct pymatgen imports |
+| `matsimpy/calculator/vasp/inputs.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/vasp/outputs.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/vasp/sets.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
 | `matsimpy/calculator/vasp/calculator.py` | Modify | Rewrite with run-mode pipeline |
-| `matsimpy/calculator/gaussian/gaussian.py` | Modify | Replace direct pymatgen imports |
+| `matsimpy/calculator/gaussian/gaussian.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
 | `matsimpy/calculator/gaussian/calculator.py` | Modify | Rewrite with run-mode pipeline |
-| `matsimpy/calculator/lammps/inputs.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/lammps/outputs.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/lammps/data.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/lammps/generators.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/lammps/sets.py` | Modify | Replace direct pymatgen imports |
-| `matsimpy/calculator/lammps/utils.py` | Modify | Replace direct pymatgen imports |
+| `matsimpy/calculator/lammps/inputs.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/lammps/outputs.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/lammps/data.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/lammps/generators.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/lammps/sets.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
+| `matsimpy/calculator/lammps/utils.py` | Modify | Replace all runtime pymatgen imports with matsimpy-native modules/APIs |
 | `matsimpy/calculator/lammps/calculator.py` | Modify | Rewrite with run-mode pipeline |
 | `matsimpy/calculator/__init__.py` | Modify | Export all calculators, lazy MatterSim |
 | `tests/calculator/test_calculator_base.py` | Modify | Add run-mode tests |
 | `tests/calculator/test_calculator_lennard_jones.py` | Modify | Add multi-species tests |
-| `tests/calculator/test_mattersim.py` | **Create** | MatterSim tests |
+| `tests/calculator/test_calculator_mattersim.py` | **Create** | MatterSim tests (torch-optional; filename matches existing calculator test naming) |
 | `tests/calculator/test_vasp_inputs.py` | **Create** | VASP input tests |
 | `tests/calculator/test_vasp_outputs.py` | **Create** | VASP output tests |
 | `tests/calculator/test_vasp_sets.py` | **Create** | VASP input set tests |
@@ -66,7 +84,7 @@ Run:
 conda run -n pmg pytest tests/calculator/ -v --tb=short 2>&1
 ```
 
-Expected: All 3 existing test files pass (test_calculator_base.py, test_calculator_lennard_jones.py, test_vasp_imports.py). Note any failures.
+Expected: All currently existing calculator test files pass (currently `test_calculator_base.py`, `test_calculator_lennard_jones.py`, and `test_vasp_imports.py` in this snapshot). Note any failures before editing.
 
 - [ ] **Step 2: Verify matsimpy core imports work**
 
@@ -82,20 +100,23 @@ print('All core imports OK')
 
 Expected: "All core imports OK"
 
-- [ ] **Step 3: Commit baseline**
+- [ ] **Step 3: Baseline checkpoint**
 
 ```bash
-git add -A && git commit -m "chore: baseline before calculator module implementation"
+git status --short
 ```
+
+Expected: Record the baseline result in the task log. Do not create a commit unless this baseline phase intentionally changes documentation or fixtures; all implementation phases below require a commit.
 
 ---
 
-### Task 1: Create shared calculator utilities (Ha_to_eV, clean_lines, etc.)
+### Task 1: Create shared calculator utilities and support modules
 
 **Files:**
 - Create: `matsimpy/calculator/utils.py`
+- Create as needed: `matsimpy/calculator/electronic.py`, `matsimpy/calculator/io.py`, `matsimpy/calculator/symmetry.py`
 
-These small utility functions are used across VASP, Gaussian, and LAMMPS IO files and currently import from pymatgen. Creating matsimpy-native versions unlocks the IO import fixes in later tasks.
+These small utility functions and shared support types are used across VASP, Gaussian, and LAMMPS IO files and currently import from pymatgen. Creating matsimpy-native versions unlocks the IO import fixes in later tasks. Do not add one-off replacement classes inside copied IO files; add missing dependency surfaces as coherent matsimpy modules/APIs.
 
 - [ ] **Step 1: Write the utility module**
 
@@ -187,7 +208,11 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 2: Verify the module imports**
+- [ ] **Step 2: Add shared support modules as dependency gaps are identified**
+
+Create `matsimpy/calculator/electronic.py`, `matsimpy/calculator/io.py`, or `matsimpy/calculator/symmetry.py` only when copied IO modules need those surfaces. Keep APIs small, documented, tested, and reusable across VASP/Gaussian/LAMMPS instead of creating per-file adapters. Electronic helpers may be copied/adapted from pymatgen with attribution; they become matsimpy-owned code and must not import pymatgen.
+
+- [ ] **Step 3: Verify the module imports**
 
 Run:
 ```bash
@@ -196,13 +221,15 @@ conda run -n pmg python -c "from matsimpy.calculator.utils import Ha_to_eV, clea
 
 Expected: `Ha_to_eV = 27.211386245988`
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add matsimpy/calculator/utils.py
-git commit -m "feat: add calculator utility functions (Ha_to_eV, clean_lines, etc.)
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+# Also stage matsimpy/calculator/electronic.py, io.py, and/or symmetry.py if this phase created them.
+git commit -m "<why this support-module phase was necessary>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -334,7 +361,11 @@ Expected: Tests fail — `Calculator` has no `run` parameter, no `write_input`, 
 
 - [ ] **Step 3: Enhance Calculator base class**
 
+Compatibility guard: `Calculator` is currently abstract because `_compute()` is decorated with `@abstractmethod`. To support external-code calculators that do not override `_compute()` and to allow `Calculator(run=False)` smoke tests, remove the `@abstractmethod` decorator from `_compute()` and make the method concrete. The class may still inherit `ABC`, but it must be instantiable after this change.
+
 Modify `matsimpy/calculator/base.py`:
+
+Remove `abstractmethod` usage from `_compute()` before relying on this smoke test: `Calculator()` must be instantiable once `_compute()` is a concrete no-op compatibility hook.
 
 In `__init__`, add `run` parameter:
 
@@ -450,7 +481,7 @@ def _compute(self) -> None:
     pass
 ```
 
-Note: LJ and MatterSim override `_compute()` directly. They don't need `write_input`/`_execute`/`_parse_output`. We must ensure `calculate()` still works for them. The current `calculate()` calls `_compute()` — we need to keep backward compatibility.
+Note: LJ and MatterSim override `_compute()` directly. They don't need `write_input`/`_execute`/`_parse_output`. Preserve backward compatibility by routing subclasses that override `_compute()` through the pure-Python path, and route subclasses that do not override `_compute()` through the external-code pipeline.
 
 **Preserve backward compatibility:** Pure-Python calculators (LJ, MatterSim) override `_compute()`. External-code calculators use the new `write_input/_execute/_parse_output` pipeline. The base `calculate()` should check which path to take:
 
@@ -502,13 +533,10 @@ Expected: All existing tests still pass.
 
 ```bash
 git add matsimpy/calculator/base.py tests/calculator/test_calculator_base.py
-git commit -m "feat: add run-mode pipeline to Calculator base class
-
-Add run=True/False parameter with write_input/_execute/_parse_output/read_results
-pipeline for external-code calculators. Pure-Python calculators (LJ) continue
-using _compute() unaffected.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git commit -m "<why the base calculator pipeline changed>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -658,9 +686,10 @@ Expected: All LJ tests pass including new multi-species tests.
 
 ```bash
 git add matsimpy/calculator/lj/calculator.py tests/calculator/test_calculator_lennard_jones.py
-git commit -m "feat: add multi-species Lorentz-Berthelot mixing to LJ calculator
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git commit -m "<why LJ mixing support changed>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -671,7 +700,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Create: `matsimpy/calculator/mattersim/__init__.py`
 - Create: `matsimpy/calculator/mattersim/calculator.py`
 - Create: `matsimpy/calculator/mattersim/dataloader.py`
-- Create: `tests/calculator/test_mattersim.py`
+- Create: `tests/calculator/test_calculator_mattersim.py`
 
 Restore the MatterSim calculator from git commit `845e79e`, flatten from `calculator/ml/` to `calculator/mattersim/`, update imports.
 
@@ -772,7 +801,7 @@ except ImportError:
 
 - [ ] **Step 5: Write MatterSim test**
 
-Create `tests/calculator/test_mattersim.py`:
+Create `tests/calculator/test_calculator_mattersim.py`:
 
 ```python
 """Tests for MatterSim calculator.
@@ -853,7 +882,7 @@ class TestMattersimWithTorch:
 
 Run:
 ```bash
-conda run -n pmg pytest tests/calculator/test_mattersim.py -v 2>&1 | tail -30
+conda run -n pmg pytest tests/calculator/test_calculator_mattersim.py -v 2>&1 | tail -30
 ```
 
 Expected: Serialization tests pass. Torch tests skip if torch not installed.
@@ -861,14 +890,11 @@ Expected: Serialization tests pass. Torch tests skip if torch not installed.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add matsimpy/calculator/mattersim/ tests/calculator/test_mattersim.py
-git commit -m "feat: restore MatterSim calculator from v0.4 (845e79e)
-
-Flatten from calculator/ml/ to calculator/mattersim/.
-Inherit directly from Calculator (drop BaseML intermediary).
-Update imports to matsimpy absolute paths.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git add matsimpy/calculator/mattersim/ tests/calculator/test_calculator_mattersim.py
+git commit -m "<why MatterSim was restored in this phase>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -910,8 +936,8 @@ Create `tests/calculator/test_vasp_inputs.py`:
 ```python
 """Tests for VASP input file classes.
 
-Inspired by pymatgen-core tests/io/vasp/test_inputs.py
-Rewritten for matsimpy Crystal/Lattice/Composition classes.
+May copy relevant cases/fixtures from thirds/pymatgen-core/tests/io/vasp/test_inputs.py.
+Rewrite to matsimpy style using matsimpy Crystal/Lattice/Composition classes and matsimpy imports.
 """
 
 import pytest
@@ -1008,11 +1034,11 @@ Run:
 conda run -n pmg pytest tests/calculator/test_vasp_inputs.py -v 2>&1 | tail -30
 ```
 
-Note: These may fail because inputs.py still imports from pymatgen which may not be in the conda env, OR they may pass if pymatgen is installed. The goal is to make them pass WITHOUT pymatgen.
+Note: These may fail because inputs.py still imports from pymatgen which may not be in the conda env, OR they may pass if pymatgen is installed. The goal is to make runtime VASP functionality pass without pymatgen. Advanced electronic-structure, symmetry, or POTCAR paths must use matsimpy-native modules/APIs where supported, or raise clear unsupported-feature errors without importing pymatgen at runtime.
 
 - [ ] **Step 3: Fix imports in vasp/inputs.py**
 
-Replace pymatgen imports with matsimpy equivalents:
+Replace pymatgen imports with matsimpy-native modules/APIs:
 
 ```python
 # OLD:
@@ -1025,7 +1051,7 @@ from pymatgen.util.string import str_delimited
 from matsimpy.core import Element, Lattice, Crystal, Composition
 from matsimpy.calculator.utils import clean_lines, str_delimited
 
-# Magmom: create a simple local replacement (used in POSCAR/POTCAR)
+# Magmom: add a matsimpy-native magnetic moment helper in a shared support module
 class Magmom:
     """Simple magnetic moment wrapper. Adapted from pymatgen."""
     def __init__(self, magmom):
@@ -1041,36 +1067,19 @@ In the file, replace `Structure` → `Crystal` throughout, `get_el_sp(x)` → `E
 
 - [ ] **Step 4: Fix imports in vasp/outputs.py**
 
-Replace pymatgen imports. For complex electronic structure classes (BandStructure, Dos, CompleteDos, Spin, OrbitalType, etc.), keep them as lazy/optional imports wrapped in try/except:
+Replace pymatgen imports with matsimpy-native modules/APIs. For complex electronic structure classes (BandStructure, Dos, CompleteDos, Spin, OrbitalType, etc.), add the minimal matsimpy-native data containers needed by supported parser behavior, or make the affected advanced methods raise clear unsupported-feature errors. Do not keep pymatgen fallback imports in runtime modules.
 
 ```python
 from matsimpy.core import Composition, Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
 
-# Optional: pymatgen electronic structure classes for advanced parsing
-try:
-    from pymatgen.core.entries import ComputedEntry, ComputedStructureEntry
-    from pymatgen.core.trajectory import Trajectory
-    from pymatgen.core.units import unitized
-    from pymatgen.electronic_structure.bandstructure import (
-        BandStructure, BandStructureSymmLine, get_reconstructed_band_structure,
-    )
-    from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
-    from pymatgen.electronic_structure.dos import CompleteDos, Dos
-    from pymatgen.io.common import VolumetricData as BaseVolumetricData
-    from pymatgen.io.core import ParseError
-    from pymatgen.io.wannier90 import Unk
-    _HAS_PYMATGEN_ES = True
-except ImportError:
-    _HAS_PYMATGEN_ES = False
-    ComputedEntry = ComputedStructureEntry = None
-    Trajectory = None
-    # ... etc
+# Runtime code must not import pymatgen. Tests may import pymatgen as an optional reference oracle.
+# Add shared matsimpy-native support classes/APIs only for behavior matsimpy supports.
 ```
 
 Replace internal import: `from pymatgen.io.vasp.inputs import Incar, Kpoints...` → `from matsimpy.calculator.vasp.inputs import Incar, Kpoints...`
 
-Replace `micro_pyawk` → local implementation or inline.
+Replace `micro_pyawk` → a matsimpy-native utility where the behavior is reused, or direct straightforward parsing when it is unique to one parser.
 
 - [ ] **Step 5: Fix imports in vasp/sets.py**
 
@@ -1091,14 +1100,8 @@ from matsimpy.core import Element, Crystal, Lattice
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
 
-# Optional symmetry — these require pymatgen or spglib
-try:
-    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-    from pymatgen.symmetry.bandstructure import HighSymmKpath
-    from pymatgen.core.structure_matcher import StructureMatcher
-    _HAS_SYMMETRY = True
-except ImportError:
-    _HAS_SYMMETRY = False
+# Runtime code must not import pymatgen. Add matsimpy-native or spglib-backed
+# symmetry APIs only when needed; otherwise raise clear unsupported-feature errors.
 ```
 
 - [ ] **Step 6: Rewrite VaspCalculator**
@@ -1189,8 +1192,8 @@ Create `tests/calculator/test_vasp_outputs.py`:
 ```python
 """Tests for VASP output file parsing.
 
-Inspired by pymatgen-core tests/io/vasp/test_outputs.py
-Rewritten for matsimpy Crystal/Lattice classes.
+May copy relevant cases/fixtures from thirds/pymatgen-core/tests/io/vasp/test_outputs.py.
+Rewrite to matsimpy style and keep pymatgen only as an optional reference oracle.
 """
 
 import pytest
@@ -1264,7 +1267,8 @@ Create `tests/calculator/test_vasp_sets.py`:
 ```python
 """Tests for VASP input sets.
 
-Inspired by pymatgen-core tests/io/vasp/test_sets.py
+May copy relevant cases/fixtures from thirds/pymatgen-core/tests/io/vasp/test_sets.py.
+Rewrite to matsimpy style using matsimpy structures and imports.
 """
 
 import pytest
@@ -1353,14 +1357,10 @@ conda run -n pmg pytest tests/calculator/test_vasp_*.py -v 2>&1 | tail -40
 
 ```bash
 git add matsimpy/calculator/vasp/ tests/calculator/test_vasp_*.py
-git commit -m "feat: fix VASP IO imports + rewrite VaspCalculator with run mode
-
-Replace direct pymatgen core imports with matsimpy equivalents.
-Keep electronic-structure imports as optional (pymatgen extra).
-Add run=True/False support to VaspCalculator.
-Add test_vasp_inputs/outputs/sets/calculator tests.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git commit -m "<why VASP runtime dependencies and driver changed>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -1392,8 +1392,8 @@ Create `tests/calculator/test_gaussian.py`:
 ```python
 """Tests for Gaussian input/output and calculator.
 
-Inspired by pymatgen-core tests/io/test_gaussian.py
-Rewritten for matsimpy Crystal/Molecule classes.
+May copy relevant cases/fixtures from thirds/pymatgen-core/tests/io/test_gaussian.py.
+Rewrite to matsimpy style using matsimpy Crystal/Molecule classes and matsimpy imports.
 """
 
 import pytest
@@ -1466,7 +1466,7 @@ class TestGaussianCalculator:
 
 - [ ] **Step 2: Fix imports in gaussian.py**
 
-Replace:
+Replace imports with matsimpy-native modules/APIs. Plotting, symmetry operations, and spin helpers must be matsimpy-native or unsupported; do not keep pymatgen fallback imports in runtime modules. Replace:
 ```python
 # OLD:
 from pymatgen.core import Composition, Element, Molecule
@@ -1479,7 +1479,7 @@ from pymatgen.util.plotting import pretty_plot
 # NEW:
 from matsimpy.core import Composition, Element, Molecule
 from matsimpy.calculator.utils import Ha_to_eV, get_angle
-# Spin — simple local enum if needed; pretty_plot — optional
+# Spin — add a matsimpy-native enum if needed; pretty_plot — unsupported unless matsimpy owns the plotting path
 ```
 
 - [ ] **Step 3: Rewrite GaussianCalculator**
@@ -1502,9 +1502,10 @@ conda run -n pmg pytest tests/calculator/test_gaussian.py -v 2>&1 | tail -25
 
 ```bash
 git add matsimpy/calculator/gaussian/ tests/calculator/test_gaussian.py
-git commit -m "feat: fix Gaussian IO imports + rewrite calculator with run mode
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git commit -m "<why Gaussian runtime dependencies and driver changed>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -1524,6 +1525,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Create: `tests/calculator/test_lammps_data.py`
 - Create: `tests/calculator/test_lammps_generators.py`
 - Create: `tests/calculator/test_lammps_calculator.py`
+
+Related LAMMPS IO tests may copy relevant cases/fixtures from `thirds/pymatgen-core/tests/io/lammps/`, then rewrite them to matsimpy style with matsimpy imports and optional pymatgen reference checks only.
 
 - [ ] **Step 0: Verify attribution docstrings on all 6 IO files**
 
@@ -1768,7 +1771,7 @@ from pymatgen.io.template import TemplateInputGen
 # NEW:
 from matsimpy import __version__ as CURRENT_VER
 from matsimpy.calculator.lammps.data import CombinedData, LammpsData
-# Create local InputFile protocol
+# Add a matsimpy-native InputFile protocol/support API
 class InputFile:
     """Protocol: objects that can write themselves to a file."""
     def write_file(self, filename): ...
@@ -1777,9 +1780,9 @@ class InputFile:
 - [ ] **Step 4: Fix imports in remaining LAMMPS files**
 
 - `lammps/outputs.py`: `from pymatgen.io.lammps.data import LammpsBox` → `from matsimpy.calculator.lammps.data import LammpsBox`
-- `lammps/generators.py`: Replace `pymatgen.core.Structure` → `matsimpy.core.Crystal`, `pymatgen.io.core.InputGenerator` → local protocol, internal imports → matsimpy paths
-- `lammps/sets.py`: `pymatgen.io.core.InputSet` → local protocol, internal imports → matsimpy paths
-- `lammps/utils.py`: `pymatgen.core.operations.SymmOp` → inline the symmetry operation logic needed, `pymatgen.io.babel.BabelMolAdaptor` → optional try/except
+- `lammps/generators.py`: Replace `pymatgen.core.Structure` → `matsimpy.core.Crystal`, `pymatgen.io.core.InputGenerator` → matsimpy-native protocol/API, internal imports → matsimpy paths
+- `lammps/sets.py`: `pymatgen.io.core.InputSet` → matsimpy-native protocol/API, internal imports → matsimpy paths
+- `lammps/utils.py`: `pymatgen.core.operations.SymmOp` → matsimpy-native symmetry API, `pymatgen.io.babel.BabelMolAdaptor` → matsimpy-owned behavior or explicit unsupported-feature error with no runtime pymatgen import
 
 - [ ] **Step 5: Rewrite LammpsCalculator**
 
@@ -1800,9 +1803,10 @@ conda run -n pmg pytest tests/calculator/test_lammps_*.py -v 2>&1 | tail -40
 
 ```bash
 git add matsimpy/calculator/lammps/ tests/calculator/test_lammps_*.py
-git commit -m "feat: fix LAMMPS IO imports + rewrite calculator with run mode
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git commit -m "<why LAMMPS runtime dependencies and driver changed>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
@@ -1890,14 +1894,17 @@ Expected: All tests pass.
 
 ```bash
 git add matsimpy/calculator/__init__.py
-git commit -m "feat: update calculator __init__.py exports for all five calculators
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git commit -m "<why calculator exports changed>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
 
 ---
 
 ### Task 9: Final integration verification and coverage check
+
+Before this task, confirm the external-code tests use mocked commands or offline fixtures. The final verification must not require licensed/proprietary executables unless the local environment already provides them and the test is explicitly marked as optional.
 
 **Files:**
 - None created/modified
@@ -1941,11 +1948,26 @@ print('EVERYTHING WORKS')
 
 Expected: "EVERYTHING WORKS"
 
-- [ ] **Step 4: Commit final state**
+- [ ] **Step 4: Verify runtime calculator modules do not import pymatgen**
+
+Run:
+```bash
+if rg -n "from pymatgen|import pymatgen" matsimpy/calculator/; then
+  echo "Runtime pymatgen dependency found in calculator modules" >&2
+  exit 1
+fi
+```
+
+Expected: No matches. Pymatgen references are allowed only in tests as optional reference checks and in attribution/documentation comments.
+
+- [ ] **Step 5: Commit final state**
 
 ```bash
-git add -A
-git commit -m "chore: final integration verification for calculator modules
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git status --short
+# Stage only files intentionally changed by this implementation.
+git add <intentional files>
+git commit -m "<why final integration state is ready>" \
+  -m "Constraint: <key constraint>" \
+  -m "Tested: <commands run>" \
+  -m "Not-tested: <known gaps>"
 ```
