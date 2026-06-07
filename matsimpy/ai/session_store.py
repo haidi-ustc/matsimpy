@@ -62,6 +62,42 @@ class SessionStore:
         self.conn.commit()
         return int(cursor.lastrowid)
 
+    def add_messages_batch(self, session_id: int, rows: list[dict]) -> None:
+        """Insert all messages for a session in one transaction."""
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO messages (session_id, role, content, tool_calls_json, tool_call_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                [
+                    (
+                        session_id,
+                        row["role"],
+                        row["content"],
+                        self._json_dump(row.get("tool_calls")),
+                        row.get("tool_call_id"),
+                    )
+                    for row in rows
+                ],
+            )
+
+    def add_tool_calls_batch(self, session_id: int, rows: list[dict]) -> None:
+        """Insert all tool calls for a session in one transaction."""
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO tool_calls (session_id, tool_name, arguments_json, result_json, status) "
+                "VALUES (?, ?, ?, ?, ?)",
+                [
+                    (
+                        session_id,
+                        row["tool_name"],
+                        self._json_dump(row.get("arguments")),
+                        self._json_dump(row.get("result")),
+                        row["status"],
+                    )
+                    for row in rows
+                ],
+            )
+
     def add_tool_call(
         self,
         session_id: int,
@@ -83,7 +119,6 @@ class SessionStore:
                 status,
             ),
         )
-        self._refresh_trace_fts_for_session(session_id)
         self.conn.commit()
         return int(cursor.lastrowid)
 
@@ -94,6 +129,7 @@ class SessionStore:
         plan_summary: str,
         validation_status: str,
         final_response: str,
+        tool_names: list[str] | None = None,
     ) -> int:
         cursor = self.conn.execute(
             """
@@ -105,7 +141,7 @@ class SessionStore:
             (session_id, user_request, plan_summary, validation_status, final_response),
         )
         trace_id = int(cursor.lastrowid)
-        self._upsert_trace_fts(trace_id)
+        self._upsert_trace_fts(trace_id, tool_names=tool_names)
         self.conn.commit()
         return trace_id
 
@@ -211,6 +247,8 @@ class SessionStore:
     def _init_schema(self) -> None:
         self.conn.executescript(
             """
+            PRAGMA journal_mode=WAL;
+
             PRAGMA foreign_keys = ON;
 
             CREATE TABLE IF NOT EXISTS sessions (
@@ -282,7 +320,7 @@ class SessionStore:
         )
         self.conn.commit()
 
-    def _upsert_trace_fts(self, trace_id: int) -> None:
+    def _upsert_trace_fts(self, trace_id: int, tool_names: list[str] | None = None) -> None:
         row = self.conn.execute(
             """
             SELECT
@@ -299,6 +337,11 @@ class SessionStore:
         ).fetchone()
         if row is None:
             return
+
+        if tool_names is None:
+            tool_names_str = self._tool_names_for_session(row["session_id"])
+        else:
+            tool_names_str = " ".join(tool_names)
 
         self.conn.execute("DELETE FROM trace_fts WHERE trace_id = ?", (trace_id,))
         self.conn.execute(
@@ -321,7 +364,7 @@ class SessionStore:
                 row["plan_summary"],
                 row["validation_status"],
                 row["final_response"],
-                self._tool_names_for_session(row["session_id"]),
+                tool_names_str,
             ),
         )
 
