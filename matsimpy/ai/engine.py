@@ -99,6 +99,7 @@ class AIEngine:
         )
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
+        self.workspace.enter()
         self.conversation = list(self.runtime.messages)
         self._last_tool_calls = [record["name"] for record in result.tool_calls]
         self._last_tool_results = [record["result"] for record in result.tool_calls]

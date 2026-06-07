@@ -431,6 +431,35 @@ def test_engine_chat_uses_runtime_with_fake_provider(tmp_path):
     assert engine.runtime.last_result.validation_status == "success"
 
 
+def test_engine_chat_keeps_repl_workspace_cwd_for_relative_commands(tmp_path):
+    from matsimpy.ai.engine import AIEngine
+
+    original_cwd = Path.cwd()
+    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    engine.runtime.provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("Ready to save."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    try:
+        engine.workspace.enter()
+        response = engine.chat("prepare a saveable conversation")
+
+        assert response == "Ready to save."
+        assert Path.cwd() == engine.workspace.path
+
+        engine._handle_command("/save rel-conversation.json")
+
+        assert (engine.workspace.path / "rel-conversation.json").exists()
+    finally:
+        os.chdir(original_cwd)
+
+
 def test_engine_chat_passes_preloaded_context_to_runtime_provider(tmp_path):
     from matsimpy.ai.engine import AIEngine
 
