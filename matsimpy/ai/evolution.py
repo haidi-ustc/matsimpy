@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from .session_store import SessionStore
+from .skill_loader import save_skill_md
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
@@ -77,11 +78,31 @@ class EvolutionManager:
 
     def approve(self, name: str) -> None:
         """Approve a generated skill draft."""
+        draft = self._find_draft(name)
+        if draft is None:
+            raise KeyError(f"Unknown generated skill draft: {name}")
+
         self.store.set_skill_draft_status(name, "approved")
+        metadata = draft.get("metadata", {})
+        save_skill_md(
+            name=name,
+            description=metadata.get("description") or f"Generated skill draft for {name}",
+            tools=_normalize_tools(metadata.get("tools", [])),
+            trigger_keywords=draft.get("trigger_keywords", []),
+            body=draft.get("body", ""),
+            load_mode=metadata.get("load_mode", "auto_choice"),
+            status="approved",
+        )
 
     def reject(self, name: str) -> None:
         """Archive a generated skill draft."""
         self.store.set_skill_draft_status(name, "archived")
+
+    def _find_draft(self, name: str) -> dict | None:
+        for draft in self.store.list_skill_drafts(status=None):
+            if draft["name"] == name:
+                return draft
+        return None
 
     def _successful_tool_calls(self, session_id: int) -> list[dict]:
         rows = self.store.conn.execute(
@@ -142,6 +163,22 @@ def _json_load(value: str | None, default: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return default
+
+
+def _normalize_tools(tools: Any) -> list[dict]:
+    if not isinstance(tools, list):
+        return []
+
+    normalized = []
+    for tool in tools:
+        if isinstance(tool, str):
+            normalized.append({"function": tool})
+        elif isinstance(tool, dict):
+            if "function" in tool:
+                normalized.append(tool)
+            elif "name" in tool:
+                normalized.append({**tool, "function": tool["name"]})
+    return normalized
 
 
 def _keywords(text: str) -> list[str]:

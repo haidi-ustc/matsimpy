@@ -1,7 +1,17 @@
 """Tests for workflow skill draft generation and approval."""
 
+import pytest
+
+from matsimpy.ai import skill_loader
 from matsimpy.ai.evolution import EvolutionManager
 from matsimpy.ai.session_store import SessionStore
+
+
+@pytest.fixture(autouse=True)
+def generated_skill_dir(tmp_path, monkeypatch):
+    generated = tmp_path / "generated"
+    monkeypatch.setattr(skill_loader, "SKILLS_DIR", generated)
+    return generated
 
 
 def test_evolution_drafts_reusable_success_trace(tmp_path):
@@ -92,3 +102,68 @@ def test_approve_and_reject_skill_draft(tmp_path):
 
     manager.reject("fcc-copper")
     assert store.list_skill_drafts("archived")[0]["name"] == "fcc-copper"
+
+
+def test_approve_materializes_generated_skill_for_loader(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    session_id = store.start_session("test", str(tmp_path), "fake", "fake")
+    store.save_skill_draft(
+        "relax-copper",
+        "draft",
+        session_id,
+        ["relax", "copper"],
+        "# Relax Copper\n\nUse the stored relaxation workflow.\n",
+        {
+            "description": "Relax a copper structure",
+            "tools": ["from_prototype", {"function": "relax_structure"}],
+        },
+    )
+
+    manager = EvolutionManager(store)
+    manager.approve("relax-copper")
+
+    approved_drafts = store.list_skill_drafts("approved")
+    assert [draft["name"] for draft in approved_drafts] == ["relax-copper"]
+
+    approved_skills = skill_loader.list_generated_skills(status="approved")
+    assert len(approved_skills) == 1
+    assert approved_skills[0]["name"] == "relax-copper"
+    assert approved_skills[0]["status"] == "approved"
+    assert approved_skills[0]["body"] == "# Relax Copper\n\nUse the stored relaxation workflow."
+    assert approved_skills[0]["description"] == "Relax a copper structure"
+    assert approved_skills[0]["load_mode"] == "auto_choice"
+    assert approved_skills[0]["tools"] == [
+        {"function": "from_prototype"},
+        {"function": "relax_structure"},
+    ]
+
+
+def test_reject_does_not_materialize_generated_skill(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    session_id = store.start_session("test", str(tmp_path), "fake", "fake")
+    store.save_skill_draft(
+        "draft-only",
+        "draft",
+        session_id,
+        ["draft"],
+        "# Draft Only\n",
+        {"tools": ["from_prototype"]},
+    )
+
+    manager = EvolutionManager(store)
+    manager.reject("draft-only")
+
+    assert store.list_skill_drafts("archived")[0]["name"] == "draft-only"
+    assert skill_loader.list_generated_skills(status=None) == []
+
+
+def test_approve_unknown_skill_draft_raises_key_error(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    manager = EvolutionManager(store)
+
+    try:
+        manager.approve("missing-draft")
+    except KeyError as exc:
+        assert "Unknown generated skill draft: missing-draft" in str(exc)
+    else:
+        raise AssertionError("Expected KeyError for unknown skill draft")
