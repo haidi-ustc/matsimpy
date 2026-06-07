@@ -61,9 +61,15 @@ class AgentRuntime:
         self.messages = self._initial_messages()
         self.last_result: TaskResult | None = None
 
-    def run(self, user_message: str) -> TaskResult:
+    def run(
+        self,
+        user_message: str,
+        extra_messages: list[ChatMessage] | None = None,
+    ) -> TaskResult:
         """Execute one user task and return persisted runtime evidence."""
         self.messages = self._initial_messages()
+        if extra_messages:
+            self.messages.extend(extra_messages)
         self.executor = FunctionExecutor(self.skill_manager)
         _set_active_executor(self.executor)
         self.workspace.enter()
@@ -81,6 +87,14 @@ class AgentRuntime:
                 model=getattr(self.provider, "model", "unknown"),
                 provider=type(self.provider).__name__,
             )
+            for message in extra_messages or []:
+                self.session_store.add_message(
+                    session_id=session_id,
+                    role=message.role,
+                    content=message.content,
+                    tool_calls=message.tool_calls,
+                    tool_call_id=message.tool_call_id,
+                )
             self.messages.append(ChatMessage.user(user_message))
             self.session_store.add_message(session_id, "user", user_message)
 

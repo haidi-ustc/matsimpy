@@ -87,18 +87,16 @@ class AIEngine:
     def chat(self, user_message: str) -> str:
         """One turn: user message → runtime task lifecycle → response."""
 
-        # Auto-load relevant skills
-        loaded = self.skill_manager.auto_load(user_message)
-        if loaded:
-            print(f"📦 loaded: {', '.join(loaded)}")
-
         self._last_tool_results = []
         self._last_tool_calls = []
 
         self.runtime.skill_manager = self.skill_manager
         self.runtime.memory = self.memory
         self.runtime.system_prompt = self._build_system_prompt()
-        result = self.runtime.run(user_message)
+        result = self.runtime.run(
+            user_message,
+            extra_messages=self._explicit_context_messages(),
+        )
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
         self.conversation = list(self.runtime.messages)
@@ -109,6 +107,14 @@ class AIEngine:
             print(f"💾 draft skill: {result.draft_skill['name']} (/drafts to review)")
 
         return result.final_response
+
+    def _explicit_context_messages(self) -> list[ChatMessage]:
+        """Return deliberate REPL context without carrying prior task history."""
+        return [
+            message
+            for message in self.conversation[1:]
+            if message.role == "system"
+        ]
 
     def _chat_loop(self, tools: list[dict]) -> str:
         """Core loop: LLM → tool_calls → execute → repeat until stop."""
@@ -257,6 +263,10 @@ class AIEngine:
                 self.workspace = Workspace(new_path)
                 self.workspace.enter()
                 self.runtime.workspace = self.workspace
+                self.runtime.session_store.close()
+                self.runtime.session_store = SessionStore(
+                    self.workspace.path / "ai-state.db"
+                )
                 print(f"  Workspace changed to: {self.workspace.path}")
             else:
                 print(f"  Current workspace: {self.workspace.path}")

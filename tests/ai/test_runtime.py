@@ -429,3 +429,96 @@ def test_engine_chat_uses_runtime_with_fake_provider(tmp_path):
 
     assert response == "Task complete."
     assert engine.runtime.last_result.validation_status == "success"
+
+
+def test_engine_chat_passes_preloaded_context_to_runtime_provider(tmp_path):
+    from matsimpy.ai.engine import AIEngine
+
+    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    engine.runtime.provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("Used loaded context."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    engine.conversation.append(ChatMessage.system("[Loaded skill: x]\nimportant workflow"))
+
+    response = engine.chat("use the loaded workflow")
+
+    assert response == "Used loaded context."
+    messages = engine.runtime.provider.calls[0]["messages"]
+    assert [message.role for message in messages] == ["system", "system", "user"]
+    assert messages[1].content == "[Loaded skill: x]\nimportant workflow"
+    assert messages[2].content == "use the loaded workflow"
+
+
+def test_workspace_command_moves_runtime_session_store_and_chat_state(tmp_path):
+    from matsimpy.ai.engine import AIEngine
+
+    original_workspace = tmp_path / "original"
+    new_workspace = tmp_path / "new"
+    engine = AIEngine(api_key="unused", workspace_path=original_workspace)
+    engine.runtime.provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("Stored in new workspace."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    engine._handle_command(f"/workspace {new_workspace}")
+
+    expected_db = new_workspace / "ai-state.db"
+    assert engine.workspace.path == new_workspace.resolve()
+    assert engine.runtime.workspace.path == new_workspace.resolve()
+    assert engine.runtime.session_store.path == expected_db.resolve()
+
+    response = engine.chat("write state after workspace switch")
+
+    assert response == "Stored in new workspace."
+    assert expected_db.exists()
+    traces = engine.runtime.session_store.search_traces("workspace")
+    assert [trace["final_response"] for trace in traces] == ["Stored in new workspace."]
+    original_store = SessionStore(original_workspace / "ai-state.db")
+    try:
+        rows = original_store.conn.execute("SELECT id FROM sessions").fetchall()
+    finally:
+        original_store.close()
+    assert rows == []
+
+
+def test_engine_chat_auto_loads_user_message_once(tmp_path):
+    from matsimpy.ai.engine import AIEngine
+
+    class CountingSkillManager(SkillManager):
+        def __init__(self):
+            super().__init__()
+            self.auto_load_messages = []
+
+        def auto_load(self, message):
+            self.auto_load_messages.append(message)
+            return []
+
+    skill_manager = CountingSkillManager()
+    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    engine.skill_manager = skill_manager
+    engine.runtime.skill_manager = skill_manager
+    engine.runtime.provider = FakeProvider(
+        [
+            ChatResponse(
+                message=ChatMessage.assistant("Loaded once."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    response = engine.chat("trigger one auto load")
+
+    assert response == "Loaded once."
+    assert skill_manager.auto_load_messages == ["trigger one auto load"]
