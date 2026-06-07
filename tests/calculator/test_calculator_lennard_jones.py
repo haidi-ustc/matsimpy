@@ -279,5 +279,72 @@ class TestLennardJones(unittest.TestCase):
         np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
         np.testing.assert_allclose(calc.get_stress(), ase_stress, atol=1e-12)
 
+
+class TestLJMultispecies(unittest.TestCase):
+    """Tests for multi-species Lennard-Jones with Lorentz-Berthelot mixing."""
+
+    def test_multispecies_energy_different_from_single(self):
+        """Ar+Kr system should have different energy than pure Ar."""
+        from matsimpy.calculator.lj import LennardJones
+
+        crystal = Crystal(
+            ["Ar", "Kr", "Ar", "Kr"],
+            [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0], [0.5, 0.5, 0]],
+            Lattice.cubic(5.0),
+        )
+        calc = LennardJones(
+            sigma=3.4, epsilon=0.0104,
+            species_sigma={"Kr": 3.6}, species_epsilon={"Kr": 0.014},
+        )
+        calc.calculate(crystal)
+        energy_mixed = calc.get_potential_energy()
+
+        crystal_ar = Crystal(
+            ["Ar", "Ar", "Ar", "Ar"],
+            [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0], [0.5, 0.5, 0]],
+            Lattice.cubic(5.0),
+        )
+        calc_ar = LennardJones(sigma=3.4, epsilon=0.0104)
+        calc_ar.calculate(crystal_ar)
+        energy_pure = calc_ar.get_potential_energy()
+
+        self.assertNotEqual(energy_mixed, energy_pure)
+
+    def test_lorentz_berthelot_mixing_rules(self):
+        """sigma_12 = (s1+s2)/2, eps_12 = sqrt(eps1*eps2)."""
+        from matsimpy.calculator.lj import LennardJones
+
+        calc = LennardJones(
+            sigma=3.0, epsilon=0.01,
+            species_sigma={"B": 4.0}, species_epsilon={"B": 0.02},
+        )
+        sig, eps = calc.get_pair_params("A", "B")
+        self.assertAlmostEqual(sig, 3.5)
+        self.assertAlmostEqual(eps, 0.0141421356237)
+
+    def test_backward_compatible_single_species(self):
+        """Existing single-species usage unchanged."""
+        from matsimpy.calculator.lj import LennardJones
+
+        crystal = Crystal(["Ar"], [[0, 0, 0]], Lattice.cubic(5.26))
+        calc = LennardJones(sigma=3.4, epsilon=0.0104)
+        calc.calculate(crystal)
+        energy = calc.get_potential_energy()
+        self.assertIsInstance(energy, float)
+        self.assertTrue(np.isfinite(energy))
+
+    def test_pair_params_default_for_unknown(self):
+        """get_pair_params returns defaults for species not in dicts."""
+        from matsimpy.calculator.lj import LennardJones
+
+        calc = LennardJones(
+            sigma=3.4, epsilon=0.0104,
+            species_sigma={"Kr": 3.6}, species_epsilon={"Kr": 0.014},
+        )
+        sig, eps = calc.get_pair_params("Ar", "Ar")
+        self.assertAlmostEqual(sig, 3.4)
+        self.assertAlmostEqual(eps, 0.0104)
+
+
 if __name__ == '__main__':
     unittest.main()

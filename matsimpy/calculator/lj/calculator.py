@@ -48,6 +48,8 @@ class LennardJones(Calculator):
         epsilon: float = 0.0104,
         cutoff: Optional[float] = None,
         rc_smooth: Optional[float] = None,
+        species_sigma: Optional[dict[str, float]] = None,
+        species_epsilon: Optional[dict[str, float]] = None,
         **kwargs,
     ):
         """
@@ -58,9 +60,19 @@ class LennardJones(Calculator):
             epsilon: LJ energy parameter in eV (default: 0.0104 for Ar)
             cutoff: Cutoff distance in Å. If None, uses 3*sigma
             rc_smooth: Smoothing distance for cutoff. If None, uses cutoff
+            species_sigma: Per-species sigma overrides (e.g. {"Kr": 3.6}).
+                Pairs use Lorentz-Berthelot mixing: sigma_ij = (s_i + s_j)/2
+            species_epsilon: Per-species epsilon overrides (e.g. {"Kr": 0.014}).
+                Pairs use Lorentz-Berthelot mixing: eps_ij = sqrt(eps_i * eps_j)
             **kwargs: Additional parameters (passed to parent)
         """
         super().__init__(sigma=sigma, epsilon=epsilon, **kwargs)
+
+        # Per-species parameter overrides (Lorentz-Berthelot mixing)
+        self._species_sigma: dict[str, float] = dict(species_sigma or {})
+        self._species_epsilon: dict[str, float] = dict(species_epsilon or {})
+        self._default_sigma = sigma
+        self._default_epsilon = epsilon
 
         # Set cutoff
         if cutoff is None:
@@ -71,6 +83,25 @@ class LennardJones(Calculator):
         if rc_smooth is None:
             rc_smooth = cutoff
         self.parameters["rc_smooth"] = rc_smooth
+
+    def get_pair_params(self, species_i: str, species_j: str) -> Tuple[float, float]:
+        """Get sigma and epsilon for a species pair using Lorentz-Berthelot mixing.
+
+        sigma_ij = (sigma_i + sigma_j) / 2
+        epsilon_ij = sqrt(epsilon_i * epsilon_j)
+
+        Args:
+            species_i: First species symbol
+            species_j: Second species symbol
+
+        Returns:
+            (sigma, epsilon) tuple for the pair
+        """
+        si = self._species_sigma.get(species_i, self._default_sigma)
+        sj = self._species_sigma.get(species_j, self._default_sigma)
+        ei = self._species_epsilon.get(species_i, self._default_epsilon)
+        ej = self._species_epsilon.get(species_j, self._default_epsilon)
+        return (si + sj) / 2.0, np.sqrt(ei * ej)
 
     def _compute(self) -> None:
         """
@@ -84,10 +115,9 @@ class LennardJones(Calculator):
         if self.structure is None:
             raise ValueError("Structure not set. Call calculate(structure) first.")
 
-        sigma = self.parameters["sigma"]
-        epsilon = self.parameters["epsilon"]
         cutoff = self.parameters["cutoff"]
         rc_smooth = self.parameters["rc_smooth"]
+        species = list(self.structure.species)
 
         # Get positions (always use Cartesian)
         if isinstance(self.structure, Crystal):
@@ -109,12 +139,12 @@ class LennardJones(Calculator):
         if lattice is not None and any(pbc):
             # For periodic systems, use minimum image convention
             energy, forces, stress = self._compute_periodic(
-                positions, lattice, pbc, sigma, epsilon, cutoff, rc_smooth
+                positions, lattice, pbc, species, cutoff, rc_smooth
             )
         else:
             # For non-periodic systems (molecules or non-periodic crystals)
             energy, forces = self._compute_non_periodic(
-                positions, sigma, epsilon, cutoff, rc_smooth
+                positions, species, cutoff, rc_smooth
             )
 
         # Store results
@@ -126,18 +156,15 @@ class LennardJones(Calculator):
     def _compute_non_periodic(
         self,
         positions: np.ndarray,
-        sigma: float,
-        epsilon: float,
+        species: list[str],
         cutoff: float,
         rc_smooth: float,
     ) -> Tuple[float, np.ndarray]:
-        """
-        Compute LJ energy and forces for non-periodic system.
+        """Compute LJ energy and forces for non-periodic system with per-pair params.
 
         Args:
             positions: Atomic positions (N, 3)
-            sigma: LJ size parameter
-            epsilon: LJ energy parameter
+            species: Species symbols for each atom
             cutoff: Cutoff distance
             rc_smooth: Smoothing distance
 
@@ -147,7 +174,6 @@ class LennardJones(Calculator):
         n_atoms = len(positions)
         energy = 0.0
         forces = np.zeros((n_atoms, 3))
-        e0 = 4.0 * epsilon * ((sigma / cutoff) ** 12 - (sigma / cutoff) ** 6)
 
         # Build KDTree for efficient neighbor finding
         tree = cKDTree(positions)
@@ -161,16 +187,19 @@ class LennardJones(Calculator):
             r = np.linalg.norm(r_vec)
 
             if r < cutoff:
-                # Apply smoothing function if rc_smooth < cutoff
+                # Get per-pair LJ parameters
+                sp_i = species[i]
+                sp_j = species[j]
+                sigma, epsilon = self.get_pair_params(sp_i, sp_j)
+                e0 = 4.0 * epsilon * ((sigma / cutoff) ** 12 - (sigma / cutoff) ** 6)
+
                 if rc_smooth < cutoff and r > rc_smooth:
-                    # Smooth cutoff function (shifted Fermi)
                     f = 1.0 / (1.0 + np.exp((r - rc_smooth) / (cutoff - rc_smooth)))
                     df_dr = -f * (1.0 - f) / (cutoff - rc_smooth)
                 else:
                     f = 1.0
                     df_dr = 0.0
 
-                # LJ potential: V(r) = 4*epsilon * [(sigma/r)^12 - (sigma/r)^6]
                 sr6 = (sigma / r) ** 6
                 sr12 = sr6**2
                 v = 4.0 * epsilon * (sr12 - sr6) * f
@@ -178,9 +207,6 @@ class LennardJones(Calculator):
                     v -= e0
                 energy += v
 
-                # Force: F = -dV/dr * r_hat
-                # dV/dr = 4*epsilon * [12*sigma^12/r^13 - 6*sigma^6/r^7] * f
-                #        + 4*epsilon * (sr12 - sr6) * df_dr
                 dv_dr = (
                     4.0
                     * epsilon
@@ -198,13 +224,11 @@ class LennardJones(Calculator):
         positions: np.ndarray,
         lattice,
         pbc: list,
-        sigma: float,
-        epsilon: float,
+        species: list[str],
         cutoff: float,
         rc_smooth: float,
     ) -> Tuple[float, np.ndarray, np.ndarray]:
-        """
-        Compute LJ energy and forces for periodic system.
+        """Compute LJ energy and forces for periodic system with per-pair params.
 
         Uses minimum image convention for periodic boundary conditions.
 
@@ -212,8 +236,7 @@ class LennardJones(Calculator):
             positions: Atomic positions in Cartesian coordinates
             lattice: Lattice object
             pbc: Periodic boundary conditions [x, y, z]
-            sigma: LJ size parameter
-            epsilon: LJ energy parameter
+            species: Species symbols for each atom
             cutoff: Cutoff distance
             rc_smooth: Smoothing distance
 
@@ -227,7 +250,6 @@ class LennardJones(Calculator):
 
         positions = np.array(positions, dtype=float)
         offsets = self._periodic_offsets(lattice, pbc, cutoff)
-        e0 = 4.0 * epsilon * ((sigma / cutoff) ** 12 - (sigma / cutoff) ** 6)
 
         for offset in offsets:
             shift = np.dot(offset, lattice.matrix)
@@ -243,6 +265,10 @@ class LennardJones(Calculator):
                     if not (1e-10 < r < cutoff):
                         continue
 
+                    # Get per-pair LJ parameters
+                    sigma, epsilon = self.get_pair_params(species[i], species[j])
+                    e0 = 4.0 * epsilon * ((sigma / cutoff) ** 12 - (sigma / cutoff) ** 6)
+
                     pair_energy, force_vec = self._pair_energy_force(
                         r_vec_cart, r, sigma, epsilon, cutoff, rc_smooth
                     )
@@ -253,7 +279,7 @@ class LennardJones(Calculator):
                     stress += -0.5 * np.outer(force_vec, r_vec_cart)
 
         # Stress in eV/Å³ (volume is in Å³)
-        volume = lattice.volume  # volume is a property
+        volume = lattice.volume
         if volume > 0:
             stress = stress / volume
 
