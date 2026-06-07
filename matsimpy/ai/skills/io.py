@@ -5,6 +5,9 @@ from matsimpy.ai.skill import FunctionDef
 
 SKILL_NAME = "io"
 SKILL_DESCRIPTION = "File I/O: read and write structures in various formats"
+SKILL_KEYWORDS: list[str] = [
+    "read", "write", "save", "load", "file", "format", "convert", "io",
+]
 
 
 def _read_structure(path, format=None):

@@ -6,6 +6,7 @@ import numpy as np
 
 SKILL_NAME = "core"
 SKILL_DESCRIPTION = "Core crystal and molecular structure creation and editing"
+SKILL_KEYWORDS: list[str] = []  # always loaded, no auto-load keywords needed
 
 
 def _create_crystal(species, positions, a=5.0, lattice_type="cubic"):

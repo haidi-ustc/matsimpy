@@ -6,6 +6,9 @@ from matsimpy.ai.skill import FunctionDef
 
 SKILL_NAME = "storage"
 SKILL_DESCRIPTION = "Data storage: store, retrieve, and query structures"
+SKILL_KEYWORDS: list[str] = [
+    "store", "retrieve", "query", "database", "storage",
+]
 
 
 # Session-level in-memory store

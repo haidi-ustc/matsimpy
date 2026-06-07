@@ -9,6 +9,10 @@ from matsimpy.ai.skill import FunctionDef
 
 SKILL_NAME = "analysis"
 SKILL_DESCRIPTION = "Structure analysis: bonds, geometry, connectivity, symmetry, neighbors"
+SKILL_KEYWORDS: list[str] = [
+    "bond", "angle", "dihedral", "symmetry", "connect",
+    "ring", "topology", "analyze", "analysis",
+]
 
 
 def _load_structure(path):

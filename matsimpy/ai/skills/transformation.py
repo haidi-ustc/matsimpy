@@ -7,6 +7,10 @@ from matsimpy.ai.skill import FunctionDef
 
 SKILL_NAME = "transformation"
 SKILL_DESCRIPTION = "Structure transformations: geometric, lattice, atomic, chemical, structural"
+SKILL_KEYWORDS: list[str] = [
+    "translate", "rotate", "strain", "scale", "substitute",
+    "supercell", "transform", "move",
+]
 
 
 def _resolve_annotation(ann) -> str | None:
