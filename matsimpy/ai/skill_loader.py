@@ -87,4 +87,64 @@ def list_generated_skills() -> list[dict]:
     return skills
 
 
-__all__ = ["parse_skill_md", "save_skill_md", "list_generated_skills", "SKILLS_DIR"]
+import importlib
+import warnings
+from pathlib import Path
+
+SKILLS_PKG = Path(__file__).resolve().parent / "skills"
+
+
+def discover_builtin_skills() -> list[dict]:
+    """Scan matsimpy/ai/skills/ for modules exporting SKILL_NAME.
+
+    Returns a list of dicts with keys: name, description, keywords, functions.
+    Files without SKILL_NAME are silently skipped (utility modules, __init__.py).
+    Files with SKILL_NAME but missing required fields get a warning and are skipped.
+    Duplicate skill names get a warning and are skipped (first module wins).
+    """
+    skills = []
+    seen_names: set[str] = set()
+
+    for path in sorted(SKILLS_PKG.glob("*.py")):
+        if path.name.startswith("_"):
+            continue
+
+        try:
+            mod = importlib.import_module(f"matsimpy.ai.skills.{path.stem}")
+        except Exception as exc:
+            warnings.warn(f"Failed to import {path.stem}: {exc}")
+            continue
+
+        if not hasattr(mod, "SKILL_NAME"):
+            continue
+
+        name = mod.SKILL_NAME
+
+        # Check required fields
+        if not hasattr(mod, "SKILL_DESCRIPTION"):
+            warnings.warn(f"Skill '{name}' in {path.stem} missing SKILL_DESCRIPTION — skipping")
+            continue
+
+        if not hasattr(mod, "get_functions") or not callable(mod.get_functions):
+            warnings.warn(f"Skill '{name}' in {path.stem} missing callable get_functions() — skipping")
+            continue
+
+        if name in seen_names:
+            warnings.warn(f"Skill '{name}' redefined by {path.stem} — skipping (already registered)")
+            continue
+
+        seen_names.add(name)
+        skills.append({
+            "name": name,
+            "description": mod.SKILL_DESCRIPTION,
+            "keywords": list(getattr(mod, "SKILL_KEYWORDS", [])),
+            "functions": mod.get_functions(),
+        })
+
+    # Ensure core is always first (it's the always-loaded base skill)
+    skills.sort(key=lambda s: (s["name"] != "core", s["name"]))
+
+    return skills
+
+
+__all__ = ["parse_skill_md", "save_skill_md", "list_generated_skills", "discover_builtin_skills", "SKILLS_DIR", "SKILLS_PKG"]
