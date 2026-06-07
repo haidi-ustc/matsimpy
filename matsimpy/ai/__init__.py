@@ -31,12 +31,17 @@ from .skill import FunctionDef, Skill, SkillManager
 from .provider import DeepSeekProvider
 from .providers import ChatProvider
 from .executor import FunctionExecutor
+from .runtime import AgentRuntime, TaskResult
+from .session_store import SessionStore
 from .engine import AIEngine
 
 __all__ = [
     "AIEngine",
+    "AgentRuntime",
     "ChatProvider",
     "DeepSeekProvider",
+    "TaskResult",
+    "SessionStore",
     "SkillManager",
     "FunctionDef",
     "Skill",

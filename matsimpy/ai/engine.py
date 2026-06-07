@@ -3,7 +3,10 @@
 from __future__ import annotations
 import json
 from .conversation import ChatMessage, ToolCall
+from .evolution import EvolutionManager
 from .provider import DeepSeekProvider
+from .runtime import AgentRuntime
+from .session_store import SessionStore
 from .skill import SkillManager, Skill
 from .executor import FunctionExecutor
 from .workspace import Workspace
@@ -44,12 +47,24 @@ class AIEngine:
         _set_active_executor(self.executor)
         self.workspace = Workspace(workspace_path)
         self.memory = AgentMemory()
+        self.verbose = False
 
         # Inject soul into system prompt
         soul = self.memory.get_soul_prompt()
         base_prompt = system_prompt or SYSTEM_PROMPT
         self.system_prompt = f"{base_prompt}\n\n{soul}" if soul.strip() else base_prompt
 
+        self.runtime = AgentRuntime(
+            provider=self.provider,
+            skill_manager=self.skill_manager,
+            session_store=SessionStore(self.workspace.path / "ai-state.db"),
+            memory=self.memory,
+            workspace_path=self.workspace.path,
+            source="engine",
+            system_prompt=self._build_system_prompt(),
+        )
+        self.executor = self.runtime.executor
+        self.workspace = self.runtime.workspace
         self.conversation: list[ChatMessage] = [
             ChatMessage.system(self._build_system_prompt()),
         ]
@@ -70,8 +85,7 @@ class AIEngine:
         return self.system_prompt.replace("{available_skills}", skill_list)
 
     def chat(self, user_message: str) -> str:
-        """One turn: user message → LLM → tool execution loop → response."""
-        self.workspace.enter()
+        """One turn: user message → runtime task lifecycle → response."""
 
         # Auto-load relevant skills
         loaded = self.skill_manager.auto_load(user_message)
@@ -81,15 +95,20 @@ class AIEngine:
         self._last_tool_results = []
         self._last_tool_calls = []
 
-        self.conversation.append(ChatMessage.user(user_message))
-        tools = self.skill_manager.get_tools()
+        self.runtime.skill_manager = self.skill_manager
+        self.runtime.memory = self.memory
+        self.runtime.system_prompt = self._build_system_prompt()
+        result = self.runtime.run(user_message)
+        self.executor = self.runtime.executor
+        self.workspace = self.runtime.workspace
+        self.conversation = list(self.runtime.messages)
+        self._last_tool_calls = [record["name"] for record in result.tool_calls]
+        self._last_tool_results = [record["result"] for record in result.tool_calls]
 
-        response = self._chat_loop(tools)
+        if result.draft_skill:
+            print(f"💾 draft skill: {result.draft_skill['name']} (/drafts to review)")
 
-        # Learn from this turn
-        self._learn(user_message, response)
-
-        return response
+        return result.final_response
 
     def _chat_loop(self, tools: list[dict]) -> str:
         """Core loop: LLM → tool_calls → execute → repeat until stop."""
@@ -237,6 +256,7 @@ class AIEngine:
                 new_path = arg
                 self.workspace = Workspace(new_path)
                 self.workspace.enter()
+                self.runtime.workspace = self.workspace
                 print(f"  Workspace changed to: {self.workspace.path}")
             else:
                 print(f"  Current workspace: {self.workspace.path}")
@@ -373,6 +393,50 @@ class AIEngine:
             for name, lines in summary.items():
                 print(f"    {name}.md — {lines} lines")
 
+        elif command == "/plan":
+            result = self.runtime.last_result
+            if result is None:
+                print("  No task yet.")
+                return
+            tools = ", ".join(record["name"] for record in result.tool_calls)
+            if not tools:
+                tools = "none"
+            print(f"  Tools: {tools}")
+            print(f"  Validation: {result.validation_status}")
+
+        elif command == "/trace":
+            result = self.runtime.last_result
+            if result is None:
+                print("  No trace yet.")
+                return
+            print(f"  Session: {result.session_id}")
+            print(f"  Trace: {result.trace_id if result.trace_id is not None else 'none'}")
+            print(f"  Status: {result.status}")
+
+        elif command == "/drafts":
+            drafts = self.runtime.session_store.list_skill_drafts("draft")
+            if not drafts:
+                print("  No drafts.")
+                return
+            for draft in drafts:
+                keywords = draft.get("trigger_keywords", [])
+                keyword_text = ", ".join(keywords) if keywords else "no keywords"
+                print(f"  {draft['name']}: {keyword_text}")
+
+        elif command == "/approve-skill":
+            if not arg:
+                print("  Usage: /approve-skill <name>")
+                return
+            EvolutionManager(self.runtime.session_store).approve(arg)
+            print(f"  Approved skill draft: {arg}")
+
+        elif command == "/reject-skill":
+            if not arg:
+                print("  Usage: /reject-skill <name>")
+                return
+            EvolutionManager(self.runtime.session_store).reject(arg)
+            print(f"  Rejected skill draft: {arg}")
+
         elif command == "/help":
             if arg:
                 fn = self.skill_manager.find_function(arg)
@@ -408,6 +472,11 @@ class AIEngine:
                 print("    /model [name]         Show or switch model")
                 print("    /workspace [dir]      Show or change workspace")
                 print("    /memory               Show memory file sizes")
+                print("    /plan                 Show last task tools and validation")
+                print("    /trace                Show last session trace status")
+                print("    /drafts               List draft skills")
+                print("    /approve-skill <name> Approve a draft skill")
+                print("    /reject-skill <name>  Reject a draft skill")
                 print("    /system <text>        Set custom system prompt")
                 print("    /history              Show conversation")
                 print("    /clear                Reset conversation")
@@ -422,6 +491,7 @@ class AIEngine:
         elif command == "/system":
             if arg:
                 self.system_prompt = arg
+                self.runtime.system_prompt = arg
                 self.conversation[0] = ChatMessage.system(arg)
                 print(f"  System prompt updated ({len(arg)} chars).")
 
@@ -435,6 +505,8 @@ class AIEngine:
 
         elif command == "/clear":
             self.conversation = [ChatMessage.system(self._build_system_prompt())]
+            self.runtime.messages = list(self.conversation)
+            self.runtime.last_result = None
             self.executor._call_count = 0
             print("  Conversation cleared. Skills remain loaded.")
 

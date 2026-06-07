@@ -384,3 +384,48 @@ def test_runtime_does_not_reuse_executor_object_refs_across_runs(tmp_path):
     assert second.status == "failure"
     assert second.tool_calls[0]["status"] == "failure"
     assert "couldn't auto-resolve" in second.tool_calls[0]["result"]["error"]
+
+
+def test_engine_chat_uses_runtime_with_fake_provider(tmp_path):
+    from matsimpy.ai.engine import AIEngine
+
+    tool_call = ToolCall(
+        id="call-make-result",
+        name="make_result",
+        arguments={"value": "reusable"},
+    )
+    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    engine.runtime.provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(tool_call),
+                tool_calls=[tool_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Task complete."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+
+    fn = FunctionDef(
+        name="make_result",
+        description="Make a result",
+        parameters={
+            "type": "object",
+            "properties": {"value": {"type": "string"}},
+            "required": ["value"],
+        },
+        callable=lambda value: {"result": value},
+        skill="test",
+    )
+    skill = Skill("test", "Test skill", [fn])
+    engine.skill_manager.register(skill)
+    engine.skill_manager.load("test")
+
+    response = engine.chat("make a reusable result")
+
+    assert response == "Task complete."
+    assert engine.runtime.last_result.validation_status == "success"
