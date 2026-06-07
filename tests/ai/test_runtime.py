@@ -35,6 +35,19 @@ class RaisingProvider:
         raise RuntimeError("provider unavailable")
 
 
+class DraftFailingSessionStore(SessionStore):
+    def save_skill_draft(
+        self,
+        name,
+        status,
+        source_session_id,
+        trigger_keywords,
+        body,
+        metadata,
+    ):
+        raise RuntimeError("draft persistence unavailable")
+
+
 class TinyStructure:
     formula = "Si2"
     species = ["Si", "Si"]
@@ -178,6 +191,45 @@ def test_runtime_executes_tools_persists_trace_and_drafts_skill(tmp_path):
     assert [trace["id"] for trace in traces] == [result.trace_id]
     drafts = store.list_skill_drafts("draft")
     assert [draft["name"] for draft in drafts] == [result.draft_skill["name"]]
+
+
+def test_runtime_keeps_success_when_draft_generation_fails(tmp_path):
+    create_call = ToolCall(id="call-create", name="create_structure", arguments={})
+    save_call = ToolCall(id="call-save", name="save_structure", arguments={"path": "si.txt"})
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(create_call, save_call),
+                tool_calls=[create_call, save_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("Created and saved silicon."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    store = DraftFailingSessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("create silicon and save it")
+
+    assert result.status == "success"
+    assert result.validation_status == "success"
+    assert result.final_response == "Created and saved silicon."
+    assert result.draft_skill is None
+    rows = store.conn.execute("SELECT status FROM sessions").fetchall()
+    assert [row["status"] for row in rows] == ["success"]
+    traces = store.search_traces("silicon")
+    assert [trace["validation_status"] for trace in traces] == ["success"]
 
 
 def test_runtime_reports_tool_error_as_failure(tmp_path):

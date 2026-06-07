@@ -127,9 +127,9 @@ class AgentRuntime:
                 final_response=final_response,
             )
             self.session_store.end_session(session_id, status)
-            draft_skill = EvolutionManager(self.session_store).draft_from_trace(
+            draft_skill = self._try_draft_skill_from_trace(
                 session_id=session_id,
-                user_request=user_message,
+                user_message=user_message,
                 final_response=final_response,
                 validation_status=validation_status,
             )
@@ -292,6 +292,23 @@ class AgentRuntime:
                 plan_summary=self._plan_summary(tool_records, max_turns_reached=False),
                 validation_status="failure",
                 final_response=final_response,
+            )
+        except Exception:
+            return None
+
+    def _try_draft_skill_from_trace(
+        self,
+        session_id: int,
+        user_message: str,
+        final_response: str,
+        validation_status: str,
+    ) -> dict | None:
+        try:
+            return EvolutionManager(self.session_store).draft_from_trace(
+                session_id=session_id,
+                user_request=user_message,
+                final_response=final_response,
+                validation_status=validation_status,
             )
         except Exception:
             return None
