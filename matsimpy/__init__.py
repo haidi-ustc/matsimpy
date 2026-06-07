@@ -20,7 +20,7 @@ from .core import (
 from .constants import POSITION_TOL, LATTICE_TOL
 
 # Version
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 
 # Plugin discovery (lazy — call discover_plugins() to load extensions)
