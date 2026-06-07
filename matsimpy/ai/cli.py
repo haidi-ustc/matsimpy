@@ -66,9 +66,19 @@ def main(
 
 
 def _register_all_skills(sm: SkillManager) -> None:
-    from .skills import core, builders, transformation, analysis, io, storage
-    for mod in (core, builders, transformation, analysis, io, storage):
-        sm.register(Skill(mod.SKILL_NAME, mod.SKILL_DESCRIPTION, mod.get_functions()))
+    """Register all discovered builtin skills. No hard-coded imports."""
+    from .skill_loader import discover_builtin_skills
+
+    discovered = discover_builtin_skills()
+    if not discovered:
+        import warnings
+        warnings.warn("No builtin skills discovered — REPL will have no tools")
+        return
+
+    for s in discovered:
+        skill = Skill(s["name"], s["description"], s["functions"])
+        skill.keywords = s["keywords"]
+        sm.register(skill)
 
 
 if __name__ == "__main__":
