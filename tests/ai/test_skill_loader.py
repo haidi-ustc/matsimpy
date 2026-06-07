@@ -268,3 +268,29 @@ def test_generated_skill_status_none_returns_all(tmp_path, monkeypatch):
     skills = skill_loader.list_generated_skills(status=None)
 
     assert [s["name"] for s in skills] == ["approved-skill", "draft-skill"]
+
+
+def test_skill_schema_describes_structure_parameters_as_references():
+    from matsimpy.ai.skills._schema import sig_to_schema
+
+    def consume_structure(structure, cutoff: float = 2.0):
+        """Consume a structure."""
+        return None
+
+    schema = sig_to_schema(consume_structure)
+
+    assert schema["properties"]["structure"]["type"] == "object"
+    assert "structure reference" in schema["properties"]["structure"]["description"].lower()
+    assert schema["properties"]["cutoff"]["type"] == "number"
+    assert schema["properties"]["cutoff"]["default"] == 2.0
+    assert schema["required"] == ["structure"]
+
+
+def test_builders_skill_still_discovers_function_schemas_after_schema_helper_split():
+    skills = discover_builtin_skills()
+    builders = next(skill for skill in skills if skill["name"] == "builders")
+    from_prototype = next(fn for fn in builders["functions"] if fn.name == "from_prototype")
+
+    assert from_prototype.parameters["type"] == "object"
+    assert "properties" in from_prototype.parameters
+    assert from_prototype.skill == "builders"
