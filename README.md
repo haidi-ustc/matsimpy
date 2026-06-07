@@ -30,7 +30,7 @@
 - **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()` in 15 lines
 - **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
 - **Adapters**: pymatgen ↔ ASE bidirectional. LaTeX table export via `export/`. Plugin entry points for all registries
-- **AI REPL** (v0.5): LLM function calling via DeepSeek V4. 6 progressive skills (66 tools). `/commands`, workspace, agent memory with `user.md`/`soul.md`/`memory.md`, auto-save `.skill.md` files. `matsimpy -c "build fcc Cu"` single-shot mode
+- **AI REPL** (v0.5): LLM function calling via DeepSeek V4. 6 progressive skills (66 tools). `/commands`, `/trace`, `/drafts`, `/approve-skill <name>`, workspace, agent memory, approval-gated draft skills, and `matsimpy -c "build fcc Cu"` single-shot mode
 - **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT (VASP/QE interfaces) — optional
 - **CLI**: interactive menu for structure editing and utilities
 
@@ -497,6 +497,16 @@ print(response)
 
 Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
 
+The AI REPL and `matsimpy -c` share the same agent runtime. The runtime records searchable task traces in `~/.matsimpy/ai/state.db`, keeps compact memory files in `~/.matsimpy/ai/memory/`, and proposes reusable workflow skills as drafts. Draft skills are disabled until approved with `/approve-skill <name>`.
+
+Runtime commands:
+
+```text
+/trace
+/drafts
+/approve-skill <name>
+```
+
 ## Core Conventions
 
 ### Immutability
@@ -689,4 +699,4 @@ MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen)
 
 ---
 
-**Note**: v0.5.0 — AI REPL with LLM function calling, agent memory, auto-save skills.
+**Note**: v0.5.0 — AI REPL with LLM function calling, shared agent runtime, task traces, agent memory, and approval-gated draft skills.
