@@ -245,8 +245,39 @@ class AIEngine:
                         print(f"  ... +{len(files)-10} more")
 
         elif command == "/skills":
+            if arg:
+                # /skills <name> — show function details for a specific skill
+                skill = self.skill_manager._skills.get(arg)
+                if skill is None:
+                    # Try generated skills
+                    for g in list_generated_skills():
+                        if g["name"] == arg:
+                            print(f"\n  📦 {g['name']} (generated)")
+                            print(f"  {g.get('description', '')}")
+                            print(f"  Mode: {g.get('load_mode', 'auto_choice')}")
+                            body = g.get("body", "")
+                            if body:
+                                print(f"\n{body[:1000]}")
+                            return
+                    print(f"  Skill '{arg}' not found. Use /skills to list all.")
+                    return
+                loaded = arg in self.skill_manager._active
+                status = "✓ loaded" if loaded else "  ready"
+                print(f"\n  📦 {skill.name}  {status}  {len(skill.functions)} funcs")
+                print(f"  {skill.description}")
+                if skill.keywords:
+                    print(f"  Keywords: {', '.join(skill.keywords)}")
+                print()
+                for fn in skill.functions:
+                    # Truncate description for display
+                    desc = fn.description[:80] + "…" if len(fn.description) > 80 else fn.description
+                    print(f"  {fn.name:30s}  {desc}")
+                return
+
+            # /skills (no arg) — list all skills
             from .skill_loader import discover_builtin_skills
             discovered = discover_builtin_skills()
+            print(f"\n  Use /skills <name> for function details\n")
             for s in discovered:
                 status = "✓ loaded" if s["name"] in self.skill_manager._active else "  ready"
                 kw_preview = " ".join(s["keywords"][:5])
@@ -365,7 +396,7 @@ class AIEngine:
                             print(f"  Currently loaded: {', '.join(sorted(loaded))}")
             else:
                 print("  📦 Skills")
-                print("    /skills               List all skills (builtin + generated)")
+                print("    /skills [name]        List skills, or show functions of a skill")
                 print("    /load <name>          Load a builtin skill")
                 print("    /load-skill <name>    Load a generated skill as context")
                 print("    /unload <name>        Unload a skill")
