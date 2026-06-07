@@ -18,6 +18,8 @@ FILES = {
     "memory.md": "# Memory\n\n<!-- Auto-appended: learned facts, corrections, patterns -->\n\n",
 }
 
+MUTABLE_TARGETS = {"memory", "user", "agent"}
+
 
 class MemoryValidationError(ValueError):
     """Raised when a memory entry is invalid or unsafe."""
@@ -65,6 +67,8 @@ class AgentMemory:
         entry = content.strip()
         if not entry:
             raise MemoryValidationError("memory entry is empty")
+        if "\n" in entry or "\r" in entry:
+            raise MemoryValidationError("memory entry must be a single line")
 
         unsafe_phrases = (
             "ignore previous instructions",
@@ -81,35 +85,50 @@ class AgentMemory:
 
         return entry
 
+    def _validate_target(self, name: str) -> str:
+        target = name.strip()
+        if not target:
+            raise MemoryValidationError("memory target is empty")
+        if os.path.isabs(target) or "/" in target or "\\" in target or ".." in target:
+            raise MemoryValidationError("invalid memory target")
+        if target.endswith(".md"):
+            target = target[:-3]
+        if target not in MUTABLE_TARGETS:
+            raise MemoryValidationError("invalid memory target")
+        return target
+
     def _validate_selector(self, old_text: str) -> None:
         if not old_text.strip():
             raise MemoryValidationError("memory selector is empty")
 
     def add(self, name: str, content: str) -> None:
         """Add a validated memory entry as a markdown bullet."""
+        target = self._validate_target(name)
         entry = self._validate_entry(content)
-        existing = self.read(name)
+        existing = self.read(target)
         bullet = f"- {entry}"
         if any(line.strip() == bullet for line in existing.splitlines()):
             raise MemoryValidationError("duplicate memory entry")
-        self.append(name, bullet)
+        self.append(target, bullet)
 
     def replace(self, name: str, old_text: str, content: str) -> None:
         """Replace the first occurrence of old text with validated content."""
+        target = self._validate_target(name)
         entry = self._validate_entry(content)
         self._validate_selector(old_text)
-        existing = self.read(name)
+        existing = self.read(target)
         if old_text not in existing:
             raise MemoryValidationError("memory text not found")
-        self.write(name, existing.replace(old_text, entry, 1))
+        self.write(target, existing.replace(old_text, entry, 1))
 
     def remove(self, name: str, old_text: str) -> None:
         """Remove the first occurrence of old text from a memory file."""
+        target = self._validate_target(name)
         self._validate_selector(old_text)
-        existing = self.read(name)
+        existing = self.read(target)
         if old_text not in existing:
             raise MemoryValidationError("memory text not found")
-        self.write(name, existing.replace(old_text, "", 1))
+        self.write(target, existing.replace(old_text, "", 1))
 
     def append_learning(self, entry: dict) -> None:
         """Append a learning entry to memory.md."""
