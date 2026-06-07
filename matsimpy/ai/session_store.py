@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 STATE_DB = Path.home() / ".matsimpy" / "ai" / "state.db"
+_SEARCH_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
 class SessionStore:
@@ -108,6 +110,10 @@ class SessionStore:
         return trace_id
 
     def search_traces(self, query: str, limit: int = 10) -> list[dict]:
+        fts_query = _trace_search_query(query)
+        if fts_query is None:
+            return []
+
         rows = self.conn.execute(
             """
             SELECT
@@ -124,7 +130,7 @@ class SessionStore:
             ORDER BY bm25(trace_fts)
             LIMIT ?
             """,
-            (query, limit),
+            (fts_query, limit),
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -362,6 +368,13 @@ class SessionStore:
         )
         result["metadata"] = self._json_load(result.pop("metadata_json"), {})
         return result
+
+
+def _trace_search_query(query: str) -> str | None:
+    tokens = _SEARCH_TOKEN_RE.findall(query)
+    if not tokens:
+        return None
+    return " OR ".join(f'"{token}"' for token in tokens)
 
 
 __all__ = ["STATE_DB", "SessionStore"]

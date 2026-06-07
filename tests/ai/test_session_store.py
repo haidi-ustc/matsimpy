@@ -31,6 +31,22 @@ def test_session_store_records_session_message_tool_and_trace(tmp_path):
     assert traces[0]["validation_status"] == "success"
 
 
+def test_session_store_search_traces_handles_literal_punctuation(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    session_id = store.start_session(source="test", workspace=str(tmp_path), model="fake", provider="fake")
+    trace_id = store.add_task_trace(
+        session_id,
+        user_request="create fcc Cu",
+        plan_summary="Build an FCC copper structure.",
+        validation_status="success",
+        final_response="Created Cu4.",
+    )
+
+    assert [trace["id"] for trace in store.search_traces("copper?")] == [trace_id]
+    assert [trace["id"] for trace in store.search_traces('"copper"')] == [trace_id]
+    assert store.search_traces("???") == []
+
+
 def test_skill_draft_lifecycle(tmp_path):
     store = SessionStore(tmp_path / "state.db")
     session_id = store.start_session(source="test", workspace=str(tmp_path), model="fake", provider="fake")
