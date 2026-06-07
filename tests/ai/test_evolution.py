@@ -138,6 +138,34 @@ def test_approve_materializes_generated_skill_for_loader(tmp_path):
     ]
 
 
+def test_approve_materializes_unsafe_draft_name_under_generated_skills(tmp_path, generated_skill_dir):
+    store = SessionStore(tmp_path / "state.db")
+    session_id = store.start_session("test", str(tmp_path), "fake", "fake")
+    store.save_skill_draft(
+        "../outside",
+        "draft",
+        session_id,
+        ["outside"],
+        "# Unsafe Draft\n",
+        {"tools": ["from_prototype"]},
+    )
+
+    manager = EvolutionManager(store)
+    manager.approve("../outside")
+
+    paths = list(generated_skill_dir.glob("*.skill.md"))
+    assert len(paths) == 1
+    assert paths[0].resolve().is_relative_to(generated_skill_dir.resolve())
+    assert paths[0].name == "outside.skill.md"
+    assert (tmp_path / "outside.skill.md").exists() is False
+
+    approved_skills = skill_loader.list_generated_skills(status="approved")
+    assert [skill["name"] for skill in approved_skills] == ["outside"]
+    assert ".." not in approved_skills[0]["name"]
+    assert "/" not in approved_skills[0]["name"]
+    assert "\\" not in approved_skills[0]["name"]
+
+
 def test_reject_does_not_materialize_generated_skill(tmp_path):
     store = SessionStore(tmp_path / "state.db")
     session_id = store.start_session("test", str(tmp_path), "fake", "fake")

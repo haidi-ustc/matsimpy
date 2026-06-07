@@ -6,6 +6,21 @@ from pathlib import Path
 from datetime import datetime
 
 SKILLS_DIR = Path.home() / ".matsimpy" / "ai" / "skills" / "generated"
+_UNSAFE_SKILL_NAME_RE = re.compile(r"[^a-z0-9-]+")
+
+
+def _safe_skill_name(name: str) -> str:
+    """Return a filesystem-safe generated skill slug."""
+    safe_name = _UNSAFE_SKILL_NAME_RE.sub("-", name.lower()).strip("-")
+    return safe_name[:120].strip("-") or "generated-skill"
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def parse_skill_md(path: Path) -> dict | None:
@@ -43,10 +58,7 @@ def save_skill_md(
     import yaml
 
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
-    path = SKILLS_DIR / f"{name}.skill.md"
-
-    # Normalize name for filename
-    safe_name = name.lower().replace(" ", "-").replace("_", "-")
+    safe_name = _safe_skill_name(name)
 
     frontmatter = {
         "name": safe_name,
@@ -74,6 +86,8 @@ def save_skill_md(
             content += "\n"
 
     path = SKILLS_DIR / f"{safe_name}.skill.md"
+    if not _is_relative_to(path.resolve(), SKILLS_DIR.resolve()):
+        raise ValueError(f"Generated skill path escapes SKILLS_DIR: {path}")
     path.write_text(content)
     return path
 

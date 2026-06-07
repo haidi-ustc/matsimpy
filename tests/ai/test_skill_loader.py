@@ -197,6 +197,31 @@ def test_generated_skill_status_filter(tmp_path, monkeypatch):
     assert [s["name"] for s in drafts] == ["draft-skill"]
 
 
+def test_save_skill_md_sanitizes_name_before_writing_path(tmp_path, monkeypatch):
+    from matsimpy.ai import skill_loader
+
+    generated = tmp_path / "generated"
+    monkeypatch.setattr(skill_loader, "SKILLS_DIR", generated)
+
+    path = skill_loader.save_skill_md(
+        name="../outside",
+        description="Unsafe skill name",
+        tools=[],
+        trigger_keywords=[],
+    )
+
+    assert path.resolve().is_relative_to(generated.resolve())
+    assert path.name == "outside.skill.md"
+    assert (tmp_path / "outside.skill.md").exists() is False
+
+    saved = skill_loader.parse_skill_md(path)
+    assert saved is not None
+    assert saved["name"] == "outside"
+    assert ".." not in saved["name"]
+    assert "/" not in saved["name"]
+    assert "\\" not in saved["name"]
+
+
 def test_generated_skill_missing_status_defaults_to_approved(tmp_path, monkeypatch):
     from matsimpy.ai import skill_loader
 
