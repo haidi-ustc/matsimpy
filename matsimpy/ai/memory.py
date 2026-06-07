@@ -103,15 +103,6 @@ class AgentMemory:
         existing = self.read(name)
         if old_text not in existing:
             raise MemoryValidationError("memory text not found")
-
-        bullet = f"- {old_text}"
-        lines = existing.splitlines(keepends=True)
-        for index, line in enumerate(lines):
-            if line.strip() == bullet:
-                del lines[index]
-                self.write(name, "".join(lines))
-                return
-
         self.write(name, existing.replace(old_text, "", 1))
 
     def append_learning(self, entry: dict) -> None:

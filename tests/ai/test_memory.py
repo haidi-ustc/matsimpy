@@ -21,6 +21,15 @@ def test_memory_add_replace_remove_and_duplicate_rejection(tmp_path):
     assert "User prefers VASP output" not in memory.read("memory")
 
 
+def test_memory_remove_removes_first_occurrence_before_bullet(tmp_path):
+    memory = AgentMemory(tmp_path, max_entry_chars=200)
+    memory.write("memory", "prefix foo\n- foo\n")
+
+    memory.remove("memory", "foo")
+
+    assert memory.read("memory") == "prefix \n- foo\n"
+
+
 def test_memory_rejects_large_and_injection_entries(tmp_path):
     memory = AgentMemory(tmp_path, max_entry_chars=20)
 
