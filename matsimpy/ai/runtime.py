@@ -183,6 +183,12 @@ class AgentRuntime:
             if max_turns_reached:
                 validation_status = "failure"
             status = "success" if validation_status == "success" else "failure"
+            if status == "failure":
+                self._append_failure_learning(
+                    user_message=user_message,
+                    tool_records=tool_records,
+                    final_response=final_response,
+                )
             plan_summary = self._plan_summary(tool_records, max_turns_reached)
 
             self.session_store.add_messages_batch(session_id, pending_messages)
@@ -348,6 +354,11 @@ class AgentRuntime:
                 tool_records=tool_records,
                 final_response=final_response,
             )
+        self._append_failure_learning(
+            user_message=user_message,
+            tool_records=tool_records,
+            final_response=final_response,
+        )
         try:
             self.session_store.end_session(session_id, "failure")
         except Exception:
@@ -396,6 +407,33 @@ class AgentRuntime:
             )
         except Exception:
             return None
+
+    def _append_failure_learning(
+        self,
+        user_message: str,
+        tool_records: list[dict],
+        final_response: str,
+    ) -> None:
+        """Persist concise failure experience for future prompt context."""
+        failed_records = [r for r in tool_records if r.get("status") == "failure"]
+        tools_used = [r["name"] for r in tool_records]
+        if failed_records:
+            failed = failed_records[0]
+            failed_tool = failed.get("name", "unknown")
+            error = failed.get("result", {}).get("error", final_response)
+            insight = f"Tool {failed_tool} failed: {error}"
+        else:
+            insight = final_response
+
+        try:
+            self.memory.append_learning({
+                "user_intent": user_message[:200],
+                "outcome": "failure",
+                "tools_used": tools_used,
+                "insight": insight[:300],
+            })
+        except Exception:
+            pass
 
 
 __all__ = [

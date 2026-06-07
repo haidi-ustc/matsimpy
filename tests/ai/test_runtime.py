@@ -760,3 +760,63 @@ def test_runtime_initial_prompt_keeps_memory_after_core_rules(tmp_path):
     assert "do not invent coordinates" in system_message
     assert "relevant memory" in system_message
     assert "prefer builder functions" in system_message
+
+
+def test_runtime_appends_learning_when_tool_execution_fails(tmp_path):
+    bad_call = ToolCall(id="call-bad", name="missing_tool", arguments={})
+    provider = FakeProvider(
+        [
+            ChatResponse(
+                message=_assistant_tool_message(bad_call),
+                tool_calls=[bad_call],
+                finish_reason="tool_calls",
+            ),
+            ChatResponse(
+                message=ChatMessage.assistant("I could not finish."),
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    memory = AgentMemory(tmp_path / "memory")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=memory,
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("create a crystal with generated coordinates")
+    next_prompt = runtime._initial_messages()[0].content
+
+    assert result.status == "failure"
+    assert "missing_tool" in memory.read("memory")
+    assert "create a crystal with generated coordinates" in memory.read("memory")
+    assert "missing_tool" in next_prompt
+
+
+def test_runtime_appends_learning_when_provider_raises_after_session_start(tmp_path):
+    class LateRaisingProvider(FakeProvider):
+        model = "fake-runtime-model"
+
+        def chat(self, messages, tools=None, tool_choice="auto"):
+            self.calls.append({"messages": list(messages), "tools": tools, "tool_choice": tool_choice})
+            raise RuntimeError("provider unavailable after session start")
+
+    memory = AgentMemory(tmp_path / "memory")
+    runtime = AgentRuntime(
+        provider=LateRaisingProvider([]),
+        skill_manager=SkillManager(),
+        session_store=SessionStore(tmp_path / "state.db"),
+        memory=memory,
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("run an unavailable workflow")
+
+    assert result.status == "failure"
+    assert "provider unavailable after session start" in memory.read("memory")
+    assert "run an unavailable workflow" in memory.read("memory")
