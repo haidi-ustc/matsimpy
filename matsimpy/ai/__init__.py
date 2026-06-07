@@ -29,11 +29,13 @@ Requirements:
 from .conversation import ChatMessage, ToolCall, ChatResponse
 from .skill import FunctionDef, Skill, SkillManager
 from .provider import DeepSeekProvider
+from .providers import ChatProvider
 from .executor import FunctionExecutor
 from .engine import AIEngine
 
 __all__ = [
     "AIEngine",
+    "ChatProvider",
     "DeepSeekProvider",
     "SkillManager",
     "FunctionDef",
