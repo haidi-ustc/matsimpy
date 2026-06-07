@@ -78,6 +78,7 @@ docs/_static/
 docs/_templates/
 docs/superpowers/
 reviews/
+.superpowers/
 
 # Generated output files
 examples_output/
