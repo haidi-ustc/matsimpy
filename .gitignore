@@ -76,7 +76,8 @@ tests/install
 docs/_build/
 docs/_static/
 docs/_templates/
-docs/superpowers
+docs/superpowers/
+reviews/
 
 # Generated output files
 examples_output/
