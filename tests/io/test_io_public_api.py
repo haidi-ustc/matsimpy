@@ -1,6 +1,7 @@
 """Public API contract tests for matsimpy.io."""
 
 import importlib.util
+from pathlib import Path
 import sys
 
 
@@ -32,3 +33,24 @@ def test_removed_public_packages_are_not_importable():
             if cached == module_name or cached.startswith(f"{module_name}."):
                 sys.modules.pop(cached)
         assert importlib.util.find_spec(module_name) is None
+
+
+def test_no_runtime_imports_from_removed_adapter_or_export_packages():
+    removed_imports = (
+        "matsimpy.adapters",
+        "..adapters",
+        "...adapters",
+        "matsimpy.export",
+        "..export",
+        "...export",
+    )
+    offenders = []
+    for path in Path("matsimpy").glob("**/*.py"):
+        if any("adapters" in part or "export" in part for part in path.parts):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for reference in removed_imports:
+            if reference in text:
+                offenders.append(f"{path}: {reference}")
+
+    assert offenders == []

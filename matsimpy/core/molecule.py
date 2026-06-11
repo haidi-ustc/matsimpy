@@ -1040,7 +1040,7 @@ class Molecule(Structure):
         Raises:
             ImportError: If pymatgen is not installed
         """
-        from ..adapters.pymatgen import to_pymatgen
+        from ..io import to_pymatgen
 
         return to_pymatgen(self)
 
@@ -1054,7 +1054,7 @@ class Molecule(Structure):
         Raises:
             ImportError: If ASE is not installed
         """
-        from ..adapters.ase import to_ase
+        from ..io import to_ase
 
         return to_ase(self)
 
@@ -1072,7 +1072,7 @@ class Molecule(Structure):
         Raises:
             ImportError: If pymatgen is not installed
         """
-        from ..adapters.pymatgen import from_pymatgen
+        from ..io import from_pymatgen
 
         return from_pymatgen(pymatgen_molecule)
 
@@ -1090,7 +1090,7 @@ class Molecule(Structure):
         Raises:
             ImportError: If ASE is not installed
         """
-        from ..adapters.ase import from_ase
+        from ..io import from_ase
 
         result = from_ase(ase_atoms)
         if not isinstance(result, Molecule):
