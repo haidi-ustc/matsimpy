@@ -27,14 +27,14 @@ SKILL_KEYWORDS: list[str] = [
 ]
 
 
-def _read_structure(path, format=None):
+def _read_structure(path: str, format: str | None = None):
     from matsimpy import io
 
     structure = io.read(path, format=format) if format else io.read(path)
     return _summarize_structure(structure)
 
 
-def _write_structure(path, structure=None, format=None):
+def _write_structure(path: str, structure=None, format: str | None = None):
     from matsimpy import io
 
     structure = _require_structure(structure)
@@ -149,12 +149,23 @@ def _summarize_external_object(obj):
     }
 
 
+def _schema(fn, *, strings=(), booleans=()):
+    schema = sig_to_schema(fn)
+    for name in strings:
+        if name in schema["properties"]:
+            schema["properties"][name]["type"] = "string"
+    for name in booleans:
+        if name in schema["properties"]:
+            schema["properties"][name]["type"] = "boolean"
+    return schema
+
+
 def get_functions() -> list[FunctionDef]:
     return [
         FunctionDef(
             name="read_structure",
             description="Read a crystal or molecule structure from a file. Auto-detects format.",
-            parameters=sig_to_schema(_read_structure),
+            parameters=_schema(_read_structure, strings=("path", "format")),
             callable=_read_structure,
             skill=SKILL_NAME,
             help_text="Read a structure file. Format auto-detected from extension.\n"
@@ -163,7 +174,7 @@ def get_functions() -> list[FunctionDef]:
         FunctionDef(
             name="write_structure",
             description="Write a MatSimPy structure reference to a file. Uses the last structure when none is provided.",
-            parameters=sig_to_schema(_write_structure),
+            parameters=_schema(_write_structure, strings=("path", "format")),
             callable=_write_structure,
             skill=SKILL_NAME,
             help_text="Save the last structure to a file. Creates/overwrites the file.\n"
@@ -201,14 +212,22 @@ def get_functions() -> list[FunctionDef]:
         FunctionDef(
             name="structures_to_latex_table",
             description="Create a LaTeX table for MatSimPy structure references",
-            parameters=sig_to_schema(_structures_to_latex_table),
+            parameters=_schema(
+                _structures_to_latex_table,
+                strings=("caption", "label"),
+                booleans=("separate_by_type", "use_mhchem"),
+            ),
             callable=_structures_to_latex_table,
             skill=SKILL_NAME,
         ),
         FunctionDef(
             name="save_latex_table",
             description="Save a LaTeX table for structure references to a file",
-            parameters=sig_to_schema(_save_latex_table),
+            parameters=_schema(
+                _save_latex_table,
+                strings=("path", "caption", "label"),
+                booleans=("separate_by_type", "use_mhchem"),
+            ),
             callable=_save_latex_table,
             skill=SKILL_NAME,
         ),

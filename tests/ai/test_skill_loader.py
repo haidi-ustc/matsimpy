@@ -345,3 +345,51 @@ def test_new_ai_coverage_skills_use_compact_structure_reference_schemas():
                 if name in {"structure", "structures", "crystal", "molecule"}:
                     assert prop["type"] in {"object", "array"}
                     assert "coordinate" not in prop.get("description", "").lower()
+
+
+def test_io_skill_schemas_type_public_string_and_boolean_parameters():
+    skills = {s["name"]: s for s in discover_builtin_skills()}
+    io_functions = {fn.name: fn for fn in skills["io"]["functions"]}
+
+    read_schema = io_functions["read_structure"].parameters
+    assert read_schema["properties"]["path"]["type"] == "string"
+    assert "path" in read_schema["required"]
+    assert read_schema["properties"]["format"]["type"] == "string"
+    assert "format" not in read_schema["required"]
+
+    write_schema = io_functions["write_structure"].parameters
+    assert write_schema["properties"]["path"]["type"] == "string"
+    assert "path" in write_schema["required"]
+
+    latex_schema = io_functions["structures_to_latex_table"].parameters
+    assert latex_schema["properties"]["caption"]["type"] == "string"
+    assert latex_schema["properties"]["label"]["type"] == "string"
+    assert latex_schema["properties"]["separate_by_type"]["type"] == "boolean"
+    assert latex_schema["properties"]["use_mhchem"]["type"] == "boolean"
+
+    save_schema = io_functions["save_latex_table"].parameters
+    assert save_schema["properties"]["path"]["type"] == "string"
+    assert "path" in save_schema["required"]
+    assert save_schema["properties"]["caption"]["type"] == "string"
+    assert save_schema["properties"]["label"]["type"] == "string"
+
+
+def test_io_skill_get_functions_does_not_import_runtime_io_dependencies():
+    from matsimpy.ai.skills import io as io_skill
+
+    for module_name in (
+        "matsimpy.io",
+        "matsimpy.io.ase",
+        "matsimpy.io.pymatgen",
+        "ase",
+        "pymatgen",
+    ):
+        sys.modules.pop(module_name, None)
+
+    io_skill.get_functions()
+
+    assert "matsimpy.io" not in sys.modules
+    assert "matsimpy.io.ase" not in sys.modules
+    assert "matsimpy.io.pymatgen" not in sys.modules
+    assert "ase" not in sys.modules
+    assert "pymatgen" not in sys.modules
