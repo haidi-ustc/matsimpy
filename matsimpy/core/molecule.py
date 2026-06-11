@@ -1087,14 +1087,14 @@ class Molecule(Structure):
 
     def to_code(self, code: str, filename: str, **kwargs) -> None:
         """
-        Write input file for a DFT code.
+        Write input file for a supported DFT code.
 
-        Generic interface for writing DFT code input files. Supports multiple
-        codes through the code parameter. Molecules are typically treated as
-        isolated systems in a large cell.
+        Generic interface for writing supported DFT code input files through
+        the code parameter. Molecules are typically treated as isolated systems
+        in a large cell.
 
         Args:
-            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            code: DFT code name (for example, 'vasp')
             filename: Output filename
             **kwargs: Additional parameters for the DFT code input
                      (code-specific parameters)
@@ -1104,8 +1104,7 @@ class Molecule(Structure):
             NotImplementedError: If code interface is not yet implemented
 
         Examples:
-            >>> molecule.to_code('quantum_espresso', 'mol_scf.in')
-            >>> molecule.to_code('qe', 'molecule.in')
+            >>> molecule.to_code('vasp', 'POSCAR')
         """
         from ..code import get_code_interface
 
@@ -1125,7 +1124,7 @@ class Molecule(Structure):
         Currently not implemented.
 
         Args:
-            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            code: DFT code name (for example, 'vasp')
             filename: Path to output file
             **kwargs: Additional parameters for parsing
 
@@ -1137,7 +1136,7 @@ class Molecule(Structure):
             NotImplementedError: Output parsing not yet implemented
 
         Examples:
-            >>> molecule = Molecule.from_code('quantum_espresso', 'mol_scf.out')
+            >>> molecule = Molecule.from_code('vasp', 'OUTCAR')
         """
         from ..code import get_code_interface
 

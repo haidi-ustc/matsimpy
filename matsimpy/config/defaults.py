@@ -38,10 +38,6 @@ def get_default_config() -> Dict[str, Any]:
                     "default_npar": 1,
                     "default_ncore": 1,
                 },
-                "quantum_espresso": {
-                    "default_command": "pw.x",
-                    "default_mpirun": "mpirun -np",
-                },
             },
         },
         "paths": {

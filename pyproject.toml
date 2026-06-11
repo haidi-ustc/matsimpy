@@ -73,10 +73,11 @@ all = [
     "pyxtal>=1.0.0",
     "rdkit",
     "spglib",
+    "typer",
+    "requests",
 ]
 
 [project.scripts]
-matsimpy = "matsimpy.ai.cli:app"
 matsimpy-ai = "matsimpy.ai.cli:app"
 
 [tool.setuptools]

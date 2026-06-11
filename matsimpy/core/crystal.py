@@ -1627,13 +1627,13 @@ class Crystal(Structure):
 
     def to_code(self, code: str, filename: str, **kwargs) -> None:
         """
-        Write input file for a DFT code.
+        Write input file for a supported DFT code.
 
-        Generic interface for writing DFT code input files. Supports multiple
-        codes through the code parameter.
+        Generic interface for writing supported DFT code input files through
+        the code parameter.
 
         Args:
-            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            code: DFT code name (for example, 'vasp')
             filename: Output filename
             **kwargs: Additional parameters for the DFT code input
                      (code-specific parameters)
@@ -1643,8 +1643,7 @@ class Crystal(Structure):
             NotImplementedError: If code interface is not yet implemented
 
         Examples:
-            >>> crystal.to_code('quantum_espresso', 'scf.in')
-            >>> crystal.to_code('qe', 'pw.in', calculation='scf')
+            >>> crystal.to_code('vasp', 'POSCAR')
         """
         from ..code import get_code_interface
 
@@ -1664,7 +1663,7 @@ class Crystal(Structure):
         Currently not implemented.
 
         Args:
-            code: DFT code name (e.g., 'quantum_espresso', 'qe', 'vasp')
+            code: DFT code name (for example, 'vasp')
             filename: Path to output file
             **kwargs: Additional parameters for parsing
 
@@ -1676,7 +1675,7 @@ class Crystal(Structure):
             NotImplementedError: Output parsing not yet implemented
 
         Examples:
-            >>> crystal = Crystal.from_code('quantum_espresso', 'scf.out')
+            >>> crystal = Crystal.from_code('vasp', 'OUTCAR')
         """
         from ..code import get_code_interface
 

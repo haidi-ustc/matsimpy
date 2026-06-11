@@ -5,9 +5,9 @@
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
-[![Tests](https://img.shields.io/badge/tests-1462%20passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-core%20suite-brightgreen)](tests/)
 
-**Version**: v0.5.0
+**Version**: v0.8.0
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Core Conventions](#core-conventions)
-- [CLI](#command-line-interface)
+- [AI Command Line](#ai-command-line-interface)
 - [Project Structure](#project-structure)
 - [Examples](#examples)
 - [Testing](#testing)
@@ -30,9 +30,8 @@
 - **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()` in 15 lines
 - **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
 - **Adapters**: pymatgen ↔ ASE bidirectional. LaTeX table export via `export/`. Plugin entry points for all registries
-- **AI REPL** (v0.5): LLM function calling via DeepSeek V4. 6 progressive skills (66 tools). `/commands`, `/trace`, `/drafts`, `/approve-skill <name>`, workspace, agent memory, approval-gated draft skills, and `matsimpy -c "build fcc Cu"` single-shot mode
-- **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT (VASP/QE interfaces) — optional
-- **CLI**: interactive menu for structure editing and utilities
+- **AI REPL**: Optional LLM function calling via DeepSeek models. Built-in MatSimPy skills expose core, builders, transformations, analysis, IO, storage, calculators, symmetry, adapters, and export tools. Use `matsimpy-ai -c "build fcc Cu"` for single-shot mode
+- **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT file/workflow interfaces for VASP, Gaussian, and LAMMPS — optional
 
 ## Installation
 
@@ -47,6 +46,7 @@ This installs the core package with required dependencies:
 - scipy
 - monty
 - tabulate
+- pyyaml
 
 ### From source (editable)
 
@@ -74,9 +74,6 @@ This includes:
 MatSimPy supports optional features through extra dependencies:
 
 ```bash
-# CLI (interactive menu)
-pip install -e .[cli]
-
 # Machine learning calculators (torch, torch-geometric)
 pip install -e .[ml]
 
@@ -91,6 +88,9 @@ pip install -e .[analysis]
 
 # Data storage (maggma)
 pip install -e .[storage]
+
+# AI REPL
+pip install -e .[ai]
 
 # Everything
 pip install -e .[all]
@@ -473,12 +473,12 @@ pip install -e .[ai]
 export DEEPSEEK_API_KEY="sk-..."
 
 # Interactive REPL
-matsimpy
-matsimpy --workspace ~/my-project --model deepseek-v4-pro
+matsimpy-ai
+matsimpy-ai --workspace ~/my-project --model deepseek-v4-pro
 
 # Single-shot command
-matsimpy -c "create fcc Cu crystal and save to cu.vasp"
-matsimpy -v -c "analyze bonds in nacl.cif"
+matsimpy-ai -c "create fcc Cu crystal and save to cu.vasp"
+matsimpy-ai -v -c "analyze bonds in nacl.cif"
 ```
 
 ```python
@@ -497,7 +497,7 @@ print(response)
 
 Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
 
-The AI REPL and `matsimpy -c` share the same agent runtime. The runtime records searchable task traces in `~/.matsimpy/ai/state.db`, keeps compact memory files in `~/.matsimpy/ai/memory/`, and proposes reusable workflow skills as drafts. Draft skills are disabled until approved with `/approve-skill <name>`.
+The AI REPL and `matsimpy-ai -c` share the same agent runtime. The runtime records searchable task traces in `~/.matsimpy/ai/state.db`, keeps compact memory files in `~/.matsimpy/ai/memory/`, and proposes reusable workflow skills as drafts. Draft skills are disabled until approved with `/approve-skill <name>`.
 
 Runtime commands:
 
@@ -602,26 +602,28 @@ matsimpy/
 ├── calculator/        # Energy/force calculators
 ├── config/            # Global configuration (ConfigManager)
 ├── symmetry/          # Symmetry analysis (spglib)
-├── ui/                # CLI interface
-├── ai/                # AI/ML integration
+├── ai/                # Optional AI REPL and skill runtime
 ├── exceptions.py      # MatSimPyError, FormatError, StructureTypeError, etc.
 ├── plugins.py         # Plugin discovery via entry points
 └── constants.py       # POSITION_TOL, LATTICE_TOL
 ```
 
-## Command-Line Interface
+## AI Command-Line Interface
 
-MatSimPy includes an interactive CLI menu system for easy access to all features:
+MatSimPy includes an optional AI command-line interface in the `[ai]` extra:
 
 ```bash
-# Launch interactive menu
-matsimpy
+# Install AI dependencies
+pip install -e .[ai]
 
-# Or specify menu file
-matsimpy path/to/matsimpy_menu.json
+# Launch interactive REPL
+matsimpy-ai
+
+# Run a single natural-language task
+matsimpy-ai -c "create fcc Cu crystal and save to cu.vasp"
 ```
 
-The CLI provides access to structure generation/editing, analysis tools, format conversion, and more.
+The AI CLI provides natural-language access to structure generation, transformations, analysis, format conversion, storage, and calculator helpers through MatSimPy tool calls.
 
 ## Examples
 
@@ -699,4 +701,4 @@ MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen)
 
 ---
 
-**Note**: v0.5.0 — AI REPL with LLM function calling, shared agent runtime, task traces, agent memory, and approval-gated draft skills.
+**Note**: v0.8.0 — optional AI REPL with LLM function calling, shared agent runtime, task traces, agent memory, and approval-gated draft skills.

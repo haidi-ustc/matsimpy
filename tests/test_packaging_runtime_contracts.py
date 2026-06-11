@@ -5,6 +5,19 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    tomllib = None
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read_pyproject():
+    if tomllib is None:
+        raise RuntimeError("tomllib is required for packaging contract tests")
+    return tomllib.loads((ROOT / "pyproject.toml").read_text())
 
 
 def test_config_import_is_base_dependency_safe():
@@ -19,6 +32,52 @@ def test_workflow_files_do_not_reference_removed_entrypoints():
     )
     assert "requirements.txt" not in workflow_text
     assert "python3 ./main.py" not in workflow_text
+
+
+def test_package_version_is_single_sourced_in_readme_and_import():
+    pyproject = _read_pyproject()
+    expected_version = pyproject["project"]["version"]
+    readme = (ROOT / "README.md").read_text()
+
+    import matsimpy
+
+    assert matsimpy.__version__ == expected_version
+    assert f"**Version**: v{expected_version}" in readme
+    assert "v0.5.0" not in readme
+    assert "v0.6.0" not in readme
+
+
+def test_license_metadata_and_readme_use_mit():
+    pyproject = _read_pyproject()
+    readme = (ROOT / "README.md").read_text()
+    license_text = (ROOT / "LICENSE").read_text()
+
+    assert "License :: OSI Approved :: MIT License" in pyproject["project"]["classifiers"]
+    assert "MIT License" in license_text
+    assert "Permission is hereby granted, free of charge" in license_text
+    assert "Redistribution and use in source and binary forms" not in license_text
+    assert "licensed under the MIT License" in readme
+
+
+def test_readme_and_config_do_not_advertise_quantum_espresso():
+    readme = (ROOT / "README.md").read_text()
+    defaults = (ROOT / "matsimpy" / "config" / "defaults.py").read_text()
+
+    assert "Quantum Espresso" not in readme
+    assert "QE" not in readme
+    assert "quantum_espresso" not in defaults
+
+
+def test_console_scripts_keep_ai_repl_optional():
+    pyproject = _read_pyproject()
+    scripts = pyproject["project"]["scripts"]
+    optional = pyproject["project"]["optional-dependencies"]
+
+    assert scripts == {"matsimpy-ai": "matsimpy.ai.cli:app"}
+    assert "ai" in optional
+    assert "typer" in optional["ai"]
+    assert "requests" in optional["ai"]
+    assert "cli" not in optional
 
 
 def test_storage_import_without_maggma_is_quiet_and_actionable():
@@ -53,7 +112,7 @@ def test_storage_import_without_maggma_is_quiet_and_actionable():
     result = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=ROOT,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -78,6 +137,6 @@ def test_core_runtime_imports_without_ase_or_pymatgen():
     result = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=ROOT,
     )
     assert result.returncode == 0, result.stdout + result.stderr

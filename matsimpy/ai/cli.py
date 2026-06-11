@@ -40,9 +40,9 @@ def main(
 
     \b
     Examples:
-        matsimpy -c "create fcc Cu and save to cu.vasp"
-        matsimpy -w ~/my-project -m deepseek-v4-flash
-        matsimpy -v -c "analyze bonds in nacl.cif"
+        matsimpy-ai -c "create fcc Cu and save to cu.vasp"
+        matsimpy-ai -w ~/my-project -m deepseek-v4-flash
+        matsimpy-ai -v -c "analyze bonds in nacl.cif"
     """
     engine = AIEngine(
         api_key=api_key,

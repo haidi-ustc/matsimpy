@@ -20,7 +20,25 @@ from .core import (
 from .constants import POSITION_TOL, LATTICE_TOL
 
 # Version
-__version__ = "0.6.0"
+def _get_version() -> str:
+    from pathlib import Path
+    import re
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    if pyproject.exists():
+        match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.MULTILINE)
+        if match:
+            return match.group(1)
+
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        return version("MatSimPy")
+    except PackageNotFoundError:  # pragma: no cover - source tree without install metadata
+        return "0.8.0"
+
+
+__version__ = _get_version()
 
 
 # Plugin discovery (lazy — call discover_plugins() to load extensions)
