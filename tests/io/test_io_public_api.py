@@ -36,6 +36,8 @@ def test_removed_public_packages_are_not_importable():
 
 
 def test_no_runtime_imports_from_removed_adapter_or_export_packages():
+    repo_root = Path(__file__).resolve().parents[2]
+    root = repo_root / "matsimpy"
     removed_imports = (
         "matsimpy.adapters",
         "..adapters",
@@ -44,13 +46,16 @@ def test_no_runtime_imports_from_removed_adapter_or_export_packages():
         "..export",
         "...export",
     )
+    scanned = []
     offenders = []
-    for path in Path("matsimpy").glob("**/*.py"):
+    for path in root.rglob("*.py"):
         if "adapters" in path.parts or "export" in path.parts:
             continue
-        text = path.read_text(encoding="utf-8")
+        scanned.append(path)
+        text = path.read_text()
         for reference in removed_imports:
             if reference in text:
                 offenders.append(f"{path}: {reference}")
 
+    assert scanned
     assert offenders == []
