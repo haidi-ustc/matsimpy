@@ -55,7 +55,7 @@ Supporting core classes: `Lattice`, `Composition`, `Site`, `CrystalSite`, `Eleme
 
 ### Core Domain Rule
 
-`core` must not import from `builders`, `transformation`, `io`, `storage`, `analysis`, `adapters`, or `export`. It may import from `utils` and `constants`.
+`core` must not import from `builders`, `transformation`, `io`, `storage`, or `analysis`. It may import from `utils` and `constants`.
 
 ### Immutability Contract
 
@@ -153,16 +153,7 @@ Seven subdomains: `bulk/`, `surface/`, `alloy/`, `molecule/`, `defects/`, `inter
 
 **Format modules**: `vasp.py`, `cif.py`, `xyz.py`, `pdb.py`, `xsf.py`, `mol.py`, `json.py`, `ase.py`. Each registers its FormatHandler at import time.
 
-### Adapters (`matsimpy/adapters/`)
-
-External library converters. Lazy-import pymatgen/ase at call time; raises `ImportError` with install hint if missing:
-- `adapters/pymatgen.py` — `to_pymatgen()`, `from_pymatgen()`
-- `adapters/ase.py` — `to_ase()`, `from_ase()`
-
-### Export (`matsimpy/export/`)
-
-Presentation-layer exports (not file-format IO):
-- `export/latex.py` — `crystals_to_latex_table()`, `save_latex_table()`, etc.
+**Converters and export helpers**: `io/pymatgen.py`, `io/ase.py`, and `io/latex.py` expose third-party conversion and LaTeX table helpers through `matsimpy.io`. Lazy imports raise `ImportError` with install hints when optional dependencies are missing.
 
 ### Analysis (`matsimpy/analysis/`)
 
@@ -214,8 +205,7 @@ tests/
 ├── core/               # Domain model tests (focused regressions)
 ├── builders/           # Constructor + modification tests
 ├── transformation/     # Operation tests + registry/spec tests
-├── io/                 # Format round-trips, malformed-input tests
-├── adapters/           # pymatgen/ASE conversion tests
+├── io/                 # Format round-trips, converters, LaTeX, malformed-input tests
 ├── storage/            # Backend contract tests (parametrized)
 ├── analysis/           # Graph, bonding, topology tests
 ├── integration/        # Cross-layer workflow tests (builder → transform → io → storage)
@@ -231,9 +221,7 @@ core — imports nothing from matsimpy except constants.py
 transformation → core, exceptions, utils
 builders → core, transformation, exceptions
 analysis → core, exceptions
-io → core, exceptions
-adapters → core (lazy-import pymatgen/ase at use time)
-export → core
+io → core, exceptions (lazy-import optional pymatgen/ase at use time)
 storage → core (serialization), exceptions
 config → utils
 ```

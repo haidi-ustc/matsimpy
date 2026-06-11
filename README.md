@@ -27,10 +27,10 @@
 - **Builders** (7 domains, 27 functions): `from_prototype` (9 prototypes: fcc/bcc/hcp/diamond/rocksalt/perovskite/zincblende/sc/CsCl), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. Registered via `BuilderRegistry`
 - **Transformations** (5 categories, 26 functions): `translate`, `rotate`, `apply_strain`, `make_supercell`, `substitute`, `move_atoms`, `scale_lattice`, etc. Registered via `TransformationRegistry` with `TransformationSpec` metadata. `TransformationPlan` for reproducible pipelines
 - **Analysis** (6 modules): `BondAnalyzer` (bonds/angles/dihedrals/orders), `StructureAnalyzer` (COM/inertia/density), `TopologyAnalyzer` (connectivity/rings/paths), graph/neighbor functions, `AtomSelection` (9 selectors)
-- **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()` in 15 lines
+- **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()`, third-party conversion, and LaTeX table helpers
 - **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
-- **Adapters**: pymatgen ↔ ASE bidirectional. LaTeX table export via `export/`. Plugin entry points for all registries
-- **AI REPL**: Optional LLM function calling via DeepSeek models. Built-in MatSimPy skills expose core, builders, transformations, analysis, IO, storage, calculators, symmetry, adapters, and export tools. Use `matsimpy-ai -c "build fcc Cu"` for single-shot mode
+- **Extensibility**: Plugin entry points for registries, including IO formats
+- **AI REPL**: Optional LLM function calling via DeepSeek models. Built-in MatSimPy skills expose core, builders, transformations, analysis, IO, storage, calculators, and symmetry tools. Use `matsimpy-ai -c "build fcc Cu"` for single-shot mode
 - **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT file/workflow interfaces for VASP, Gaussian, and LAMMPS — optional
 
 ## Installation
@@ -166,7 +166,7 @@ coord = get_coordination_numbers(crystal, cutoff=5.0)
 ### LaTeX export
 
 ```python
-from matsimpy.export import crystals_to_latex_table, save_latex_table
+from matsimpy.io import crystals_to_latex_table, save_latex_table
 from matsimpy import Molecule, Crystal, Lattice
 
 # Export crystals to LaTeX table
@@ -559,7 +559,7 @@ matsimpy/
 │   ├── registry.py    # TransformationRegistry singleton
 │   └── _register.py   # Auto-registration of built-in transformations
 │
-├── io/                # File format support
+├── io/                # File IO, converters, and export helpers
 │   ├── core.py        # High-level read/write interface
 │   ├── registry.py    # FormatHandler + FormatRegistry (table-driven dispatch)
 │   ├── vasp.py        # VASP POSCAR/CONTCAR
@@ -568,15 +568,10 @@ matsimpy/
 │   ├── pdb.py         # PDB format
 │   ├── mol.py         # MOL format
 │   ├── xsf.py         # XSF format
-│   ├── ase.py         # ASE format
+│   ├── ase.py         # ASE format and converters
+│   ├── pymatgen.py    # pymatgen converters
+│   ├── latex.py       # LaTeX table export
 │   └── json.py        # JSON serialization
-│
-├── adapters/          # External library converters
-│   ├── pymatgen.py    # to_pymatgen, from_pymatgen
-│   └── ase.py         # to_ase, from_ase
-│
-├── export/            # Presentation / export
-│   └── latex.py       # LaTeX table export
 │
 ├── analysis/          # Analysis tools
 │   ├── graph.py       # StructureGraph, MoleculeGraph, CrystalGraph
