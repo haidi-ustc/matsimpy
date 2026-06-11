@@ -4,7 +4,7 @@ import unittest
 import tempfile
 
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.export.latex import (
+from matsimpy.io import (
     crystals_to_latex_table,
     molecules_to_latex_table,
     structures_to_latex_table,
@@ -311,4 +311,3 @@ class TestMhchemSupport(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

@@ -4,8 +4,8 @@ import numpy as np
 
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.adapters.pymatgen import to_pymatgen, from_pymatgen
-from matsimpy.adapters.ase import to_ase, from_ase
+from matsimpy.io import to_pymatgen, from_pymatgen
+from matsimpy.io import to_ase, from_ase
 from tests.conftest import has_ase, has_pymatgen
 
 class TestIOConverters(unittest.TestCase):
