@@ -1,6 +1,7 @@
 """Public API contract tests for matsimpy.io."""
 
-import importlib
+import importlib.util
+import sys
 
 
 def test_io_exports_unified_public_api():
@@ -27,8 +28,7 @@ def test_io_exports_unified_public_api():
 
 def test_removed_public_packages_are_not_importable():
     for module_name in ("matsimpy.adapters", "matsimpy.export"):
-        try:
-            importlib.import_module(module_name)
-        except ModuleNotFoundError:
-            continue
-        raise AssertionError(f"{module_name} should not be public/importable")
+        for cached in list(sys.modules):
+            if cached == module_name or cached.startswith(f"{module_name}."):
+                sys.modules.pop(cached)
+        assert importlib.util.find_spec(module_name) is None
