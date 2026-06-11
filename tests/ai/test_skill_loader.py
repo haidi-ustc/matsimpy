@@ -360,6 +360,8 @@ def test_io_skill_schemas_type_public_string_and_boolean_parameters():
     write_schema = io_functions["write_structure"].parameters
     assert write_schema["properties"]["path"]["type"] == "string"
     assert "path" in write_schema["required"]
+    assert write_schema["properties"]["format"]["type"] == "string"
+    assert "format" not in write_schema["required"]
 
     latex_schema = io_functions["structures_to_latex_table"].parameters
     assert latex_schema["properties"]["caption"]["type"] == "string"
@@ -372,6 +374,8 @@ def test_io_skill_schemas_type_public_string_and_boolean_parameters():
     assert "path" in save_schema["required"]
     assert save_schema["properties"]["caption"]["type"] == "string"
     assert save_schema["properties"]["label"]["type"] == "string"
+    assert save_schema["properties"]["separate_by_type"]["type"] == "boolean"
+    assert save_schema["properties"]["use_mhchem"]["type"] == "boolean"
 
 
 def test_io_skill_get_functions_does_not_import_runtime_io_dependencies():
