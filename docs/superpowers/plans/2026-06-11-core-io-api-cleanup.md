@@ -580,7 +580,7 @@ Run:
 python -m pytest tests/io/test_io_public_api.py tests/io/test_io_converters.py -q
 ```
 
-Expected: conversion tests pass except removed-package importability remains pending until Task 6.
+Expected: conversion tests pass. `test_removed_public_packages_are_not_importable` remains pending until Task 6. `test_no_runtime_imports_from_removed_adapter_or_export_packages` may still report `matsimpy/ai/skills/adapters.py` or `matsimpy/ai/skills/export.py` until Task 5 removes those old AI skill modules.
 
 - [ ] **Step 5: Commit**
 
