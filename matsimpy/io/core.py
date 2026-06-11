@@ -62,4 +62,8 @@ def write(
     registry.write(structure, filename, format=format, **kwargs)
 
 
-__all__ = ["read", "write"]
+read_file = read
+write_file = write
+
+
+__all__ = ["read", "write", "read_file", "write_file"]

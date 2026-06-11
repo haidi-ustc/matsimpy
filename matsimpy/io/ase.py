@@ -174,7 +174,65 @@ def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:
             f.write(f"{specie:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}\n")
 
 
-__all__ = ["read_ASE", "write_ASE"]
+def to_ase(structure):
+    """Convert a MatSimPy Crystal or Molecule to an ASE Atoms object."""
+    from ..core import Crystal, Molecule
+
+    if not isinstance(structure, (Crystal, Molecule)):
+        raise ValueError(f"Unsupported structure type: {type(structure)}")
+
+    try:
+        from ase import Atoms
+    except ImportError as exc:
+        raise ImportError(
+            "ASE is required for conversion. Install with: pip install 'MatSimPy[io]'"
+        ) from exc
+
+    symbols = list(structure.species)
+
+    if isinstance(structure, Crystal):
+        return Atoms(
+            symbols=symbols,
+            positions=structure.cart_positions.tolist(),
+            cell=structure.lattice.matrix,
+            pbc=structure.pbc,
+        )
+
+    return Atoms(symbols=symbols, positions=structure.positions.tolist())
+
+
+def from_ase(ase_atoms):
+    """Convert an ASE Atoms object to a MatSimPy Crystal or Molecule."""
+    from ..core import Crystal, Molecule, Lattice
+
+    try:
+        from ase import Atoms
+    except ImportError as exc:
+        raise ImportError(
+            "ASE is required for conversion. Install with: pip install 'MatSimPy[io]'"
+        ) from exc
+
+    if not isinstance(ase_atoms, Atoms):
+        raise ValueError(f"Expected ASE Atoms object, got {type(ase_atoms)}")
+
+    symbols = list(ase_atoms.get_chemical_symbols())
+    positions = ase_atoms.get_positions().tolist()
+    cell = ase_atoms.get_cell()
+    pbc = ase_atoms.get_pbc()
+
+    if cell is not None and cell.any() and any(pbc):
+        return Crystal(
+            symbols,
+            positions,
+            Lattice(cell.array),
+            coords_are_cartesian=True,
+            pbc=list(pbc),
+        )
+
+    return Molecule(symbols, positions)
+
+
+__all__ = ["read_ASE", "write_ASE", "to_ase", "from_ase"]
 
 # --- Registry registration ---
 from .registry import registry, FormatHandler

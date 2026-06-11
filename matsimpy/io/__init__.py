@@ -27,7 +27,7 @@ For the format registry (plugin extension point)::
 """
 
 # High-level interface (recommended)
-from .core import read, write
+from .core import read, write, read_file, write_file
 
 # Format-specific readers/writers (for advanced use)
 from .vasp import read_POSCAR, write_POSCAR, read_CONTCAR, write_CONTCAR
@@ -36,8 +36,15 @@ from .xyz import read_XYZ, write_XYZ, read_XYZ_multiframe
 from .pdb import read_PDB, write_PDB
 from .xsf import read_XSF, write_XSF
 from .json import to_json, from_json
-from .ase import read_ASE, write_ASE
+from .ase import read_ASE, write_ASE, to_ase, from_ase
 from .mol import read_MOL, write_MOL
+from .pymatgen import to_pymatgen, from_pymatgen
+from .latex import (
+    crystals_to_latex_table,
+    molecules_to_latex_table,
+    structures_to_latex_table,
+    save_latex_table,
+)
 
 # Registry (for plugins and introspection)
 from .registry import registry, FormatHandler, FormatRegistry
@@ -46,6 +53,8 @@ __all__ = [
     # High-level
     "read",
     "write",
+    "read_file",
+    "write_file",
     # VASP
     "read_POSCAR",
     "write_POSCAR",
@@ -70,9 +79,19 @@ __all__ = [
     # ASE
     "read_ASE",
     "write_ASE",
+    "to_ase",
+    "from_ase",
     # MOL
     "read_MOL",
     "write_MOL",
+    # pymatgen
+    "to_pymatgen",
+    "from_pymatgen",
+    # LaTeX
+    "crystals_to_latex_table",
+    "molecules_to_latex_table",
+    "structures_to_latex_table",
+    "save_latex_table",
     # Registry
     "registry",
     "FormatHandler",
