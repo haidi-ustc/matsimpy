@@ -52,7 +52,7 @@ def test_no_runtime_imports_from_removed_adapter_or_export_packages():
         if "adapters" in path.parts or "export" in path.parts:
             continue
         scanned.append(path)
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         for reference in removed_imports:
             if reference in text:
                 offenders.append(f"{path}: {reference}")
