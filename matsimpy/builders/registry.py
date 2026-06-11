@@ -7,6 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from ..utils.schema_validation import validate_kwargs
+
 
 @dataclass(frozen=True)
 class BuilderSpec:
@@ -53,6 +55,7 @@ class BuilderRegistry:
     def build(self, name: str, **kwargs):
         """Validate and call the builder, return a structure."""
         spec = self.get(name)
+        validate_kwargs(spec.parameter_schema, kwargs)
         return spec.callable(**kwargs)
 
     def list_all(self) -> list[BuilderSpec]:

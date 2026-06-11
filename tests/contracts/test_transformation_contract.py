@@ -6,7 +6,8 @@ Tests: new-object return, type constraints enforced.
 
 import pytest
 from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.transformation.registry import registry
+from matsimpy.transformation.registry import TransformationRegistry, registry
+from matsimpy.transformation.spec import TransformationSpec
 
 
 @pytest.fixture
@@ -106,3 +107,55 @@ class TestTransformationContract:
             assert result is not None
         except (ValueError, TypeError, IndexError):
             pytest.skip("Requires more specific kwargs")
+
+
+def test_transformation_registry_validates_required_parameters_before_calling(nacl):
+    called = False
+
+    def transform_dummy(structure, **kwargs):
+        nonlocal called
+        called = True
+        return structure
+
+    local_registry = TransformationRegistry()
+    local_registry.register(TransformationSpec(
+        name="dummy",
+        category="test",
+        callable=transform_dummy,
+        applicable_types=(Crystal,),
+        parameter_schema={
+            "type": "object",
+            "properties": {"vector": {"type": "array"}},
+            "required": ["vector"],
+        },
+    ))
+
+    with pytest.raises(ValueError, match="Missing required parameter: vector"):
+        local_registry.apply("dummy", nacl)
+    assert called is False
+
+
+def test_transformation_registry_validates_parameter_types_before_calling(nacl):
+    called = False
+
+    def transform_dummy(structure, **kwargs):
+        nonlocal called
+        called = True
+        return structure
+
+    local_registry = TransformationRegistry()
+    local_registry.register(TransformationSpec(
+        name="dummy",
+        category="test",
+        callable=transform_dummy,
+        applicable_types=(Crystal,),
+        parameter_schema={
+            "type": "object",
+            "properties": {"scale": {"type": "number"}},
+            "required": ["scale"],
+        },
+    ))
+
+    with pytest.raises(TypeError, match="Parameter 'scale' must be a number"):
+        local_registry.apply("dummy", nacl, scale="large")
+    assert called is False

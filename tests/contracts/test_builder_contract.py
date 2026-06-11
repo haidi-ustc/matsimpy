@@ -6,7 +6,7 @@ Tests: output_type correctness.
 
 import pytest
 from matsimpy.core import Crystal, Molecule
-from matsimpy.builders.registry import registry
+from matsimpy.builders.registry import BuilderRegistry, BuilderSpec, registry
 
 
 all_specs = registry.list_all()
@@ -93,3 +93,53 @@ class TestBuilderContract:
             assert result is not None
         except (ValueError, TypeError, IndexError):
             pytest.skip("Requires more specific kwargs")
+
+
+def test_builder_registry_validates_required_parameters_before_calling():
+    called = False
+
+    def build_dummy(**kwargs):
+        nonlocal called
+        called = True
+        return kwargs
+
+    local_registry = BuilderRegistry()
+    local_registry.register(BuilderSpec(
+        name="dummy",
+        category="test",
+        callable=build_dummy,
+        parameter_schema={
+            "type": "object",
+            "properties": {"element": {"type": "string"}},
+            "required": ["element"],
+        },
+    ))
+
+    with pytest.raises(ValueError, match="Missing required parameter: element"):
+        local_registry.build("dummy")
+    assert called is False
+
+
+def test_builder_registry_validates_parameter_types_before_calling():
+    called = False
+
+    def build_dummy(**kwargs):
+        nonlocal called
+        called = True
+        return kwargs
+
+    local_registry = BuilderRegistry()
+    local_registry.register(BuilderSpec(
+        name="dummy",
+        category="test",
+        callable=build_dummy,
+        parameter_schema={
+            "type": "object",
+            "properties": {"count": {"type": "integer"}},
+            "required": ["count"],
+        },
+    ))
+
+    with pytest.raises(TypeError, match="Parameter 'count' must be an integer"):
+        local_registry.build("dummy", count="two")
+    assert called is False

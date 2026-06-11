@@ -8,6 +8,7 @@ validation, and plan execution.
 from __future__ import annotations
 
 from ..exceptions import RegistryError
+from ..utils.schema_validation import validate_kwargs
 from .spec import TransformationSpec
 
 
@@ -110,6 +111,7 @@ class TransformationRegistry:
                 f"got {type(structure).__name__}"
             )
 
+        validate_kwargs(spec.parameter_schema, kwargs)
         return spec.callable(structure, **kwargs)
 
     # ------------------------------------------------------------------
