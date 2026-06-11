@@ -37,19 +37,32 @@ class SymmOp:
         Args:
             affine_matrix: 4x4 numpy array representing the affine transformation.
         """
-        self.affine_matrix = np.array(affine_matrix, dtype=np.float64)
-        if self.affine_matrix.shape != (4, 4):
-            raise ValueError(f"Affine matrix must be 4x4, got {self.affine_matrix.shape}")
+        matrix = np.array(affine_matrix, dtype=np.float64, copy=True)
+        if matrix.shape != (4, 4):
+            raise ValueError(f"Affine matrix must be 4x4, got {matrix.shape}")
+        matrix.flags.writeable = False
+        self._affine_matrix = matrix
+
+    @property
+    def affine_matrix(self) -> NDArray[np.float64]:
+        """The read-only 4x4 affine transformation matrix."""
+        view = self._affine_matrix.view()
+        view.flags.writeable = False
+        return view
 
     @property
     def rotation_matrix(self) -> NDArray[np.float64]:
         """The 3x3 rotation matrix."""
-        return self.affine_matrix[:3, :3]
+        rotation = self._affine_matrix[:3, :3].copy()
+        rotation.flags.writeable = False
+        return rotation
 
     @property
     def translation_vector(self) -> NDArray[np.float64]:
         """The 3D translation vector."""
-        return self.affine_matrix[:3, 3]
+        translation = self._affine_matrix[:3, 3].copy()
+        translation.flags.writeable = False
+        return translation
 
     def operate(self, point: NDArray[np.float64]) -> NDArray[np.float64]:
         """Apply the symmetry operation to a point.
@@ -61,15 +74,15 @@ class SymmOp:
             Transformed 3D coordinate.
         """
         affine_point = np.append(np.array(point, dtype=np.float64), 1.0)
-        return np.dot(self.affine_matrix, affine_point)[:3]
+        return np.dot(self._affine_matrix, affine_point)[:3]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SymmOp):
             return NotImplemented
-        return np.allclose(self.affine_matrix, other.affine_matrix)
+        return np.allclose(self._affine_matrix, other.affine_matrix)
 
     def __repr__(self) -> str:
-        return f"SymmOp(\n{self.affine_matrix}\n)"
+        return f"SymmOp(\n{self._affine_matrix}\n)"
 
     @staticmethod
     def from_origin_axis_angle(
@@ -142,7 +155,7 @@ class SymmOp:
         return {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
-            "matrix": self.affine_matrix.tolist(),
+            "matrix": self._affine_matrix.tolist(),
         }
 
     @classmethod

@@ -283,12 +283,12 @@ class Molecule(Structure):
     # ======================================================================
 
     @property
-    def sites(self) -> List[Site]:
+    def sites(self) -> Tuple[Site, ...]:
         """
         Get the list of Site objects for all atoms.
 
         Returns:
-            List[Site]: List of Site objects, one for each atom in the molecule.
+            Tuple[Site, ...]: Fresh Site snapshots, one for each atom in the molecule.
 
         Example:
             >>> molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
@@ -297,9 +297,7 @@ class Molecule(Structure):
             >>> len(molecule.sites)
             3
         """
-        if self._sites is None:
-            self._sites = self._initialize_sites()
-        return self._sites
+        return tuple(self._initialize_sites())
 
     def __getitem__(self, item: Union[int, slice]) -> Union[Site, List[Site]]:
         """
@@ -348,7 +346,7 @@ class Molecule(Structure):
                 raise ValueError("Cannot compute center of mass for molecule with only zero-mass species")
             center_of_mass = np.average(self.positions, weights=masses, axis=0)
             self._cached_com = center_of_mass.tolist()
-        return self._cached_com
+        return list(self._cached_com)
 
     def translate(self, vector: List[float]) -> "Molecule":
         """

@@ -865,12 +865,12 @@ class Crystal(Structure):
             ]
 
     @property
-    def sites(self) -> List[CrystalSite]:
+    def sites(self) -> Tuple[CrystalSite, ...]:
         """
         Get the list of CrystalSite objects for all atoms.
 
         Returns:
-            List[CrystalSite]: List of CrystalSite objects, one for each atom in the crystal.
+            Tuple[CrystalSite, ...]: Fresh CrystalSite snapshots, one for each atom in the crystal.
 
         Example:
             >>> crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
@@ -879,9 +879,7 @@ class Crystal(Structure):
             >>> len(crystal.sites)
             2
         """
-        if self._sites is None:
-            self._sites = self._initialize_sites()
-        return self._sites
+        return tuple(self._initialize_sites())
 
     def as_dict(self) -> Dict[str, Any]:
         """

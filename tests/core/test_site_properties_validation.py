@@ -72,3 +72,43 @@ def test_added_site_properties_are_copied():
 
     assert result.site_properties[1]["tag"] == "added"
     assert result.site_properties[1]["nested"]["value"] == 1
+
+
+def test_molecule_sites_returns_safe_snapshots():
+    molecule = Molecule(
+        ["C", "O"],
+        [[0, 0, 0], [1.2, 0, 0]],
+        site_properties=[{"tag": "carbon"}, {"tag": "oxygen"}],
+    )
+
+    assert molecule.formula == "CO"
+    leaked = molecule.sites
+    leaked[0].specie = "N"
+    leaked[0].position = [9, 9, 9]
+    leaked[0].properties = {"tag": "changed"}
+
+    assert molecule.species == ("C", "O")
+    assert molecule.formula == "CO"
+    assert molecule.sites[0].specie == "C"
+    assert molecule.sites[0].position.tolist() == [0, 0, 0]
+    assert molecule.sites[0].properties["tag"] == "carbon"
+
+
+def test_crystal_sites_returns_safe_snapshots():
+    crystal = Crystal(
+        ["Si", "O"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        Lattice.cubic(10),
+        site_properties=[{"tag": "silicon"}, {"tag": "oxygen"}],
+    )
+
+    original_formula = crystal.formula
+    leaked = crystal.sites
+    leaked[0].specie = "C"
+    leaked[0].properties = {"tag": "changed"}
+
+    assert crystal.species == ("Si", "O")
+    assert crystal.formula == original_formula
+    assert crystal.sites[0].specie == "Si"
+    assert crystal.sites[0].frac_position.tolist() == [0, 0, 0]
+    assert crystal.sites[0].properties["tag"] == "silicon"

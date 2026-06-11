@@ -169,6 +169,18 @@ class TestMoleculeEdgeCases(unittest.TestCase):
         substituted_com = result.get_center_of_mass()
         self.assertNotEqual(original_com, substituted_com)
 
+    def test_molecule_center_of_mass_returns_copy_of_cache(self):
+        """Mutating a returned COM list should not poison the cached value."""
+        molecule = Molecule(['H', 'O'], [[0, 0, 0], [1, 0, 0]])
+        original_com = molecule.get_center_of_mass()
+        expected_com = list(original_com)
+
+        original_com[0] = 99
+
+        fresh_com = molecule.get_center_of_mass()
+        self.assertNotEqual(fresh_com[0], 99)
+        np.testing.assert_array_almost_equal(fresh_com, expected_com)
+
     def test_molecule_add_atom_rolls_back_on_site_property_error(self):
         """A failed add_atom should not partially mutate the molecule."""
         molecule = Molecule(['C'], [[0, 0, 0]])
