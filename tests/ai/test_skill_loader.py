@@ -300,7 +300,9 @@ def test_discover_builtin_skills_includes_ai_coverage_expansion():
     skills = discover_builtin_skills()
     names = {s["name"] for s in skills}
 
-    assert names >= {"calculator", "symmetry", "adapters", "export"}
+    assert names >= {"calculator", "symmetry", "io"}
+    assert "adapters" not in names
+    assert "export" not in names
 
 
 def test_new_ai_coverage_skills_have_expected_keywords_and_functions():
@@ -308,24 +310,32 @@ def test_new_ai_coverage_skills_have_expected_keywords_and_functions():
 
     assert {"energy", "force", "calculator", "lj"} <= set(skills["calculator"]["keywords"])
     assert {"symmetry", "space group", "conventional"} <= set(skills["symmetry"]["keywords"])
-    assert {"ase", "pymatgen", "adapter", "convert"} <= set(skills["adapters"]["keywords"])
-    assert {"latex", "export", "table"} <= set(skills["export"]["keywords"])
+    assert {"ase", "pymatgen", "convert", "latex", "read", "write"} <= set(
+        skills["io"]["keywords"]
+    )
 
     calc_functions = {fn.name for fn in skills["calculator"]["functions"]}
     symmetry_functions = {fn.name for fn in skills["symmetry"]["functions"]}
-    adapter_functions = {fn.name for fn in skills["adapters"]["functions"]}
-    export_functions = {fn.name for fn in skills["export"]["functions"]}
+    io_functions = {fn.name for fn in skills["io"]["functions"]}
 
     assert {"list_calculators", "calculate_lennard_jones", "write_calculator_input"} <= calc_functions
     assert {"analyze_symmetry", "get_conventional_cell"} <= symmetry_functions
-    assert {"to_ase", "from_ase", "to_pymatgen", "from_pymatgen"} <= adapter_functions
-    assert {"structures_to_latex_table", "save_latex_table"} <= export_functions
+    assert {
+        "read_structure",
+        "write_structure",
+        "to_ase",
+        "from_ase",
+        "to_pymatgen",
+        "from_pymatgen",
+        "structures_to_latex_table",
+        "save_latex_table",
+    } <= io_functions
 
 
 def test_new_ai_coverage_skills_use_compact_structure_reference_schemas():
     skills = {s["name"]: s for s in discover_builtin_skills()}
 
-    for skill_name in ("calculator", "symmetry", "adapters", "export"):
+    for skill_name in ("calculator", "symmetry", "io"):
         for fn in skills[skill_name]["functions"]:
             params = fn.parameters
             assert params["type"] == "object"
