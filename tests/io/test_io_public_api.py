@@ -46,7 +46,7 @@ def test_no_runtime_imports_from_removed_adapter_or_export_packages():
     )
     offenders = []
     for path in Path("matsimpy").glob("**/*.py"):
-        if any("adapters" in part or "export" in part for part in path.parts):
+        if "adapters" in path.parts or "export" in path.parts:
             continue
         text = path.read_text(encoding="utf-8")
         for reference in removed_imports:
