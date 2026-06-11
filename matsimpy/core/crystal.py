@@ -864,6 +864,19 @@ class Crystal(Structure):
                 for pos, spec in zip(self.frac_positions, self.species)
             ]
 
+    def _site_snapshot(self, index: int) -> CrystalSite:
+        """Return a detached CrystalSite snapshot for one atom."""
+        if self._sites is None:
+            self._sites = self._initialize_sites()
+        site = self._sites[index]
+        return CrystalSite(
+            position=site.frac_position,
+            specie=site.specie,
+            lattice=self.lattice,
+            properties=site.properties,
+            coords_are_cartesian=False,
+        )
+
     @property
     def sites(self) -> Tuple[CrystalSite, ...]:
         """
@@ -879,7 +892,9 @@ class Crystal(Structure):
             >>> len(crystal.sites)
             2
         """
-        return tuple(self._initialize_sites())
+        if self._sites is None:
+            self._sites = self._initialize_sites()
+        return tuple(self._site_snapshot(i) for i in range(len(self._sites)))
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -1203,7 +1218,9 @@ class Crystal(Structure):
         )
 
     def __getitem__(self, item):
-        return self.sites[item]
+        if isinstance(item, slice):
+            return self.sites[item]
+        return self._site_snapshot(item)
 
     def _convert_to_cartesian(self) -> np.ndarray:
         """

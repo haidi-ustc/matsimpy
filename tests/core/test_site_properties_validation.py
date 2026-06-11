@@ -94,6 +94,21 @@ def test_molecule_sites_returns_safe_snapshots():
     assert molecule.sites[0].properties["tag"] == "carbon"
 
 
+def test_molecule_index_returns_single_safe_snapshot(monkeypatch):
+    molecule = Molecule(["C", "O"], [[0, 0, 0], [1.2, 0, 0]])
+
+    def fail_full_sites_rebuild():
+        raise AssertionError("indexed access should not rebuild every site")
+
+    monkeypatch.setattr(molecule, "_initialize_sites", fail_full_sites_rebuild)
+    site = molecule[0]
+    site.specie = "N"
+
+    assert site.specie == "N"
+    assert molecule[0].specie == "C"
+    assert molecule.species == ("C", "O")
+
+
 def test_crystal_sites_returns_safe_snapshots():
     crystal = Crystal(
         ["Si", "O"],
@@ -112,3 +127,22 @@ def test_crystal_sites_returns_safe_snapshots():
     assert crystal.sites[0].specie == "Si"
     assert crystal.sites[0].frac_position.tolist() == [0, 0, 0]
     assert crystal.sites[0].properties["tag"] == "silicon"
+
+
+def test_crystal_index_returns_single_safe_snapshot(monkeypatch):
+    crystal = Crystal(
+        ["Si", "O"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        Lattice.cubic(10),
+    )
+
+    def fail_full_sites_rebuild():
+        raise AssertionError("indexed access should not rebuild every site")
+
+    monkeypatch.setattr(crystal, "_initialize_sites", fail_full_sites_rebuild)
+    site = crystal[0]
+    site.specie = "C"
+
+    assert site.specie == "C"
+    assert crystal[0].specie == "Si"
+    assert crystal.species == ("Si", "O")

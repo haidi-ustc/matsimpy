@@ -282,6 +282,17 @@ class Molecule(Structure):
     # Sites / indexing
     # ======================================================================
 
+    def _site_snapshot(self, index: int) -> Site:
+        """Return a detached Site snapshot for one atom."""
+        if self._sites is None:
+            self._sites = self._initialize_sites()
+        site = self._sites[index]
+        return Site(
+            position=site.position,
+            specie=site.specie,
+            properties=site.properties,
+        )
+
     @property
     def sites(self) -> Tuple[Site, ...]:
         """
@@ -297,7 +308,9 @@ class Molecule(Structure):
             >>> len(molecule.sites)
             3
         """
-        return tuple(self._initialize_sites())
+        if self._sites is None:
+            self._sites = self._initialize_sites()
+        return tuple(self._site_snapshot(i) for i in range(len(self._sites)))
 
     def __getitem__(self, item: Union[int, slice]) -> Union[Site, List[Site]]:
         """
@@ -317,7 +330,9 @@ class Molecule(Structure):
             >>> molecule[0:2]  # First two Sites
             [<Site object>, <Site object>]
         """
-        return self.sites[item]
+        if isinstance(item, slice):
+            return self.sites[item]
+        return self._site_snapshot(item)
 
     # ======================================================================
     # Geometry & transformations (immutable)

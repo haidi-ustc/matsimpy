@@ -46,14 +46,20 @@ class TestMoleculeComprehensive(unittest.TestCase):
         self.assertIsInstance(com[0], float)
     
     def test_molecule_center_of_mass_caching(self):
-        """Test center of mass caching."""
+        """Test center of mass cache returns isolated values."""
         species = ['C', 'O']
         positions = [[0, 0, 0], [1.4, 0, 0]]
         molecule = Molecule(species, positions)
         
         com1 = molecule.get_center_of_mass()
         com2 = molecule.get_center_of_mass()
-        self.assertIs(com1, com2)  # Should be cached
+        self.assertEqual(com1, com2)
+        self.assertIsNot(com1, com2)
+
+        com1[0] = 99
+        com3 = molecule.get_center_of_mass()
+        self.assertEqual(com2, com3)
+        self.assertNotEqual(com3[0], 99)
     
     def test_molecule_center_of_mass_recalculation(self):
         """Test center of mass recalculates for new molecule after translate."""
@@ -270,4 +276,3 @@ class TestMoleculeComprehensive(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
