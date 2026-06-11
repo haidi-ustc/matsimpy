@@ -228,6 +228,19 @@ class Structure(ABC, MSONable):
         self._composition: Optional[Composition] = None
         self._formula: Optional[str] = None
 
+    @classmethod
+    def from_file(cls, filename: str, format: Optional[str] = None, **kwargs):
+        """Read a structure from a file using the public IO registry."""
+        from matsimpy.io import read_file
+
+        return read_file(filename, format=format, **kwargs)
+
+    def to_file(self, filename: str, format: Optional[str] = None, **kwargs) -> None:
+        """Write this structure to a file using the public IO registry."""
+        from matsimpy.io import write_file
+
+        write_file(self, filename, format=format, **kwargs)
+
     @property
     def species(self) -> Tuple[str, ...]:
         """Get the species as a tuple of strings."""

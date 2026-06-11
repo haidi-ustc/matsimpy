@@ -201,6 +201,22 @@ class Molecule(Structure):
         self._sites = self._initialize_sites()
         self._cached_com: Optional[List[float]] = None
 
+    @classmethod
+    def from_file(
+        cls, filename: str, format: Optional[str] = None, **kwargs
+    ) -> "Molecule":
+        """Read a molecule from a file, rejecting crystal-only results."""
+        from matsimpy.exceptions import StructureTypeError
+        from matsimpy.io import read_file
+
+        structure = read_file(filename, format=format, **kwargs)
+        if not isinstance(structure, cls):
+            raise StructureTypeError(
+                f"Expected {cls.__name__} from {filename!r}, got "
+                f"{type(structure).__name__}."
+            )
+        return structure
+
     @property
     def site_properties(self) -> Tuple[Dict[str, Any], ...]:
         """Per-site metadata as deep-copied dictionaries."""

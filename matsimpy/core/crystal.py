@@ -292,6 +292,22 @@ class Crystal(Structure):
         # partially-initialised state under concurrent reads.
         self._neighbor_cache: Optional[_NeighborCache] = None
 
+    @classmethod
+    def from_file(
+        cls, filename: str, format: Optional[str] = None, **kwargs
+    ) -> "Crystal":
+        """Read a crystal from a file, rejecting molecule-only results."""
+        from matsimpy.exceptions import StructureTypeError
+        from matsimpy.io import read_file
+
+        structure = read_file(filename, format=format, **kwargs)
+        if not isinstance(structure, cls):
+            raise StructureTypeError(
+                f"Expected {cls.__name__} from {filename!r}, got "
+                f"{type(structure).__name__}."
+            )
+        return structure
+
     @property
     def site_properties(self) -> Tuple[Dict[str, Any], ...]:
         """Per-site metadata as deep-copied dictionaries."""
