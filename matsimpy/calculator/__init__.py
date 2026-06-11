@@ -12,18 +12,24 @@ Provides calculators for computing energies, forces, and other properties.
 from .base import Calculator
 from .lj import LennardJones
 
-# Lazy import for MatterSim (torch optional)
-try:
-    from .mattersim import Mattersim
-    _has_mattersim = True
-except ImportError:
-    Mattersim = None
-    _has_mattersim = False
+_LAZY_EXPORTS = {
+    "Mattersim": (".mattersim", "Mattersim"),
+    "VaspCalculator": (".vasp", "VaspCalculator"),
+    "GaussianCalculator": (".gaussian", "GaussianCalculator"),
+    "LammpsCalculator": (".lammps", "LammpsCalculator"),
+}
 
-# VASP, Gaussian, LAMMPS — always available (IO-only, no external binary required)
-from .vasp import VaspCalculator
-from .gaussian import GaussianCalculator
-from .lammps import LammpsCalculator
+
+def __getattr__(name):
+    if name not in _LAZY_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = _LAZY_EXPORTS[name]
+    from importlib import import_module
+
+    module = import_module(module_name, __name__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
 
 __all__ = [
     "Calculator",

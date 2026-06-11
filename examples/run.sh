@@ -2,7 +2,7 @@
 # Run all MatSimPy examples.
 set -e
 cd "$(dirname "$0")"
-PYTHON=/opt/miniconda3/envs/pmg/bin/python
+PYTHON=${PYTHON:-python}
 FAILED=""
 for f in *.py; do
   echo "=== $f ==="

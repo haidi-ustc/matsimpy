@@ -31,7 +31,7 @@ class Mattersim(Calculator):
 
     Example:
         >>> from matsimpy.builders.bulk import from_prototype
-        >>> from matsimpy.calculator.ml import Mattersim
+        >>> from matsimpy.calculator.mattersim import Mattersim
         >>>
         >>> # Use proper diamond structure (2 atoms in primitive cell)
         >>> si_crystal = from_prototype('diamond', 'Si', 5.43)

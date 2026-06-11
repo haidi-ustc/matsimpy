@@ -494,7 +494,7 @@ def build_dataloader(
 
     Examples:
         >>> from matsimpy.builders import bulk
-        >>> from matsimpy.calculator.ml.dataloader import build_dataloader
+        >>> from matsimpy.calculator.mattersim.dataloader import build_dataloader
         >>>
         >>> # Inference mode (no labels)
         >>> crystal = bulk('Si', 'diamond', a=5.43)

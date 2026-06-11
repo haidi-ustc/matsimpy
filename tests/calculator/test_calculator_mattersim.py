@@ -21,6 +21,13 @@ class TestMattersimBasic(unittest.TestCase):
         except ImportError:
             self.skipTest("mattersim subpackage not importable")
 
+    def test_legacy_ml_import_path_aliases_mattersim(self):
+        """The old matsimpy.calculator.ml path remains a compatibility alias."""
+        from matsimpy.calculator.mattersim import Mattersim as canonical
+        from matsimpy.calculator.ml import Mattersim as legacy
+
+        self.assertIs(legacy, canonical)
+
     def test_default_init_no_model(self):
         """Mattersim with no model_path should initialize (lazy load)."""
         try:

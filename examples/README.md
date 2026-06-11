@@ -25,7 +25,6 @@ This directory contains comprehensive examples demonstrating how to use differen
 
 ### IO Module
 - **`io_basic.py`** - Reading and writing structure files (VASP, XYZ, JSON)
-- **`io_advanced.py`** - Advanced file format operations
 
 ### Calculator Module
 - **`calculator_basic.py`** - Using calculators (LJ, ML) for energy and force calculations
@@ -41,7 +40,6 @@ This directory contains comprehensive examples demonstrating how to use differen
 
 ### Integration Examples
 - **`workflow_basic.py`** - Complete workflow from structure creation to analysis
-- **`workflow_advanced.py`** - Advanced workflows with multiple transformations
 
 ## Running Examples
 
@@ -62,6 +60,7 @@ exec(open('examples/core_basic.py').read())
 All examples assume MatSimPy is installed. Some examples may require additional dependencies:
 - RDKit (for SMILES parsing in molecule builders)
 - PyXtal (for random crystal generation)
+- MatterSim (for ML calculator examples)
 - maggma (for `storage_basic.py` - install with `pip install MatSimPy[storage]`)
 
 ## Example Output
@@ -83,4 +82,3 @@ for f in examples/*.py; do
     python "$f"
 done
 ```
-

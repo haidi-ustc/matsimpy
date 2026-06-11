@@ -7,7 +7,7 @@ Demonstrates usage of calculators for computing energies and forces.
 import numpy as np
 from matsimpy import Crystal, Molecule, Lattice
 from matsimpy.calculator import LennardJones
-from matsimpy.calculator.ml import Mattersim
+from matsimpy.calculator.mattersim import Mattersim
 
 print("=" * 70)
 print("MatSimPy Calculator Module - Basic Examples")
@@ -135,4 +135,3 @@ for crystal in crystals:
 print("\n" + "=" * 70)
 print("Calculator examples completed!")
 print("=" * 70)
-

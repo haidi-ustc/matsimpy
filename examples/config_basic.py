@@ -6,7 +6,7 @@ Demonstrates usage of the global configuration system.
 
 from matsimpy.config import get_config, ConfigManager
 from matsimpy import Crystal, Lattice
-from matsimpy.calculator.ml import Mattersim
+from matsimpy.calculator.mattersim import Mattersim
 
 print("=" * 70)
 print("MatSimPy Configuration System - Basic Examples")
@@ -139,4 +139,3 @@ for section, keys in sections.items():
 print("\n" + "=" * 70)
 print("Configuration examples completed!")
 print("=" * 70)
-
