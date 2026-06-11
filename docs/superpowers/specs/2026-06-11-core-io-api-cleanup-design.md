@@ -36,6 +36,10 @@ Core bug risks to fix in the same change:
 - `SymmOp` exposes writable matrix views through `rotation_matrix` and `translation_vector`.
 - `Molecule.get_center_of_mass` returns its cached list directly.
 - Calculator offline `read_results()` does not clearly bind parsed results to a structure hash.
+- `Element.get_element()` can raise unstable errors for non-string direct inputs.
+- `Composition` only parses integer formula counts; decimal composition support or rejection should be explicit.
+- `Lattice.from_parameters()` relies on downstream finite/volume validation for extreme angle combinations.
+- Serialization needs regression coverage to keep `Crystal.as_dict()` using fractional coordinates rather than the base Cartesian `positions` view.
 
 ## Public API Design
 
@@ -234,6 +238,26 @@ The recommended behavior is:
 - `read_results()` preserves that hash after parsing.
 - `Structure.get_*` recomputes only when the attached structure hash differs.
 
+### Element input validation
+
+`Element.get_element()` should validate direct API inputs before calling string methods. Non-string inputs such as `1` or `None` should raise a clear `TypeError` or project-standard validation error, not an incidental `AttributeError`.
+
+This should not change normal species normalization behavior. The goal is to make the direct public `Element.get_element()` contract stable.
+
+### Composition formula count policy
+
+`Composition` currently parses integer formula counts. Decimal formulas such as `Fe0.5Ni0.5` should either be explicitly rejected with a clear error or deliberately supported through a separate design.
+
+For this implementation plan, prefer explicit rejection and tests unless broader fractional composition support is separately approved. Supporting decimals would affect formula normalization, mass/fraction math, serialization expectations, and possibly dummy species behavior.
+
+### Lattice parameter edge cases
+
+`Lattice.from_parameters()` should have tests around near-degenerate angles and angle combinations that can push the computed third vector component toward non-finite values. The implementation may continue to reject these through existing finite/volume checks, but the error behavior should be stable and intentional.
+
+### Serialization coordinate semantics
+
+`Crystal.as_dict()` must continue serializing fractional coordinates, while `Structure.positions` for crystals remains the Cartesian view. Regression tests should lock subclass serializer dispatch so future base-class changes do not accidentally serialize Cartesian coordinates and deserialize them as fractional coordinates.
+
 ## Testing Plan
 
 Add or update tests for:
@@ -250,6 +274,10 @@ Add or update tests for:
 - `SymmOp.rotation_matrix` and `translation_vector` cannot mutate internal state.
 - `Molecule.get_center_of_mass()` returns data that callers cannot use to mutate the cache.
 - Calculator offline `read_results()` cache behavior is stable.
+- `Element.get_element(1)` and `Element.get_element(None)` raise clear validation errors.
+- Decimal formulas such as `Composition("Fe0.5Ni0.5")` have an explicit tested policy.
+- `Lattice.from_parameters()` rejects near-degenerate or non-finite angle combinations predictably.
+- Crystal serialization round-trips through `Crystal.as_dict()` using fractional coordinates, not the Cartesian `positions` view.
 
 ## Implementation Sequence
 
@@ -261,7 +289,7 @@ Add or update tests for:
 6. Replace AI `adapters` and `export` skills with one `io` skill.
 7. Update internal imports and tests.
 8. Remove old public packages.
-9. Fix core mutability, index validation, SymmOp, center-of-mass, and calculator cache behavior.
+9. Fix core mutability, index validation, SymmOp, center-of-mass, calculator cache behavior, Element validation, Composition formula policy, and lattice/serialization edge cases.
 10. Run targeted tests, then the full suite.
 
 ## Non-Goals
