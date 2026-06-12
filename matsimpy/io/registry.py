@@ -82,7 +82,8 @@ class FormatRegistry:
         """
         # Primary name
         if handler.name in self._by_name:
-            if self._by_name[handler.name] is not handler:
+            existing = self._by_name[handler.name]
+            if existing is not handler and existing.name != handler.name:
                 raise ValueError(
                     f"Format handler name {handler.name!r} is already registered"
                 )
@@ -93,7 +94,7 @@ class FormatRegistry:
             ext_lower = ext.lower()
             if ext_lower in self._by_extension:
                 existing = self._by_extension[ext_lower]
-                if existing is not handler:
+                if existing is not handler and existing.name != handler.name:
                     raise ValueError(
                         f"Extension {ext_lower!r} already registered by "
                         f"{existing.name!r}"
@@ -105,7 +106,7 @@ class FormatRegistry:
             alias_lower = alias.lower()
             if alias_lower in self._by_alias:
                 existing = self._by_alias[alias_lower]
-                if existing is not handler:
+                if existing is not handler and existing.name != handler.name:
                     raise ValueError(
                         f"Alias {alias_lower!r} already registered by "
                         f"{existing.name!r}"

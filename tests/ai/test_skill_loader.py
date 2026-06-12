@@ -381,6 +381,11 @@ def test_io_skill_schemas_type_public_string_and_boolean_parameters():
 def test_io_skill_get_functions_does_not_import_runtime_io_dependencies():
     from matsimpy.ai.skills import io as io_skill
 
+    def pop_module_tree(module_name):
+        for cached in list(sys.modules):
+            if cached == module_name or cached.startswith(f"{module_name}."):
+                sys.modules.pop(cached, None)
+
     for module_name in (
         "matsimpy.io",
         "matsimpy.io.ase",
@@ -388,12 +393,18 @@ def test_io_skill_get_functions_does_not_import_runtime_io_dependencies():
         "ase",
         "pymatgen",
     ):
-        sys.modules.pop(module_name, None)
+        pop_module_tree(module_name)
 
     io_skill.get_functions()
 
-    assert "matsimpy.io" not in sys.modules
-    assert "matsimpy.io.ase" not in sys.modules
-    assert "matsimpy.io.pymatgen" not in sys.modules
-    assert "ase" not in sys.modules
-    assert "pymatgen" not in sys.modules
+    for module_name in (
+        "matsimpy.io",
+        "matsimpy.io.ase",
+        "matsimpy.io.pymatgen",
+        "ase",
+        "pymatgen",
+    ):
+        assert not any(
+            cached == module_name or cached.startswith(f"{module_name}.")
+            for cached in sys.modules
+        )

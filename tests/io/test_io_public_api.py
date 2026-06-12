@@ -1,6 +1,7 @@
 """Public API contract tests for matsimpy.io."""
 
 import importlib.util
+import importlib
 from pathlib import Path
 import sys
 
@@ -59,3 +60,15 @@ def test_no_runtime_imports_from_removed_adapter_or_export_packages():
 
     assert scanned
     assert offenders == []
+
+
+def test_io_reimport_after_module_cache_clear_is_idempotent():
+    import matsimpy.io
+
+    for cached in list(sys.modules):
+        if cached == "matsimpy.io" or cached.startswith("matsimpy.io."):
+            if cached != "matsimpy.io.registry":
+                sys.modules.pop(cached)
+
+    reimported = importlib.import_module("matsimpy.io")
+    assert "to_ase" in reimported.__all__
