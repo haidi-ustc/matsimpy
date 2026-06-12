@@ -35,6 +35,7 @@ Examples:
 """
 
 from pathlib import Path
+from numbers import Integral
 from monty.serialization import loadfn, dumpfn
 from typing import Optional, Dict, Any, List, Union
 
@@ -144,6 +145,11 @@ class Element:
             >>> fe = Element('Fe')
             >>> o = Element('o')  # Case-insensitive
         """
+        if not isinstance(symbol, str):
+            raise TypeError(
+                f"Element symbol must be a string, got {type(symbol).__name__}"
+            )
+
         # Normalize and validate symbol
         symbol = symbol.capitalize()
 
@@ -232,6 +238,9 @@ class Element:
             >>> fe2 = Element.from_Z(26)
             >>> print(fe1 is fe2)  # True
         """
+        if isinstance(Z, bool) or not isinstance(Z, Integral):
+            raise TypeError(f"Z must be an integer, got {type(Z).__name__}")
+        Z = int(Z)
         if not (0 < Z <= len(ELEMENTS)):
             raise ValueError(f"Z must be between 1 and {len(ELEMENTS)}, got {Z}")
         symbol = ELEMENTS[Z - 1]
@@ -273,6 +282,11 @@ class Element:
             >>> print(fe.atomic_no)  # 26
             >>> print(fe.name)  # 'Iron'
         """
+        if not isinstance(symbol, str):
+            raise TypeError(
+                f"Element symbol must be a string, got {type(symbol).__name__}"
+            )
+
         # Normalize case once
         normalized_symbol = symbol.capitalize()
         # Check cache with normalized symbol

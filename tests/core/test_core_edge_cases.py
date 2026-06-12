@@ -24,6 +24,13 @@ class TestCompositionEdgeCases(unittest.TestCase):
         self.assertEqual(comp['O'], 2)
         self.assertEqual(comp['H'], 2)
 
+    def test_composition_rejects_decimal_counts(self):
+        """Formula parser only accepts integer atom counts."""
+        for formula in ('Fe0.5O', 'H2O1.5', 'Ca(OH)2.5'):
+            with self.subTest(formula=formula):
+                with self.assertRaises(ValueError):
+                    Composition(formula)
+
 class TestLatticeEdgeCases(unittest.TestCase):
     """Edge cases for Lattice."""
     
@@ -41,6 +48,22 @@ class TestLatticeEdgeCases(unittest.TestCase):
         # Gamma=180 should also raise ValueError
         with self.assertRaises(ValueError):
             Lattice.from_parameters(a=5, b=5, c=5, alpha=90, beta=90, gamma=180)
+
+    def test_lattice_rejects_singular_matrix(self):
+        """Full lattice matrices must be linearly independent."""
+        with self.assertRaises(ValueError):
+            Lattice([[1, 0, 0], [2, 0, 0], [0, 0, 1]])
+
+    def test_lattice_serialization_round_trip_preserves_read_only_arrays(self):
+        """Serialized lattices should round-trip without exposing mutable caches."""
+        lattice = Lattice.from_parameters(3, 4, 5, 70, 80, 90)
+        restored = Lattice.from_dict(lattice.as_dict())
+
+        np.testing.assert_allclose(restored.matrix, lattice.matrix, atol=1e-8)
+        with self.assertRaises(ValueError):
+            restored.matrix[0, 0] = 99
+        with self.assertRaises(ValueError):
+            restored.inv_matrix[0, 0] = 99
 
 class TestCrystalEdgeCases(unittest.TestCase):
     """Edge cases for Crystal."""
@@ -107,6 +130,23 @@ class TestElementEdgeCases(unittest.TestCase):
         # Test that cache works
         h3 = Element.get_element('H')
         self.assertIs(h2, h3)  # Should be same cached object
+
+    def test_element_rejects_unknown_and_non_string_symbols(self):
+        """Element lookup should fail with stable public exceptions."""
+        with self.assertRaises(ValueError):
+            Element.get_element('Qq')
+
+        for symbol in (None, 1, 1.0):
+            with self.subTest(symbol=symbol):
+                with self.assertRaises(TypeError):
+                    Element.get_element(symbol)
+
+    def test_element_from_z_requires_integer_atomic_number(self):
+        """Atomic-number lookup should not accept bools or non-integers."""
+        for atomic_number in (True, 1.0, '1'):
+            with self.subTest(atomic_number=atomic_number):
+                with self.assertRaises(TypeError):
+                    Element.from_Z(atomic_number)
 
 class TestStructureEdgeCases(unittest.TestCase):
     """Edge cases for Structure."""
