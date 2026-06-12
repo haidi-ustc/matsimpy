@@ -213,6 +213,32 @@ class TestCalculatorRunMode(unittest.TestCase):
         self.assertTrue(calc.read_called)
         self.assertEqual(calc.get_potential_energy(), -1.0)
 
+    def test_offline_calculate_clears_previous_results(self):
+        calc = _DummyNoRunCalculator(run=False)
+        calc.calculate(self.crystal)
+        calc.read_results()
+        self.assertEqual(calc.get_potential_energy(), -5.0)
+
+        moved = Crystal(["Si"], [[0.25, 0.25, 0.25]], Lattice.cubic(5.43))
+        calc.calculate(moved)
+
+        self.assertEqual(calc.results, {})
+        with self.assertRaises(ValueError):
+            calc.get_potential_energy()
+
+    def test_structure_get_energy_does_not_reuse_offline_results_for_new_structure(self):
+        calc = _DummyNoRunCalculator(run=False)
+        calc.calculate(self.crystal)
+        calc.read_results()
+        self.assertEqual(calc.get_potential_energy(), -5.0)
+
+        moved = Crystal(["Si"], [[0.25, 0.25, 0.25]], Lattice.cubic(5.43))
+        moved.calc = calc
+
+        with self.assertRaises(ValueError):
+            moved.get_potential_energy()
+        self.assertEqual(calc.results, {})
+
     def test_read_results_without_calculate(self):
         calc = _DummyNoRunCalculator(run=False)
         calc.read_results()
@@ -237,4 +263,3 @@ class TestCalculatorRunMode(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

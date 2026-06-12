@@ -110,6 +110,7 @@ class Calculator(ABC, MSONable):
                 f"Calculator requires Crystal or Molecule, got {type(structure)}"
             )
 
+        self.results.clear()
         self.structure = structure
         self._calculation_performed = False
         # Record the structure identity before running so that callers can
