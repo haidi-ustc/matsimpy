@@ -40,6 +40,16 @@ class TestMoleculeSubstitution(unittest.TestCase):
         with self.assertRaises(IndexError):
             self.molecule.substitute(10, 'N')
 
+    def test_substitute_rejects_negative_index(self):
+        molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
+
+        with self.assertRaises(IndexError):
+            molecule.substitute(-1, 'N')
+        with self.assertRaises(IndexError):
+            molecule.substitute([-1], ['N'])
+        with self.assertRaises(IndexError):
+            molecule.substitute([-1], {'O': 'N'})
+
     def test_substitute_mismatched_lengths(self):
         with self.assertRaises(ValueError):
             self.molecule.substitute([0, 1], ['N'])
@@ -125,6 +135,20 @@ class TestCrystalSubstitution(unittest.TestCase):
         self.assertNotEqual(original_formula, new_formula)
         self.assertIn('Si', new_formula)
         self.assertIn('Ge', new_formula)
+
+    def test_substitute_rejects_negative_index(self):
+        crystal = Crystal(
+            ['Si', 'O'],
+            [[0, 0, 0], [0.5, 0.5, 0.5]],
+            Lattice.cubic(5),
+        )
+
+        with self.assertRaises(IndexError):
+            crystal.substitute(-1, 'Ge')
+        with self.assertRaises(IndexError):
+            crystal.substitute([-1], ['Ge'])
+        with self.assertRaises(IndexError):
+            crystal.substitute([-1], {'O': 'S'})
 
 
 class TestSubstitutionTransformationEquivalence(unittest.TestCase):

@@ -623,8 +623,7 @@ class Molecule(Structure):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        if isinstance(indices, int):
-            indices = [indices]
+        indices = self._validate_atom_indices(indices)
 
         if isinstance(new_species, dict):
             new_species_list = []

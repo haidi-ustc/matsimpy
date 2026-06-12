@@ -931,6 +931,29 @@ class Structure(ABC, MSONable):
     # Species editing
     # ------------------------------------------------------------------
 
+    def _validate_atom_indices(
+        self,
+        indices: Union[int, np.integer, List[int], Tuple[int, ...]],
+    ) -> List[int]:
+        """Normalize atom indices and reject negative or out-of-range values."""
+        if isinstance(indices, (int, np.integer)):
+            normalized = [int(indices)]
+        else:
+            normalized = [
+                int(idx) if isinstance(idx, np.integer) else idx
+                for idx in list(indices)
+            ]
+
+        n_atoms = len(self.species)
+        for idx in normalized:
+            if not isinstance(idx, int):
+                raise TypeError(
+                    f"Atom index must be an integer, got {type(idx).__name__}"
+                )
+            if idx < 0 or idx >= n_atoms:
+                raise IndexError(f"Atom index {idx} out of range [0, {n_atoms - 1}]")
+        return normalized
+
     def substitute(
         self,
         indices: Union[int, List[int], "AtomSelection"],
@@ -943,8 +966,7 @@ class Structure(ABC, MSONable):
                 raise ValueError("AtomSelection must be created from this structure")
             indices = indices.indices
 
-        if isinstance(indices, int):
-            indices = [indices]
+        indices = self._validate_atom_indices(indices)
 
         if isinstance(new_species, dict):
             new_species_list = []
