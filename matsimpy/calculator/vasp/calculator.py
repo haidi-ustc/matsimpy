@@ -96,8 +96,7 @@ class VaspCalculator(Calculator):
                 "or use copy_potcar=False."
             )
 
-        species = list(set(poscar.site_symbols))
-        potcar_symbols = [f"{s}" for s in species]
+        potcar_symbols = [f"{s}" for s in poscar.site_symbols]
         potcar = Potcar(potcar_symbols, functional="PBE")
         potcar.write_file(self.directory / "POTCAR")
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from matsimpy.ai.executor import get_last_structure
 from matsimpy.ai.skill import FunctionDef
 from matsimpy.ai.skills._schema import sig_to_schema
@@ -37,6 +39,7 @@ def _read_structure(path: str, format: str | None = None):
 def _write_structure(path: str, structure=None, format: str | None = None):
     from matsimpy import io
 
+    path = _workspace_relative_path(path)
     structure = _require_structure(structure)
     io.write(structure, path, format=format)
     return {
@@ -102,6 +105,7 @@ def _save_latex_table(
 ):
     from matsimpy import io
 
+    path = _workspace_relative_path(path)
     structures = _default_structures(structures)
     io.save_latex_table(
         structures,
@@ -116,6 +120,15 @@ def _save_latex_table(
         "format": "latex",
         "num_structures": len(structures),
     }
+
+
+def _workspace_relative_path(path: str) -> str:
+    candidate = Path(path)
+    if candidate.is_absolute() or ".." in candidate.parts or "\\" in path:
+        raise ValueError(
+            "AI file output paths must be workspace-relative and must not contain '..'."
+        )
+    return str(candidate)
 
 
 def _require_structure(structure):

@@ -56,3 +56,28 @@ class TestVaspCalculator:
         )
         assert calc.incar_params["EDIFF"] == 1e-6
         assert calc.kpoints_grid == [2, 2, 2]
+
+    def test_potcar_symbols_preserve_poscar_order(self, tmp_path, monkeypatch):
+        from matsimpy.calculator.vasp import VaspCalculator
+        import matsimpy.calculator.vasp.inputs as inputs
+
+        captured = {}
+
+        class DummyPotcar:
+            def __init__(self, symbols, functional=None):
+                captured["symbols"] = list(symbols)
+                captured["functional"] = functional
+
+            def write_file(self, filename):
+                captured["filename"] = filename
+
+        monkeypatch.setenv("VASP_PP_PATH", str(tmp_path / "potcars"))
+        monkeypatch.setattr(inputs, "Potcar", DummyPotcar)
+
+        calc = VaspCalculator(directory=str(tmp_path), run=True)
+        poscar = type("DummyPoscar", (), {"site_symbols": ["Na", "Cl", "O"]})()
+
+        calc._write_potcar(poscar)
+
+        assert captured["symbols"] == ["Na", "Cl", "O"]
+        assert captured["functional"] == "PBE"
