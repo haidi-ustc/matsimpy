@@ -326,6 +326,11 @@ class Crystal(Structure):
             "site_properties": list(self.site_properties) if self.site_properties else [],
         }
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Crystal):
+            return False
+        return super().__eq__(other) and self.pbc == other.pbc
+
     def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
         """Return site_properties filtered to kept_indices after atom removal."""
         if not self.site_properties:

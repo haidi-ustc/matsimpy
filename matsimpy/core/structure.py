@@ -555,6 +555,8 @@ class Structure(ABC, MSONable):
         }
         if self.lattice is not None:
             hash_dict["lattice"] = self.lattice.as_dict()
+        if hasattr(self, "pbc"):
+            hash_dict["pbc"] = list(self.pbc)
 
         hash_str = str(hash_dict).encode("utf-8")
         hash_bytes = hashlib.sha256(hash_str).digest()

@@ -33,3 +33,17 @@ def test_crystal_construct_rejects_infinite_position():
             Lattice.cubic(3),
             (True, True, True),
         )
+
+
+def test_crystal_equality_includes_pbc():
+    crystal = Crystal(["He"], [[0, 0, 0]], Lattice.cubic(3))
+    non_periodic = crystal.set_pbc([False, False, False])
+
+    assert crystal != non_periodic
+
+
+def test_crystal_structural_hash_includes_pbc():
+    crystal = Crystal(["He"], [[0, 0, 0]], Lattice.cubic(3))
+    non_periodic = crystal.set_pbc([False, False, False])
+
+    assert crystal._structural_hash() != non_periodic._structural_hash()
