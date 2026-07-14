@@ -14,7 +14,8 @@ from typing import Optional
 import numpy as np
 
 from matsimpy.calculator.base import Calculator
-from matsimpy.core import Crystal, Molecule
+from matsimpy.core import Crystal, Molecule, SymmOp
+from matsimpy.core.periodic_table import Element
 
 
 class LammpsCalculator(Calculator):
@@ -59,12 +60,65 @@ class LammpsCalculator(Calculator):
         self.lammps_cmd = lammps_cmd
         self.units = units
 
+    @staticmethod
+    def _atom_type_map(structure: Crystal | Molecule) -> dict[str, int]:
+        """Map species symbols to stable LAMMPS atom type ids."""
+        return {symbol: i for i, symbol in enumerate(structure.symbol_set, start=1)}
+
+    @staticmethod
+    def _crystal_box_and_transform(structure: Crystal) -> tuple[list[str], SymmOp]:
+        matrix = structure.lattice.matrix
+        a, b, c = np.linalg.norm(matrix, axis=1)
+        xlo = ylo = zlo = 0.0
+        xhi = a
+        xy = float(np.dot(matrix[1], matrix[0] / a))
+        yhi = float(np.sqrt(b**2 - xy**2))
+        xz = float(np.dot(matrix[2], matrix[0] / a))
+        yz = float((np.dot(matrix[1], matrix[2]) - xy * xz) / yhi)
+        zhi = float(np.sqrt(c**2 - xz**2 - yz**2))
+
+        lines = [
+            f"{xlo:.6f} {xhi:.6f} xlo xhi",
+            f"{ylo:.6f} {yhi:.6f} ylo yhi",
+            f"{zlo:.6f} {zhi:.6f} zlo zhi",
+        ]
+        if not structure.lattice.is_orthogonal():
+            lines.append(f"{xy:.6f} {xz:.6f} {yz:.6f} xy xz yz")
+
+        lammps_matrix = [[xhi - xlo, 0, 0], [xy, yhi - ylo, 0], [xz, yz, zhi - zlo]]
+        rot_matrix = np.linalg.solve(lammps_matrix, matrix)
+        symm_op = SymmOp.from_rotation_and_translation(rot_matrix, [0, 0, 0])
+        return lines, symm_op
+
+    @staticmethod
+    def _lammps_positions(structure: Crystal | Molecule) -> np.ndarray:
+        if not isinstance(structure, Crystal):
+            return np.asarray(structure.positions, dtype=float)
+
+        _box_lines, symm_op = LammpsCalculator._crystal_box_and_transform(structure)
+        return np.array([symm_op.operate(pos) for pos in structure.cart_positions])
+
+    @staticmethod
+    def _box_lines(structure: Crystal | Molecule) -> list[str]:
+        if isinstance(structure, Crystal):
+            box_lines, _symm_op = LammpsCalculator._crystal_box_and_transform(structure)
+            return box_lines
+
+        max_coord = np.max(np.abs(structure.positions)) * 2
+        return [
+            f"{-max_coord:.1f} {max_coord:.1f} xlo xhi",
+            f"{-max_coord:.1f} {max_coord:.1f} ylo yhi",
+            f"{-max_coord:.1f} {max_coord:.1f} zlo zhi",
+        ]
+
     def write_input(self, structure: Crystal | Molecule) -> None:
         """Write LAMMPS input and data files."""
         self.directory.mkdir(parents=True, exist_ok=True)
 
         n_atoms = len(structure)
         is_periodic = isinstance(structure, Crystal)
+        atom_types = self._atom_type_map(structure)
+        positions = self._lammps_positions(structure)
 
         # Data file
         data_lines = [
@@ -76,29 +130,22 @@ class LammpsCalculator(Calculator):
             "0 dihedrals",
             "0 impropers",
             "",
-            "1 atom types",
+            f"{len(atom_types)} atom types",
             "",
         ]
 
-        if is_periodic:
-            data_lines.append(f"0.0 {structure.lattice.a:.6f} xlo xhi")
-            data_lines.append(f"0.0 {structure.lattice.b:.6f} ylo yhi")
-            data_lines.append(f"0.0 {structure.lattice.c:.6f} zlo zhi")
-        else:
-            max_coord = np.max(np.abs(structure.positions)) * 2
-            data_lines.extend(
-                [
-                    f"{-max_coord:.1f} {max_coord:.1f} xlo xhi",
-                    f"{-max_coord:.1f} {max_coord:.1f} ylo yhi",
-                    f"{-max_coord:.1f} {max_coord:.1f} zlo zhi",
-                ]
-            )
+        data_lines.extend(self._box_lines(structure))
 
-        data_lines.extend(["", "Masses", "", "1 1.0", "", "Atoms", ""])
-        for i, (species, pos) in enumerate(
-            zip(structure.species, structure.positions), 1
-        ):
-            data_lines.append(f"{i} 1 {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
+        data_lines.extend(["", "Masses", ""])
+        for symbol, type_id in atom_types.items():
+            data_lines.append(f"{type_id} {Element(symbol).atomic_mass:.6g}")
+
+        data_lines.extend(["", "Atoms", ""])
+        for i, (species, pos) in enumerate(zip(structure.species, positions), 1):
+            type_id = atom_types[species]
+            data_lines.append(
+                f"{i} {type_id} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"
+            )
 
         (self.directory / "data.lammps").write_text("\n".join(data_lines))
 
