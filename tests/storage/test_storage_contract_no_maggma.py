@@ -124,3 +124,12 @@ def test_default_storage_is_memory():
     doc_id = storage.store_data({"test": 1})
     assert storage.retrieve_data(doc_id) is not None
     storage.close()
+
+
+def test_raw_dict_storage_rejects_reserved_metadata_keys():
+    from matsimpy.storage import DataStorage, MemoryBackend
+
+    storage = DataStorage(backend=MemoryBackend())
+
+    with pytest.raises(ValueError, match="reserved"):
+        storage.store_data({"x": 1}, metadata={"doc_id": "shadow"})

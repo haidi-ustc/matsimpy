@@ -51,12 +51,14 @@ class DataStorage:
                     metadata=envelope.metadata,
                 )
         elif isinstance(data, dict):
+            metadata = metadata or {}
+            DocumentEnvelope.validate_metadata(metadata)
             if doc_id is None:
                 doc_id = DocumentEnvelope.generate_id(data, metadata)
             envelope = DocumentEnvelope(
                 doc_id=doc_id,
                 payload=data,
-                metadata=metadata or {},
+                metadata=metadata,
             )
         else:
             raise TypeError(
