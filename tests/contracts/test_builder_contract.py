@@ -13,7 +13,44 @@ all_specs = registry.list_all()
 spec_ids = [s.name for s in all_specs]
 
 
+_SIGNATURE_MISMATCH_MESSAGES = (
+    "unexpected keyword argument",
+    "required positional argument",
+)
 _STRUCTURE_PARAMS = frozenset({"structure", "substrate", "film", "bottom", "top", "layers", "other"})
+_KNOWN_SIGNATURE_SETUP_SKIPS = frozenset({
+    "from_prototype",
+    "generate_slab",
+    "add_adsorbate",
+    "generate_random_alloy",
+    "generate_ordered_alloy",
+    "generate_intermetallic",
+    "build_heusler",
+    "build_full_heusler",
+    "build_half_heusler",
+    "build_inverse_heusler",
+    "create_vacancy",
+    "create_interstitial",
+    "create_substitution",
+    "create_frenkel",
+    "create_schottky",
+    "create_antisite",
+    "create_simple_interface",
+    "build_bent",
+    "build_tetrahedral",
+    "build_nanotube",
+    "build_twisted_bilayer",
+    "build_magic_angle_twisted",
+    "build_twisted_multilayer",
+})
+
+
+def _skip_if_semantic_setup_error(spec, error):
+    if isinstance(error, TypeError) and any(
+        message in str(error) for message in _SIGNATURE_MISMATCH_MESSAGES
+    ) and spec.name not in _KNOWN_SIGNATURE_SETUP_SKIPS:
+        raise error
+    pytest.skip(f"Requires more specific kwargs: {error}")
 
 
 def _minimal_kwargs(spec):
@@ -76,7 +113,7 @@ class TestBuilderContract:
             result = spec.callable(**kwargs)
             assert isinstance(result, spec.output_type)
         except (ValueError, TypeError, IndexError) as e:
-            pytest.skip(f"Requires more specific kwargs: {e}")
+            _skip_if_semantic_setup_error(spec, e)
 
     def test_output_is_not_none(self, spec):
         """Builder output is not None."""
@@ -91,8 +128,8 @@ class TestBuilderContract:
         try:
             result = spec.callable(**kwargs)
             assert result is not None
-        except (ValueError, TypeError, IndexError):
-            pytest.skip("Requires more specific kwargs")
+        except (ValueError, TypeError, IndexError) as e:
+            _skip_if_semantic_setup_error(spec, e)
 
 
 def test_builder_registry_validates_required_parameters_before_calling():

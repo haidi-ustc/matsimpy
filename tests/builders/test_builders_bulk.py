@@ -261,5 +261,33 @@ class TestRandomCrystal(unittest.TestCase):
         self.assertEqual(crystal.species, ('Si',))
         self.assertAlmostEqual(crystal.lattice.a, 3.0)
 
+
+def test_random_crystal_registry_maps_public_schema_to_callable(monkeypatch):
+    import matsimpy.builders._register as register_module
+    from matsimpy import Crystal, Lattice
+    from matsimpy.builders.registry import BuilderRegistry
+
+    def fake_random_crystal(dim, group, species, num_ions, **kwargs):
+        assert dim == 3
+        assert group == 225
+        assert species == ["Si"]
+        assert num_ions == [1]
+        assert kwargs["factor"] == 1.0
+        return Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+
+    registry = BuilderRegistry()
+    monkeypatch.setattr(register_module, "registry", registry)
+    monkeypatch.setattr(
+        "matsimpy.builders.bulk.random.random_crystal",
+        fake_random_crystal,
+        raising=False,
+    )
+
+    register_module.register_all()
+    result = registry.build("random_crystal", sg=225, species=["Si"], numIons=[1])
+
+    assert result.formula == "Si"
+
+
 if __name__ == '__main__':
     unittest.main()

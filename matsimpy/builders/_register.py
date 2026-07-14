@@ -26,8 +26,21 @@ def register_all():
 
     try:
         from .bulk.random import random_crystal
+
+        def _random_crystal_from_registry(
+            sg, species, numIons, dim=3, factor=1.0, **kwargs
+        ):
+            return random_crystal(
+                dim=dim,
+                group=sg,
+                species=species,
+                num_ions=numIons,
+                factor=factor,
+                **kwargs,
+            )
+
         registry.register(BuilderSpec(
-            name="random_crystal", category="bulk", callable=random_crystal,
+            name="random_crystal", category="bulk", callable=_random_crystal_from_registry,
             description="Generate random crystal with symmetry constraints",
             output_type=Crystal,
             requires_optional=("pyxtal",),
