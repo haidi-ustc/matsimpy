@@ -44,7 +44,7 @@ from .structure import Structure
 from .composition import Composition
 from .periodic_table import Element
 from .site import Site
-from ._validation import normalize_species, validate_site_properties
+from ._validation import validate_site_properties
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
@@ -144,11 +144,9 @@ class Molecule(Structure):
         ``Structure._positions`` convention for Molecule).
         """
         obj = cls.__new__(cls)
-        obj._species = tuple(normalize_species(s) for s in species)
-        obj._positions = np.array(positions, dtype=np.float64, copy=True)
-        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
-            raise ValueError("positions must have shape (n_atoms, 3)")
-        obj._positions.flags.writeable = False
+        obj._species, obj._positions = cls._validate_constructed_state(
+            species, positions
+        )
         obj.lattice = lattice
         obj._composition = None
         obj._formula = None
@@ -491,9 +489,10 @@ class Molecule(Structure):
                     f"got {pos} at index {idx}."
                 )
 
+        new_positions_array = self._validate_positions(new_positions)
+
         # Check for duplicates within new positions
-        if len(new_positions) > 1:
-            new_positions_array = np.array(new_positions, dtype=np.float64)
+        if len(new_positions_array) > 1:
             for i in range(len(new_positions_array)):
                 for j in range(i + 1, len(new_positions_array)):
                     dist = np.linalg.norm(new_positions_array[i] - new_positions_array[j])
@@ -512,9 +511,9 @@ class Molecule(Structure):
 
         # Check each new position against existing atoms
         if len(self.positions) > 0:
-            for idx, new_pos in enumerate(new_positions):
+            for idx, new_pos in enumerate(new_positions_array):
                 if len(new_pos) == 3:
-                    new_pos_array = np.array(new_pos, dtype=np.float64).reshape(1, 3)
+                    new_pos_array = new_pos.reshape(1, 3)
                     min_distance = np.min(cdist(new_pos_array, self.positions))
                     if min_distance < 1e-6:
                         raise ValueError(
@@ -547,8 +546,8 @@ class Molecule(Structure):
 
         new_species = list(self.species) + species_list
         new_positions_arr = (
-            np.vstack([self.positions, np.array(new_positions, dtype=np.float64)])
-            if new_positions
+            np.vstack([self.positions, new_positions_array])
+            if len(new_positions_array)
             else self.positions.copy()
         )
 

@@ -139,11 +139,9 @@ class Structure(ABC, MSONable):
         mostly validated data.
         """
         obj = cls.__new__(cls)
-        obj._species = tuple(normalize_species(s) for s in species)
-        obj._positions = np.array(positions, dtype=np.float64, copy=True)
-        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
-            raise ValueError("positions must have shape (n_atoms, 3)")
-        obj._positions.flags.writeable = False
+        obj._species, obj._positions = cls._validate_constructed_state(
+            species, positions
+        )
         obj.lattice = lattice
 
         # Compute-once caches (never invalidated — structure is immutable)
@@ -246,7 +244,23 @@ class Structure(ABC, MSONable):
         """Get the species as a tuple of strings."""
         return self._species
 
-    def _validate_positions(self, positions: Union[List, np.ndarray]) -> np.ndarray:
+    @staticmethod
+    def _validate_constructed_state(
+        species: Tuple[str, ...], positions: Union[List, np.ndarray]
+    ) -> tuple[tuple[str, ...], np.ndarray]:
+        """Normalize species and validate positions for lightweight constructors."""
+        normalized_species = tuple(normalize_species(s) for s in species)
+        positions_array = Structure._validate_positions(positions)
+        if len(positions_array) != len(normalized_species):
+            raise ValueError(
+                f"Number of positions ({len(positions_array)}) must match "
+                f"number of species ({len(normalized_species)})"
+            )
+        positions_array.flags.writeable = False
+        return normalized_species, positions_array
+
+    @staticmethod
+    def _validate_positions(positions: Union[List, np.ndarray]) -> np.ndarray:
         """
         Validate and convert positions to proper numpy array format.
 

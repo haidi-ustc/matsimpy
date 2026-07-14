@@ -52,7 +52,6 @@ from .periodic_table import Element
 from .site import CrystalSite
 from .composition import Composition
 from ._validation import (
-    normalize_species,
     validate_lattice,
     validate_pbc,
     validate_site_properties,
@@ -196,11 +195,9 @@ class Crystal(Structure):
         lattice = validate_lattice(lattice)
         pbc = validate_pbc(pbc)
 
-        obj._species = tuple(normalize_species(s) for s in species)
-        obj._positions = np.array(positions, dtype=np.float64, copy=True)
-        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
-            raise ValueError("positions must have shape (n_atoms, 3)")
-        obj._positions.flags.writeable = False
+        obj._species, obj._positions = cls._validate_constructed_state(
+            species, positions
+        )
         obj.lattice = lattice
         obj._composition = None
         obj._formula = None
@@ -587,7 +584,7 @@ class Crystal(Structure):
 
         # Convert to fractional coordinates if needed
         if new_positions:
-            new_pos_array = np.array(new_positions, dtype=np.float64)
+            new_pos_array = self._validate_positions(new_positions)
             if coords_are_cartesian:
                 # Convert Cartesian to fractional
                 new_frac_positions = np.dot(new_pos_array, self.lattice.inv_matrix)
