@@ -106,8 +106,8 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"strain": _M3},
-            "required": ["strain"],
+            "properties": {"strain_matrix": _M3},
+            "required": ["strain_matrix"],
         },
         version="1.0.0",
     ))
@@ -119,8 +119,11 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"deformation": _M3},
-            "required": ["deformation"],
+            "properties": {
+                "deformation_matrix": _M3,
+                "deform_positions": {"type": "boolean", "default": True},
+            },
+            "required": ["deformation_matrix"],
         },
         version="1.0.0",
     ))
@@ -132,7 +135,10 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"magnitude": {"type": "number", "default": 0.01}},
+            "properties": {
+                "amplitude": {"type": "number", "default": 0.01},
+                "seed": {"type": "integer"},
+            },
         },
         version="1.0.0",
     ))
@@ -145,11 +151,11 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "scale": {
+                "scale_factor": {
                     "oneOf": [_V3, {"type": "number"}],
                 },
             },
-            "required": ["scale"],
+            "required": ["scale_factor"],
         },
         version="1.0.0",
     ))
@@ -161,8 +167,8 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"volume": {"type": "number"}},
-            "required": ["volume"],
+            "properties": {"target_volume": {"type": "number"}},
+            "required": ["target_volume"],
         },
         version="1.0.0",
     ))
@@ -183,8 +189,11 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"matrix": _M3},
-            "required": ["matrix"],
+            "properties": {
+                "rotation_matrix": _M3,
+                "rotate_atoms": {"type": "boolean", "default": True},
+            },
+            "required": ["rotation_matrix"],
         },
         version="1.0.0",
     ))
@@ -196,8 +205,11 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"matrix": _M3},
-            "required": ["matrix"],
+            "properties": {
+                "transformation_matrix": _M3,
+                "transform_positions": {"type": "boolean", "default": False},
+            },
+            "required": ["transformation_matrix"],
         },
         version="1.0.0",
     ))
@@ -242,10 +254,10 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "i": {"type": "integer"},
-                "j": {"type": "integer"},
+                "index1": {"type": "integer"},
+                "index2": {"type": "integer"},
             },
-            "required": ["i", "j"],
+            "required": ["index1", "index2"],
         },
         version="1.0.0",
     ))
@@ -258,10 +270,12 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "i": {"type": "integer"},
-                "j": {"type": "integer"},
+                "index1": {"type": "integer"},
+                "index2": {"type": "integer"},
+                "species": {"type": "string"},
+                "position": _V3,
             },
-            "required": ["i", "j"],
+            "required": ["index1", "index2"],
         },
         version="1.0.0",
     ))
@@ -275,9 +289,10 @@ def register_all():
             "type": "object",
             "properties": {
                 "index": {"type": "integer"},
-                "displacement": _V3,
+                "species": {"type": "array", "items": {"type": "string"}},
+                "positions": {"type": "array", "items": _V3},
             },
-            "required": ["index", "displacement"],
+            "required": ["index", "species", "positions"],
         },
         version="1.0.0",
     ))
@@ -312,7 +327,11 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"magnitude": {"type": "number", "default": 0.01}},
+            "properties": {
+                "amplitude": {"type": "number", "default": 0.01},
+                "indices": {"type": "array", "items": {"type": "integer"}},
+                "seed": {"type": "integer"},
+            },
         },
         version="1.0.0",
     ))
@@ -389,12 +408,18 @@ def register_all():
             parameter_schema={
                 "type": "object",
                 "properties": {
-                    "indices": {
+                    "break_indices": {
                         "type": "array",
-                        "items": {"type": "integer"},
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                        },
                     },
+                    "cutoff": {"type": "number", "default": 1.8},
                 },
-                "required": ["indices"],
+                "required": ["break_indices"],
             },
             version="1.0.0",
         ))
@@ -407,10 +432,11 @@ def register_all():
             parameter_schema={
                 "type": "object",
                 "properties": {
-                    "ref_indices": {"type": "array", "items": {"type": "integer"}},
-                    "target_indices": {"type": "array", "items": {"type": "integer"}},
+                    "molecule2": {},
+                    "indices1": {"type": "array", "items": {"type": "integer"}},
+                    "indices2": {"type": "array", "items": {"type": "integer"}},
                 },
-                "required": ["ref_indices", "target_indices"],
+                "required": ["molecule2", "indices1", "indices2"],
             },
             version="1.0.0",
         ))
@@ -422,8 +448,13 @@ def register_all():
             applicable_types=_MOLECULE, output_type=Molecule,
             parameter_schema={
                 "type": "object",
-                "properties": {"other": {}},
-                "required": ["other"],
+                "properties": {
+                    "molecule2": {},
+                    "bond_atom1": {"type": "integer"},
+                    "bond_atom2": {"type": "integer"},
+                    "remove_atoms": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["molecule2", "bond_atom1", "bond_atom2"],
             },
             version="1.0.0",
         ))

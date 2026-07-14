@@ -29,6 +29,18 @@ def water():
 
 all_specs = registry.list_all()
 spec_ids = [s.name for s in all_specs]
+_SIGNATURE_MISMATCH_MESSAGES = (
+    "unexpected keyword argument",
+    "required positional argument",
+)
+
+
+def _skip_if_semantic_setup_error(error):
+    if isinstance(error, TypeError) and any(
+        message in str(error) for message in _SIGNATURE_MISMATCH_MESSAGES
+    ):
+        raise error
+    pytest.skip("Requires more specific kwargs than auto-generated")
 
 
 def _minimal_kwargs(spec):
@@ -37,7 +49,9 @@ def _minimal_kwargs(spec):
     props = schema.get("properties", {})
     kwargs = {}
     for name, prop in props.items():
-        if "default" in prop:
+        if name == "molecule2":
+            kwargs[name] = Molecule(["He"], [[0, 0, 0]])
+        elif "default" in prop:
             kwargs[name] = prop["default"]
         elif "oneOf" in prop:
             kwargs[name] = _value_from_schema(prop["oneOf"][0])
@@ -79,11 +93,11 @@ class TestTransformationContract:
         try:
             result = spec.callable(structure, **kwargs)
             assert id(result) != id(structure)
-        except (ValueError, TypeError, IndexError):
+        except (ValueError, TypeError, IndexError) as error:
             # Some transforms require specific valid kwargs that
             # the auto-generated minimal ones can't provide.
             # That's OK — type checking tests catch those separately.
-            pytest.skip("Requires more specific kwargs than auto-generated")
+            _skip_if_semantic_setup_error(error)
 
     def test_type_constraint(self, spec, nacl, water):
         """Registry.apply rejects incompatible types."""
@@ -105,8 +119,8 @@ class TestTransformationContract:
         try:
             result = registry.apply(spec.name, structure, **kwargs)
             assert result is not None
-        except (ValueError, TypeError, IndexError):
-            pytest.skip("Requires more specific kwargs")
+        except (ValueError, TypeError, IndexError) as error:
+            _skip_if_semantic_setup_error(error)
 
 
 def test_transformation_registry_validates_required_parameters_before_calling(nacl):

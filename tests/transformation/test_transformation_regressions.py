@@ -155,6 +155,31 @@ def test_perturb_lattice_does_not_reset_global_rng():
     np.testing.assert_allclose(actual_next, expected_next)
 
 
+def test_registry_apply_strain_executes_registered_schema():
+    from matsimpy import Crystal, Lattice
+    from matsimpy.transformation import registry
+
+    crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+    strained = registry.apply(
+        "apply_strain",
+        crystal,
+        strain_matrix=[[0.01, 0, 0], [0, 0, 0], [0, 0, 0]],
+    )
+
+    assert strained.lattice.a > crystal.lattice.a
+
+
+def test_registry_swap_atoms_executes_registered_schema():
+    from matsimpy import Molecule
+    from matsimpy.transformation import registry
+
+    molecule = Molecule(["H", "O"], [[0, 0, 0], [1, 0, 0]])
+    swapped = registry.apply("swap_atoms", molecule, index1=0, index2=1)
+
+    assert swapped.species == ("O", "H")
+    assert swapped.positions[0].tolist() == [1.0, 0.0, 0.0]
+
+
 def test_fragment_molecule_breaks_inferred_bond_and_preserves_properties():
     molecule = Molecule(
         ["H", "H"],
