@@ -38,6 +38,8 @@ class TestVaspCalculator:
         calc = VaspCalculator(directory=fixtures)
         calc.read_results()
         assert calc.results.get("energy") is not None
+        assert calc.results["forces"].shape == (25, 3)
+        assert calc.results["stress"].shape == (3, 3)
 
     def test_init_with_defaults(self):
         from matsimpy.calculator.vasp import VaspCalculator

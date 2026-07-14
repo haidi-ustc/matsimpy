@@ -125,8 +125,10 @@ class VaspCalculator(Calculator):
         if vasprun_xml.exists():
             vasprun = Vasprun(str(vasprun_xml))
             energy = vasprun.final_energy
-            if hasattr(vasprun, "force_constants") and vasprun.force_constants is not None and len(vasprun.ionic_steps) > 0:
-                forces = vasprun.ionic_steps[-1].get("forces", None)
+            if vasprun.ionic_steps:
+                final_step = vasprun.ionic_steps[-1]
+                forces = final_step.get("forces")
+                stress = final_step.get("stress")
         elif outcar_path.exists():
             outcar = Outcar(str(outcar_path))
             energy = outcar.final_energy
