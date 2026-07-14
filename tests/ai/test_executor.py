@@ -38,6 +38,34 @@ def registered_ex(ex):
     return ex
 
 
+# ── active executor context ────────────────────────────────────────
+
+def test_active_executor_is_context_local(si_crystal, water):
+    import contextvars
+    from matsimpy.ai.executor import (
+        FunctionExecutor,
+        _set_active_executor,
+        get_last_structure,
+        set_last_structure,
+    )
+    from matsimpy.ai.skill import SkillManager
+
+    crystal_executor = FunctionExecutor(SkillManager())
+    molecule_executor = FunctionExecutor(SkillManager())
+
+    crystal_context = contextvars.Context()
+    molecule_context = contextvars.Context()
+
+    crystal_context.run(_set_active_executor, crystal_executor)
+    crystal_context.run(set_last_structure, si_crystal)
+
+    molecule_context.run(_set_active_executor, molecule_executor)
+    molecule_context.run(set_last_structure, water)
+
+    assert crystal_context.run(get_last_structure) is si_crystal
+    assert molecule_context.run(get_last_structure) is water
+
+
 # ── _resolve_one ───────────────────────────────────────────────────
 
 class TestResolveOne:

@@ -10,6 +10,7 @@ Pipeline design:
 """
 
 from __future__ import annotations
+from contextvars import ContextVar
 import json
 import numpy as np
 from .skill import SkillManager, FunctionDef
@@ -264,31 +265,34 @@ class FunctionExecutor:
 
 # ── module-level accessors (used by IO skill) ──
 
-_active_executor: FunctionExecutor | None = None
+_active_executor: ContextVar[FunctionExecutor | None] = ContextVar(
+    "matsimpy_active_executor",
+    default=None,
+)
 
 
 def get_last_structure():
     """Return the most recently serialized structure from the active executor."""
-    if _active_executor is not None and _active_executor._registry:
+    executor = _active_executor.get()
+    if executor is not None and executor._registry:
         # Return the highest-ID object (most recently stored)
-        max_id = max(_active_executor._registry.keys())
-        return _active_executor._registry[max_id]
+        max_id = max(executor._registry.keys())
+        return executor._registry[max_id]
     return None
 
 
 def set_last_structure(s):
     """Store a structure in the active executor's registry."""
-    global _active_executor
-    if _active_executor is not None:
-        ref = _active_executor._next_id
-        _active_executor._next_id += 1
-        _active_executor._registry[ref] = s
+    executor = _active_executor.get()
+    if executor is not None:
+        ref = executor._next_id
+        executor._next_id += 1
+        executor._registry[ref] = s
 
 
 def _set_active_executor(exe: FunctionExecutor) -> None:
     """Register the active executor (called by AIEngine)."""
-    global _active_executor
-    _active_executor = exe
+    _active_executor.set(exe)
 
 
 __all__ = ["FunctionExecutor", "get_last_structure", "set_last_structure", "_set_active_executor"]
