@@ -1,0 +1,7 @@
+{
+  "scenario": "10_water_bonds",
+  "runs": 3,
+  "deterministic_pass_rate": 1.0,
+  "judge_pass_rate": 1.0,
+  "stable": true
+}

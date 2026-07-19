@@ -150,12 +150,17 @@ class TestTryResolveStructure:
 # ── _serialize ─────────────────────────────────────────────────────
 
 class TestSerialize:
+    def test_crystal_gets_canonical_structure_ref(self, ex, si_crystal):
+        result = ex._serialize(si_crystal)
+        assert result["structure_ref"] == "structure:1"
+        assert "_note" not in result
+
     def test_crystal_gets_obj_ref(self, ex, si_crystal):
         result = ex._serialize(si_crystal)
         assert "_obj_ref" in result
         assert result["formula"] == "Si2"
         assert result["num_atoms"] == 2
-        assert "_note" in result
+        assert result["structure_ref"] == "structure:1"
         assert 1 in ex._registry
 
     def test_molecule_gets_obj_ref(self, ex, water):
@@ -217,6 +222,15 @@ class TestIsStructure:
 # ── execute (normal path) ──────────────────────────────────────────
 
 class TestExecuteNormal:
+    def test_succeeds_with_canonical_structure_ref(self, registered_ex, si_crystal):
+        registered_ex._registry[5] = si_crystal
+        args = {
+            "crystal": {"structure_ref": "structure:5"},
+            "scaling_matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        }
+        result = registered_ex.execute(ToolCall(id="canonical", name="make_supercell", arguments=args))
+        assert result["structure_ref"] == "structure:1"
+
     def test_succeeds_with_live_crystal(self, registered_ex, si_crystal):
         args = {"crystal": si_crystal, "scaling_matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]}
         tc = ToolCall(id="n1", name="make_supercell", arguments=args)

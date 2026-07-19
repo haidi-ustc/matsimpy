@@ -40,6 +40,7 @@ This directory contains comprehensive examples demonstrating how to use differen
 
 ### Integration Examples
 - **`workflow_basic.py`** - Complete workflow from structure creation to analysis
+- **`llm/`** - 15 live-LLM examples with repeated stability evaluation, artifact validation, and factual-output judging
 
 ## Running Examples
 
@@ -81,4 +82,16 @@ Or manually:
 for f in examples/*.py; do
     python "$f"
 done
+```
+
+Live LLM examples are intentionally separate from `run.sh` because they call an
+external provider. Run one scenario or the complete three-repeat campaign with:
+
+```bash
+python -m examples.llm.04_racksalt_nacl.run
+# Incremental by default: skips scenarios with complete passing saved results.
+python -m examples.llm.run_all --repetitions 3 --workers 3
+# Force a fresh full campaign only when required.
+python -m examples.llm.run_all --run-all --repetitions 3 --workers 3
+python -m examples.llm.run_all --rejudge-failures
 ```

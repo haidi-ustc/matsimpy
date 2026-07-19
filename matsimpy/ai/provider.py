@@ -37,6 +37,7 @@ class DeepSeekProvider:
         api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        request_timeout: float = 120,
     ):
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
         if not self.api_key:
@@ -46,6 +47,7 @@ class DeepSeekProvider:
             )
         self.model = model or os.getenv("MATSIMPY_AI_MODEL") or DEFAULT_MODEL
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+        self.request_timeout = request_timeout
         self._endpoint = f"{self.base_url}/v1/chat/completions"
 
     def chat(
@@ -75,7 +77,7 @@ class DeepSeekProvider:
             self._endpoint,
             json=payload,
             headers=headers,
-            timeout=120,
+            timeout=self.request_timeout,
         )
         resp.raise_for_status()
         data = resp.json()

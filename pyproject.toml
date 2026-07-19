@@ -115,6 +115,7 @@ filterwarnings = [
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "requires_llm: makes live calls to the configured LLM provider",
     "requires_torch: marks tests that require torch",
     "requires_ase: marks tests that require ase",
     "requires_pymatgen: marks tests that require pymatgen",

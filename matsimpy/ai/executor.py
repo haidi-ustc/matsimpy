@@ -119,6 +119,12 @@ class FunctionExecutor:
             return self._registry[value]
         if not isinstance(value, dict):
             return None
+        if "structure_ref" in value:
+            ref = self._parse_structure_ref(value["structure_ref"])
+            if ref is not None:
+                obj = self._registry.get(ref)
+                if obj is not None:
+                    return obj
         # Check _obj_ref first
         if "_obj_ref" in value:
             ref = value["_obj_ref"]
@@ -153,6 +159,12 @@ class FunctionExecutor:
 
     def _resolve_one(self, value):
         """Resolve a single value — dicts with _obj_ref become live objects."""
+        if isinstance(value, dict) and "structure_ref" in value:
+            ref = self._parse_structure_ref(value["structure_ref"])
+            if ref is not None:
+                obj = self._registry.get(ref)
+                if obj is not None:
+                    return obj
         if isinstance(value, dict) and "_obj_ref" in value:
             ref = value["_obj_ref"]
             obj = self._registry.get(ref)
@@ -162,6 +174,15 @@ class FunctionExecutor:
         if isinstance(value, dict) and "@module" in value and "@class" in value:
             return self._from_dict(value)
         return value
+
+    @staticmethod
+    def _parse_structure_ref(value) -> int | None:
+        if not isinstance(value, str) or not value.startswith("structure:"):
+            return None
+        try:
+            return int(value.removeprefix("structure:"))
+        except ValueError:
+            return None
 
     def _from_dict(self, d: dict):
         """Reconstruct a live Crystal or Molecule from a legacy MSONable dict."""
@@ -208,11 +229,12 @@ class FunctionExecutor:
         The _note field tells the LLM NOT to extract individual values.
         """
         d: dict = {
-            "_note": "⚠️ pass this entire dict as the structure argument — do NOT extract values",
             "formula": str(obj.formula),
             "num_atoms": len(obj),
         }
         if ref is not None:
+            d["structure_ref"] = f"structure:{ref}"
+            # Compatibility for callers created before the canonical string reference.
             d["_obj_ref"] = ref
         if hasattr(obj, "lattice") and obj.lattice is not None:
             d["lattice"] = {

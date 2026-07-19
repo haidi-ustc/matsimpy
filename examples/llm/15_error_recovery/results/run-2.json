@@ -1,0 +1,102 @@
+{
+  "scenario": "15_error_recovery",
+  "run": 2,
+  "model": "deepseek-v4-pro",
+  "requests": [
+    "Try to build prototype unobtainium for Cu; if MatSimPy rejects it, recover by building fcc Cu with a=3.61 A and save recovered.cif"
+  ],
+  "tool_calls": [
+    {
+      "id": "call_00_kT50unrbvtkhf2Z96RXt1578",
+      "name": "from_prototype",
+      "arguments": {
+        "prototype": "unobtainium",
+        "species": "Cu",
+        "lattice_constant": 3.61
+      },
+      "result": {
+        "error": "ValueError: Unknown prototype 'unobtainium'. Available: ['fcc', 'bcc', 'diamond', 'zincblende', 'rocksalt', 'wurtzite', 'perovskite', 'hcp', 'sc']"
+      },
+      "status": "failure"
+    },
+    {
+      "id": "call_00_IhJUVMXMzKTzO5T8UVSR3236",
+      "name": "from_prototype",
+      "arguments": {
+        "prototype": "fcc",
+        "species": "Cu",
+        "lattice_constant": 3.61
+      },
+      "result": {
+        "formula": "Cu",
+        "num_atoms": 1,
+        "structure_ref": "structure:1",
+        "_obj_ref": 1,
+        "lattice": {
+          "a": 2.5527,
+          "b": 2.5527,
+          "c": 2.5527,
+          "alpha": 60.0,
+          "beta": 60.0,
+          "gamma": 60.0
+        },
+        "pbc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "status": "success"
+    },
+    {
+      "id": "call_00_cqRxGvIXTxLTMXO2cqig6490",
+      "name": "write_structure",
+      "arguments": {
+        "path": "recovered.cif",
+        "structure": {
+          "structure_ref": "structure:1",
+          "formula": "Cu",
+          "num_atoms": 1
+        }
+      },
+      "result": {
+        "saved_to": "recovered.cif",
+        "format": "auto-detected",
+        "formula": "Cu",
+        "num_atoms": 1,
+        "type": "Crystal"
+      },
+      "status": "success"
+    }
+  ],
+  "final_outputs": [
+    "Done! Here's a summary of what happened:\n\n| Step | Action | Result |\n|------|--------|--------|\n| 1 | `from_prototype(\"unobtainium\", \"Cu\", 3.61)` | \u274c Rejected \u2014 not a known prototype |\n| 2 | `from_prototype(\"fcc\", \"Cu\", 3.61)` | \u2705 Built fcc Cu (primitive cell, `a = 2.55 \u00c5` = `3.61/\u221a2`) |\n| 3 | `write_structure(\"recovered.cif\")` | \u2705 Saved to **recovered.cif** |\n\nThe fcc Cu structure with conventional lattice constant 3.61 \u00c5 has been saved to `recovered.cif`."
+  ],
+  "artifacts": [
+    {
+      "path": "recovered.cif",
+      "bytes": 424,
+      "formula": "Cu",
+      "num_atoms": 1,
+      "type": "Crystal"
+    },
+    {
+      "path": "state.db-shm",
+      "bytes": 32768
+    },
+    {
+      "path": "state.db-wal",
+      "bytes": 127752
+    }
+  ],
+  "deterministic_errors": [],
+  "deterministic_pass": true,
+  "judge": {
+    "pass": true,
+    "score": 100,
+    "unsupported_claims": [],
+    "analysis": "The workflow correctly attempted to build 'unobtainium' prototype, which was rejected by the tool (ValueError). It then recovered by building fcc Cu with lattice_constant=3.61 \u00c5. The resulting structure is a valid primitive cell of fcc with a=2.5527 \u00c5 (3.61/\u221a2). The structure was saved to 'recovered.cif' as required. All steps are consistent with the request, and no unsupported claims or deterministic errors are present.",
+    "raw": "{\n  \"pass\": true,\n  \"score\": 100,\n  \"unsupported_claims\": [],\n  \"analysis\": \"The workflow correctly attempted to build 'unobtainium' prototype, which was rejected by the tool (ValueError). It then recovered by building fcc Cu with lattice_constant=3.61 \u00c5. The resulting structure is a valid primitive cell of fcc with a=2.5527 \u00c5 (3.61/\u221a2). The structure was saved to 'recovered.cif' as required. All steps are consistent with the request, and no unsupported claims or deterministic errors are present.\"\n}"
+  },
+  "judge_pass": true
+}

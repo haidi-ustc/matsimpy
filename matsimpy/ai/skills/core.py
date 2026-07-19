@@ -32,7 +32,9 @@ def get_functions() -> list[FunctionDef]:
     return [
         FunctionDef(
             name="create_crystal",
-            description="Create a periodic crystal structure with a lattice",
+            description=(
+                "Low-level creation from explicit fractional coordinates; does not infer or establish a named prototype"
+            ),
             parameters={
                 "type": "object",
                 "properties": {

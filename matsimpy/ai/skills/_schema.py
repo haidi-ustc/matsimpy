@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import typing
+from copy import deepcopy
 from collections.abc import Callable
 
 
@@ -18,6 +19,23 @@ STRUCTURE_PARAM_NAMES = {
     "bottom",
     "top",
     "other",
+}
+
+STRUCTURE_REF_SCHEMA = {
+    "type": "object",
+    "description": "MatSimPy structure reference returned by a previous tool call",
+    "properties": {
+        "structure_ref": {
+            "type": "string",
+            "pattern": r"^structure:[1-9][0-9]*$",
+            "description": "Reference returned by a MatSimPy structure-producing tool",
+        },
+        "type": {"type": "string"},
+        "formula": {"type": "string"},
+        "num_atoms": {"type": "integer", "minimum": 0},
+    },
+    "required": ["structure_ref"],
+    "additionalProperties": True,
 }
 
 
@@ -63,19 +81,24 @@ def sig_to_schema(fn: Callable) -> dict:
     except (ValueError, TypeError):
         return {"type": "object", "properties": {}, "required": []}
 
+    try:
+        hints = typing.get_type_hints(fn)
+    except (NameError, TypeError):
+        hints = {}
+
     props = {}
     required = []
     for name, param in sig.parameters.items():
-        if name in ("self", "kwargs", "args"):
+        if name == "self" or param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             continue
 
         if name in STRUCTURE_PARAM_NAMES:
-            prop = {
-                "type": "object",
-                "description": "MatSimPy structure reference returned by a previous tool call",
-            }
+            prop = deepcopy(STRUCTURE_REF_SCHEMA)
         else:
-            json_type = resolve_annotation(param.annotation)
+            json_type = resolve_annotation(hints.get(name, param.annotation))
             prop = {"type": json_type} if json_type else {}
 
         if param.default is inspect.Parameter.empty:

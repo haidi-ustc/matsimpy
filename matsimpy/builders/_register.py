@@ -11,7 +11,10 @@ def register_all():
     from .bulk.prototype import from_prototype
     registry.register(BuilderSpec(
         name="from_prototype", category="bulk", callable=from_prototype,
-        description="Build bulk crystal from prototype (fcc, bcc, hcp, etc.)",
+        description=(
+            "Build a primitive bulk cell from a named prototype (fcc, rocksalt, etc.); "
+            "lattice_constant is the conventional prototype parameter"
+        ),
         output_type=Crystal,
         parameter_schema={
             "type": "object",
@@ -20,8 +23,20 @@ def register_all():
                     "type": "string",
                     "enum": ["fcc", "bcc", "hcp", "diamond", "zincblende", "rocksalt", "wurtzite", "perovskite", "sc"],
                 },
-                "species": {"type": "string"},
-                "lattice_constant": {"type": "number", "description": "Lattice constant in Angstrom"},
+                "species": {
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    ],
+                    "description": "Element symbol/formula or ordered species for prototype sites",
+                },
+                "lattice_constant": {
+                    "oneOf": [
+                        {"type": "number"},
+                        {"type": "array", "items": {"type": "number"}, "minItems": 1},
+                    ],
+                    "description": "Lattice constant in Angstrom; anisotropic prototypes accept a list",
+                },
             },
             "required": ["prototype", "species", "lattice_constant"],
         },

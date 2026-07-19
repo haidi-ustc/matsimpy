@@ -10,7 +10,7 @@ from matsimpy.ai.skill import FunctionDef
 SKILL_NAME = "analysis"
 SKILL_DESCRIPTION = "Structure analysis: bonds, geometry, connectivity, symmetry, neighbors"
 SKILL_KEYWORDS: list[str] = [
-    "bond", "angle", "dihedral", "symmetry", "connect",
+    "bond", "angle", "dihedral", "connect",
     "ring", "topology", "analyze", "analysis",
 ]
 
@@ -111,8 +111,8 @@ def get_functions() -> list[FunctionDef]:
             skill=SKILL_NAME,
         ),
         FunctionDef(
-            name="analyze_symmetry",
-            description="Get space group, point group, and crystal system information",
+            name="analyze_symmetry_file",
+            description="Read a structure file and get its space group and crystal system information",
             parameters={
                 "type": "object",
                 "properties": {

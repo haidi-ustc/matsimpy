@@ -24,3 +24,23 @@ def test_fake_provider_matches_protocol():
 
 def test_deepseek_provider_is_exported_from_providers():
     assert DeepSeekProvider.__name__ == "DeepSeekProvider"
+
+
+def test_deepseek_provider_uses_configurable_request_timeout(monkeypatch):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]}
+
+    def post(*args, **kwargs):
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr("matsimpy.ai.provider.requests.post", post)
+    provider = DeepSeekProvider(api_key="test", request_timeout=30)
+    provider.chat([ChatMessage.user("hello")])
+    assert captured["timeout"] == 30

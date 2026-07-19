@@ -32,8 +32,7 @@ SKILL_KEYWORDS: list[str] = [
 def _read_structure(path: str, format: str | None = None):
     from matsimpy import io
 
-    structure = io.read(path, format=format) if format else io.read(path)
-    return _summarize_structure(structure)
+    return io.read(path, format=format) if format else io.read(path)
 
 
 def _write_structure(path: str, structure=None, format: str | None = None):

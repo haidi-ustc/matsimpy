@@ -545,6 +545,25 @@ print(response)
 
 Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
 
+Builder and transformation tools are generated from the live MatSimPy registries.
+New registered functions and plugins therefore become available to the LLM without
+adding matching wrappers under `matsimpy.ai`; explicit registry schemas take
+priority, with callable signatures used when a registry does not provide one.
+
+Named structures should use prototype builders, while `create_crystal` is the
+low-level interface for explicitly supplied fractional coordinates:
+
+```bash
+matsimpy-ai -c "build rocksalt NaCl with a=5.64 angstrom and save it as nacl.cif"
+```
+
+AI boundary and live-provider tests can be run independently:
+
+```bash
+pytest tests/ai/ -q -m "not requires_llm"
+pytest tests/ai/test_live_llm.py -q -m requires_llm
+```
+
 The AI REPL and `matsimpy-ai -c` share the same agent runtime. The runtime records searchable task traces in `~/.matsimpy/ai/state.db`, keeps compact memory files in `~/.matsimpy/ai/memory/`, and proposes reusable workflow skills as drafts. Draft skills are disabled until approved with `/approve-skill <name>`.
 
 Runtime commands:

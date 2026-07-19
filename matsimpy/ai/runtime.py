@@ -32,6 +32,16 @@ Core rules:
    Pass returned structure references or result dictionaries through the executor
    instead of expanding full structure data into later arguments.
 5. You may show returned data only when the user explicitly asks to see it.
+6. For a named crystal prototype such as fcc, bcc, hcp, diamond, zincblende,
+   rocksalt, wurtzite, or perovskite, use the named prototype builder. Use the
+   low-level coordinate constructor only when the user explicitly supplies
+   species and coordinates.
+7. When the user requests a generated crystal without naming a prototype and
+   without supplying coordinates, use the PyXtal-backed random crystal builder.
+8. Ground the final response in returned facts. Never infer a named prototype
+   from low-level coordinates. Distinguish a builder's conventional lattice
+   parameter input from the primitive cell vectors it returns, and never call a
+   one-atom FCC primitive cell a conventional cell.
 
 If a tool fails, explain the failure, stop inventing evidence, and choose a smaller
 MatSimPy-backed next step only when the user request can still be satisfied safely."""
