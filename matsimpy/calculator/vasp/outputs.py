@@ -31,7 +31,7 @@ from monty.os.path import zpath
 from monty.re import regrep
 from tqdm import tqdm
 
-from matsimpy.core import Composition, Element, Lattice, Crystal
+from matsimpy.core import Composition, Element, Lattice, Crystal, Trajectory
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
 from matsimpy.electronic_structure import (
@@ -43,6 +43,8 @@ from matsimpy.electronic_structure import (
     Orbital,
     OrbitalType,
     Spin,
+    ComputedEntry,
+    ComputedStructureEntry,
     get_reconstructed_band_structure,
 )
 from matsimpy.io.errors import ParseError
@@ -68,15 +70,12 @@ def micro_pyawk(filename, search, results=None, debug=None, postdebug=None):
 
 # Advanced pymatgen types — optional, guarded by _HAS_PYMATGEN_ES
 try:
-    from pymatgen.core.entries import ComputedEntry, ComputedStructureEntry
-    from pymatgen.core.trajectory import Trajectory
     from pymatgen.core.units import unitized
     from pymatgen.io.common import VolumetricData as BaseVolumetricData
     from pymatgen.io.wannier90 import Unk
     _HAS_PYMATGEN_ES = True
 except ImportError:
     _HAS_PYMATGEN_ES = False
-    ComputedEntry = ComputedStructureEntry = Trajectory = None
     # No-op unitized decorator (returns function unchanged)
     def unitized(unit):
         def decorator(func):

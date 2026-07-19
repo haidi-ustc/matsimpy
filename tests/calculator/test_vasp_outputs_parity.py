@@ -97,3 +97,37 @@ def test_vasprun_get_band_structure_parity():
     assert native_gap["energy"] == pytest.approx(oracle_gap["energy"])
     assert native_gap["direct"] == oracle_gap["direct"]
     assert native_gap["transition"] == oracle_gap["transition"]
+
+
+@pytest.mark.requires_pymatgen
+def test_vasprun_entry_parity():
+    pytest.importorskip("pymatgen")
+    from pymatgen.io.vasp.outputs import Vasprun as PymatgenVasprun
+
+    native_run = Vasprun(FIXTURE)
+    oracle_run = PymatgenVasprun(FIXTURE, parse_potcar_file=False)
+    native = native_run.get_computed_entry(entry_id="fixture")
+    oracle = oracle_run.get_computed_entry(entry_id="fixture")
+
+    assert dict(native.composition.composition) == oracle.composition.as_dict()
+    assert native.uncorrected_energy == pytest.approx(oracle.uncorrected_energy)
+    assert native.correction == pytest.approx(oracle.correction)
+    assert native.parameters == oracle.parameters
+    assert native.data == oracle.data
+    assert native.entry_id == oracle.entry_id
+
+
+@pytest.mark.requires_pymatgen
+def test_vasprun_trajectory_parity():
+    pytest.importorskip("pymatgen")
+    from pymatgen.io.vasp.outputs import Vasprun as PymatgenVasprun
+
+    native = Vasprun(FIXTURE).get_trajectory()
+    oracle = PymatgenVasprun(FIXTURE, parse_potcar_file=False).get_trajectory()
+
+    assert len(native) == len(oracle)
+    for native_frame, oracle_frame in zip(native, oracle):
+        np.testing.assert_allclose(native_frame.lattice.matrix, oracle_frame.lattice.matrix)
+        assert list(native_frame.species) == [str(specie) for specie in oracle_frame.species]
+        coordinate_delta = native_frame.frac_positions - oracle_frame.frac_coords
+        np.testing.assert_allclose(coordinate_delta - np.round(coordinate_delta), 0, atol=1e-8)
