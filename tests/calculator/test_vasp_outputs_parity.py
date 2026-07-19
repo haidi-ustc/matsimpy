@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from matsimpy.calculator.vasp.outputs import Vasprun
+from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
 from matsimpy.core import Crystal, Lattice, Trajectory
 from matsimpy.electronic_structure import (
     BandStructure,
@@ -23,11 +23,27 @@ FIXTURE = Path(__file__).parent / "fixtures" / "vasp" / "vasprun.xml"
 
 
 def test_supported_vasprun_results_are_native():
-    vasprun = Vasprun(FIXTURE)
+    vasprun = Vasprun(FIXTURE, parse_projected_eigen=True)
     assert isinstance(vasprun.tdos, Dos)
     assert isinstance(vasprun.complete_dos, CompleteDos)
     assert isinstance(vasprun.get_computed_entry(), ComputedStructureEntry)
     assert isinstance(vasprun.get_trajectory(), Trajectory)
+    assert set(vasprun.eigenvalues) == {Spin.up, Spin.down}
+    assert vasprun.eigenvalues[Spin.up].shape[-1] == 2
+    assert set(vasprun.projected_eigenvalues) == {Spin.up, Spin.down}
+    assert vasprun.projected_eigenvalues[Spin.up].ndim == 4
+
+
+def test_outcar_fixture_exercises_magnetic_parser_path():
+    outcar = Outcar(FIXTURE.with_name("OUTCAR"))
+    assert outcar.magnetization
+    assert {"s", "p", "d", "tot"} <= set(outcar.magnetization[0])
+    assert outcar.has_onsite_density_matrices is True
+    onsite = outcar.data["onsite_density_matrices"]
+    assert onsite
+    assert set(onsite[0]) == {Spin.up, Spin.down}
+    matrix = np.asarray(onsite[-1][Spin.up])
+    assert matrix.ndim == 2 and matrix.shape[0] == matrix.shape[1]
 
 
 @pytest.mark.requires_pymatgen

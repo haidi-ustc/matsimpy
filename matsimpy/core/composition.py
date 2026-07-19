@@ -28,6 +28,7 @@ import string
 import functools
 import types
 from collections import Counter
+from fractions import Fraction
 from typing import Optional, Dict, List, Tuple, Any, Mapping
 from monty.json import MSONable
 from .periodic_table import Element, ELEMENTS, DUMMY_ELEMENTS
@@ -92,6 +93,31 @@ class Composition(MSONable):
         # Cache for mass calculation
         self._cached_mass: Optional[float] = None
 
+    @classmethod
+    def from_mapping(
+        cls, amounts: Mapping[str, float], sort_by: Optional[str] = None
+    ) -> "Composition":
+        """Build a composition while retaining non-integral stoichiometries."""
+        if not amounts:
+            raise ValueError("Composition mapping cannot be empty")
+        obj = cls.__new__(cls)
+        normalized = Counter()
+        order = []
+        for raw_symbol, raw_amount in amounts.items():
+            symbol = normalize_species(str(raw_symbol), allow_dummy=True)
+            amount = float(raw_amount)
+            if not math.isfinite(amount) or amount <= 0:
+                raise ValueError("Composition amounts must be finite and positive")
+            normalized[symbol] += amount
+            if symbol not in order:
+                order.append(symbol)
+        obj._composition = normalized
+        obj._element_order = order
+        obj._sort_by = sort_by
+        obj.formula = obj._chemical_formula(sort_by=sort_by)
+        obj._cached_mass = None
+        return obj
+
     @property
     def composition(self) -> Mapping[str, int]:
         """
@@ -140,9 +166,15 @@ class Composition(MSONable):
             elements = self._get_sorted_element_counts(element_counts, sort_by)
 
         formula = "".join(
-            [f'{element}{count if count > 1 else ""}' for element, count in elements]
+            f"{element}{self._format_amount(count)}" for element, count in elements
         )
         return formula
+
+    @staticmethod
+    def _format_amount(amount: float) -> str:
+        if amount == 1:
+            return ""
+        return format(amount, ".15g")
 
     @staticmethod
     def _get_sorted_element_counts(
@@ -348,22 +380,27 @@ class Composition(MSONable):
             'CH2O'
         """
         counts = list(self._composition.values())
-        gcd = counts[0]
-        for c in counts[1:]:
-            gcd = math.gcd(gcd, c)
-        if gcd <= 1:
+        fractions = [Fraction(value).limit_denominator(1_000_000) for value in counts]
+        denominator = math.lcm(*(value.denominator for value in fractions))
+        integer_counts = [value.numerator * (denominator // value.denominator) for value in fractions]
+        gcd = math.gcd(*integer_counts)
+        reduced = {
+            element: integer_counts[index] // gcd
+            for index, element in enumerate(self._composition)
+        }
+        if denominator == 1 and gcd <= 1:
             return self.formula
         # Build formula preserving current element ordering
         seen = set()
         parts = []
         for element in self._element_order:
             if element in self._composition and element not in seen:
-                reduced_count = self._composition[element] // gcd
+                reduced_count = reduced[element]
                 parts.append(f"{element}{reduced_count if reduced_count > 1 else ''}")
                 seen.add(element)
         for element in self._composition:
             if element not in seen:
-                reduced_count = self._composition[element] // gcd
+                reduced_count = reduced[element]
                 parts.append(f"{element}{reduced_count if reduced_count > 1 else ''}")
                 seen.add(element)
         return "".join(parts)
@@ -559,6 +596,7 @@ class Composition(MSONable):
             "@class": self.__class__.__name__,
             "formula": self.formula,
             "sort_by": self._sort_by,
+            "amounts": dict(self._composition),
         }
 
     @classmethod
@@ -585,9 +623,10 @@ class Composition(MSONable):
             >>> c.formula
             'H2O'
         """
-        formula = d["formula"]
         sort_by = d.get("sort_by", None)
-        return cls(formula=formula, sort_by=sort_by)
+        if "amounts" in d:
+            return cls.from_mapping(d["amounts"], sort_by=sort_by)
+        return cls(formula=d["formula"], sort_by=sort_by)
 
     def to_json(self) -> str:
         """

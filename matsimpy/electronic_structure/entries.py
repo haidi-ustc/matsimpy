@@ -26,11 +26,7 @@ class ComputedEntry(MSONable):
         elif isinstance(composition, str):
             self.composition = Composition(composition)
         elif isinstance(composition, Mapping):
-            formula = "".join(
-                "%s%s" % (symbol, amount if amount != 1 else "")
-                for symbol, amount in composition.items()
-            )
-            self.composition = Composition(formula)
+            self.composition = Composition.from_mapping(composition)
         else:
             raise TypeError("composition must be a Composition, formula, or mapping")
         self.uncorrected_energy = float(energy)

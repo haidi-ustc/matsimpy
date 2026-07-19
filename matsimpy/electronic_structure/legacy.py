@@ -1,5 +1,9 @@
 """Explicit decoding for the pymatgen result dictionaries MatSimPy supports."""
 
+from copy import deepcopy
+
+import numpy as np
+
 from matsimpy.calculator.vasp.outputs import Chgcar, Elfcar, Locpot, VolumetricData
 from matsimpy.core import Crystal, Lattice, Trajectory
 from matsimpy.electronic_structure.bandstructure import BandStructure, BandStructureSymmLine
@@ -78,22 +82,47 @@ def decode_legacy_pymatgen_dict(data):
         lattice_data = data["lattice"]
         lattices = [lattice_data] * len(data["coords"]) if data.get("constant_lattice") else lattice_data
         species = [_species_symbol(value) for value in data["species"]]
-        frames = [
-            Crystal(species, coords, Lattice(lattice), pbc=[True] * 3)
-            for coords, lattice in zip(data["coords"], lattices)
-        ]
-        return Trajectory(frames, constant_lattice=data.get("constant_lattice", False))
+        coords = np.asarray(data["coords"], dtype=float)
+        if data.get("coords_are_displacement"):
+            coords = coords + np.asarray(data["base_positions"], dtype=float)
+        site_properties = data.get("site_properties") or [{} for _ in coords]
+        frames = []
+        for frame_coords, lattice, properties in zip(coords, lattices, site_properties):
+            per_site = [
+                {name: values[index] for name, values in properties.items()}
+                for index in range(len(species))
+            ]
+            frames.append(Crystal(species, frame_coords, Lattice(lattice), pbc=[True] * 3,
+                                  site_properties=per_site))
+        return _trajectory_with_metadata(frames, data)
     if result_type is Trajectory:
-        frames = [item.get("structure", item) for item in data["frames"]]
-        return Trajectory(
-            [_decode_structure(frame) for frame in frames],
-            constant_lattice=data.get("constant_lattice", False),
-        )
+        frames = []
+        for item in data["frames"]:
+            frame = _decode_structure(item.get("structure", item))
+            if "structure" in item:
+                extras = item.get("extra_properties")
+                if extras is None:
+                    extras = {key: value for key, value in item.items() if key != "structure"}
+                if extras:
+                    frame._extra_properties = deepcopy(extras)
+            frames.append(frame)
+        return _trajectory_with_metadata(frames, data)
     if issubclass(result_type, VolumetricData):
         normalized = dict(data)
         normalized["structure"] = _decode_structure(data["structure"])
         return result_type.from_dict(normalized)
     return result_type.from_dict(data)
+
+
+def _trajectory_with_metadata(frames, data):
+    return Trajectory(
+        frames, constant_lattice=data.get("constant_lattice", False),
+        frame_properties=data.get("frame_properties"), charge=data.get("charge"),
+        spin=data.get("spin"), spin_multiplicity=data.get("spin_multiplicity"),
+        time_step=data.get("time_step"),
+        coords_are_displacement=data.get("coords_are_displacement", False),
+        base_positions=data.get("base_positions"),
+    )
 
 
 def _species_symbol(value):
