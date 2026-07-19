@@ -79,6 +79,7 @@ docs/_build/
 docs/_static/
 docs/_templates/
 docs/superpowers/
+superpowers/
 reviews/
 devdocs/
 .superpowers/
