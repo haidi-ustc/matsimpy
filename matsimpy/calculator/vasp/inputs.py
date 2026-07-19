@@ -41,6 +41,7 @@ from tabulate import tabulate
 
 from matsimpy.core import Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, str_delimited
+from matsimpy.electronic_structure import Magmom
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
@@ -60,23 +61,6 @@ def get_el_sp(el):
     if isinstance(el, Element):
         return el
     return Element(el)
-
-# Magmom: simple local class (adapted from pymatgen)
-class Magmom:
-    """Simple magnetic moment wrapper. Adapted from pymatgen."""
-    def __init__(self, magmom):
-        if isinstance(magmom, (list, tuple, np.ndarray)):
-            self.moment = list(magmom)
-        else:
-            self.moment = [float(magmom)]
-    def __getitem__(self, i):
-        return self.moment[i]
-    def __repr__(self):
-        return f"Magmom({self.moment})"
-    def __eq__(self, other):
-        if isinstance(other, Magmom):
-            return self.moment == other.moment
-        return NotImplemented
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

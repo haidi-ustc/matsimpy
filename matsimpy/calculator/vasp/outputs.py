@@ -34,6 +34,8 @@ from tqdm import tqdm
 from matsimpy.core import Composition, Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
+from matsimpy.electronic_structure import Magmom, Orbital, OrbitalType, Spin
+from matsimpy.io.errors import ParseError
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
@@ -62,10 +64,8 @@ try:
     from pymatgen.electronic_structure.bandstructure import (
         BandStructure, BandStructureSymmLine, get_reconstructed_band_structure,
     )
-    from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
     from pymatgen.electronic_structure.dos import CompleteDos, Dos
     from pymatgen.io.common import VolumetricData as BaseVolumetricData
-    from pymatgen.io.core import ParseError
     from pymatgen.io.wannier90 import Unk
     _HAS_PYMATGEN_ES = True
 except ImportError:
@@ -78,11 +78,9 @@ except ImportError:
         return decorator
     BandStructure = BandStructureSymmLine = None
     get_reconstructed_band_structure = None
-    Magmom = Orbital = OrbitalType = Spin = None
     CompleteDos = Dos = None
     # Dummy base classes so subclasses don't fail on import
     BaseVolumetricData = type("BaseVolumetricData", (), {})
-    ParseError = type("ParseError", (Exception,), {})
     Unk = None
 
 try:
