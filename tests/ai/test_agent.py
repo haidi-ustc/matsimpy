@@ -86,6 +86,51 @@ def test_agent_run_restores_callers_working_directory(tmp_path):
     assert Path.cwd() == original
 
 
+def test_agent_replays_complete_tool_evidence_on_follow_up(tmp_path):
+    from matsimpy.ai import Agent
+
+    build = ToolCall("build", "build_copper", {})
+    save = ToolCall("save", "save_copper", {"path": "copper.cif"})
+    provider = FakeProvider([
+        ChatResponse(_tool_message(build), [build], "tool_calls"),
+        ChatResponse(ChatMessage.assistant("Copper is ready."), [], "stop"),
+        ChatResponse(_tool_message(save), [save], "tool_calls"),
+        ChatResponse(ChatMessage.assistant("Saved it."), [], "stop"),
+    ])
+    agent = Agent(workspace=tmp_path, provider=provider)
+
+    def save_copper(path):
+        Path(path).write_text("Cu")
+        return {"saved_to": path}
+
+    skill = Skill("copper", "copper", [
+        FunctionDef("build_copper", "Build copper", {"type": "object", "properties": {}}, lambda: {"formula": "Cu"}),
+        FunctionDef(
+            "save_copper",
+            "Save copper",
+            {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+            save_copper,
+        ),
+    ])
+    agent.skill_manager.register(skill)
+    agent.skill_manager.load("copper")
+
+    agent.run("build fcc copper")
+    result = agent.run("save it")
+
+    replay = provider.calls[2]
+    assert [message.role for message in replay] == [
+        "system", "user", "assistant", "tool", "assistant", "user"
+    ]
+    assert replay[2].tool_calls[0]["function"]["name"] == "build_copper"
+    assert '"formula": "Cu"' in replay[3].content
+    assert result.artifacts == (str(tmp_path / "copper.cif"),)
+
+
 def test_import_and_agent_construction_do_not_warn_but_engine_does(tmp_path):
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -145,3 +190,30 @@ def test_engine_construction_does_not_leave_active_executor(tmp_path):
         AIEngine(api_key="unused", workspace_path=tmp_path)
 
     assert _active_executor.get() is None
+
+
+def test_repl_workspace_switch_keeps_relative_commands_in_new_workspace(
+    tmp_path, monkeypatch
+):
+    from matsimpy.ai.engine import AIEngine
+
+    original_cwd = Path.cwd()
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        engine = AIEngine(api_key="unused", workspace_path=old)
+    commands = iter([f"/workspace {new}", "/save conversation.json"])
+
+    def fake_input(_prompt):
+        try:
+            return next(commands)
+        except StopIteration:
+            raise EOFError
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    try:
+        engine.repl()
+        assert (new / "conversation.json").exists()
+    finally:
+        os.chdir(original_cwd)

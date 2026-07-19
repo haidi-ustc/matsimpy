@@ -49,7 +49,6 @@ class Agent:
         self.system_prompt = system_prompt
         self.verbose_hook = verbose_hook
         self.source = source
-        self.extra_messages: list[ChatMessage] | None = None
         self._workspace_path = Path(workspace).expanduser().resolve() if workspace else None
         self._create_session()
 
@@ -80,16 +79,16 @@ class Agent:
     def run(
         self,
         text: str,
-        *,
-        extra_messages: list[ChatMessage] | None = None,
     ) -> AgentResult:
         """Run one turn and return normalized runtime evidence."""
-        context = extra_messages if extra_messages is not None else self.extra_messages
-        self.extra_messages = None
-        turn = self.session.run(text, extra_messages=context)
+        turn = self.session.run(text)
         result = turn.result
         assert result is not None
         return self._normalize(result)
+
+    def add_context(self, message: ChatMessage) -> None:
+        """Add explicit context to subsequent conversation turns."""
+        self.session.add_context(message)
 
     def switch_workspace(self, workspace: str | Path) -> None:
         """Move future tasks and durable state to another workspace."""

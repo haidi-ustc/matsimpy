@@ -22,6 +22,7 @@ class SessionTurn:
     user_request: str
     final_response: str
     result: TaskResult | None = None
+    messages: tuple[ChatMessage, ...] = ()
 
 
 class AgentSession:
@@ -40,6 +41,7 @@ class AgentSession:
         self.runtime.session_store = session_store
         self.conversation_id: int | None = None
         self.turns: list[SessionTurn] = []
+        self.context_messages: list[ChatMessage] = []
         self._replacement_parent_id: int | None = None
 
     def new(self) -> int:
@@ -63,11 +65,7 @@ class AgentSession:
         self._replacement_parent_id = None
         return self
 
-    def run(
-        self,
-        text: str,
-        extra_messages: list[ChatMessage] | None = None,
-    ) -> SessionTurn:
+    def run(self, text: str) -> SessionTurn:
         """Execute and append one conversational turn."""
         parent_id = self._replacement_parent_id
         self._replacement_parent_id = None
@@ -75,7 +73,6 @@ class AgentSession:
             text,
             parent_attempt_id=parent_id,
             replace_parent=False,
-            extra_messages=extra_messages,
         )
 
     def retry(self) -> SessionTurn:
@@ -87,7 +84,6 @@ class AgentSession:
             parent.user_request,
             parent_attempt_id=parent.attempt_id,
             replace_parent=True,
-            extra_messages=None,
         )
 
     def undo(self) -> SessionTurn:
@@ -103,7 +99,6 @@ class AgentSession:
         text: str,
         parent_attempt_id: int | None,
         replace_parent: bool,
-        extra_messages: list[ChatMessage] | None,
     ) -> SessionTurn:
         if self.conversation_id is None:
             self.new()
@@ -114,11 +109,8 @@ class AgentSession:
             parent_attempt_id=parent_attempt_id,
         )
         context_turns = self.turns[:-1] if replace_parent else self.turns
-        context = (
-            list(extra_messages)
-            if extra_messages is not None
-            else self._messages_for(context_turns)
-        )
+        context = list(self.context_messages)
+        context.extend(self._messages_for(context_turns))
         try:
             result = self.runtime.run(text, extra_messages=context)
         except (KeyboardInterrupt, asyncio.CancelledError) as exc:
@@ -142,22 +134,28 @@ class AgentSession:
             self.turns.append(turn)
         return turn
 
+    def add_context(self, message: ChatMessage) -> None:
+        """Add explicit session context, such as an activated skill."""
+        self.context_messages.append(message)
+
     @staticmethod
     def _messages_for(turns: list[SessionTurn]) -> list[ChatMessage]:
         messages: list[ChatMessage] = []
         for turn in turns:
-            messages.append(ChatMessage.user(turn.user_request))
-            messages.append(ChatMessage.assistant(turn.final_response))
+            if turn.messages:
+                messages.extend(turn.messages)
+            else:
+                messages.append(ChatMessage.user(turn.user_request))
+                messages.append(ChatMessage.assistant(turn.final_response))
         return messages
 
-    @classmethod
-    def _active_branch(cls, attempts: list[AttemptRecord]) -> list[SessionTurn]:
+    def _active_branch(self, attempts: list[AttemptRecord]) -> list[SessionTurn]:
         active: list[SessionTurn] = []
         active_indices: dict[int, int] = {}
         for attempt in attempts:
             if attempt.state not in {"succeeded", "failed"}:
                 continue
-            turn = cls._turn_from_attempt(attempt)
+            turn = self._turn_from_attempt(attempt)
             parent_index = active_indices.get(attempt.parent_attempt_id or -1)
             if parent_index is not None:
                 old = active[parent_index]
@@ -169,10 +167,15 @@ class AgentSession:
                 active.append(turn)
         return active
 
-    @staticmethod
     def _turn_from_attempt(
-        attempt: AttemptRecord, result: TaskResult | None = None
+        self, attempt: AttemptRecord, result: TaskResult | None = None
     ) -> SessionTurn:
+        messages: tuple[ChatMessage, ...] = ()
+        if attempt.trace_id is not None:
+            messages = tuple(
+                ChatMessage(**row)
+                for row in self.session_store.load_trace_messages(attempt.trace_id)
+            )
         return SessionTurn(
             conversation_id=attempt.conversation_id,
             attempt_id=attempt.id,
@@ -181,6 +184,7 @@ class AgentSession:
             user_request=attempt.user_request,
             final_response=attempt.final_response or "",
             result=result,
+            messages=messages,
         )
 
 

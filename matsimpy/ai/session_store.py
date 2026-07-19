@@ -213,6 +213,29 @@ class SessionStore:
                 ],
             )
 
+    def load_trace_messages(self, trace_id: int) -> list[dict]:
+        """Return the complete ordered runtime transcript for one trace."""
+        rows = self.conn.execute(
+            """
+            SELECT messages.role, messages.content, messages.tool_calls_json,
+                   messages.tool_call_id
+            FROM task_traces
+            JOIN messages ON messages.session_id = task_traces.session_id
+            WHERE task_traces.id = ?
+            ORDER BY messages.id
+            """,
+            (trace_id,),
+        ).fetchall()
+        return [
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "tool_calls": self._json_load(row["tool_calls_json"], None),
+                "tool_call_id": row["tool_call_id"],
+            }
+            for row in rows
+        ]
+
     def add_tool_calls_batch(self, session_id: int, rows: list[dict]) -> None:
         """Insert all tool calls for a session in one transaction."""
         with self.conn:

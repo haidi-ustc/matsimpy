@@ -52,6 +52,7 @@ class AIEngine:
         self.skill_manager = SkillManager()
         self.memory = AgentMemory()
         self.verbose = False
+        self._repl_active = False
 
         # Inject soul into system prompt
         soul = self.memory.get_soul_prompt()
@@ -74,6 +75,7 @@ class AIEngine:
         self.conversation: list[ChatMessage] = [
             ChatMessage.system(self._build_system_prompt()),
         ]
+        self._registered_contexts: set[str] = set()
 
         # Learning state
         self._last_tool_results: list[dict] = []
@@ -96,7 +98,11 @@ class AIEngine:
         self._last_tool_results = []
         self._last_tool_calls = []
 
-        self.agent.extra_messages = self._explicit_context_messages()
+        for message in self.conversation[1:]:
+            if message.role != "system" or message.content in self._registered_contexts:
+                continue
+            self.agent.add_context(message)
+            self._registered_contexts.add(message.content)
         result = self.agent.run(user_message)
         self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
@@ -117,13 +123,10 @@ class AIEngine:
 
         return result.response
 
-    def _explicit_context_messages(self) -> list[ChatMessage]:
-        """Return prior conversation for continuity across turns."""
-        return list(self.conversation[1:])
-
     def repl(self) -> None:
         """Interactive REPL loop with /commands."""
         self.workspace.enter()
+        self._repl_active = True
         from .provider import MODELS
         from .skill_loader import discover_builtin_skills
 
@@ -170,6 +173,7 @@ class AIEngine:
                 print(f"\n🤖 › {response}")
             except Exception as e:
                 print(f"\n⚠️ › Error: {e}")
+        self._repl_active = False
 
     def _handle_command(self, cmd: str) -> None:
         """Handle REPL /commands."""
@@ -183,10 +187,14 @@ class AIEngine:
 
         elif command == "/workspace":
             if arg:
+                if self._repl_active:
+                    self.workspace.leave()
                 self.agent.switch_workspace(arg)
                 self.runtime = self.agent.runtime
                 self.executor = self.runtime.executor
                 self.workspace = self.runtime.workspace
+                if self._repl_active:
+                    self.workspace.enter()
                 print(f"  Workspace changed to: {self.workspace.path}")
             else:
                 print(f"  Current workspace: {self.workspace.path}")

@@ -79,6 +79,55 @@ def test_run_and_restart_resume_restore_active_context(tmp_path):
     assert third.final_response == "third answer"
 
 
+def test_restart_resume_restores_assistant_tool_calls_and_results(tmp_path):
+    store = SessionStore(tmp_path / "sessions.db")
+    call = ToolCall("ping-1", "ping", {})
+    tool_response = ChatResponse(
+        ChatMessage.assistant(
+            "",
+            tool_calls=[{
+                "id": call.id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": "{}"},
+            }],
+        ),
+        [call],
+        "tool_calls",
+    )
+    first_provider = RecordingProvider([tool_response, "tool complete"])
+    skill = Skill(
+        "ping-test",
+        "Ping test",
+        [FunctionDef("ping", "Ping", {"type": "object", "properties": {}}, lambda: {"value": "pong"})],
+    )
+    manager = SkillManager({"ping-test": skill})
+    manager.load("ping-test")
+
+    def first_runtime():
+        return AgentRuntime(
+            first_provider,
+            manager,
+            session_store=store,
+            workspace_path=tmp_path,
+            source="test",
+        )
+
+    original = AgentSession(first_runtime, store)
+    turn = original.run("ping once")
+
+    resumed_provider = RecordingProvider(["remembered"])
+    resumed = AgentSession(runtime_factory(resumed_provider, tmp_path), store)
+    resumed.resume(turn.conversation_id)
+    resumed.run("what happened?")
+
+    replay = resumed_provider.calls[0]
+    assert [message.role for message in replay] == [
+        "system", "user", "assistant", "tool", "assistant", "user"
+    ]
+    assert replay[2].tool_calls[0]["function"]["name"] == "ping"
+    assert '"value": "pong"' in replay[3].content
+
+
 def test_retry_links_audit_attempt_and_replaces_active_turn(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     provider = RecordingProvider(["bad answer", "better answer"])
