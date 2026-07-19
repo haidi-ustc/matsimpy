@@ -5,11 +5,44 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 STATE_DB = Path.home() / ".matsimpy" / "ai" / "state.db"
 _SEARCH_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+_SCHEMA_VERSION = 2
+AttemptState = Literal["pending", "running", "interrupted", "succeeded", "failed"]
+_FINISHED_ATTEMPT_STATES = frozenset({"succeeded", "failed"})
+
+
+@dataclass(frozen=True)
+class ConversationRecord:
+    """A durable logical conversation spanning one or more attempts."""
+
+    id: int
+    source: str
+    workspace: str
+    model: str
+    provider: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class AttemptRecord:
+    """One durable execution attempt within a conversation."""
+
+    id: int
+    conversation_id: int
+    parent_attempt_id: int | None
+    state: AttemptState
+    user_request: str
+    final_response: str | None
+    trace_id: int | None
+    error: str | None
+    created_at: str
+    finished_at: str | None
 
 
 class SessionStore:
@@ -32,6 +65,106 @@ class SessionStore:
         )
         self.conn.commit()
         return int(cursor.lastrowid)
+
+    def create_conversation(
+        self, source: str, workspace: str, model: str, provider: str
+    ) -> ConversationRecord:
+        """Create and return a durable conversation."""
+        cursor = self.conn.execute(
+            """
+            INSERT INTO conversations (source, workspace, model, provider)
+            VALUES (?, ?, ?, ?)
+            """,
+            (source, workspace, model, provider),
+        )
+        self.conn.commit()
+        return self._get_conversation(int(cursor.lastrowid))
+
+    def list_conversations(self) -> list[ConversationRecord]:
+        """Return conversations in stable creation order."""
+        rows = self.conn.execute("SELECT * FROM conversations ORDER BY id").fetchall()
+        return [self._conversation_from_row(row) for row in rows]
+
+    def load_conversation(
+        self, conversation_id: int
+    ) -> tuple[ConversationRecord, list[AttemptRecord]]:
+        """Load a conversation and its attempts in stable creation order."""
+        conversation = self._get_conversation(conversation_id)
+        rows = self.conn.execute(
+            "SELECT * FROM attempts WHERE conversation_id = ? ORDER BY id",
+            (conversation_id,),
+        ).fetchall()
+        return conversation, [self._attempt_from_row(row) for row in rows]
+
+    def start_attempt(
+        self,
+        conversation_id: int,
+        user_request: str,
+        parent_attempt_id: int | None = None,
+    ) -> AttemptRecord:
+        """Persist a running attempt, optionally linked to a prior attempt."""
+        self._get_conversation(conversation_id)
+        if parent_attempt_id is not None:
+            parent = self._get_attempt(parent_attempt_id)
+            if parent.conversation_id != conversation_id:
+                raise ValueError("parent attempt belongs to a different conversation")
+        with self.conn:
+            cursor = self.conn.execute(
+                """
+                INSERT INTO attempts (
+                    conversation_id, parent_attempt_id, state, user_request
+                ) VALUES (?, ?, 'running', ?)
+                """,
+                (conversation_id, parent_attempt_id, user_request),
+            )
+            self._touch_conversation(conversation_id)
+        return self._get_attempt(int(cursor.lastrowid))
+
+    def finish_attempt(
+        self,
+        attempt_id: int,
+        state: Literal["succeeded", "failed"],
+        final_response: str | None = None,
+        trace_id: int | None = None,
+        error: str | None = None,
+    ) -> AttemptRecord:
+        """Finish a running attempt as succeeded or failed."""
+        if state not in _FINISHED_ATTEMPT_STATES:
+            raise ValueError("finished attempt state must be 'succeeded' or 'failed'")
+        attempt = self._get_attempt(attempt_id)
+        if attempt.state != "running":
+            raise ValueError(f"attempt {attempt_id} is already {attempt.state}")
+        with self.conn:
+            self.conn.execute(
+                """
+                UPDATE attempts
+                SET state = ?, final_response = ?, trace_id = ?, error = ?,
+                    finished_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (state, final_response, trace_id, error, attempt_id),
+            )
+            self._touch_conversation(attempt.conversation_id)
+        return self._get_attempt(attempt_id)
+
+    def mark_attempt_interrupted(
+        self, attempt_id: int, error: str | None = None
+    ) -> AttemptRecord:
+        """Durably mark a running attempt as interrupted."""
+        attempt = self._get_attempt(attempt_id)
+        if attempt.state != "running":
+            raise ValueError(f"attempt {attempt_id} is already {attempt.state}")
+        with self.conn:
+            self.conn.execute(
+                """
+                UPDATE attempts
+                SET state = 'interrupted', error = ?, finished_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (error, attempt_id),
+            )
+            self._touch_conversation(attempt.conversation_id)
+        return self._get_attempt(attempt_id)
 
     def end_session(self, session_id: int, status: str) -> None:
         self.conn.execute(
@@ -245,13 +378,40 @@ class SessionStore:
         self.conn.close()
 
     def _init_schema(self) -> None:
-        self.conn.executescript(
-            """
-            PRAGMA journal_mode=WAL;
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        with self.conn:
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_meta (
+                    version INTEGER NOT NULL CHECK (version >= 0)
+                )
+                """
+            )
+            row = self.conn.execute("SELECT version FROM schema_meta").fetchone()
+            if row is None:
+                self.conn.execute("INSERT INTO schema_meta (version) VALUES (0)")
 
-            PRAGMA foreign_keys = ON;
+        version = int(self.conn.execute("SELECT version FROM schema_meta").fetchone()[0])
+        if version > _SCHEMA_VERSION:
+            raise RuntimeError(
+                f"database schema version {version} is newer than supported version {_SCHEMA_VERSION}"
+            )
+        migrations = (self._migrate_to_v1, self._migrate_to_v2)
+        for target_version in range(version + 1, _SCHEMA_VERSION + 1):
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                migrations[target_version - 1]()
+                self.conn.execute("UPDATE schema_meta SET version = ?", (target_version,))
+            except Exception:
+                self.conn.rollback()
+                raise
+            else:
+                self.conn.commit()
 
-            CREATE TABLE IF NOT EXISTS sessions (
+    def _migrate_to_v1(self) -> None:
+        statements = (
+            """CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source TEXT NOT NULL,
                 workspace TEXT NOT NULL,
@@ -260,9 +420,8 @@ class SessionStore:
                 status TEXT NOT NULL,
                 started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 ended_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS messages (
+            )""",
+            """CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER NOT NULL,
                 role TEXT NOT NULL,
@@ -271,9 +430,8 @@ class SessionStore:
                 tool_call_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
-            );
-
-            CREATE TABLE IF NOT EXISTS tool_calls (
+            )""",
+            """CREATE TABLE IF NOT EXISTS tool_calls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER NOT NULL,
                 tool_name TEXT NOT NULL,
@@ -282,9 +440,8 @@ class SessionStore:
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
-            );
-
-            CREATE TABLE IF NOT EXISTS task_traces (
+            )""",
+            """CREATE TABLE IF NOT EXISTS task_traces (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER NOT NULL,
                 user_request TEXT NOT NULL,
@@ -293,9 +450,8 @@ class SessionStore:
                 final_response TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
-            );
-
-            CREATE TABLE IF NOT EXISTS skill_drafts (
+            )""",
+            """CREATE TABLE IF NOT EXISTS skill_drafts (
                 name TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
                 source_session_id INTEGER,
@@ -305,9 +461,8 @@ class SessionStore:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (source_session_id) REFERENCES sessions(id)
-            );
-
-            CREATE VIRTUAL TABLE IF NOT EXISTS trace_fts USING fts5(
+            )""",
+            """CREATE VIRTUAL TABLE IF NOT EXISTS trace_fts USING fts5(
                 trace_id UNINDEXED,
                 session_id UNINDEXED,
                 user_request,
@@ -315,10 +470,79 @@ class SessionStore:
                 validation_status UNINDEXED,
                 final_response,
                 tool_names
-            );
+            )""",
+        )
+        for statement in statements:
+            self.conn.execute(statement)
+
+    def _migrate_to_v2(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                workspace TEXT NOT NULL,
+                model TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
             """
         )
-        self.conn.commit()
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                parent_attempt_id INTEGER,
+                state TEXT NOT NULL CHECK (
+                    state IN ('pending', 'running', 'interrupted', 'succeeded', 'failed')
+                ),
+                user_request TEXT NOT NULL,
+                final_response TEXT,
+                trace_id INTEGER,
+                error TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at TEXT,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+                FOREIGN KEY (parent_attempt_id) REFERENCES attempts(id),
+                FOREIGN KEY (trace_id) REFERENCES task_traces(id)
+            )
+            """
+        )
+
+    def _get_conversation(self, conversation_id: int) -> ConversationRecord:
+        row = self.conn.execute(
+            "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"unknown conversation id: {conversation_id}")
+        return self._conversation_from_row(row)
+
+    def _get_attempt(self, attempt_id: int) -> AttemptRecord:
+        row = self.conn.execute(
+            "SELECT * FROM attempts WHERE id = ?", (attempt_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"unknown attempt id: {attempt_id}")
+        return self._attempt_from_row(row)
+
+    def _touch_conversation(self, conversation_id: int) -> None:
+        self.conn.execute(
+            "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (conversation_id,),
+        )
+
+    @staticmethod
+    def _conversation_from_row(row: sqlite3.Row) -> ConversationRecord:
+        return ConversationRecord(**dict(row))
+
+    @staticmethod
+    def _attempt_from_row(row: sqlite3.Row) -> AttemptRecord:
+        state = row["state"]
+        if state not in {"pending", "running", "interrupted", "succeeded", "failed"}:
+            raise ValueError(f"unknown persisted attempt state: {state!r}")
+        return AttemptRecord(**dict(row))
 
     def _upsert_trace_fts(self, trace_id: int, tool_names: list[str] | None = None) -> None:
         row = self.conn.execute(
@@ -420,4 +644,4 @@ def _trace_search_query(query: str) -> str | None:
     return " OR ".join(f'"{token}"' for token in tokens)
 
 
-__all__ = ["STATE_DB", "SessionStore"]
+__all__ = ["AttemptRecord", "ConversationRecord", "STATE_DB", "SessionStore"]
