@@ -65,3 +65,40 @@ unattributed third-party conditional table.
   spglib can change site multiplicity; chemical species are preserved, but a
   policy for propagating arbitrary per-site metadata would need a separate API
   decision.
+
+## Review rework: complete Setyawan--Curtarolo paths
+
+### RED / GREEN record
+
+- RED: the new alias regression failed for `tI`, `oF`, `oI`, `oC`, and `mC`;
+  each object was identical to its primitive-family fallback. The pinned
+  interpolation regression also failed because the implementation returned
+  `ceil(distance * density)` points rather than that many intervals plus both
+  endpoints.
+- GREEN: all centered families now use their real metric-dependent SC
+  definitions, including BCT1/2, ORCF1/2/3, RHL1/2, and MCLC1--5 selection.
+  Labels use pymatgen's `\\Gamma`, subscript, and `\\Sigma` spelling, and every
+  independent edge includes both endpoints exactly as pymatgen 2025.6.14 does.
+- The representative 14-family parity matrix passes for Bravais
+  classification, fractional special-point coordinates, path branches,
+  interpolated coordinates, endpoint labels, and point counts with explicit
+  `path_type="setyawan_curtarolo"` and `coords_are_cartesian=False`.
+- Strong dependency-free tests cover all 14 Bravais families and all
+  non-boundary metric subvariants. The measure-zero MCLC2 boundary is checked
+  directly against the selected public SC definition.
+
+### Attribution
+
+The reworked implementation obtains variant selection, point formulae, and
+path strings through the public API of ASE 3.29.0 (`ase.lattice` and
+`ase.dft.kpoints`). ASE is distributed under the BSD-2-Clause license and its
+Bravais definitions cite Setyawan and Curtarolo, *Computational Materials
+Science* 49, 299--312 (2010), Tables 2--19. No pymatgen source or tables were
+copied; pymatgen 2025.6.14 is only an optional black-box test oracle. The scope
+adapted here is special-point coordinates, SC path branch names, metric variant
+classification, and canonical primitive reciprocal metrics.
+
+### Superseded limitation
+
+The earlier limitation claiming conservative fallback paths for `tI`,
+`oF`/`oI`/`oC`, and `mC` is superseded by this rework.
