@@ -194,7 +194,10 @@ class ReplController:
         rollback = getattr(self.evolution, "rollback", None)
         if rollback is None:
             return self._error("Skill rollback is not available yet.", kind="rollback")
-        rollback(arg)
+        try:
+            rollback(arg)
+        except (KeyError, ValueError) as exc:
+            return self._error(str(exc), kind="rollback")
         return CommandResult(
             "rollback", data={"name": arg}, display_hint=f"Rolled back skill: {arg}"
         )

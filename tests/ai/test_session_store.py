@@ -36,7 +36,7 @@ def test_legacy_database_migrates_without_losing_existing_rows(tmp_path):
     store = SessionStore(path)
 
     assert store.conn.execute("SELECT user_request FROM task_traces WHERE id = 9").fetchone()[0] == "keep me"
-    assert store.conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 2
+    assert store.conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 3
     assert {"conversations", "attempts"} <= {
         row[0] for row in store.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
@@ -123,7 +123,7 @@ def test_pending_state_parses_and_migrated_database_reopens(tmp_path):
     reopened = SessionStore(path)
 
     assert reopened.load_conversation(conversation.id)[1][0].state == "pending"
-    assert reopened.conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 2
+    assert reopened.conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 3
     assert reopened.conn.execute("SELECT COUNT(*) FROM attempts WHERE id = ?", (pending_id,)).fetchone()[0] == 1
 
 

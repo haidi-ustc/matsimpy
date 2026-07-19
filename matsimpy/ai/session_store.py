@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 STATE_DB = Path.home() / ".matsimpy" / "ai" / "state.db"
 _SEARCH_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 AttemptState = Literal["pending", "running", "interrupted", "succeeded", "failed"]
 _FINISHED_ATTEMPT_STATES = frozenset({"succeeded", "failed"})
 
@@ -43,6 +43,31 @@ class AttemptRecord:
     error: str | None
     created_at: str
     finished_at: str | None
+
+
+@dataclass(frozen=True)
+class SkillVersion:
+    """Immutable, auditable version of an evolved Agent Skill."""
+
+    id: int
+    name: str
+    version: int
+    description: str
+    body: str
+    allowed_tools: tuple[str, ...]
+    source_trace_ids: tuple[int, ...]
+    content_hash: str
+    parent_version_id: int | None
+    rollback_of_version_id: int | None
+    diff: str
+    status: str
+    deterministic_pass: bool | None
+    deterministic_result: dict[str, Any] | None
+    judge_result: dict[str, Any] | None
+    approvable: bool
+    created_at: str
+    evaluated_at: str | None
+    approved_at: str | None
 
 
 class SessionStore:
@@ -397,6 +422,107 @@ class SessionStore:
         )
         self.conn.commit()
 
+    def create_skill_version(
+        self,
+        *,
+        name: str,
+        description: str,
+        body: str,
+        allowed_tools: tuple[str, ...],
+        source_trace_ids: tuple[int, ...],
+        content_hash: str,
+        parent_version_id: int | None,
+        diff: str,
+        rollback_of_version_id: int | None = None,
+        status: str = "draft",
+    ) -> SkillVersion:
+        """Append an immutable skill version."""
+        row = self.conn.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM skill_versions WHERE name = ?",
+            (name,),
+        ).fetchone()
+        version = int(row[0])
+        with self.conn:
+            cursor = self.conn.execute(
+                """INSERT INTO skill_versions (
+                    name, version, description, body, allowed_tools_json,
+                    source_trace_ids_json, content_hash, parent_version_id,
+                    rollback_of_version_id, diff, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    name,
+                    version,
+                    description,
+                    body,
+                    self._json_dump(allowed_tools),
+                    self._json_dump(source_trace_ids),
+                    content_hash,
+                    parent_version_id,
+                    rollback_of_version_id,
+                    diff,
+                    status,
+                ),
+            )
+        return self.get_skill_version(int(cursor.lastrowid))
+
+    def get_skill_version(self, version_id: int) -> SkillVersion:
+        row = self.conn.execute(
+            "SELECT * FROM skill_versions WHERE id = ?", (version_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"unknown skill version id: {version_id}")
+        return self._skill_version_from_row(row)
+
+    def get_active_skill_version(self, name: str) -> SkillVersion:
+        row = self.conn.execute(
+            "SELECT * FROM skill_versions WHERE name = ? AND active = 1", (name,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no active skill version: {name}")
+        return self._skill_version_from_row(row)
+
+    def evaluate_skill_version(
+        self,
+        version_id: int,
+        deterministic_pass: bool,
+        deterministic_result: dict[str, Any],
+        judge_result: dict[str, Any] | None,
+        approvable: bool,
+    ) -> SkillVersion:
+        with self.conn:
+            self.conn.execute(
+                """UPDATE skill_versions SET deterministic_pass = ?,
+                    deterministic_result_json = ?, judge_result_json = ?,
+                    approvable = ?, status = 'evaluated',
+                    evaluated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+                (
+                    int(deterministic_pass),
+                    self._json_dump(deterministic_result),
+                    self._json_dump(judge_result),
+                    int(approvable),
+                    version_id,
+                ),
+            )
+        return self.get_skill_version(version_id)
+
+    def set_skill_version_status(
+        self, version_id: int, status: str, *, activate: bool = False
+    ) -> SkillVersion:
+        version = self.get_skill_version(version_id)
+        with self.conn:
+            if activate:
+                self.conn.execute(
+                    "UPDATE skill_versions SET active = 0 WHERE name = ?",
+                    (version.name,),
+                )
+            approved_at = "CURRENT_TIMESTAMP" if status == "approved" else "approved_at"
+            self.conn.execute(
+                "UPDATE skill_versions SET status = ?, active = ?, "
+                f"approved_at = {approved_at} WHERE id = ?",
+                (status, int(activate), version_id),
+            )
+        return self.get_skill_version(version_id)
+
     def close(self) -> None:
         self.conn.close()
 
@@ -420,7 +546,7 @@ class SessionStore:
             raise RuntimeError(
                 f"database schema version {version} is newer than supported version {_SCHEMA_VERSION}"
             )
-        migrations = (self._migrate_to_v1, self._migrate_to_v2)
+        migrations = (self._migrate_to_v1, self._migrate_to_v2, self._migrate_to_v3)
         for target_version in range(version + 1, _SCHEMA_VERSION + 1):
             self.conn.execute("BEGIN IMMEDIATE")
             try:
@@ -532,6 +658,41 @@ class SessionStore:
                 FOREIGN KEY (trace_id) REFERENCES task_traces(id)
             )
             """
+        )
+
+    def _migrate_to_v3(self) -> None:
+        self.conn.execute(
+            """CREATE TABLE IF NOT EXISTS skill_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                body TEXT NOT NULL,
+                allowed_tools_json TEXT NOT NULL,
+                source_trace_ids_json TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                parent_version_id INTEGER,
+                rollback_of_version_id INTEGER,
+                diff TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN ('draft', 'evaluated', 'approved', 'rejected')
+                ),
+                deterministic_pass INTEGER,
+                deterministic_result_json TEXT,
+                judge_result_json TEXT,
+                approvable INTEGER NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                evaluated_at TEXT,
+                approved_at TEXT,
+                UNIQUE(name, version),
+                FOREIGN KEY (parent_version_id) REFERENCES skill_versions(id),
+                FOREIGN KEY (rollback_of_version_id) REFERENCES skill_versions(id)
+            )"""
+        )
+        self.conn.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS one_active_skill_version
+               ON skill_versions(name) WHERE active = 1"""
         )
 
     def _get_conversation(self, conversation_id: int) -> ConversationRecord:
@@ -659,6 +820,25 @@ class SessionStore:
         result["metadata"] = self._json_load(result.pop("metadata_json"), {})
         return result
 
+    def _skill_version_from_row(self, row: sqlite3.Row) -> SkillVersion:
+        data = dict(row)
+        data["allowed_tools"] = tuple(
+            self._json_load(data.pop("allowed_tools_json"), [])
+        )
+        data["source_trace_ids"] = tuple(
+            self._json_load(data.pop("source_trace_ids_json"), [])
+        )
+        data["deterministic_result"] = self._json_load(
+            data.pop("deterministic_result_json"), None
+        )
+        data["judge_result"] = self._json_load(data.pop("judge_result_json"), None)
+        data["deterministic_pass"] = (
+            None if data["deterministic_pass"] is None else bool(data["deterministic_pass"])
+        )
+        data["approvable"] = bool(data["approvable"])
+        data.pop("active")
+        return SkillVersion(**data)
+
 
 def _trace_search_query(query: str) -> str | None:
     tokens = _SEARCH_TOKEN_RE.findall(query)
@@ -667,4 +847,4 @@ def _trace_search_query(query: str) -> str | None:
     return " OR ".join(f'"{token}"' for token in tokens)
 
 
-__all__ = ["AttemptRecord", "ConversationRecord", "STATE_DB", "SessionStore"]
+__all__ = ["AttemptRecord", "ConversationRecord", "SkillVersion", "STATE_DB", "SessionStore"]

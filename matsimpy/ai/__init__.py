@@ -31,7 +31,7 @@ from .provider import DeepSeekProvider
 from .providers import ChatProvider
 from .executor import FunctionExecutor
 from .runtime import AgentRuntime, TaskResult
-from .session_store import SessionStore
+from .session_store import SessionStore, SkillVersion
 from .session import AgentSession, SessionTurn
 from .agent import Agent, AgentResult
 from .repl import CommandResult, ReplController
@@ -43,7 +43,12 @@ from .terminal import (
 )
 from .engine import AIEngine
 from .doctor import Diagnostic, Doctor
-from .evolution import EvolutionCandidate, EvolutionManager, EvolutionPolicy
+from .evolution import (
+    EvolutionCandidate,
+    EvolutionManager,
+    EvolutionPolicy,
+    SkillEvolutionError,
+)
 from .memory import AgentMemory, MemoryEntry, MemoryValidationError
 
 __all__ = [
@@ -64,6 +69,8 @@ __all__ = [
     "EvolutionCandidate",
     "EvolutionManager",
     "EvolutionPolicy",
+    "SkillEvolutionError",
+    "SkillVersion",
     "AgentMemory",
     "MemoryEntry",
     "MemoryValidationError",

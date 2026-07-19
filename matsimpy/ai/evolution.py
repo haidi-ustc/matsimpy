@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import difflib
+import hashlib
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
 
-from .session_store import SessionStore
+import yaml
+
+from .agent_skills import SkillValidationError, parse_skill, validate_skill_name
+from .session_store import SessionStore, SkillVersion
 from .skill_loader import save_skill_md
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
@@ -29,6 +37,35 @@ class EvolutionCandidate:
 
 
 SemanticEvaluator = Callable[[Sequence[Mapping[str, Any]]], EvolutionCandidate | None]
+ReplayRunner = Callable[[SkillVersion, Path], Mapping[str, Any]]
+
+
+class SkillEvolutionError(ValueError):
+    """Raised when a skill version cannot safely advance its lifecycle."""
+
+
+_FORBIDDEN_INSTRUCTIONS = (
+    (
+        re.compile(r"\bscripts?[/\\]", re.IGNORECASE),
+        "scripts cannot be executed by evolved skills",
+    ),
+    (
+        re.compile(r"\b(?:pip|conda|uv|poetry|npm)\s+install\b", re.IGNORECASE),
+        "dependencies cannot be installed by evolved skills",
+    ),
+    (
+        re.compile(
+            r"\b(?:edit|modify|patch|rewrite|update)\b.{0,80}"
+            r"\b(?:matsimpy[/\\]|\.py\b)",
+            re.IGNORECASE,
+        ),
+        "source edits are not allowed in evolved skills",
+    ),
+    (
+        re.compile(r"\bSOUL\.md\b", re.IGNORECASE),
+        "SOUL.md edits are not allowed in evolved skills",
+    ),
+)
 
 
 class EvolutionPolicy:
@@ -129,9 +166,301 @@ class EvolutionManager:
         self,
         store: SessionStore,
         policy: EvolutionPolicy | None = None,
+        *,
+        user_skill_root: str | Path | None = None,
+        available_tools: Mapping[str, Any] | Sequence[str] | set[str] | None = None,
+        replay: ReplayRunner | None = None,
     ):
         self.store = store
         self.policy = policy or EvolutionPolicy()
+        self.user_skill_root = Path(
+            user_skill_root or Path.home() / ".matsimpy" / "ai" / "skills"
+        )
+        self.available_tools = frozenset(
+            available_tools.keys()
+            if isinstance(available_tools, Mapping)
+            else (available_tools or ())
+        )
+        self.replay = replay
+
+    def draft_skill(
+        self,
+        name: str,
+        description: str,
+        body: str,
+        tools: Sequence[str],
+        source_trace_ids: Sequence[int],
+    ) -> SkillVersion:
+        """Create an inactive first version after static safety validation."""
+        if self._versions_for(name):
+            raise SkillEvolutionError(f"skill {name!r} already exists; draft a revision")
+        return self._create_version(
+            name=name,
+            description=description,
+            body=body,
+            tools=tools,
+            source_trace_ids=source_trace_ids,
+            parent=None,
+        )
+
+    def draft_revision(
+        self,
+        parent_version_id: int,
+        *,
+        description: str | None = None,
+        body: str | None = None,
+        tools: Sequence[str] | None = None,
+        source_trace_ids: Sequence[int],
+    ) -> SkillVersion:
+        """Create an inactive child version and retain its unified diff."""
+        parent = self.store.get_skill_version(parent_version_id)
+        return self._create_version(
+            name=parent.name,
+            description=description if description is not None else parent.description,
+            body=body if body is not None else parent.body,
+            tools=tools if tools is not None else parent.allowed_tools,
+            source_trace_ids=source_trace_ids,
+            parent=parent,
+        )
+
+    def evaluate(
+        self, version_id: int, judge_result: Mapping[str, Any] | None = None
+    ) -> SkillVersion:
+        """Validate and replay a draft in isolation before it can be approved."""
+        version = self.store.get_skill_version(version_id)
+        if version.status not in {"draft", "evaluated"}:
+            raise SkillEvolutionError(f"cannot evaluate {version.status} skill version")
+        self._validate_content(
+            version.name, version.description, version.body, version.allowed_tools
+        )
+        if self.replay is None:
+            result: Mapping[str, Any] = {
+                "passed": False,
+                "error": "no deterministic replay runner configured",
+            }
+        else:
+            with tempfile.TemporaryDirectory(
+                prefix="matsimpy-skill-replay-"
+            ) as workspace:
+                result = self.replay(version, Path(workspace))
+        if not isinstance(result, Mapping) or not isinstance(result.get("passed"), bool):
+            raise SkillEvolutionError("deterministic replay must return a boolean 'passed' result")
+        deterministic_pass = bool(result["passed"])
+        judge = dict(judge_result) if judge_result is not None else None
+        judge_pass = judge is None or judge.get("passed") is True
+        return self.store.evaluate_skill_version(
+            version_id, deterministic_pass, dict(result), judge,
+            approvable=deterministic_pass and judge_pass,
+        )
+
+    def approve(self, version: int | str) -> SkillVersion | None:
+        """Atomically materialize an evaluated version, or support legacy names."""
+        if isinstance(version, str):
+            self._approve_legacy(version)
+            return None
+        record = self.store.get_skill_version(version)
+        if record.status != "evaluated" or not record.approvable:
+            raise SkillEvolutionError("skill version is not approvable")
+        self._validate_content(
+            record.name, record.description, record.body, record.allowed_tools
+        )
+        self._materialize(record)
+        return self.store.set_skill_version_status(record.id, "approved", activate=True)
+
+    def reject(self, version: int | str) -> SkillVersion | None:
+        """Reject a version without deleting its evidence; retain legacy support."""
+        if isinstance(version, str):
+            self.store.set_skill_draft_status(version, "archived")
+            return None
+        record = self.store.get_skill_version(version)
+        if record.status == "approved":
+            raise SkillEvolutionError("an approved version cannot be rejected")
+        return self.store.set_skill_version_status(record.id, "rejected")
+
+    def rollback(
+        self, target_version_id: int | str, *, source_trace_ids: Sequence[int] = ()
+    ) -> SkillVersion:
+        """Create and activate a new approved version containing prior content."""
+        if isinstance(target_version_id, str):
+            if not hasattr(self.store, "conn"):
+                raise SkillEvolutionError("skill rollback is not available for this store")
+            row = self.store.conn.execute(
+                """SELECT id FROM skill_versions
+                   WHERE name = ? AND status = 'approved' AND active = 0
+                   ORDER BY version DESC LIMIT 1""",
+                (target_version_id,),
+            ).fetchone()
+            if row is None:
+                raise SkillEvolutionError(
+                    f"no prior approved version is available for {target_version_id!r}"
+                )
+            target_version_id = int(row[0])
+        target = self.store.get_skill_version(target_version_id)
+        if target.status != "approved":
+            raise SkillEvolutionError("rollback target must be an approved version")
+        current = self.store.get_active_skill_version(target.name)
+        rolled_back = self._create_version(
+            name=target.name,
+            description=target.description,
+            body=target.body,
+            tools=target.allowed_tools,
+            source_trace_ids=source_trace_ids,
+            parent=current,
+            rollback_of_version_id=target.id,
+        )
+        # The target already passed deterministic review; the new record makes that
+        # provenance explicit while materialization is still revalidated.
+        evaluated = self.store.evaluate_skill_version(
+            rolled_back.id,
+            True,
+            {"passed": True, "rollback_of_version_id": target.id},
+            None,
+            True,
+        )
+        self._materialize(evaluated)
+        return self.store.set_skill_version_status(evaluated.id, "approved", activate=True)
+
+    def _create_version(
+        self,
+        *,
+        name: str,
+        description: str,
+        body: str,
+        tools: Sequence[str],
+        source_trace_ids: Sequence[int],
+        parent: SkillVersion | None,
+        rollback_of_version_id: int | None = None,
+    ) -> SkillVersion:
+        normalized_tools = tuple(dict.fromkeys(tools))
+        traces = tuple(source_trace_ids)
+        if any(
+            isinstance(item, bool) or not isinstance(item, int) or item <= 0
+            for item in traces
+        ):
+            raise SkillEvolutionError("source trace ids must be positive integers")
+        self._validate_content(name, description, body, normalized_tools)
+        content = self._standard_content(
+            name, description, body, normalized_tools, "draft"
+        )
+        diff = ""
+        if parent is not None:
+            before = self._standard_content(
+                parent.name,
+                parent.description,
+                parent.body,
+                parent.allowed_tools,
+                "approved",
+            )
+            diff = "".join(
+                difflib.unified_diff(
+                    before.splitlines(True),
+                    content.splitlines(True),
+                    fromfile=f"v{parent.version}",
+                    tofile="draft",
+                )
+            )
+        return self.store.create_skill_version(
+            name=name,
+            description=description,
+            body=body,
+            allowed_tools=normalized_tools,
+            source_trace_ids=traces,
+            content_hash=hashlib.sha256(content.encode()).hexdigest(),
+            parent_version_id=parent.id if parent else None,
+            rollback_of_version_id=rollback_of_version_id,
+            diff=diff,
+        )
+
+    def _validate_content(
+        self, name: str, description: str, body: str, tools: Sequence[str]
+    ) -> None:
+        try:
+            validate_skill_name(name, Path(name))
+        except SkillValidationError as exc:
+            raise SkillEvolutionError(str(exc)) from exc
+        if (
+            not isinstance(description, str)
+            or not description.strip()
+            or len(description) > 1024
+        ):
+            raise SkillEvolutionError("description must be 1-1024 characters")
+        unknown = sorted(set(tools) - self.available_tools)
+        if unknown:
+            raise SkillEvolutionError(
+                f"unknown tool permission requested: {', '.join(unknown)}"
+            )
+        for pattern, message in _FORBIDDEN_INSTRUCTIONS:
+            if pattern.search(body):
+                raise SkillEvolutionError(message)
+        with tempfile.TemporaryDirectory(prefix="matsimpy-skill-validate-") as temporary:
+            root = Path(temporary) / name
+            root.mkdir()
+            (root / "SKILL.md").write_text(
+                self._standard_content(name, description, body, tools, "draft"),
+                encoding="utf-8",
+            )
+            try:
+                parse_skill(root)
+            except SkillValidationError as exc:
+                raise SkillEvolutionError(str(exc)) from exc
+
+    @staticmethod
+    def _standard_content(
+        name: str, description: str, body: str, tools: Sequence[str], status: str
+    ) -> str:
+        frontmatter: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "metadata": {"matsimpy": {"status": status}},
+        }
+        if tools:
+            frontmatter["allowed-tools"] = " ".join(tools)
+        dumped = yaml.safe_dump(frontmatter, sort_keys=False)
+        return f"---\n{dumped}---\n{body.strip()}\n"
+
+    def _materialize(self, version: SkillVersion) -> None:
+        self.user_skill_root.mkdir(parents=True, exist_ok=True)
+        root = self.user_skill_root.resolve(strict=True)
+        if self.user_skill_root.is_symlink():
+            raise SkillEvolutionError("user skill root must not be a symlink")
+        destination = self.user_skill_root / version.name
+        if not destination.resolve(strict=False).is_relative_to(root):
+            raise SkillEvolutionError("skill destination escapes user skill root")
+        if destination.is_symlink():
+            raise SkillEvolutionError("skill destination must not be a symlink")
+        if destination.exists():
+            unexpected = [
+                item for item in destination.iterdir() if item.name != "SKILL.md"
+            ]
+            if unexpected:
+                raise SkillEvolutionError(
+                    "approval will not retain scripts or other bundled resources"
+                )
+        else:
+            destination.mkdir()
+        content = self._standard_content(
+            version.name,
+            version.description,
+            version.body,
+            version.allowed_tools,
+            "approved",
+        )
+        fd, temporary = tempfile.mkstemp(prefix=".SKILL.md.tmp-", dir=destination)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, destination / "SKILL.md")
+        except BaseException:
+            Path(temporary).unlink(missing_ok=True)
+            raise
+
+    def _versions_for(self, name: str) -> list[int]:
+        rows = self.store.conn.execute(
+            "SELECT id FROM skill_versions WHERE name = ?", (name,)
+        ).fetchall()
+        return [int(row[0]) for row in rows]
 
     def draft_from_trace(
         self,
@@ -209,8 +538,8 @@ class EvolutionManager:
             suffix += 1
         return f"{base_name}-{suffix}"
 
-    def approve(self, name: str) -> None:
-        """Approve a generated skill draft."""
+    def _approve_legacy(self, name: str) -> None:
+        """Approve a generated legacy skill draft."""
         draft = self._find_draft(name)
         if draft is None:
             raise KeyError(f"Unknown generated skill draft: {name}")
@@ -226,10 +555,6 @@ class EvolutionManager:
             load_mode=metadata.get("load_mode", "auto_choice"),
             status="approved",
         )
-
-    def reject(self, name: str) -> None:
-        """Archive a generated skill draft."""
-        self.store.set_skill_draft_status(name, "archived")
 
     def _find_draft(self, name: str) -> dict | None:
         for draft in self.store.list_skill_drafts(status=None):
