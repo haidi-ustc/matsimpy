@@ -58,7 +58,7 @@ def _validation_error(path: Path, message: str) -> SkillValidationError:
     return SkillValidationError(f"Invalid skill at {path}: {message}")
 
 
-def _read_skill_file(root: Path) -> tuple[Path, str]:
+def _resolve_skill_file(root: Path) -> tuple[Path, Path]:
     try:
         resolved_root = root.resolve(strict=True)
     except OSError as exc:
@@ -71,21 +71,68 @@ def _read_skill_file(root: Path) -> tuple[Path, str]:
         resolved_skill_path = skill_path.resolve(strict=True)
         if not resolved_skill_path.is_relative_to(resolved_root):
             raise _validation_error(skill_path, "SKILL.md resolves outside skill root")
+    except SkillValidationError:
+        raise
+    except OSError as exc:
+        raise _validation_error(skill_path, f"cannot resolve SKILL.md: {exc}") from exc
+    return resolved_root, resolved_skill_path
+
+
+def _read_skill_file(root: Path) -> tuple[Path, str]:
+    resolved_root, resolved_skill_path = _resolve_skill_file(root)
+    try:
         with resolved_skill_path.open("rb") as skill_file:
             content_bytes = _read_bounded(skill_file)
         if len(content_bytes) > MAX_SKILL_BYTES:
             raise _validation_error(
-                skill_path,
+                resolved_skill_path,
                 f"SKILL.md exceeds the {MAX_SKILL_BYTES}-byte size limit",
             )
         content = content_bytes.decode("utf-8", errors="strict")
     except SkillValidationError:
         raise
     except UnicodeDecodeError as exc:
-        raise _validation_error(skill_path, f"SKILL.md is not valid UTF-8: {exc}") from exc
+        raise _validation_error(
+            resolved_skill_path, f"SKILL.md is not valid UTF-8: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise _validation_error(
+            resolved_skill_path, f"cannot read SKILL.md: {exc}"
+        ) from exc
+    return resolved_root, content
+
+
+def _read_skill_frontmatter(root: Path) -> tuple[Path, str]:
+    """Read only bounded frontmatter bytes, leaving the body untouched."""
+
+    resolved_root, skill_path = _resolve_skill_file(root)
+    content = bytearray()
+    line_number = 0
+    try:
+        with skill_path.open("rb") as skill_file:
+            while len(content) <= MAX_SKILL_BYTES:
+                line = skill_file.readline(MAX_SKILL_BYTES - len(content) + 1)
+                if not line:
+                    break
+                line_number += 1
+                content.extend(line)
+                if len(content) > MAX_SKILL_BYTES:
+                    raise _validation_error(
+                        skill_path,
+                        f"frontmatter exceeds the {MAX_SKILL_BYTES}-byte size limit",
+                    )
+                if line_number > 1 and line.rstrip(b"\r\n") == b"---":
+                    break
+        text = bytes(content).decode("utf-8", errors="strict")
+    except SkillValidationError:
+        raise
+    except UnicodeDecodeError as exc:
+        raise _validation_error(
+            skill_path, f"SKILL.md frontmatter is not valid UTF-8: {exc}"
+        ) from exc
     except OSError as exc:
         raise _validation_error(skill_path, f"cannot read SKILL.md: {exc}") from exc
-    return resolved_root, content
+    return resolved_root, text
 
 
 def _read_bounded(skill_file: BinaryIO) -> bytes:
@@ -135,12 +182,12 @@ def _optional_string(manifest: dict[str, Any], field: str, path: Path) -> str | 
     return value
 
 
-def parse_skill(path: Path) -> SkillManifest:
-    """Parse and validate ``path/SKILL.md`` without following escaping links."""
-
-    root, content = _read_skill_file(Path(path))
-    manifest, body = _parse_frontmatter(root / "SKILL.md", content)
-
+def _build_manifest(
+    path: Path,
+    root: Path,
+    manifest: dict[str, Any],
+    body: str,
+) -> SkillManifest:
     name = _required_string(manifest, "name", path)
     if len(name) > 64 or _NAME_PATTERN.fullmatch(name) is None:
         raise _validation_error(
@@ -175,6 +222,24 @@ def parse_skill(path: Path) -> SkillManifest:
     )
 
 
+def parse_skill(path: Path) -> SkillManifest:
+    """Parse and validate ``path/SKILL.md`` without following escaping links."""
+
+    root, content = _read_skill_file(Path(path))
+    manifest, body = _parse_frontmatter(root / "SKILL.md", content)
+    return _build_manifest(path, root, manifest, body)
+
+
+def _parse_skill_summary(path: Path) -> SkillManifest:
+    """Parse validated manifest metadata without reading instruction bytes."""
+
+    root, frontmatter = _read_skill_frontmatter(Path(path))
+    manifest, body = _parse_frontmatter(root / "SKILL.md", frontmatter)
+    if body:
+        raise _validation_error(root / "SKILL.md", "unexpected frontmatter content")
+    return _build_manifest(path, root, manifest, "")
+
+
 class SkillLibrary:
     """Discover skill metadata and load instructions only on activation."""
 
@@ -195,15 +260,12 @@ class SkillLibrary:
         }
         if available_tools is None:
             self.available_tools: Mapping[str, Any] = MappingProxyType({})
-            self._validate_tools = False
         elif isinstance(available_tools, Mapping):
             self.available_tools = MappingProxyType(dict(available_tools))
-            self._validate_tools = True
         else:
             self.available_tools = MappingProxyType(
                 {name: None for name in available_tools}
             )
-            self._validate_tools = True
         self.diagnostics: list[SkillDiagnostic] = []
         self.loaded_resources: list[tuple[str, str]] = []
         self.activated: dict[str, SkillManifest] = {}
@@ -225,7 +287,7 @@ class SkillLibrary:
             for skill_path in sorted(root.iterdir(), key=lambda item: item.name):
                 if not skill_path.is_dir():
                     continue
-                manifest = parse_skill(skill_path)
+                manifest = _parse_skill_summary(skill_path)
                 if manifest.name in level:
                     raise SkillValidationError(
                         f"duplicate skill {manifest.name!r} in {source} source"
@@ -269,8 +331,6 @@ class SkillLibrary:
             raise _validation_error(
                 manifest.root / "SKILL.md", f"invalid 'allowed-tools': {exc}"
             ) from exc
-        if not self._validate_tools:
-            return requested
         allowed = tuple(name for name in requested if name in self.available_tools)
         for name in requested:
             if name not in self.available_tools:

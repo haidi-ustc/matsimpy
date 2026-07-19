@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from matsimpy.ai.agent_skills import SkillLibrary, SkillValidationError
+from matsimpy.ai.agent_skills import MAX_SKILL_BYTES, SkillLibrary, SkillValidationError
 
 
 def _write_skill(
@@ -137,6 +137,24 @@ def test_resource_reads_are_explicit_and_contained(tmp_path):
         library.read_resource("documented", "../secret.txt")
 
 
+def test_resource_symlink_cannot_escape_skill_root(tmp_path):
+    packaged = tmp_path / "packaged"
+    packaged.mkdir()
+    skill = _write_skill(
+        packaged,
+        "documented",
+        description="A documented skill",
+        body="Read references explicitly.",
+    )
+    secret = tmp_path / "secret.txt"
+    secret.write_text("secret", encoding="utf-8")
+    (skill / "escaped.txt").symlink_to(secret)
+    library = SkillLibrary(packaged=packaged)
+
+    with pytest.raises(ValueError, match="outside skill root"):
+        library.read_resource("documented", "escaped.txt")
+
+
 def test_allowed_tools_only_restrict_known_capabilities(tmp_path):
     packaged = tmp_path / "packaged"
     packaged.mkdir()
@@ -155,3 +173,48 @@ def test_allowed_tools_only_restrict_known_capabilities(tmp_path):
     assert set(library.available_tools) == {"Read"}
     assert any(item.code == "unknown-allowed-tool" for item in library.diagnostics)
 
+
+def test_allowed_tools_default_to_no_capabilities(tmp_path):
+    packaged = tmp_path / "packaged"
+    packaged.mkdir()
+    _write_skill(
+        packaged,
+        "restricted",
+        description="Cannot add capabilities",
+        body="Instructions.",
+        allowed_tools="Read Bash",
+    )
+    library = SkillLibrary(packaged=packaged)
+
+    summary = library.discover()[0]
+
+    assert summary.allowed_tools == ()
+    assert [item.code for item in library.diagnostics] == [
+        "unknown-allowed-tool",
+        "unknown-allowed-tool",
+    ]
+    assert "Read" not in library.available_tools
+    assert "Bash" not in library.available_tools
+
+
+@pytest.mark.parametrize(
+    ("body", "activation_error"),
+    [
+        (b"x" * MAX_SKILL_BYTES, "size limit"),
+        (b"invalid: \xff", "valid UTF-8"),
+    ],
+    ids=["oversized-body", "invalid-utf8-body"],
+)
+def test_discovery_reads_only_frontmatter(body, activation_error, tmp_path):
+    packaged = tmp_path / "packaged"
+    skill = packaged / "metadata-only"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_bytes(
+        b"---\nname: metadata-only\ndescription: Safe summary\n---\n" + body
+    )
+    library = SkillLibrary(packaged=packaged)
+
+    assert library.discover()[0].description == "Safe summary"
+
+    with pytest.raises(SkillValidationError, match=activation_error):
+        library.activate("metadata-only")
