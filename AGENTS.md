@@ -33,4 +33,4 @@ History uses short, imperative subjects, often with a conventional prefix: `fix:
 
 ## Agent-Specific Instructions
 
-Read `CLAUDE.md` for detailed architecture and domain invariants. Preserve existing user changes, inspect the diff before editing, use targeted tests during development, and run `git diff --check` before completion. Do not commit ignored local planning directories such as `superpowers/`.
+Read `CLAUDE.md` for detailed architecture and domain invariants. Preserve existing user changes, inspect the diff before editing, use targeted tests during development, and run `git diff --check` before completion. Always store Superpowers plans and specifications under the repository-root `superpowers/` directory, never under `docs/`. Keep `superpowers/` ignored and do not commit it.
