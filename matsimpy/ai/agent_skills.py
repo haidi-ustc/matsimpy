@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import shlex
 from types import MappingProxyType
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Iterable
 
 import yaml
 
@@ -31,6 +32,26 @@ class SkillManifest:
     compatibility: str | None
     allowed_tools: str | None
     metadata: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class SkillSummary:
+    """Metadata disclosed while a skill remains inactive."""
+
+    name: str
+    description: str
+    source: str
+    compatibility: str | None
+    allowed_tools: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SkillDiagnostic:
+    """A non-fatal issue found while indexing skills."""
+
+    code: str
+    message: str
+    skill_name: str | None = None
 
 
 def _validation_error(path: Path, message: str) -> SkillValidationError:
@@ -152,3 +173,180 @@ def parse_skill(path: Path) -> SkillManifest:
         allowed_tools=allowed_tools,
         metadata=MappingProxyType(dict(metadata)),
     )
+
+
+class SkillLibrary:
+    """Discover skill metadata and load instructions only on activation."""
+
+    _SOURCES = ("packaged", "user", "workspace")
+
+    def __init__(
+        self,
+        *,
+        packaged: Path | None = None,
+        user: Path | None = None,
+        workspace: Path | None = None,
+        available_tools: Mapping[str, Any] | Iterable[str] | None = None,
+    ) -> None:
+        self._roots = {
+            "packaged": Path(packaged) if packaged is not None else None,
+            "user": Path(user) if user is not None else None,
+            "workspace": Path(workspace) if workspace is not None else None,
+        }
+        if available_tools is None:
+            self.available_tools: Mapping[str, Any] = MappingProxyType({})
+            self._validate_tools = False
+        elif isinstance(available_tools, Mapping):
+            self.available_tools = MappingProxyType(dict(available_tools))
+            self._validate_tools = True
+        else:
+            self.available_tools = MappingProxyType(
+                {name: None for name in available_tools}
+            )
+            self._validate_tools = True
+        self.diagnostics: list[SkillDiagnostic] = []
+        self.loaded_resources: list[tuple[str, str]] = []
+        self.activated: dict[str, SkillManifest] = {}
+        self._summaries: dict[str, SkillSummary] = {}
+        self._skill_paths: dict[str, Path] = {}
+        self._discovered = False
+
+    def discover(self) -> list[SkillSummary]:
+        """Index skills by metadata, applying source precedence."""
+
+        self.diagnostics.clear()
+        self._summaries.clear()
+        self._skill_paths.clear()
+        for source in self._SOURCES:
+            root = self._roots[source]
+            if root is None or not root.exists():
+                continue
+            level: dict[str, tuple[SkillSummary, Path]] = {}
+            for skill_path in sorted(root.iterdir(), key=lambda item: item.name):
+                if not skill_path.is_dir():
+                    continue
+                manifest = parse_skill(skill_path)
+                if manifest.name in level:
+                    raise SkillValidationError(
+                        f"duplicate skill {manifest.name!r} in {source} source"
+                    )
+                allowed_tools = self._restrict_tools(manifest, source)
+                summary = SkillSummary(
+                    name=manifest.name,
+                    description=manifest.description,
+                    source=source,
+                    compatibility=manifest.compatibility,
+                    allowed_tools=allowed_tools,
+                )
+                level[manifest.name] = (summary, manifest.root)
+
+            for name, (summary, path) in level.items():
+                previous = self._summaries.get(name)
+                if previous is not None:
+                    self.diagnostics.append(
+                        SkillDiagnostic(
+                            code="skill-shadowed",
+                            skill_name=name,
+                            message=(
+                                f"{source} skill {name!r} shadows "
+                                f"{previous.source} skill"
+                            ),
+                        )
+                    )
+                self._summaries[name] = summary
+                self._skill_paths[name] = path
+        self._discovered = True
+        return sorted(self._summaries.values(), key=lambda item: item.name)
+
+    def _restrict_tools(
+        self, manifest: SkillManifest, source: str
+    ) -> tuple[str, ...]:
+        if not manifest.allowed_tools:
+            return ()
+        try:
+            requested = tuple(shlex.split(manifest.allowed_tools))
+        except ValueError as exc:
+            raise _validation_error(
+                manifest.root / "SKILL.md", f"invalid 'allowed-tools': {exc}"
+            ) from exc
+        if not self._validate_tools:
+            return requested
+        allowed = tuple(name for name in requested if name in self.available_tools)
+        for name in requested:
+            if name not in self.available_tools:
+                self.diagnostics.append(
+                    SkillDiagnostic(
+                        code="unknown-allowed-tool",
+                        skill_name=manifest.name,
+                        message=(
+                            f"{source} skill {manifest.name!r} requests unknown "
+                            f"tool {name!r}"
+                        ),
+                    )
+                )
+        return allowed
+
+    def search(self, query: str) -> list[SkillSummary]:
+        """Search disclosed skill names and descriptions."""
+
+        self._ensure_discovered()
+        terms = query.casefold().split()
+        return [
+            summary
+            for summary in sorted(self._summaries.values(), key=lambda item: item.name)
+            if all(
+                term in f"{summary.name} {summary.description}".casefold()
+                for term in terms
+            )
+        ]
+
+    def activate(self, name: str) -> SkillManifest:
+        """Explicitly load the full instructions for a discovered skill."""
+
+        self._ensure_discovered()
+        try:
+            skill_path = self._skill_paths[name]
+        except KeyError as exc:
+            raise KeyError(f"unknown skill {name!r}") from exc
+        manifest = parse_skill(skill_path)
+        self.activated[name] = manifest
+        return manifest
+
+    def read_resource(self, name: str, relative_path: str) -> str:
+        """Explicitly read a UTF-8 resource contained by a discovered skill."""
+
+        self._ensure_discovered()
+        try:
+            root = self._skill_paths[name]
+        except KeyError as exc:
+            raise KeyError(f"unknown skill {name!r}") from exc
+        requested = Path(relative_path)
+        if requested.is_absolute():
+            raise ValueError("resource path resolves outside skill root")
+        candidate = (root / requested).resolve(strict=False)
+        if not candidate.is_relative_to(root):
+            raise ValueError("resource path resolves outside skill root")
+        try:
+            resource = candidate.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"cannot resolve skill resource: {exc}") from exc
+        if not resource.is_relative_to(root) or not resource.is_file():
+            raise ValueError("resource path resolves outside skill root")
+        try:
+            with resource.open("rb") as resource_file:
+                content = _read_bounded(resource_file)
+            if len(content) > MAX_SKILL_BYTES:
+                raise ValueError(
+                    f"resource exceeds the {MAX_SKILL_BYTES}-byte size limit"
+                )
+            text = content.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"skill resource is not valid UTF-8: {exc}") from exc
+        except OSError as exc:
+            raise ValueError(f"cannot read skill resource: {exc}") from exc
+        self.loaded_resources.append((name, relative_path))
+        return text
+
+    def _ensure_discovered(self) -> None:
+        if not self._discovered:
+            self.discover()
