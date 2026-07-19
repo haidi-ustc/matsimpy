@@ -1383,9 +1383,10 @@ class Vasprun(MSONable):
             "GW0R",
         }:
             nelect = self.parameters["NELECT"]
-            if len(potcar) == len(self.initial_structure.composition.element_composition):
+            element_composition = self.initial_structure.composition.composition
+            if len(potcar) == len(element_composition):
                 potcar_nelect = sum(
-                    self.initial_structure.composition.element_composition[ps.element] * ps.ZVAL for ps in potcar
+                    element_composition[getattr(ps.element, "symbol", str(ps.element))] * ps.ZVAL for ps in potcar
                 )
             else:
                 nums = [len(list(g)) for _, g in itertools.groupby(self.atomic_symbols)]
@@ -1452,7 +1453,7 @@ class Vasprun(MSONable):
         vin["potcar_spec"] = self.potcar_spec
         vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
         vin["parameters"] = dict(self.parameters.items())
-        vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
+        vin["lattice_rec"] = self.final_structure.lattice.get_reciprocal_lattice().as_dict()
         dct["input"] = vin
 
         n_sites = len(self.final_structure)
@@ -1994,7 +1995,7 @@ class BSVasprun(Vasprun):
         vin["potcar_spec"] = self.potcar_spec
         vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
         vin["parameters"] = dict(self.parameters)
-        vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
+        vin["lattice_rec"] = self.final_structure.lattice.get_reciprocal_lattice().as_dict()
         dct["input"] = vin
 
         vout: dict[str, Any] = {

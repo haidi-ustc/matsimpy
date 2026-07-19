@@ -65,7 +65,7 @@ def _copy_with_site_property(structure: Crystal, name: str, values: list) -> Cry
     if len(values) != len(structure):
         raise ValueError(f"{name} must contain one value per site")
     properties = [dict(site.properties) for site in structure]
-    for props, value in zip(properties, values, strict=True):
+    for props, value in zip(properties, values):
         props[name] = value
     return Crystal(
         structure.species,
@@ -2930,7 +2930,7 @@ class NEBSet(VaspInputSet):
         if write_path_cif:
             unique_sites: dict[tuple, tuple[str, np.ndarray]] = {}
             for structure in self.structures:
-                for species, coords in zip(structure.species, structure.frac_positions, strict=True):
+                for species, coords in zip(structure.species, structure.frac_positions):
                     key = (species, *np.round(coords, 12))
                     unique_sites[key] = (species, coords)
             neb_path = Crystal(
@@ -3260,7 +3260,9 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
     result = structure.copy()
     merged = [dict(site.properties) for site in structure]
     for name, values in site_properties.items():
-        for props, value in zip(merged, values, strict=True):
+        if len(values) != len(merged):
+            raise ValueError(f"{name} must contain one value per site")
+        for props, value in zip(merged, values):
             props[name] = value
     result.site_properties = merged
     if isinstance(result, Crystal):

@@ -6,6 +6,8 @@ Uses matsimpy constructs. May import pymatgen as optional reference oracle.
 
 import json
 import os
+from types import SimpleNamespace
+
 import pytest
 import numpy as np
 
@@ -192,6 +194,50 @@ class TestVasprun:
         # parameters may be Incar (dict-like) or plain dict
         assert vr.parameters is not None
         assert vr.parameters["NELM"] == 60
+
+    @pytest.mark.parametrize("parser_name", ["Vasprun", "BSVasprun"])
+    def test_as_dict_uses_native_reciprocal_lattice(self, parser_name):
+        """Both XML serializers must use MatSimPy's reciprocal-lattice API."""
+        from matsimpy.calculator.vasp import outputs
+
+        parser = getattr(outputs, parser_name)(os.path.join(FIXTURES_DIR, "vasprun.xml"))
+        data = parser.as_dict()
+
+        expected = parser.final_structure.lattice.get_reciprocal_lattice().matrix
+        actual = np.asarray(data["input"]["lattice_rec"]["lattice_vectors"])
+        np.testing.assert_allclose(actual, expected, atol=1e-8)
+
+    def test_update_charge_from_potcar_uses_native_composition(self):
+        """POTCAR charge updates must consume Composition.composition."""
+        from matsimpy.calculator.vasp.inputs import Incar
+        from matsimpy.calculator.vasp.outputs import Vasprun
+        from matsimpy.core import Crystal, Lattice
+
+        structure = Crystal(
+            ["Si", "O"],
+            [[0, 0, 0], [0.25, 0.25, 0.25]],
+            Lattice.cubic(5.0),
+        )
+        vasprun = Vasprun.__new__(Vasprun)
+        vasprun.initial_structure = structure
+        vasprun.final_structure = structure.copy()
+        vasprun.ionic_steps = [
+            {"structure": structure},
+            {"structure": vasprun.final_structure},
+        ]
+        vasprun.atomic_symbols = ["Si", "O"]
+        vasprun.incar = Incar({})
+        vasprun.parameters = {"NELECT": 9.0}
+        potcar = [
+            SimpleNamespace(element="Si", ZVAL=4.0),
+            SimpleNamespace(element="O", ZVAL=6.0),
+        ]
+        vasprun.get_potcars = lambda _path: potcar
+
+        vasprun.update_charge_from_potcar(False)
+
+        assert vasprun.initial_structure._charge == pytest.approx(1.0)
+        assert vasprun.final_structure._charge == pytest.approx(1.0)
 
     @pytest.mark.requires_pymatgen
     def test_optional_pymatgen_reference(self):

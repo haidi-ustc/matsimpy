@@ -33,6 +33,21 @@ def test_vasp_production_modules_do_not_import_pymatgen():
     assert violations == []
 
 
+def test_native_vasp_sets_remain_python39_compatible():
+    """Python 3.9's zip() does not accept the strict keyword."""
+    path = VASP_DIR / "sets.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    violations = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "zip"
+        and any(keyword.arg == "strict" for keyword in node.keywords)
+    ]
+    assert violations == []
+
+
 def test_vasp_imports_when_pymatgen_is_blocked(tmp_path):
     import os
     import subprocess
