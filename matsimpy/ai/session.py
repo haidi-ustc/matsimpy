@@ -9,6 +9,7 @@ from typing import Callable
 from .conversation import ChatMessage
 from .runtime import AgentRuntime, TaskResult
 from .session_store import AttemptRecord, SessionStore
+from .evolution import EvolutionManager
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class AgentSession:
         self,
         runtime_factory: Callable[[], AgentRuntime],
         session_store: SessionStore,
+        evolution: EvolutionManager | None = None,
     ) -> None:
         self._runtime_factory = runtime_factory
         self.session_store = session_store
@@ -42,6 +44,7 @@ class AgentSession:
         self.conversation_id: int | None = None
         self.turns: list[SessionTurn] = []
         self.context_messages: list[ChatMessage] = []
+        self.evolution = evolution or EvolutionManager(session_store)
         self._replacement_parent_id: int | None = None
 
     def new(self) -> int:
@@ -141,6 +144,19 @@ class AgentSession:
     def active_messages(self) -> list[ChatMessage]:
         """Return explicit context and complete messages for the active branch."""
         return [*self.context_messages, *self._messages_for(self.turns)]
+
+    def review_evolution(self, candidate: int | str | None = None):
+        """Run explicit candidate review; no maintenance runs in the background."""
+        return self.evolution.review(candidate)
+
+    def approve_skill(self, version_id: int):
+        return self.evolution.approve(version_id)
+
+    def reject_skill(self, version_id: int):
+        return self.evolution.reject(version_id)
+
+    def rollback_skill(self, version_id: int):
+        return self.evolution.rollback(version_id)
 
     @staticmethod
     def _messages_for(turns: list[SessionTurn]) -> list[ChatMessage]:

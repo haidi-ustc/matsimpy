@@ -230,6 +230,80 @@ class EvolutionManager:
         )
         self.replay = replay
 
+    def set_tool_catalog(self, tools: Mapping[str, FunctionDef]) -> None:
+        """Refresh executable definitions without replacing lifecycle state."""
+        self.available_tools = frozenset(tools)
+        self._tool_definitions = dict(tools)
+        self._catalog_errors = tuple(
+            f"tool {name!r} does not resolve to a matching FunctionDef"
+            for name, definition in tools.items()
+            if not isinstance(definition, FunctionDef) or definition.name != name
+        )
+
+    def review(
+        self,
+        candidate: int | str | None = None,
+        *,
+        judge_result: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Evaluate and render inactive candidates before an approval decision."""
+        if candidate is None:
+            legacy = [
+                self._legacy_review(draft)
+                for draft in self.store.list_skill_drafts("draft")
+            ]
+            versions = [
+                self._version_review(version)
+                for version in self.store.list_skill_versions()
+                if version.status in {"draft", "evaluated"}
+            ]
+            return [*legacy, *versions]
+        if isinstance(candidate, str):
+            draft = self._find_draft(candidate)
+            if draft is None:
+                raise KeyError(f"Unknown generated skill draft: {candidate}")
+            rationale = self._legacy_review(draft)["rationale"]
+            version = self._migrate_legacy_draft(candidate)
+        else:
+            rationale = None
+            version = self.store.get_skill_version(candidate)
+        if version.status == "draft":
+            version = self.evaluate(version.id, judge_result=judge_result)
+        reviewed = self._version_review(version)
+        if rationale is not None:
+            reviewed["rationale"] = rationale
+        return reviewed
+
+    @staticmethod
+    def _version_review(version: SkillVersion) -> dict[str, Any]:
+        return {
+            "version_id": version.id,
+            "name": version.name,
+            "version": version.version,
+            "status": version.status,
+            "rationale": "revision" if version.parent_version_id else "new reusable workflow",
+            "source_trace_ids": list(version.source_trace_ids),
+            "deterministic_evidence": version.deterministic_result,
+            "judge_evidence": version.judge_result,
+            "content_diff": version.diff,
+            "approvable": version.approvable,
+        }
+
+    @staticmethod
+    def _legacy_review(draft: Mapping[str, Any]) -> dict[str, Any]:
+        evolution = draft.get("metadata", {}).get("evolution", {})
+        return {
+            "version_id": None,
+            "name": draft["name"],
+            "status": draft["status"],
+            "rationale": evolution.get("rationale", "legacy workflow candidate"),
+            "source_trace_ids": list(evolution.get("source_trace_ids", ())),
+            "deterministic_evidence": None,
+            "judge_evidence": None,
+            "content_diff": "",
+            "approvable": False,
+        }
+
     def draft_skill(
         self,
         name: str,
@@ -446,7 +520,14 @@ class EvolutionManager:
         content = self._standard_content(
             name, description, body, normalized_tools, "draft"
         )
-        diff = ""
+        diff = "".join(
+            difflib.unified_diff(
+                (),
+                content.splitlines(True),
+                fromfile="/dev/null",
+                tofile="draft",
+            )
+        )
         if parent is not None:
             before = self._standard_content(
                 parent.name,

@@ -495,6 +495,19 @@ class SessionStore:
             raise KeyError(f"no active skill version: {name}")
         return self._skill_version_from_row(row)
 
+    def list_skill_versions(self, status: str | None = None) -> list[SkillVersion]:
+        """Return skill versions in creation order, optionally filtered by state."""
+        if status is None:
+            rows = self.conn.execute(
+                "SELECT * FROM skill_versions ORDER BY created_at, id"
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM skill_versions WHERE status = ? ORDER BY created_at, id",
+                (status,),
+            ).fetchall()
+        return [self._skill_version_from_row(row) for row in rows]
+
     def prepend_skill_version_diff(self, version_id: int, marker: str) -> None:
         """Record creation-time rollback provenance before evaluation."""
         with self.conn:

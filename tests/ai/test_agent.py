@@ -72,6 +72,111 @@ def test_agent_run_returns_structured_result_and_artifacts(tmp_path):
     assert result.evolution_candidates == ()
 
 
+def test_skill_manager_exposes_live_function_catalog():
+    from matsimpy.ai.skill import SkillManager
+
+    definition = FunctionDef(
+        "step", "step", {"type": "object", "properties": {}}, lambda: None
+    )
+    manager = SkillManager({"workflow": Skill("workflow", "workflow", [definition])})
+
+    assert manager.function_definitions() == {"step": definition}
+    assert manager.function_definitions(active_only=True) == {}
+    manager.load("workflow")
+    assert manager.function_definitions(active_only=True) == {"step": definition}
+
+
+def test_agent_evolution_candidate_requires_review_before_activation(tmp_path):
+    from matsimpy.ai import Agent
+
+    calls = [ToolCall(str(index), f"step_{index}", {}) for index in range(1, 4)]
+    responses = []
+    for call in calls:
+        responses.append(ChatResponse(_tool_message(call), [call], "tool_calls"))
+    responses.append(
+        ChatResponse(ChatMessage.assistant("Workflow complete."), [], "stop")
+    )
+    agent = Agent(workspace=tmp_path, provider=FakeProvider(responses))
+    skill = Skill(
+        "workflow",
+        "Three step workflow",
+        [
+            FunctionDef(
+                call.name,
+                call.name,
+                {"type": "object", "properties": {}},
+                lambda: {"ok": True},
+            )
+            for call in calls
+        ],
+    )
+    skill.keywords = ["workflow"]
+    agent.skill_manager.register(skill)
+    agent.skill_manager.load(skill.name)
+
+    result = agent.run("run this reusable workflow")
+
+    assert len(result.evolution_candidates) == 1
+    assert result.evolution_candidates[0]["status"] == "draft"
+    assert not (tmp_path / "skills").exists()
+
+    review = agent.review_evolution(result.evolution_candidates[0]["name"])
+    assert review["rationale"] == "nontrivial validated workflow"
+    assert review["source_trace_ids"] == [result.trace_id]
+    assert review["deterministic_evidence"]["passed"] is True
+    assert review["judge_evidence"] is None
+    assert "content_diff" in review
+    assert review["status"] == "evaluated"
+
+    approved = agent.approve_skill(review["version_id"])
+    assert approved["status"] == "approved"
+    assert "run-this-reusable-workflow" in {
+        item["name"] for item in agent.skill_manager.list_skills()
+    }
+
+
+def test_agent_skill_revision_remains_inactive_until_separate_approval(tmp_path):
+    from matsimpy.ai import Agent
+
+    agent = Agent(
+        workspace=tmp_path,
+        provider=FakeProvider([ChatResponse(ChatMessage.assistant("ok"), [], "stop")]),
+    )
+    trace_id = agent.run("answer").trace_id
+    assert trace_id is not None
+    agent.skill_manager.register(
+        Skill(
+            "workflow",
+            "workflow",
+            [
+                FunctionDef(
+                    "step",
+                    "step",
+                    {"type": "object", "properties": {}},
+                    lambda: {"ok": True},
+                )
+            ],
+        )
+    )
+    agent.skill_manager.load("workflow")
+    agent.evolution.replay = lambda version, context: {"passed": True}
+    first = agent.evolution.draft_skill(
+        "revision-flow", "Revision flow", "Run `step`.", ["step"], [trace_id]
+    )
+    evaluated = agent.evolution.evaluate(first.id)
+    approved = agent.approve_skill(evaluated.id)
+
+    revision = agent.evolution.draft_revision(
+        approved["version_id"], body="Run `step` twice.", source_trace_ids=[trace_id]
+    )
+
+    assert revision.status == "draft"
+    assert (
+        agent.evolution.store.get_active_skill_version("revision-flow").id
+        == approved["version_id"]
+    )
+
+
 def test_agent_run_restores_callers_working_directory(tmp_path):
     from matsimpy.ai import Agent
 

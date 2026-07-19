@@ -105,6 +105,17 @@ class FakeEvolution:
         self.calls.append(("rollback", version_id))
         return {"version": version_id + 1}
 
+    def review(self, candidate=None):
+        self.calls.append(("review", candidate))
+        return [{
+            "version_id": 3,
+            "rationale": "validated recovery",
+            "source_trace_ids": [9],
+            "deterministic_evidence": {"passed": True},
+            "judge_evidence": None,
+            "content_diff": "--- v1\n+++ draft\n",
+        }]
+
 
 @pytest.fixture
 def controller():
@@ -132,6 +143,7 @@ def controller():
         ("/approve-skill copper-flow", "approve", ("approve", "copper-flow")),
         ("/reject copper-flow", "reject", ("reject", "copper-flow")),
         ("/rollback 7", "rollback", ("rollback", 7)),
+        ("/evolve review", "evolve-review", ("review", None)),
     ],
 )
 def test_mutating_commands_delegate_to_services(controller, command, kind, expected_call):
@@ -177,6 +189,7 @@ def test_inspection_commands_return_data_without_printing(
         ("/approve", "/approve <name>"),
         ("/reject", "/reject <name>"),
         ("/rollback", "/rollback <version-id>"),
+        ("/evolve", "/evolve review [candidate]"),
         ("/unknown", "Unknown command"),
         ("not-a-command", "Commands must start"),
     ],
@@ -201,6 +214,20 @@ def test_aliases_completion_and_command_names(controller):
     assert repl.complete("/res") == ("/resume",)
     assert "/approve-skill" in repl.complete("/app")
     assert repl.execute("/reject-skill copper-flow").ok is True
+
+
+def test_evolve_review_exposes_all_approval_evidence(controller):
+    repl, _, _ = controller
+
+    result = repl.execute("/evolve review copper-flow")
+
+    assert result.ok is True
+    candidate = result.data["candidates"][0]
+    assert candidate["rationale"] == "validated recovery"
+    assert candidate["source_trace_ids"] == [9]
+    assert candidate["deterministic_evidence"] == {"passed": True}
+    assert candidate["judge_evidence"] is None
+    assert candidate["content_diff"].startswith("---")
 
 
 def test_skills_exact_name_returns_detail_but_non_exact_uses_search(

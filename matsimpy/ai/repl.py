@@ -49,6 +49,7 @@ class ReplController:
             "/approve": self._approve,
             "/reject": self._reject,
             "/rollback": self._rollback,
+            "/evolve": self._evolve,
             "/trace": self._trace,
             "/usage": self._show_usage,
             "/quit": self._quit,
@@ -210,6 +211,21 @@ class ReplController:
             "rollback",
             data={"target_version_id": version_id, "version": rolled_back},
             display_hint=f"Rolled back from skill version: {version_id}",
+        )
+
+    def _evolve(self, arg: str) -> CommandResult:
+        action, _, candidate = arg.partition(" ")
+        if action.casefold() != "review":
+            return self._usage_result("/evolve review [candidate]")
+        selector: int | str | None = candidate.strip() or None
+        if isinstance(selector, str) and selector.isdecimal():
+            selector = int(selector)
+        reviewed = self.evolution.review(selector)
+        candidates = reviewed if isinstance(reviewed, list) else [reviewed]
+        return CommandResult(
+            "evolve-review",
+            data={"candidates": [_record(item) for item in candidates]},
+            display_hint=f"{len(candidates)} evolution candidate(s) ready for review.",
         )
 
     def _trace(self, arg: str) -> CommandResult:

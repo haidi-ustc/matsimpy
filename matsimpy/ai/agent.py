@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -12,8 +13,9 @@ from .provider import DeepSeekProvider
 from .providers import ChatProvider
 from .runtime import AgentRuntime, RUNTIME_SYSTEM_PROMPT, TaskResult
 from .session import AgentSession
-from .session_store import SessionStore
+from .session_store import SessionStore, SkillVersion
 from .skill import SkillManager
+from .evolution import EvolutionManager
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class Agent:
         system_prompt: str = RUNTIME_SYSTEM_PROMPT,
         verbose_hook: Callable[[str], None] | None = None,
         source: str = "python",
+        evolution: EvolutionManager | None = None,
     ) -> None:
         self.skill_manager = skill_manager or SkillManager()
         self.memory = memory or AgentMemory()
@@ -49,24 +52,39 @@ class Agent:
         self.system_prompt = system_prompt
         self.verbose_hook = verbose_hook
         self.source = source
+        self._evolution = evolution
         self._workspace_path = Path(workspace).expanduser().resolve() if workspace else None
         self._create_session()
 
     def _create_session(self) -> None:
+        store = self._evolution.store if self._evolution is not None else SessionStore(
+            self._workspace_path / "ai-state.db" if self._workspace_path else None
+        )
         runtime = AgentRuntime(
             provider=self.provider,
             skill_manager=self.skill_manager,
-            session_store=SessionStore(
-                self._workspace_path / "ai-state.db" if self._workspace_path else None
-            ),
+            session_store=store,
             memory=self.memory,
             workspace_path=self._workspace_path,
             source=self.source,
             system_prompt=self.system_prompt,
             verbose_hook=self.verbose_hook,
         )
-        store = runtime.session_store
-        self.session = AgentSession(lambda: runtime, store)
+        manager = self._evolution or EvolutionManager(
+            store,
+            user_skill_root=runtime.workspace.path / "skills",
+            available_tools=self._tool_definitions(),
+            replay=self._replay_trace_evidence,
+        )
+        self._evolution = manager
+        self.session = AgentSession(lambda: runtime, store, evolution=manager)
+
+    @property
+    def evolution(self) -> EvolutionManager:
+        assert self._evolution is not None
+        definitions = self._tool_definitions()
+        self._evolution.set_tool_catalog(definitions)
+        return self._evolution
 
     @property
     def runtime(self) -> AgentRuntime:
@@ -99,8 +117,91 @@ class Agent:
         self.provider = self.runtime.provider
         self.skill_manager = self.runtime.skill_manager
         self.session.session_store.close()
+        self._evolution = None
         self._workspace_path = Path(workspace).expanduser().resolve()
         self._create_session()
+
+    def review_evolution(
+        self, candidate: int | str | None = None
+    ) -> Mapping[str, Any] | list[Mapping[str, Any]]:
+        """Evaluate one candidate, or list all candidates awaiting review."""
+        self.session.evolution = self.evolution
+        return self.session.review_evolution(candidate)
+
+    def approve_skill(self, version_id: int) -> Mapping[str, Any]:
+        """Approve an evaluated version and make it discoverable."""
+        version = self.evolution.approve(version_id)
+        assert version is not None
+        self._register_approved_skill(version)
+        return self._version_record(version)
+
+    def reject_skill(self, version_id: int) -> Mapping[str, Any]:
+        version = self.evolution.reject(version_id)
+        assert version is not None
+        return self._version_record(version)
+
+    def rollback_skill(self, version_id: int) -> Mapping[str, Any]:
+        version = self.evolution.rollback(version_id)
+        self._register_approved_skill(version)
+        return self._version_record(version)
+
+    def _tool_definitions(self) -> dict[str, Any]:
+        return self.skill_manager.function_definitions()
+
+    def _replay_trace_evidence(self, version: SkillVersion, context) -> Mapping[str, Any]:
+        placeholders = ",".join("?" for _ in version.source_trace_ids)
+        rows = self.runtime.session_store.conn.execute(
+            f"SELECT id, session_id, validation_status FROM task_traces "
+            f"WHERE id IN ({placeholders}) ORDER BY id",
+            version.source_trace_ids,
+        ).fetchall()
+        traces_valid = len(rows) == len(version.source_trace_ids) and all(
+            row["validation_status"] == "success" for row in rows
+        )
+        results = []
+        for row in rows:
+            calls = self.runtime.session_store.conn.execute(
+                "SELECT tool_name, arguments_json FROM tool_calls "
+                "WHERE session_id = ? AND status = 'success' ORDER BY id",
+                (row["session_id"],),
+            ).fetchall()
+            for call in calls:
+                if call["tool_name"] not in version.allowed_tools:
+                    continue
+                arguments = json.loads(call["arguments_json"] or "{}")
+                outcome = context.execute(call["tool_name"], arguments)
+                results.append({"tool": call["tool_name"], "result": outcome})
+        passed = traces_valid and bool(results) and all(
+            "error" not in item["result"] for item in results
+        )
+        return {
+            "passed": passed,
+            "source_trace_ids": list(version.source_trace_ids),
+            "replayed_tools": [item["tool"] for item in results],
+        }
+
+    def _register_approved_skill(self, version: SkillVersion) -> None:
+        from .skill import Skill
+
+        definitions = self._tool_definitions()
+        functions = [
+            definitions[name]
+            for name in version.allowed_tools
+            if name in definitions
+        ]
+        skill = Skill(version.name, version.description, functions)
+        skill.keywords = [version.name]
+        self.skill_manager.register(skill)
+
+    @staticmethod
+    def _version_record(version: SkillVersion) -> Mapping[str, Any]:
+        return {
+            "version_id": version.id,
+            "name": version.name,
+            "version": version.version,
+            "status": version.status,
+            "source_trace_ids": list(version.source_trace_ids),
+        }
 
     def _normalize(self, result: TaskResult) -> AgentResult:
         candidates = (result.draft_skill,) if result.draft_skill else ()
