@@ -150,6 +150,7 @@ class AgentRuntime:
         session_id: int | None = None
         tool_records: list[dict] = []
         final_response = ""
+        final_outcome_completed = False
         max_turns_reached = False
         trace_id: int | None = None
         pending_messages: list[dict] = []
@@ -192,6 +193,7 @@ class AgentRuntime:
                     continue
 
                 final_response = response.message.content
+                final_outcome_completed = response.finish_reason == "stop"
                 if response.finish_reason == "length":
                     final_response = f"{final_response}\n[response truncated]"
                 break
@@ -199,7 +201,11 @@ class AgentRuntime:
                 max_turns_reached = True
                 final_response = self.messages[-1].content or "[max turns reached]"
 
-            validation_status = self._validate_tool_records(tool_records)
+            validation_status = self._validate_tool_records(
+                tool_records,
+                final_response=final_response,
+                final_outcome_completed=final_outcome_completed,
+            )
             if max_turns_reached:
                 validation_status = "failure"
             status = "success" if validation_status == "success" else "failure"
@@ -363,10 +369,27 @@ class AgentRuntime:
             "status": status,
         }
 
-    def _validate_tool_records(self, records: list[dict]) -> str:
-        if any(record["status"] == "failure" for record in records):
-            return "failure"
-        return "success"
+    def _validate_tool_records(
+        self,
+        records: list[dict],
+        final_response: str = "",
+        final_outcome_completed: bool = True,
+    ) -> str:
+        """Validate a task, allowing an evidenced correction after a failed call."""
+        failure_indexes = [
+            index for index, record in enumerate(records)
+            if record["status"] == "failure"
+        ]
+        if not failure_indexes:
+            return "success"
+
+        last_failure = failure_indexes[-1]
+        corrected = any(
+            record["status"] == "success"
+            for record in records[last_failure + 1:]
+        )
+        final_outcome = final_outcome_completed and bool(final_response.strip())
+        return "success" if corrected and final_outcome else "failure"
 
     def _validate_tool_result(self, result: dict[str, Any]) -> str:
         if "error" in result:

@@ -213,11 +213,12 @@ class AgentMemory:
             if not matches:
                 raise MemoryValidationError("memory entry to supersede was not found or is inactive")
 
+        trace_ids = self._validated_trace_ids(source_trace_ids)
         new_entry = MemoryEntry(
             content=validated,
             fingerprint=fingerprint,
             confidence=float(confidence),
-            source_trace_ids=tuple(int(trace_id) for trace_id in source_trace_ids),
+            source_trace_ids=trace_ids,
             supersedes=supersedes,
             created_at=datetime.now().isoformat(timespec="seconds"),
         )
@@ -235,24 +236,105 @@ class AgentMemory:
         path = self.dir / STRUCTURED_MEMORY_FILE
         if not path.exists():
             return []
-        raw: Any = json.loads(path.read_text())
+        try:
+            raw: Any = json.loads(path.read_text())
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise MemoryValidationError(
+                "structured memory ledger is not valid JSON"
+            ) from exc
         if not isinstance(raw, list):
             raise MemoryValidationError("structured memory ledger is malformed")
-        entries = [
-            MemoryEntry(
-                content=item["content"],
-                fingerprint=item["fingerprint"],
-                confidence=float(item["confidence"]),
-                source_trace_ids=tuple(item.get("source_trace_ids", ())),
-                supersedes=item.get("supersedes"),
-                superseded_by=item.get("superseded_by"),
-                created_at=item.get("created_at", ""),
-            )
-            for item in raw
-        ]
+        entries = [self._parse_structured_entry(item) for item in raw]
+        self._validate_supersession_graph(entries)
         if include_superseded:
             return entries
         return [entry for entry in entries if entry.superseded_by is None]
+
+    def _parse_structured_entry(self, item: Any) -> MemoryEntry:
+        if not isinstance(item, dict):
+            raise MemoryValidationError("structured memory entry must be an object")
+        required = {"content", "fingerprint", "confidence", "source_trace_ids"}
+        allowed = required | {"supersedes", "superseded_by", "created_at"}
+        if not required <= item.keys() or not item.keys() <= allowed:
+            raise MemoryValidationError("structured memory entry has invalid fields")
+        try:
+            content = self._validate_entry(item["content"])
+        except (MemoryValidationError, TypeError, AttributeError) as exc:
+            raise MemoryValidationError("structured memory content is invalid") from exc
+        fingerprint = item["fingerprint"]
+        if not isinstance(fingerprint, str) or fingerprint != normalized_fingerprint(content):
+            raise MemoryValidationError("structured memory fingerprint is invalid")
+        confidence = item["confidence"]
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0.0 <= confidence <= 1.0
+        ):
+            raise MemoryValidationError("structured memory confidence is invalid")
+        trace_ids = self._validated_trace_ids(item["source_trace_ids"])
+        supersedes = self._optional_fingerprint(item.get("supersedes"))
+        superseded_by = self._optional_fingerprint(item.get("superseded_by"))
+        created_at = item.get("created_at", "")
+        if not isinstance(created_at, str):
+            raise MemoryValidationError("structured memory timestamp is invalid")
+        return MemoryEntry(
+            content=content,
+            fingerprint=fingerprint,
+            confidence=float(confidence),
+            source_trace_ids=trace_ids,
+            supersedes=supersedes,
+            superseded_by=superseded_by,
+            created_at=created_at,
+        )
+
+    @staticmethod
+    def _validated_trace_ids(value: Any) -> tuple[int, ...]:
+        if not isinstance(value, (list, tuple)):
+            raise MemoryValidationError("structured memory trace IDs are invalid")
+        if any(
+            isinstance(trace_id, bool)
+            or not isinstance(trace_id, int)
+            or trace_id <= 0
+            for trace_id in value
+        ):
+            raise MemoryValidationError("structured memory trace IDs are invalid")
+        if len(set(value)) != len(value):
+            raise MemoryValidationError("structured memory trace IDs are duplicated")
+        return tuple(value)
+
+    @staticmethod
+    def _optional_fingerprint(value: Any) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value:
+            raise MemoryValidationError("structured memory supersession is invalid")
+        return value
+
+    @staticmethod
+    def _validate_supersession_graph(entries: list[MemoryEntry]) -> None:
+        by_fingerprint = {entry.fingerprint: entry for entry in entries}
+        if len(by_fingerprint) != len(entries):
+            raise MemoryValidationError("structured memory fingerprints are duplicated")
+        for entry in entries:
+            if entry.supersedes == entry.fingerprint or entry.superseded_by == entry.fingerprint:
+                raise MemoryValidationError("structured memory entry cannot supersede itself")
+            if entry.supersedes is not None:
+                parent = by_fingerprint.get(entry.supersedes)
+                if parent is None or parent.superseded_by != entry.fingerprint:
+                    raise MemoryValidationError("structured memory supersession reference is invalid")
+            if entry.superseded_by is not None:
+                child = by_fingerprint.get(entry.superseded_by)
+                if child is None or child.supersedes != entry.fingerprint:
+                    raise MemoryValidationError("structured memory replacement reference is invalid")
+
+        for entry in entries:
+            seen: set[str] = set()
+            current: MemoryEntry | None = entry
+            while current is not None and current.supersedes is not None:
+                if current.fingerprint in seen:
+                    raise MemoryValidationError("structured memory supersession cycle detected")
+                seen.add(current.fingerprint)
+                current = by_fingerprint.get(current.supersedes)
 
     def _write_structured_entries(self, entries: list[MemoryEntry]) -> None:
         payload = [

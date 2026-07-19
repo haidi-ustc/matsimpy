@@ -67,6 +67,22 @@ def test_policy_classifies_validated_recovery():
     assert candidate.source_trace_ids == (21,)
 
 
+def test_policy_does_not_classify_failure_after_success_as_recovery():
+    candidate = EvolutionPolicy().classify([
+        {
+            "trace_id": 22,
+            "validation_status": "success",
+            "user_request": "attempt a structure operation",
+            "tool_calls": [
+                {"name": "read_structure", "status": "success"},
+                {"name": "read_structure", "status": "failure"},
+            ],
+        }
+    ])
+
+    assert candidate is None
+
+
 def test_policy_classifies_explicit_correction_as_memory():
     candidate = EvolutionPolicy().classify(
         [{"trace_id": 31, "validation_status": "success", "user_request": "save POSCAR"}],
@@ -77,6 +93,47 @@ def test_policy_classifies_explicit_correction_as_memory():
     assert candidate.kind == "memory"
     assert candidate.rationale == "explicit user correction"
     assert candidate.payload["content"] == "Use VASP format for my crystal files."
+    assert candidate.source_trace_ids == (31,)
+
+
+def test_correction_uses_explicit_trace_id_not_unrelated_history():
+    candidate = EvolutionPolicy().classify(
+        [
+            {"trace_id": 31, "validation_status": "success", "user_request": "old task"},
+            {"trace_id": 32, "validation_status": "failure", "user_request": "new task"},
+        ],
+        correction="Use VASP format.",
+        source_trace_id=31,
+    )
+
+    assert candidate is not None
+    assert candidate.source_trace_ids == (31,)
+    assert candidate.payload["provenance"] == "trace"
+
+
+def test_correction_defaults_to_newest_trace_and_has_empty_request_policy():
+    policy = EvolutionPolicy()
+
+    latest = policy.classify(
+        [
+            {"trace_id": 31, "validation_status": "success", "user_request": "old"},
+            {"trace_id": 32, "validation_status": "failure", "user_request": "new"},
+        ],
+        correction="Use VASP format.",
+    )
+    request_only = policy.classify([], correction="Use VASP format.")
+
+    assert latest is not None and latest.source_trace_ids == (32,)
+    assert latest.payload["provenance"] == "trace"
+    assert request_only is not None and request_only.source_trace_ids == ()
+    assert request_only.payload["provenance"] == "explicit_request"
+
+
+def test_correction_rejects_invalid_explicit_trace_id():
+    with pytest.raises(ValueError, match="positive integer"):
+        EvolutionPolicy().classify(
+            [], correction="Use VASP format.", source_trace_id=True
+        )
 
 
 def test_policy_classifies_explicit_learn_request_without_provider_call():

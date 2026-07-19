@@ -193,6 +193,57 @@ def test_runtime_executes_tools_persists_trace_and_drafts_skill(tmp_path):
     assert [draft["name"] for draft in drafts] == [result.draft_skill["name"]]
 
 
+def test_runtime_validates_corrective_recovery_and_preserves_failed_audit(tmp_path):
+    invalid = ToolCall(
+        id="call-invalid",
+        name="create_structure",
+        arguments={"unexpected": True},
+    )
+    corrected = ToolCall(id="call-corrected", name="create_structure", arguments={})
+    provider = FakeProvider([
+        ChatResponse(
+            message=_assistant_tool_message(invalid),
+            tool_calls=[invalid],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=_assistant_tool_message(corrected),
+            tool_calls=[corrected],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=ChatMessage.assistant("Created silicon after correcting the call."),
+            tool_calls=[],
+            finish_reason="stop",
+        ),
+    ])
+    store = SessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("create silicon")
+
+    assert result.status == "success"
+    assert [record["status"] for record in result.tool_calls] == ["failure", "success"]
+    assert result.draft_skill is not None
+    assert result.draft_skill["metadata"]["evolution"]["rationale"] == (
+        "validated recovery from tool failure"
+    )
+    audit = store.conn.execute(
+        "SELECT tool_name, status FROM tool_calls ORDER BY id"
+    ).fetchall()
+    assert [(row["tool_name"], row["status"]) for row in audit] == [
+        ("create_structure", "failure"),
+        ("create_structure", "success"),
+    ]
+
+
 def test_runtime_keeps_success_when_draft_generation_fails(tmp_path):
     create_call = ToolCall(id="call-create", name="create_structure", arguments={})
     save_call = ToolCall(id="call-save", name="save_structure", arguments={"path": "si.txt"})

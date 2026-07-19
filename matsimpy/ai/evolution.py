@@ -41,19 +41,34 @@ class EvolutionPolicy:
         self,
         trace_history: Sequence[Mapping[str, Any]],
         correction: str | None = None,
+        source_trace_id: int | None = None,
     ) -> EvolutionCandidate | None:
         successful = [
             trace for trace in trace_history
             if trace.get("validation_status") == "success"
         ]
-        trace_ids = _trace_ids(successful)
-
         if correction is not None and correction.strip():
+            if source_trace_id is not None:
+                if (
+                    isinstance(source_trace_id, bool)
+                    or not isinstance(source_trace_id, int)
+                    or source_trace_id <= 0
+                ):
+                    raise ValueError("source_trace_id must be a positive integer")
+                provenance_ids = (source_trace_id,)
+            elif trace_history:
+                provenance_ids = _trace_ids([trace_history[-1]])
+            else:
+                provenance_ids = ()
             return EvolutionCandidate(
                 "memory",
                 "explicit user correction",
-                trace_ids,
-                {"content": correction.strip(), "confidence": 1.0},
+                provenance_ids,
+                {
+                    "content": correction.strip(),
+                    "confidence": 1.0,
+                    "provenance": "trace" if provenance_ids else "explicit_request",
+                },
             )
         if not successful:
             return None
@@ -321,10 +336,15 @@ def _tool_sequence(trace: Mapping[str, Any]) -> list[str]:
 
 def _is_recovery(trace: Mapping[str, Any]) -> bool:
     calls = trace.get("tool_calls", ())
-    statuses = [
-        call.get("status") for call in calls if isinstance(call, Mapping)
-    ]
-    return "failure" in statuses and "success" in statuses
+    failure_seen = False
+    for call in calls:
+        if not isinstance(call, Mapping):
+            continue
+        if call.get("status") == "failure":
+            failure_seen = True
+        elif failure_seen and call.get("status") == "success":
+            return True
+    return False
 
 
 def _normalize_tools(tools: Any) -> list[dict]:

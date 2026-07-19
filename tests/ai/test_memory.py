@@ -1,5 +1,7 @@
 """Tests for bounded AI memory operations."""
 
+import json
+
 import pytest
 
 from matsimpy.ai.memory import AgentMemory, MemoryValidationError, normalized_fingerprint
@@ -48,6 +50,66 @@ def test_structured_memory_rejects_invalid_confidence(tmp_path, confidence):
 
     with pytest.raises(MemoryValidationError, match="confidence"):
         memory.remember("A safe fact", confidence=confidence)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "not json",
+        json.dumps({"content": "not a list"}),
+        json.dumps(["not an object"]),
+        json.dumps([{"content": "missing fields"}]),
+    ],
+)
+def test_structured_memory_rejects_malformed_ledger(tmp_path, payload):
+    memory = AgentMemory(tmp_path)
+    (tmp_path / "entries.json").write_text(payload)
+
+    with pytest.raises(MemoryValidationError, match="structured memory"):
+        memory.structured_entries()
+
+
+def test_structured_memory_rejects_tampered_fields(tmp_path):
+    memory = AgentMemory(tmp_path)
+    entry = memory.remember("A trusted fact", source_trace_ids=[1])
+    path = tmp_path / "entries.json"
+    base = json.loads(path.read_text())[0]
+    tampered = [
+        {**base, "content": "changed without fingerprint update"},
+        {**base, "confidence": 2},
+        {**base, "source_trace_ids": [True]},
+        {**base, "source_trace_ids": ["1"]},
+        {**base, "fingerprint": 123},
+    ]
+
+    for item in tampered:
+        path.write_text(json.dumps([item]))
+        with pytest.raises(MemoryValidationError, match="structured memory"):
+            memory.structured_entries()
+
+    assert entry.fingerprint
+
+
+def test_structured_memory_rejects_duplicate_and_invalid_supersession_graph(tmp_path):
+    memory = AgentMemory(tmp_path)
+    first = memory.remember("First fact", source_trace_ids=[1])
+    second = memory.remember("Second fact", source_trace_ids=[2])
+    path = tmp_path / "entries.json"
+    records = json.loads(path.read_text())
+
+    invalid_ledgers = [
+        [records[0], records[0]],
+        [{**records[0], "supersedes": "missing"}, records[1]],
+        [{**records[0], "supersedes": first.fingerprint}, records[1]],
+        [
+            {**records[0], "supersedes": second.fingerprint},
+            {**records[1], "supersedes": first.fingerprint},
+        ],
+    ]
+    for ledger in invalid_ledgers:
+        path.write_text(json.dumps(ledger))
+        with pytest.raises(MemoryValidationError, match="structured memory"):
+            memory.structured_entries()
 
 
 def test_memory_add_replace_remove_and_duplicate_rejection(tmp_path):
