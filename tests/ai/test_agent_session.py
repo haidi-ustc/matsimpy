@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from matsimpy.ai.conversation import ChatMessage, ChatResponse
+from matsimpy.ai.conversation import ChatMessage, ChatResponse, ToolCall
+from matsimpy.ai.executor import get_last_structure, set_last_structure
 from matsimpy.ai.runtime import AgentRuntime
 from matsimpy.ai.session import AgentSession
 from matsimpy.ai.session_store import SessionStore
-from matsimpy.ai.skill import SkillManager
+from matsimpy.ai.skill import FunctionDef, Skill, SkillManager
 from matsimpy.ai.workspace import Workspace
 
 
@@ -28,6 +31,8 @@ class RecordingProvider:
         response = self.responses.pop(0)
         if isinstance(response, BaseException):
             raise response
+        if isinstance(response, ChatResponse):
+            return response
         return ChatResponse(ChatMessage.assistant(response), [], "stop")
 
 
@@ -175,3 +180,123 @@ def test_cancellation_is_persisted_as_interrupted_and_reraised(tmp_path, cancell
     ).fetchone()[0]
     assert runtime_status == "interrupted"
     assert Path.cwd() == Path(os.getcwd())
+
+
+def test_cancellation_after_tool_persists_buffered_runtime_evidence(tmp_path):
+    tool_call = ToolCall("tool-1", "ping", {})
+    tool_response = ChatResponse(
+        ChatMessage.assistant(
+            "",
+            tool_calls=[{
+                "id": "tool-1",
+                "type": "function",
+                "function": {"name": "ping", "arguments": "{}"},
+            }],
+        ),
+        [tool_call],
+        "tool_calls",
+    )
+    provider = RecordingProvider([tool_response, asyncio.CancelledError()])
+    skill = Skill(
+        "cancel-test",
+        "Cancellation test",
+        [FunctionDef("ping", "Ping", {"type": "object", "properties": {}}, lambda: "pong")],
+    )
+    manager = SkillManager({"cancel-test": skill})
+    manager.load("cancel-test")
+    store = SessionStore(tmp_path / "sessions.db")
+
+    def create_runtime():
+        return AgentRuntime(
+            provider,
+            manager,
+            session_store=store,
+            workspace_path=tmp_path,
+            source="test",
+        )
+
+    session = AgentSession(create_runtime, store)
+    with pytest.raises(asyncio.CancelledError):
+        session.run("use the tool then cancel")
+
+    _, attempts = store.load_conversation(session.conversation_id)
+    assert attempts[0].state == "interrupted"
+    runtime_session = store.conn.execute(
+        "SELECT id, status FROM sessions ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert runtime_session["status"] == "interrupted"
+    message_roles = store.conn.execute(
+        "SELECT role FROM messages WHERE session_id = ? ORDER BY id",
+        (runtime_session["id"],),
+    ).fetchall()
+    assert [row["role"] for row in message_roles] == ["user", "assistant", "tool"]
+    tool_row = store.conn.execute(
+        "SELECT tool_name, status FROM tool_calls WHERE session_id = ?",
+        (runtime_session["id"],),
+    ).fetchone()
+    assert tuple(tool_row) == ("ping", "success")
+    trace = store.conn.execute(
+        "SELECT validation_status, final_response FROM task_traces WHERE session_id = ?",
+        (runtime_session["id"],),
+    ).fetchone()
+    assert trace["validation_status"] == "failure"
+    assert "interrupted" in trace["final_response"].lower()
+
+
+def test_overlapping_sessions_serialize_cwd_and_isolate_executor_context(tmp_path):
+    original_cwd = Path.cwd()
+    start = threading.Barrier(2)
+    state_lock = threading.Lock()
+    active = 0
+    max_active = 0
+    observations: dict[str, tuple[Path, str]] = {}
+
+    class InspectingProvider:
+        model = "thread-test"
+
+        def __init__(self, name):
+            self.name = name
+
+        def chat(self, messages, tools=None, tool_choice="auto"):
+            nonlocal active, max_active
+            with state_lock:
+                active += 1
+                max_active = max(max_active, active)
+            try:
+                set_last_structure(self.name)
+                observations[self.name] = (Path.cwd(), get_last_structure())
+                return ChatResponse(ChatMessage.assistant(self.name), [], "stop")
+            finally:
+                with state_lock:
+                    active -= 1
+
+    def worker(name):
+        workspace = tmp_path / name
+        store = SessionStore(tmp_path / f"{name}.db")
+        provider = InspectingProvider(name)
+
+        def create_runtime():
+            return AgentRuntime(
+                provider,
+                SkillManager({}),
+                session_store=store,
+                workspace_path=workspace,
+                source="thread-test",
+            )
+
+        session = AgentSession(create_runtime, store)
+        start.wait()
+        turn = session.run(name)
+        store.close()
+        return turn.final_response
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = sorted(pool.map(worker, ("one", "two")))
+
+    assert results == ["one", "two"]
+    assert max_active == 1
+    assert observations == {
+        "one": ((tmp_path / "one").resolve(), "one"),
+        "two": ((tmp_path / "two").resolve(), "two"),
+    }
+    assert Path.cwd() == original_cwd

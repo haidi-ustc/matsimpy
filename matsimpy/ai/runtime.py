@@ -240,9 +240,16 @@ class AgentRuntime:
                 draft_skill=draft_skill,
             )
             return self.last_result
-        except (KeyboardInterrupt, asyncio.CancelledError):
+        except (KeyboardInterrupt, asyncio.CancelledError) as exc:
             if session_id is not None:
-                self.session_store.end_session(session_id, "interrupted")
+                self._persist_interrupted_run(
+                    session_id=session_id,
+                    user_message=user_message,
+                    tool_records=tool_records,
+                    pending_messages=pending_messages,
+                    pending_tool_calls=pending_tool_calls,
+                    cancellation=exc,
+                )
             raise
         except Exception as exc:
             self.last_result = self._finalize_runtime_failure(
@@ -253,6 +260,40 @@ class AgentRuntime:
                 exc=exc,
             )
             return self.last_result
+
+    def _persist_interrupted_run(
+        self,
+        session_id: int,
+        user_message: str,
+        tool_records: list[dict],
+        pending_messages: list[dict],
+        pending_tool_calls: list[dict],
+        cancellation: BaseException,
+    ) -> None:
+        """Flush buffered evidence, then durably mark a cancelled run interrupted."""
+        final_response = f"Execution interrupted: {type(cancellation).__name__}"
+        try:
+            self.session_store.add_messages_batch(session_id, pending_messages)
+            self.session_store.add_tool_calls_batch(session_id, pending_tool_calls)
+            self.session_store.add_task_trace(
+                session_id=session_id,
+                user_request=user_message,
+                plan_summary=self._plan_summary(
+                    tool_records, max_turns_reached=False
+                ),
+                validation_status="failure",
+                final_response=final_response,
+                tool_names=[record["name"] for record in tool_records],
+            )
+        except Exception as exc:
+            # Cancellation remains the control-flow signal even if audit storage
+            # itself is degraded; surface the secondary issue through diagnostics.
+            self._emit(f"failed to persist interruption evidence: {exc}")
+        finally:
+            try:
+                self.session_store.end_session(session_id, "interrupted")
+            except Exception as exc:
+                self._emit(f"failed to mark runtime session interrupted: {exc}")
 
     def _initial_messages(self) -> list[ChatMessage]:
         prompt = self.system_prompt.strip()
