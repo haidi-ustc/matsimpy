@@ -380,7 +380,18 @@ def test_migrate_legacy_skill_preserves_recursive_metadata(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "secret_key", ["api_key", "Authorization", "TOKEN", "password", "Secret"]
+    "secret_key",
+    [
+        "api_key",
+        "Authorization",
+        "TOKEN",
+        "password",
+        "Secret",
+        "access_token",
+        "CLIENT_SECRET",
+        "private_key",
+        "Credentials",
+    ],
 )
 def test_migrate_legacy_skill_rejects_nested_secret_keys(tmp_path, secret_key):
     from matsimpy.ai.agent_skills import SkillValidationError

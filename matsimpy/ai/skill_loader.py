@@ -20,7 +20,17 @@ from matsimpy.ai.agent_skills import (
 
 SKILLS_DIR = Path.home() / ".matsimpy" / "ai" / "skills" / "generated"
 _UNSAFE_SKILL_NAME_RE = re.compile(r"[^a-z0-9-]+")
-_SECRET_KEYS = {"api_key", "authorization", "token", "password", "secret"}
+_SECRET_KEYS = {
+    "access_token",
+    "api_key",
+    "authorization",
+    "client_secret",
+    "credentials",
+    "password",
+    "private_key",
+    "secret",
+    "token",
+}
 
 
 def _safe_skill_name(name: str) -> str:

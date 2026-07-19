@@ -401,13 +401,12 @@ class SkillLibrary:
             skill_path = self._skill_paths[name]
         except KeyError as exc:
             raise KeyError(f"unknown skill {name!r}") from exc
-        summary_manifest = _parse_skill_summary(skill_path)
+        manifest = parse_skill(skill_path)
         source = self._summaries[name].source
-        if not self._is_approved(summary_manifest, source):
+        if not self._is_approved(manifest, source):
             self._summaries.pop(name, None)
             self._skill_paths.pop(name, None)
             raise KeyError(f"unknown skill {name!r}")
-        manifest = parse_skill(skill_path)
         self.activated[name] = manifest
         return manifest
 
@@ -419,6 +418,12 @@ class SkillLibrary:
             root = self._skill_paths[name]
         except KeyError as exc:
             raise KeyError(f"unknown skill {name!r}") from exc
+        current_manifest = _parse_skill_summary(root)
+        source = self._summaries[name].source
+        if not self._is_approved(current_manifest, source):
+            self._summaries.pop(name, None)
+            self._skill_paths.pop(name, None)
+            raise KeyError(f"unknown skill {name!r}")
         requested = Path(relative_path)
         if requested.is_absolute():
             raise ValueError("resource path resolves outside skill root")

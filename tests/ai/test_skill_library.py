@@ -84,6 +84,32 @@ def test_activation_loads_body_but_not_references(skill_roots):
     assert library.loaded_resources == []
 
 
+def test_activation_checks_the_single_full_manifest_it_returns(
+    skill_roots, monkeypatch
+):
+    from matsimpy.ai import agent_skills
+
+    library = SkillLibrary(workspace=skill_roots.workspace)
+    library.discover()
+    real_parse = agent_skills.parse_skill
+    parse_calls = []
+
+    def parse_once(path):
+        parse_calls.append(path)
+        return real_parse(path)
+
+    def stale_summary_read(path):
+        raise AssertionError("activation must not perform a separate status read")
+
+    monkeypatch.setattr(agent_skills, "parse_skill", parse_once)
+    monkeypatch.setattr(agent_skills, "_parse_skill_summary", stale_summary_read)
+
+    active = library.activate("build-rocksalt")
+
+    assert active is library.activated["build-rocksalt"]
+    assert len(parse_calls) == 1
+
+
 def test_search_uses_summary_metadata_without_activating(skill_roots):
     library = SkillLibrary(
         packaged=skill_roots.pkg,
@@ -135,6 +161,36 @@ def test_resource_reads_are_explicit_and_contained(tmp_path):
     assert library.loaded_resources == [("documented", "references/guide.md")]
     with pytest.raises(ValueError, match="outside skill root"):
         library.read_resource("documented", "../secret.txt")
+
+
+def test_resource_read_rechecks_approval_after_discovery(tmp_path):
+    packaged = tmp_path / "packaged"
+    packaged.mkdir()
+    skill = _write_skill(
+        packaged,
+        "documented",
+        description="A documented skill",
+        body="Read references explicitly.",
+    )
+    resource = skill / "guide.md"
+    resource.write_text("Draft-only details.", encoding="utf-8")
+    library = SkillLibrary(packaged=packaged)
+    library.discover()
+    (skill / "SKILL.md").write_text(
+        "---\n"
+        "name: documented\n"
+        "description: A documented skill\n"
+        "metadata:\n"
+        "  matsimpy:\n"
+        "    status: draft\n"
+        "---\nRead references explicitly.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(KeyError, match="unknown skill"):
+        library.read_resource("documented", "guide.md")
+
+    assert library.loaded_resources == []
 
 
 def test_resource_symlink_cannot_escape_skill_root(tmp_path):
