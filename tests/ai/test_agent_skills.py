@@ -5,7 +5,12 @@ from types import MappingProxyType
 
 import pytest
 
-from matsimpy.ai.agent_skills import MAX_SKILL_BYTES, SkillValidationError, parse_skill
+from matsimpy.ai.agent_skills import (
+    MAX_SKILL_BYTES,
+    SkillLibrary,
+    SkillValidationError,
+    parse_skill,
+)
 
 
 def write_skill(tmp_path: Path, *, name: str) -> Path:
@@ -154,3 +159,45 @@ def test_parse_optional_standard_fields(tmp_path):
 
     with pytest.raises(TypeError):
         skill.metadata["owner"] = "changed"
+
+
+def test_draft_migrated_skill_is_not_discoverable_or_activatable(tmp_path):
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    root = tmp_path / "workspace"
+    legacy = tmp_path / "draft-skill.skill.md"
+    legacy.write_text(
+        "---\n"
+        "name: draft-skill\n"
+        "description: Draft generated skill\n"
+        "status: draft\n"
+        "---\nSecret draft instructions.\n"
+    )
+    migrate_legacy_skill(legacy, root)
+    library = SkillLibrary(workspace=root)
+
+    assert library.discover() == []
+    assert [(item.code, item.skill_name) for item in library.diagnostics] == [
+        ("skill-not-approved", "draft-skill")
+    ]
+    with pytest.raises(KeyError, match="unknown skill"):
+        library.activate("draft-skill")
+
+
+def test_migrated_skill_without_status_retains_legacy_approved_default(tmp_path):
+    root = tmp_path / "workspace"
+    skill = root / "legacy-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\n"
+        "name: legacy-skill\n"
+        "description: Legacy generated skill\n"
+        "metadata:\n"
+        "  matsimpy:\n"
+        "    load_mode: manual\n"
+        "---\nInstructions.\n"
+    )
+    library = SkillLibrary(workspace=root)
+
+    assert [item.name for item in library.discover()] == ["legacy-skill"]
+    assert library.activate("legacy-skill").body == "Instructions."

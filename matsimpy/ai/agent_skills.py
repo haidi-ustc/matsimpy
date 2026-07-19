@@ -298,6 +298,8 @@ class SkillLibrary:
                 if not skill_path.is_dir():
                     continue
                 manifest = _parse_skill_summary(skill_path)
+                if not self._is_approved(manifest, source):
+                    continue
                 if manifest.name in level:
                     raise SkillValidationError(
                         f"duplicate skill {manifest.name!r} in {source} source"
@@ -329,6 +331,27 @@ class SkillLibrary:
                 self._skill_paths[name] = path
         self._discovered = True
         return sorted(self._summaries.values(), key=lambda item: item.name)
+
+    def _is_approved(self, manifest: SkillManifest, source: str) -> bool:
+        matsimpy = manifest.metadata.get("matsimpy")
+        status = (
+            matsimpy.get("status", "approved")
+            if isinstance(matsimpy, dict)
+            else "approved"
+        )
+        if status == "approved":
+            return True
+        self.diagnostics.append(
+            SkillDiagnostic(
+                code="skill-not-approved",
+                skill_name=manifest.name,
+                message=(
+                    f"{source} skill {manifest.name!r} has MatSimPy status "
+                    f"{status!r} and is not discoverable"
+                ),
+            )
+        )
+        return False
 
     def _restrict_tools(
         self, manifest: SkillManifest, source: str
@@ -378,6 +401,12 @@ class SkillLibrary:
             skill_path = self._skill_paths[name]
         except KeyError as exc:
             raise KeyError(f"unknown skill {name!r}") from exc
+        summary_manifest = _parse_skill_summary(skill_path)
+        source = self._summaries[name].source
+        if not self._is_approved(summary_manifest, source):
+            self._summaries.pop(name, None)
+            self._skill_paths.pop(name, None)
+            raise KeyError(f"unknown skill {name!r}")
         manifest = parse_skill(skill_path)
         self.activated[name] = manifest
         return manifest

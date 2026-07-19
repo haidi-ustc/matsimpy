@@ -1,5 +1,6 @@
 """Tests for dynamic skill discovery — basic and edge cases."""
 import os
+from pathlib import Path
 import sys
 import yaml
 import pytest
@@ -355,6 +356,101 @@ def test_migrate_legacy_skill_preserves_body_exactly(tmp_path):
     content = result.destination.read_text(encoding="utf-8")
 
     assert content[content.index("---\n", 4) + 4 :] == body
+
+
+def test_migrate_legacy_skill_preserves_recursive_metadata(tmp_path):
+    from matsimpy.ai.agent_skills import parse_skill
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    source = tmp_path / "legacy-skill.skill.md"
+    _write_legacy_skill(source)
+    legacy = yaml.safe_load(source.read_text().split("---\n", 2)[1])
+    legacy["tools"][0]["args_template"] = {"nested": {"cutoff": 3.5}}
+    source.write_text(
+        f"---\n{yaml.safe_dump(legacy, sort_keys=False)}---\nBody.\n",
+        encoding="utf-8",
+    )
+
+    result = migrate_legacy_skill(source, tmp_path / "standard")
+
+    migrated = parse_skill(result.destination.parent)
+    assert migrated.metadata["matsimpy"]["tools"][0]["args_template"] == {
+        "nested": {"cutoff": 3.5}
+    }
+
+
+@pytest.mark.parametrize(
+    "secret_key", ["api_key", "Authorization", "TOKEN", "password", "Secret"]
+)
+def test_migrate_legacy_skill_rejects_nested_secret_keys(tmp_path, secret_key):
+    from matsimpy.ai.agent_skills import SkillValidationError
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    source = tmp_path / "legacy-skill.skill.md"
+    _write_legacy_skill(source)
+    legacy = yaml.safe_load(source.read_text().split("---\n", 2)[1])
+    legacy["tools"][0]["args_template"] = [{"nested": {secret_key: "sensitive"}}]
+    source.write_text(
+        f"---\n{yaml.safe_dump(legacy, sort_keys=False)}---\n"
+        "Ordinary prose may say token without being scanned.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SkillValidationError, match="secret-bearing.*key"):
+        migrate_legacy_skill(source, tmp_path / "standard")
+
+
+def test_migrate_legacy_skill_rejects_oversized_and_invalid_utf8(tmp_path):
+    from matsimpy.ai.agent_skills import MAX_SKILL_BYTES, SkillValidationError
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    oversized = tmp_path / "oversized.skill.md"
+    oversized.write_bytes(b"x" * (MAX_SKILL_BYTES + 1))
+    with pytest.raises(SkillValidationError, match="size limit"):
+        migrate_legacy_skill(oversized, tmp_path / "standard")
+
+    invalid = tmp_path / "invalid.skill.md"
+    invalid.write_bytes(b"---\nname: invalid\ndescription: invalid\n---\n\xff")
+    with pytest.raises(SkillValidationError, match="UTF-8"):
+        migrate_legacy_skill(invalid, tmp_path / "standard")
+
+
+def test_migrate_legacy_skill_does_not_clobber_publish_race(tmp_path, monkeypatch):
+    from matsimpy.ai import skill_loader
+
+    source = tmp_path / "legacy-skill.skill.md"
+    _write_legacy_skill(source)
+    real_link = skill_loader.os.link
+
+    def racing_link(source_path, destination_path):
+        destination_path = Path(destination_path)
+        destination_path.write_text("racing writer", encoding="utf-8")
+        return real_link(source_path, destination_path)
+
+    monkeypatch.setattr(skill_loader.os, "link", racing_link)
+
+    with pytest.raises(FileExistsError, match="collision"):
+        skill_loader.migrate_legacy_skill(source, tmp_path / "standard")
+
+    target = tmp_path / "standard" / "legacy-skill" / "SKILL.md"
+    assert target.read_text(encoding="utf-8") == "racing writer"
+    assert list(target.parent.glob(".SKILL.md-*")) == []
+
+
+def test_legacy_loader_api_compatibility_after_migration_changes(tmp_path, monkeypatch):
+    from matsimpy.ai import skill_loader
+
+    generated = tmp_path / "generated"
+    monkeypatch.setattr(skill_loader, "SKILLS_DIR", generated)
+    saved = skill_loader.save_skill_md(
+        "legacy compatible", "Compatible", [], [], status="draft"
+    )
+
+    assert skill_loader.parse_skill_md(saved)["status"] == "draft"
+    assert skill_loader.list_generated_skills() == []
+    assert [item["name"] for item in skill_loader.list_generated_skills(None)] == [
+        "legacy-compatible"
+    ]
 
 
 def test_skill_schema_describes_structure_parameters_as_references():

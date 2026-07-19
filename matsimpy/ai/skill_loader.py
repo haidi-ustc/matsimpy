@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import os
@@ -11,10 +12,15 @@ import tempfile
 
 import yaml
 
-from matsimpy.ai.agent_skills import SkillValidationError, validate_skill_name
+from matsimpy.ai.agent_skills import (
+    MAX_SKILL_BYTES,
+    SkillValidationError,
+    validate_skill_name,
+)
 
 SKILLS_DIR = Path.home() / ".matsimpy" / "ai" / "skills" / "generated"
 _UNSAFE_SKILL_NAME_RE = re.compile(r"[^a-z0-9-]+")
+_SECRET_KEYS = {"api_key", "authorization", "token", "password", "secret"}
 
 
 def _safe_skill_name(name: str) -> str:
@@ -130,7 +136,20 @@ class MigrationResult:
 
 def _parse_legacy_for_migration(path: Path) -> tuple[dict, str]:
     try:
-        content = path.read_text(encoding="utf-8")
+        with path.open("rb") as legacy_file:
+            content_bytes = legacy_file.read(MAX_SKILL_BYTES + 1)
+        if len(content_bytes) > MAX_SKILL_BYTES:
+            raise SkillValidationError(
+                f"Invalid legacy skill at {path}: exceeds the "
+                f"{MAX_SKILL_BYTES}-byte size limit"
+            )
+        content = content_bytes.decode("utf-8", errors="strict")
+    except SkillValidationError:
+        raise
+    except UnicodeDecodeError as exc:
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: content is not valid UTF-8: {exc}"
+        ) from exc
     except OSError as exc:
         raise SkillValidationError(f"Invalid legacy skill at {path}: {exc}") from exc
     match = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n(.*)\Z", content, re.DOTALL)
@@ -148,7 +167,31 @@ def _parse_legacy_for_migration(path: Path) -> tuple[dict, str]:
         raise SkillValidationError(
             f"Invalid legacy skill at {path}: frontmatter must be a mapping"
         )
+    _reject_secret_keys(metadata, path)
     return metadata, match.group(2)
+
+
+def _reject_secret_keys(value: object, path: Path) -> None:
+    pending = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            if id(current) in visited:
+                continue
+            visited.add(id(current))
+            for key, nested in current.items():
+                if isinstance(key, str) and key.casefold() in _SECRET_KEYS:
+                    raise SkillValidationError(
+                        f"Invalid legacy skill at {path}: secret-bearing metadata "
+                        f"key {key!r} is not allowed"
+                    )
+                pending.append(nested)
+        elif isinstance(current, (list, tuple)):
+            if id(current) in visited:
+                continue
+            visited.add(id(current))
+            pending.extend(current)
 
 
 def _standard_skill_content(metadata: dict, body: str, path: Path) -> tuple[str, str]:
@@ -223,11 +266,18 @@ def migrate_legacy_skill(
                 temporary_file.write(content)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
-            os.replace(temporary, skill_path)
+            os.link(temporary, skill_path)
+        except FileExistsError as exc:
+            raise FileExistsError(
+                f"Skill migration collision at {skill_path}"
+            ) from exc
         finally:
             temporary.unlink(missing_ok=True)
     except OSError:
-        skill_path.parent.rmdir()
+        try:
+            skill_path.parent.rmdir()
+        except OSError:
+            pass
         raise
     return MigrationResult(status="migrated", **result_kwargs)
 
