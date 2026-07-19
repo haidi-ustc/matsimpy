@@ -23,12 +23,10 @@ def get_default_config() -> Dict[str, Any]:
                     "default_rc_smooth": None,
                 }
             },
-            "ml": {
+            "mattersim": {
                 "default_device": "cpu",
                 "default_model_dir": "~/.matsimpy/models",
-                "mattersim": {
-                    "default_model_type": "mace",
-                },
+                "default_model_type": "mace",
             },
             "dft": {
                 "default_directory": "./calc",

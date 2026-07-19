@@ -31,8 +31,8 @@ class ConfigManager:
     Example:
         >>> from matsimpy.config import ConfigManager
         >>> config = ConfigManager()
-        >>> device = config.get('calculator.ml.default_device')
-        >>> config.set('calculator.ml.default_device', 'cuda')
+        >>> device = config.get('calculator.mattersim.default_device')
+        >>> config.set('calculator.mattersim.default_device', 'cuda')
         >>> config.save()
     """
 
@@ -111,14 +111,14 @@ class ConfigManager:
         Get configuration value using dot-notation.
 
         Args:
-            key_path: Dot-separated path (e.g., 'calculator.ml.default_device')
+            key_path: Dot-separated path (e.g., 'calculator.mattersim.default_device')
             default: Default value if key not found
 
         Returns:
             Configuration value or default
 
         Examples:
-            >>> config.get('calculator.ml.default_device')
+            >>> config.get('calculator.mattersim.default_device')
             'cpu'
             >>> config.get('paths.models')
             '~/.matsimpy/models'
@@ -147,7 +147,7 @@ class ConfigManager:
             save: If True, save to file immediately
 
         Examples:
-            >>> config.set('calculator.ml.default_device', 'cuda')
+            >>> config.set('calculator.mattersim.default_device', 'cuda')
             >>> config.set('paths.models', '~/my_models', save=True)
         """
         if self._config is None:
@@ -204,7 +204,7 @@ def get_config(key_path: str, default: Any = None) -> Any:
     Convenience function for accessing global configuration.
 
     Args:
-        key_path: Dot-separated path (e.g., 'calculator.ml.default_device')
+        key_path: Dot-separated path (e.g., 'calculator.mattersim.default_device')
         default: Default value if key not found
 
     Returns:
@@ -212,7 +212,7 @@ def get_config(key_path: str, default: Any = None) -> Any:
 
     Examples:
         >>> from matsimpy.config import get_config
-        >>> device = get_config('calculator.ml.default_device')
+        >>> device = get_config('calculator.mattersim.default_device')
         >>> model_dir = get_config('paths.models')
     """
     return get_config_manager().get(key_path, default)

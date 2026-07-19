@@ -19,7 +19,7 @@ print("\n1. Getting Configuration Values")
 print("-" * 70)
 
 # Get default values
-device = get_config('calculator.ml.default_device')
+device = get_config('calculator.mattersim.default_device')
 model_dir = get_config('paths.models')
 log_level = get_config('logging.level')
 precision = get_config('io.precision')
@@ -30,7 +30,7 @@ print(f"Log level: {log_level}")
 print(f"IO precision: {precision}")
 
 # Get nested values
-model_type = get_config('calculator.ml.mattersim.default_model_type')
+model_type = get_config('calculator.mattersim.default_model_type')
 print(f"Mattersim default model type: {model_type}")
 
 # ======================================================================
@@ -56,27 +56,27 @@ print("-" * 70)
 config = ConfigManager()
 
 # Get current value
-current_device = config.get('calculator.ml.default_device')
+current_device = config.get('calculator.mattersim.default_device')
 print(f"Current ML device: {current_device}")
 
 # Set new value (without saving)
-config.set('calculator.ml.default_device', 'test_device')
-new_device = config.get('calculator.ml.default_device')
+config.set('calculator.mattersim.default_device', 'test_device')
+new_device = config.get('calculator.mattersim.default_device')
 print(f"Set to: {new_device}")
 
 # Reload to get original value
 config.reload()
-reloaded_device = config.get('calculator.ml.default_device')
+reloaded_device = config.get('calculator.mattersim.default_device')
 print(f"After reload: {reloaded_device}")
 
 # Set and save
-config.set('calculator.ml.default_device', 'cuda', save=True)
-saved_device = config.get('calculator.ml.default_device')
+config.set('calculator.mattersim.default_device', 'cuda', save=True)
+saved_device = config.get('calculator.mattersim.default_device')
 print(f"Saved value: {saved_device}")
 
 # Reset to defaults
 config.reset()
-reset_device = config.get('calculator.ml.default_device')
+reset_device = config.get('calculator.mattersim.default_device')
 print(f"After reset: {reset_device}")
 
 # ======================================================================
@@ -100,8 +100,8 @@ print("-" * 70)
 
 sections = {
     'Calculator defaults': [
-        'calculator.ml.default_device',
-        'calculator.ml.mattersim.default_model_type',
+        'calculator.mattersim.default_device',
+        'calculator.mattersim.default_model_type',
         'calculator.dft.default_directory',
     ],
     'Paths': [

@@ -23,7 +23,7 @@ Classical Calculators
 ML Calculators
 --------------
 
-.. automodule:: matsimpy.calculator.ml
+.. automodule:: matsimpy.calculator.mattersim
    :members:
    :undoc-members:
    :no-index:

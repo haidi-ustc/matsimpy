@@ -13,10 +13,10 @@ Usage Examples
    from matsimpy.config import get_config, ConfigManager
 
    # Get configuration values
-   device = get_config('calculator.ml.default_device')  # 'cpu'
+   device = get_config('calculator.mattersim.default_device')  # 'cpu'
    model_dir = get_config('paths.models')  # '~/.matsimpy/models'
 
    # Modify configuration
    config = ConfigManager()
-   config.set('calculator.ml.default_device', 'cuda', save=True)
+   config.set('calculator.mattersim.default_device', 'cuda', save=True)
 

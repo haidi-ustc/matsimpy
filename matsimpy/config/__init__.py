@@ -7,11 +7,11 @@ Usage:
     >>> from matsimpy.config import get_config, ConfigManager
     >>>
     >>> # Get config value
-    >>> device = get_config('calculator.ml.default_device')
+    >>> device = get_config('calculator.mattersim.default_device')
     >>>
     >>> # Get full config manager
     >>> config = ConfigManager()
-    >>> config.set('calculator.ml.default_device', 'cuda', save=True)
+    >>> config.set('calculator.mattersim.default_device', 'cuda', save=True)
 """
 
 from .manager import ConfigManager, get_config_manager, get_config
