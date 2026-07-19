@@ -33,6 +33,7 @@ from .providers import ChatProvider
 from .executor import FunctionExecutor
 from .runtime import AgentRuntime, TaskResult
 from .session_store import SessionStore
+from .session import AgentSession, SessionTurn
 from .engine import AIEngine
 
 __all__ = [
@@ -42,6 +43,8 @@ __all__ = [
     "DeepSeekProvider",
     "TaskResult",
     "SessionStore",
+    "AgentSession",
+    "SessionTurn",
     "SkillManager",
     "FunctionDef",
     "Skill",

@@ -1,9 +1,15 @@
 """Workspace manager — default working directory for file operations."""
 
+from __future__ import annotations
+
 import os
+from contextlib import contextmanager
 from pathlib import Path
+from threading import RLock
+from collections.abc import Iterator
 
 DEFAULT_WORKSPACE = Path.home() / ".matsimpy" / "ai" / "workspace"
+_CWD_LOCK = RLock()
 
 
 class Workspace:
@@ -22,6 +28,19 @@ class Workspace:
     def leave(self) -> None:
         """Restore original working directory."""
         os.chdir(self._original_cwd)
+
+    @contextmanager
+    def activate(self) -> Iterator[Workspace]:
+        """Enter this workspace and restore the immediate caller's directory."""
+        # Relative-path tools still require cwd compatibility. Serialize that
+        # inherently process-global operation and always restore the caller.
+        with _CWD_LOCK:
+            previous = Path.cwd()
+            os.chdir(self.path)
+            try:
+                yield self
+            finally:
+                os.chdir(previous)
 
     def resolve(self, filename: str) -> Path:
         """Resolve filename relative to workspace."""

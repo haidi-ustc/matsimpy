@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any, Callable
 
 from .conversation import ChatMessage, ToolCall
 from .evolution import EvolutionManager
-from .executor import FunctionExecutor, _set_active_executor
+from .executor import FunctionExecutor, active_executor
 from .memory import AgentMemory
 from .providers import ChatProvider
 from .session_store import SessionStore
@@ -116,7 +117,6 @@ class AgentRuntime:
         self.max_turns = max_turns
         self.verbose_hook = verbose_hook
         self.executor = FunctionExecutor(skill_manager)
-        _set_active_executor(self.executor)
         self.messages = self._initial_messages()
         self.last_result: TaskResult | None = None
 
@@ -131,12 +131,22 @@ class AgentRuntime:
         extra_messages: list[ChatMessage] | None = None,
     ) -> TaskResult:
         """Execute one user task and return persisted runtime evidence."""
+        with self.workspace.activate(), active_executor(self.executor):
+            return self._run_in_workspace(
+                user_message=user_message,
+                extra_messages=extra_messages,
+            )
+
+    def _run_in_workspace(
+        self,
+        user_message: str,
+        extra_messages: list[ChatMessage] | None = None,
+    ) -> TaskResult:
+        """Execute after workspace and executor contexts have been selected."""
         self.messages = self._initial_messages()
         if extra_messages:
             self.messages.extend(extra_messages)
         self.executor._call_count = 0
-        _set_active_executor(self.executor)
-        self.workspace.enter()
         session_id: int | None = None
         tool_records: list[dict] = []
         final_response = ""
@@ -230,6 +240,10 @@ class AgentRuntime:
                 draft_skill=draft_skill,
             )
             return self.last_result
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            if session_id is not None:
+                self.session_store.end_session(session_id, "interrupted")
+            raise
         except Exception as exc:
             self.last_result = self._finalize_runtime_failure(
                 session_id=session_id,
@@ -239,8 +253,6 @@ class AgentRuntime:
                 exc=exc,
             )
             return self.last_result
-        finally:
-            self.workspace.leave()
 
     def _initial_messages(self) -> list[ChatMessage]:
         prompt = self.system_prompt.strip()

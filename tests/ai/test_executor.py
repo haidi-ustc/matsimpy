@@ -1,7 +1,7 @@
 """Tests for FunctionExecutor — serialization, resolution, auto-retry, evolution."""
 import pytest
 import numpy as np
-from matsimpy.ai.executor import FunctionExecutor
+from matsimpy.ai.executor import FunctionExecutor, active_executor, get_last_structure
 from matsimpy.ai.skill import SkillManager, Skill, FunctionDef
 from matsimpy.ai.conversation import ToolCall
 from matsimpy.core import Crystal, Lattice, Molecule
@@ -399,3 +399,21 @@ class TestEdgeCases:
         tc = ToolCall(id="e3", name="noop", arguments={})
         result = registered_ex.execute(tc)
         assert "_obj_ref" in result
+
+
+# Executor selection must be scoped so independent runtimes cannot steal each
+# other's implicit structure references.
+def test_active_executor_context_restores_previous_executor():
+    manager = SkillManager({})
+    outer = FunctionExecutor(manager)
+    inner = FunctionExecutor(manager)
+    outer._registry[1] = "outer"
+    inner._registry[1] = "inner"
+
+    with active_executor(outer):
+        assert get_last_structure() == "outer"
+        with active_executor(inner):
+            assert get_last_structure() == "inner"
+        assert get_last_structure() == "outer"
+
+    assert get_last_structure() is None
