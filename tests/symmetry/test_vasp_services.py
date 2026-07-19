@@ -1,5 +1,6 @@
 import importlib.util
 import os
+from pathlib import Path
 import subprocess
 import sys
 import warnings
@@ -32,7 +33,7 @@ def test_symmetry_kpath_imports_and_runs_when_ase_and_pymatgen_are_blocked(tmp_p
         "assert len(path.get_kpoints(2)[0]) > 0\n"
     )
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.getcwd()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
     result = subprocess.run(
         [sys.executable, str(script)], env=env, text=True, capture_output=True
     )

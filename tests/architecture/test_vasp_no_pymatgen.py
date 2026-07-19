@@ -68,6 +68,7 @@ def test_vasp_imports_when_pymatgen_is_blocked(tmp_path):
         "import matsimpy.calculator.vasp.outputs; "
         "import matsimpy.calculator.vasp.sets"
     )
-    env = {**os.environ, "PYTHONPATH": f"{tmp_path}{os.pathsep}{os.getcwd()}"}
+    repo_root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "PYTHONPATH": f"{tmp_path}{os.pathsep}{repo_root}"}
     result = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

@@ -111,6 +111,7 @@ def test_io_errors_import_keeps_pymatgen_converters_callable_when_dependency_is_
         else:
             raise AssertionError("missing pymatgen did not raise ImportError")
     """)
-    env = {**os.environ, "PYTHONPATH": f"{tmp_path}{os.pathsep}{Path.cwd()}"}
+    repo_root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "PYTHONPATH": f"{tmp_path}{os.pathsep}{repo_root}"}
     result = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
