@@ -3,7 +3,7 @@
 import pytest
 
 from matsimpy.ai import skill_loader
-from matsimpy.ai.evolution import EvolutionManager
+from matsimpy.ai.evolution import EvolutionCandidate, EvolutionManager, EvolutionPolicy
 from matsimpy.ai.session_store import SessionStore
 
 
@@ -14,7 +14,7 @@ def generated_skill_dir(tmp_path, monkeypatch):
     return generated
 
 
-def test_evolution_drafts_reusable_success_trace(tmp_path):
+def test_evolution_does_not_draft_routine_two_tool_success(tmp_path):
     store = SessionStore(tmp_path / "state.db")
     session_id = store.start_session("test", str(tmp_path), "fake", "fake")
     store.add_tool_call(session_id, "from_prototype", {"prototype": "fcc"}, {"formula": "Cu4"}, "success")
@@ -28,13 +28,127 @@ def test_evolution_drafts_reusable_success_trace(tmp_path):
         validation_status="success",
     )
 
-    assert draft is not None
-    assert draft["status"] == "draft"
-    assert "from_prototype" in draft["body"]
-    assert "save_structure" in draft["body"]
-    assert "Validation evidence" in draft["body"]
-    assert draft["metadata"]["tools"] == ["from_prototype", "save_structure"]
-    assert draft["metadata"]["source_request"] == "create fcc copper and save it"
+    assert draft is None
+
+
+def test_policy_classifies_repeated_workflow_with_trace_provenance():
+    policy = EvolutionPolicy()
+    history = [
+        {"trace_id": 11, "validation_status": "success", "user_request": "build copper", "tools": ["build", "save"]},
+        {"trace_id": 12, "validation_status": "success", "user_request": "build nickel", "tools": ["build", "save"]},
+    ]
+
+    candidate = policy.classify(history)
+
+    assert candidate == EvolutionCandidate(
+        kind="skill",
+        rationale="repeated validated workflow",
+        source_trace_ids=(11, 12),
+        payload={"tool_sequence": ["build", "save"], "occurrences": 2},
+    )
+
+
+def test_policy_classifies_validated_recovery():
+    candidate = EvolutionPolicy().classify([
+        {
+            "trace_id": 21,
+            "validation_status": "success",
+            "user_request": "recover this structure",
+            "tool_calls": [
+                {"name": "read_structure", "status": "failure"},
+                {"name": "read_structure", "status": "success"},
+            ],
+        }
+    ])
+
+    assert candidate is not None
+    assert candidate.kind == "skill"
+    assert candidate.rationale == "validated recovery from tool failure"
+    assert candidate.source_trace_ids == (21,)
+
+
+def test_policy_classifies_explicit_correction_as_memory():
+    candidate = EvolutionPolicy().classify(
+        [{"trace_id": 31, "validation_status": "success", "user_request": "save POSCAR"}],
+        correction="Use VASP format for my crystal files.",
+    )
+
+    assert candidate is not None
+    assert candidate.kind == "memory"
+    assert candidate.rationale == "explicit user correction"
+    assert candidate.payload["content"] == "Use VASP format for my crystal files."
+
+
+def test_policy_classifies_explicit_learn_request_without_provider_call():
+    candidate = EvolutionPolicy().classify([
+        {
+            "trace_id": 41,
+            "validation_status": "success",
+            "user_request": "Remember this workflow for next time",
+            "tools": ["build", "write"],
+        }
+    ])
+
+    assert candidate is not None
+    assert candidate.kind == "skill"
+    assert candidate.rationale == "explicit learn request"
+
+
+def test_policy_classifies_nontrivial_validated_workflow():
+    candidate = EvolutionPolicy().classify([
+        {
+            "trace_id": 45,
+            "validation_status": "success",
+            "user_request": "prepare an analysis model",
+            "tools": ["build", "transform", "analyze"],
+        }
+    ])
+
+    assert candidate is not None
+    assert candidate.rationale == "nontrivial validated workflow"
+    assert candidate.payload["tool_sequence"] == ["build", "transform", "analyze"]
+
+
+def test_policy_does_not_call_evaluator_when_deterministic_signal_exists():
+    def evaluator(history):
+        raise AssertionError("deterministic classification should win")
+
+    candidate = EvolutionPolicy(evaluator=evaluator).classify([
+        {
+            "trace_id": 46,
+            "validation_status": "success",
+            "user_request": "learn this workflow",
+            "tools": ["build"],
+        }
+    ])
+
+    assert candidate is not None
+    assert candidate.rationale == "explicit learn request"
+
+
+def test_policy_uses_optional_evaluator_only_after_deterministic_signals():
+    calls = []
+
+    def evaluator(history):
+        calls.append(history)
+        return EvolutionCandidate("skill", "semantic reuse", (51,), {})
+
+    policy = EvolutionPolicy(evaluator=evaluator)
+    candidate = policy.classify([
+        {"trace_id": 51, "validation_status": "success", "user_request": "complex niche operation", "tools": ["one"]}
+    ])
+
+    assert candidate is not None
+    assert calls
+
+
+def test_policy_does_not_reuse_stale_explicit_signal_for_new_routine_trace():
+    candidate = EvolutionPolicy().classify([
+        {"trace_id": 61, "validation_status": "success", "user_request": "remember this workflow", "tools": ["build"]},
+        {"trace_id": 62, "validation_status": "success", "user_request": "show the current structure", "tools": ["inspect"]},
+    ])
+
+    assert candidate is None
 
 
 def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
@@ -46,7 +160,7 @@ def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
     manager = EvolutionManager(store)
     first_draft = manager.draft_from_trace(
         session_id=first_session_id,
-        user_request="create fcc copper and save it",
+        user_request="remember this workflow: create fcc copper and save it",
         final_response="Created and saved copper.",
         validation_status="success",
     )
@@ -59,14 +173,14 @@ def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
 
     second_draft = manager.draft_from_trace(
         session_id=second_session_id,
-        user_request="create fcc copper and save it",
+        user_request="remember this workflow: create fcc copper and save it",
         final_response="Created and saved a second copper structure.",
         validation_status="success",
     )
 
     assert second_draft is not None
-    assert first_draft["name"] == "create-fcc-copper-and-save-it"
-    assert second_draft["name"] == "create-fcc-copper-and-save-it-2"
+    assert first_draft["name"] == "remember-this-workflow-create-fcc-copper-and-save"
+    assert second_draft["name"] == "remember-this-workflow-create-fcc-copper-and-save-2"
     assert second_draft["status"] == "draft"
 
     approved = store.list_skill_drafts("approved")

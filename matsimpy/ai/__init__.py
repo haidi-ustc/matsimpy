@@ -43,6 +43,8 @@ from .terminal import (
 )
 from .engine import AIEngine
 from .doctor import Diagnostic, Doctor
+from .evolution import EvolutionCandidate, EvolutionManager, EvolutionPolicy
+from .memory import AgentMemory, MemoryEntry, MemoryValidationError
 
 __all__ = [
     "AIEngine",
@@ -59,6 +61,12 @@ __all__ = [
     "DeepSeekProvider",
     "Diagnostic",
     "Doctor",
+    "EvolutionCandidate",
+    "EvolutionManager",
+    "EvolutionPolicy",
+    "AgentMemory",
+    "MemoryEntry",
+    "MemoryValidationError",
     "TaskResult",
     "SessionStore",
     "AgentSession",

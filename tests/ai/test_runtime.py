@@ -173,7 +173,7 @@ def test_runtime_executes_tools_persists_trace_and_drafts_skill(tmp_path):
         source="test",
     )
 
-    result = runtime.run("create silicon and save it")
+    result = runtime.run("remember this workflow: create silicon and save it")
 
     assert result.status == "success"
     assert result.final_response == "Created and saved silicon."

@@ -2,7 +2,52 @@
 
 import pytest
 
-from matsimpy.ai.memory import AgentMemory, MemoryValidationError
+from matsimpy.ai.memory import AgentMemory, MemoryValidationError, normalized_fingerprint
+
+
+def test_structured_memory_records_fingerprint_confidence_and_provenance(tmp_path):
+    memory = AgentMemory(tmp_path)
+
+    entry = memory.remember(
+        "User prefers CIF output.", confidence=0.9, source_trace_ids=[7, 8]
+    )
+
+    assert entry.fingerprint == normalized_fingerprint("user prefers cif output")
+    assert entry.confidence == 0.9
+    assert entry.source_trace_ids == (7, 8)
+    assert entry.supersedes is None
+
+
+def test_structured_memory_rejects_normalized_duplicate(tmp_path):
+    memory = AgentMemory(tmp_path)
+    memory.remember("User prefers CIF output.", source_trace_ids=[1])
+
+    with pytest.raises(MemoryValidationError, match="duplicate"):
+        memory.remember("  user PREFERS cif output  ", source_trace_ids=[2])
+
+
+def test_structured_memory_correction_supersedes_previous_entry(tmp_path):
+    memory = AgentMemory(tmp_path)
+    old = memory.remember("User prefers CIF output", source_trace_ids=[1])
+
+    corrected = memory.remember(
+        "User prefers VASP output",
+        source_trace_ids=[2],
+        supersedes=old.fingerprint,
+    )
+
+    assert corrected.supersedes == old.fingerprint
+    entries = memory.structured_entries(include_superseded=True)
+    assert entries[0].superseded_by == corrected.fingerprint
+    assert memory.structured_entries() == [corrected]
+
+
+@pytest.mark.parametrize("confidence", [-0.1, 1.1])
+def test_structured_memory_rejects_invalid_confidence(tmp_path, confidence):
+    memory = AgentMemory(tmp_path)
+
+    with pytest.raises(MemoryValidationError, match="confidence"):
+        memory.remember("A safe fact", confidence=confidence)
 
 
 def test_memory_add_replace_remove_and_duplicate_rejection(tmp_path):

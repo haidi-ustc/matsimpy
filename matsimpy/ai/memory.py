@@ -1,9 +1,14 @@
 """Agent memory — user.md, agent.md, soul.md, memory.md persistence."""
 
 from __future__ import annotations
+import hashlib
+import json
 import os
-from pathlib import Path
+import re
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 MEMORY_DIR = Path.home() / ".matsimpy" / "ai" / "memory"
 
@@ -19,10 +24,31 @@ FILES = {
 }
 
 MUTABLE_TARGETS = {"memory", "user", "agent"}
+STRUCTURED_MEMORY_FILE = "entries.json"
+_FINGERPRINT_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
 class MemoryValidationError(ValueError):
     """Raised when a memory entry is invalid or unsafe."""
+
+
+@dataclass(frozen=True)
+class MemoryEntry:
+    """A durable fact with deduplication and provenance metadata."""
+
+    content: str
+    fingerprint: str
+    confidence: float
+    source_trace_ids: tuple[int, ...]
+    supersedes: str | None = None
+    superseded_by: str | None = None
+    created_at: str = ""
+
+
+def normalized_fingerprint(content: str) -> str:
+    """Return a stable fingerprint insensitive to case and punctuation."""
+    normalized = " ".join(_FINGERPRINT_TOKEN_RE.findall(content.casefold()))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 class AgentMemory:
@@ -162,6 +188,82 @@ class AgentMemory:
             markdown += f"- **Insight**: {insight}\n"
         self.append("memory", markdown)
 
+    def remember(
+        self,
+        content: str,
+        *,
+        confidence: float = 1.0,
+        source_trace_ids: list[int] | tuple[int, ...] = (),
+        supersedes: str | None = None,
+    ) -> MemoryEntry:
+        """Persist a structured fact, rejecting duplicates and unsafe corrections."""
+        validated = self._validate_entry(content)
+        if not 0.0 <= confidence <= 1.0:
+            raise MemoryValidationError("memory confidence must be between 0 and 1")
+        fingerprint = normalized_fingerprint(validated)
+        entries = self.structured_entries(include_superseded=True)
+        if any(entry.fingerprint == fingerprint for entry in entries):
+            raise MemoryValidationError("duplicate memory entry")
+
+        if supersedes is not None:
+            matches = [
+                entry for entry in entries
+                if entry.fingerprint == supersedes and entry.superseded_by is None
+            ]
+            if not matches:
+                raise MemoryValidationError("memory entry to supersede was not found or is inactive")
+
+        new_entry = MemoryEntry(
+            content=validated,
+            fingerprint=fingerprint,
+            confidence=float(confidence),
+            source_trace_ids=tuple(int(trace_id) for trace_id in source_trace_ids),
+            supersedes=supersedes,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        updated = []
+        for entry in entries:
+            if entry.fingerprint == supersedes:
+                entry = MemoryEntry(**{**asdict(entry), "superseded_by": fingerprint})
+            updated.append(entry)
+        updated.append(new_entry)
+        self._write_structured_entries(updated)
+        return new_entry
+
+    def structured_entries(self, include_superseded: bool = False) -> list[MemoryEntry]:
+        """Load structured facts, hiding superseded entries by default."""
+        path = self.dir / STRUCTURED_MEMORY_FILE
+        if not path.exists():
+            return []
+        raw: Any = json.loads(path.read_text())
+        if not isinstance(raw, list):
+            raise MemoryValidationError("structured memory ledger is malformed")
+        entries = [
+            MemoryEntry(
+                content=item["content"],
+                fingerprint=item["fingerprint"],
+                confidence=float(item["confidence"]),
+                source_trace_ids=tuple(item.get("source_trace_ids", ())),
+                supersedes=item.get("supersedes"),
+                superseded_by=item.get("superseded_by"),
+                created_at=item.get("created_at", ""),
+            )
+            for item in raw
+        ]
+        if include_superseded:
+            return entries
+        return [entry for entry in entries if entry.superseded_by is None]
+
+    def _write_structured_entries(self, entries: list[MemoryEntry]) -> None:
+        payload = [
+            {**asdict(entry), "source_trace_ids": list(entry.source_trace_ids)}
+            for entry in entries
+        ]
+        path = self.dir / STRUCTURED_MEMORY_FILE
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        temporary.replace(path)
+
     def get_soul_prompt(self) -> str:
         """Get soul.md content for system prompt injection."""
         return self.read("soul")
@@ -175,4 +277,9 @@ class AgentMemory:
         }
 
 
-__all__ = ["AgentMemory", "MemoryValidationError"]
+__all__ = [
+    "AgentMemory",
+    "MemoryEntry",
+    "MemoryValidationError",
+    "normalized_fingerprint",
+]
