@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 import re
-from typing import Any
+from types import MappingProxyType
+from typing import Any, BinaryIO
 
 import yaml
 
@@ -28,7 +30,7 @@ class SkillManifest:
     body: str
     compatibility: str | None
     allowed_tools: str | None
-    metadata: dict[str, Any]
+    metadata: Mapping[str, Any]
 
 
 def _validation_error(path: Path, message: str) -> SkillValidationError:
@@ -48,13 +50,14 @@ def _read_skill_file(root: Path) -> tuple[Path, str]:
         resolved_skill_path = skill_path.resolve(strict=True)
         if not resolved_skill_path.is_relative_to(resolved_root):
             raise _validation_error(skill_path, "SKILL.md resolves outside skill root")
-        size = resolved_skill_path.stat().st_size
-        if size > MAX_SKILL_BYTES:
+        with resolved_skill_path.open("rb") as skill_file:
+            content_bytes = _read_bounded(skill_file)
+        if len(content_bytes) > MAX_SKILL_BYTES:
             raise _validation_error(
                 skill_path,
                 f"SKILL.md exceeds the {MAX_SKILL_BYTES}-byte size limit",
             )
-        content = resolved_skill_path.read_text(encoding="utf-8")
+        content = content_bytes.decode("utf-8", errors="strict")
     except SkillValidationError:
         raise
     except UnicodeDecodeError as exc:
@@ -62,6 +65,12 @@ def _read_skill_file(root: Path) -> tuple[Path, str]:
     except OSError as exc:
         raise _validation_error(skill_path, f"cannot read SKILL.md: {exc}") from exc
     return resolved_root, content
+
+
+def _read_bounded(skill_file: BinaryIO) -> bytes:
+    """Read only enough bytes to determine whether the size limit is exceeded."""
+
+    return skill_file.read(MAX_SKILL_BYTES + 1)
 
 
 def _parse_frontmatter(path: Path, content: str) -> tuple[dict[str, Any], str]:
@@ -120,6 +129,11 @@ def parse_skill(path: Path) -> SkillManifest:
     description = _required_string(manifest, "description", path)
     if len(description) > 1024:
         raise _validation_error(path, "'description' must not exceed 1024 characters")
+    if name != root.name:
+        raise _validation_error(
+            path,
+            f"'name' must match resolved skill directory name {root.name!r}",
+        )
 
     compatibility = _optional_string(manifest, "compatibility", path)
     if compatibility is not None and len(compatibility) > 500:
@@ -136,5 +150,5 @@ def parse_skill(path: Path) -> SkillManifest:
         body=body,
         compatibility=compatibility,
         allowed_tools=allowed_tools,
-        metadata=dict(metadata),
+        metadata=MappingProxyType(dict(metadata)),
     )
