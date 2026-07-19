@@ -34,7 +34,7 @@ from tqdm import tqdm
 from matsimpy.core import Composition, Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
-from matsimpy.electronic_structure import Magmom, Orbital, OrbitalType, Spin
+from matsimpy.electronic_structure import CompleteDos, Dos, Magmom, Orbital, OrbitalType, Spin
 from matsimpy.io.errors import ParseError
 
 # Structure is Crystal in matsimpy
@@ -64,7 +64,6 @@ try:
     from pymatgen.electronic_structure.bandstructure import (
         BandStructure, BandStructureSymmLine, get_reconstructed_band_structure,
     )
-    from pymatgen.electronic_structure.dos import CompleteDos, Dos
     from pymatgen.io.common import VolumetricData as BaseVolumetricData
     from pymatgen.io.wannier90 import Unk
     _HAS_PYMATGEN_ES = True
@@ -78,7 +77,6 @@ except ImportError:
         return decorator
     BandStructure = BandStructureSymmLine = None
     get_reconstructed_band_structure = None
-    CompleteDos = Dos = None
     # Dummy base classes so subclasses don't fail on import
     BaseVolumetricData = type("BaseVolumetricData", (), {})
     Unk = None
@@ -803,9 +801,7 @@ class Vasprun(MSONable):
     @property
     def complete_dos(self) -> CompleteDos:
         """A CompleteDos object which incorporates the total DOS and all projected DOS."""
-        final_struct = self.final_structure
-        pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
-        return CompleteDos(self.final_structure, self.tdos, pdoss)
+        return CompleteDos(self.final_structure, self.tdos, self.pdos)
 
     @property
     def complete_dos_normalized(self) -> CompleteDos:
@@ -813,9 +809,7 @@ class Vasprun(MSONable):
         Normalized by the volume of the unit cell with units of states/eV/unit cell
         volume.
         """
-        final_struct = self.final_structure
-        pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
-        return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
+        return CompleteDos(self.final_structure, self.tdos, self.pdos, normalize=True)
 
     @property
     def hubbards(self) -> dict[str, float]:
