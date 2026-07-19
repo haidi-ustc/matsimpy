@@ -68,6 +68,8 @@ cython_debug/
 .DS_Store
 .cache/
 *.log
+# test fixtures are exempt from *.log (e.g. Gaussian output logs)
+!tests/**/fixtures/**/*.log
 tmp/
 mytest/
 tests/install
