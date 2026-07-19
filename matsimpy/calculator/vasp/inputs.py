@@ -1533,8 +1533,15 @@ class Kpoints(MSONable):
             "tuple[int, int, int]", [math.floor(max(mult / length, 1)) for length in lengths]
         )
 
-        is_hexagonal: bool = lattice.hexagonal
-        is_face_centered: bool = structure.get_space_group_info()[0][0] == "F"
+        is_hexagonal = (
+            math.isclose(lattice.a, lattice.b, rel_tol=1e-5)
+            and math.isclose(lattice.alpha, 90, abs_tol=1e-3)
+            and math.isclose(lattice.beta, 90, abs_tol=1e-3)
+            and math.isclose(lattice.gamma, 120, abs_tol=1e-3)
+        )
+        from matsimpy.symmetry import SpacegroupAnalyzer
+
+        is_face_centered = SpacegroupAnalyzer(structure).get_space_group_symbol().startswith("F")
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
             style = cls.supported_modes.Gamma
@@ -1618,7 +1625,7 @@ class Kpoints(MSONable):
         Returns:
             Kpoints
         """
-        vol = structure.lattice.reciprocal_lattice.volume
+        vol = structure.lattice.get_reciprocal_lattice().volume
         kppa = kppvol * vol * len(structure)
         return cls.automatic_density(structure, kppa, force_gamma=force_gamma, comment=comment)
 

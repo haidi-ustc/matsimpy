@@ -40,7 +40,6 @@ import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
 from glob import glob
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -49,47 +48,99 @@ from monty.dev import deprecated
 from monty.json import MSONable
 from monty.serialization import loadfn
 
-from matsimpy.core import Element, Crystal, Lattice
+from matsimpy.core import Crystal, Element, Lattice, Molecule
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
+from matsimpy.symmetry import HighSymmKpath, SpacegroupAnalyzer, StructureMatcher
 
 # Structure → Crystal alias
 Structure = Crystal
 
-# Optional symmetry features — require pymatgen/spglib
-try:
-    from pymatgen.core.structure_matcher import StructureMatcher
-    from pymatgen.io.core import InputGenerator
-    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-    from pymatgen.symmetry.bandstructure import HighSymmKpath
-    from pymatgen.util.due import Doi, due
-    _HAS_SYMMETRY = True
-except ImportError:
-    _HAS_SYMMETRY = False
-    StructureMatcher = None
-    InputGenerator = type("InputGenerator", (), {})
-    SpacegroupAnalyzer = None
-    HighSymmKpath = None
-    class _NoOpDue:
-        @staticmethod
-        def dcite(*args, **kwargs):
-            return lambda f: f
-    due = _NoOpDue()
-    Doi = lambda x: x  # no-op stub for pymatgen.util.due.Doi
+class InputGenerator(MSONable):
+    """Serialization base for native input generators."""
 
-# PeriodicSite / SiteCollection / Species — used less frequently,
-# gate them behind pymatgen availability
-try:
-    from pymatgen.core import PeriodicSite, SiteCollection, Species
-except ImportError:
-    PeriodicSite = SiteCollection = Species = None
+
+def _copy_with_site_property(structure: Crystal, name: str, values: list) -> Crystal:
+    """Copy a crystal while replacing one per-site property."""
+    if len(values) != len(structure):
+        raise ValueError(f"{name} must contain one value per site")
+    properties = [dict(site.properties) for site in structure]
+    for props, value in zip(properties, values, strict=True):
+        props[name] = value
+    return Crystal(
+        structure.species,
+        structure.frac_positions,
+        structure.lattice,
+        pbc=structure.pbc,
+        site_properties=properties,
+    )
+
+
+def _get_sorted_structure(structure: Crystal) -> Crystal:
+    """Return a stable electronegativity-sorted crystal."""
+    order = sorted(range(len(structure)), key=lambda idx: Element(structure.species[idx]).X)
+    site_properties = structure.site_properties
+    properties = [site_properties[idx] for idx in order] if site_properties else None
+    return Crystal(
+        [structure.species[idx] for idx in order],
+        [structure.frac_positions[idx] for idx in order],
+        structure.lattice,
+        pbc=structure.pbc,
+        site_properties=properties,
+    )
+
+
+def _get_lll_reduced_structure(structure: Crystal, delta: float = 0.75) -> Crystal:
+    """Return a three-dimensional Lenstra–Lenstra–Lovász reduced cell."""
+    basis = np.asarray(structure.lattice.matrix, dtype=float).copy()
+
+    def gram_schmidt(vectors):
+        orthogonal = np.zeros_like(vectors)
+        coefficients = np.zeros((3, 3))
+        for idx in range(3):
+            orthogonal[idx] = vectors[idx]
+            for prev in range(idx):
+                denominator = np.dot(orthogonal[prev], orthogonal[prev])
+                coefficients[idx, prev] = np.dot(vectors[idx], orthogonal[prev]) / denominator
+                orthogonal[idx] -= coefficients[idx, prev] * orthogonal[prev]
+        return orthogonal, coefficients
+
+    idx = 1
+    while idx < 3:
+        orthogonal, coefficients = gram_schmidt(basis)
+        for prev in range(idx - 1, -1, -1):
+            multiple = round(coefficients[idx, prev])
+            if multiple:
+                basis[idx] -= multiple * basis[prev]
+                orthogonal, coefficients = gram_schmidt(basis)
+        lhs = np.dot(orthogonal[idx], orthogonal[idx])
+        rhs = (delta - coefficients[idx, idx - 1] ** 2) * np.dot(
+            orthogonal[idx - 1], orthogonal[idx - 1]
+        )
+        if lhs >= rhs:
+            idx += 1
+        else:
+            basis[[idx, idx - 1]] = basis[[idx - 1, idx]]
+            idx = max(idx - 1, 1)
+
+    cart_positions = np.asarray(structure.cart_positions, dtype=float)
+    frac_positions = cart_positions @ np.linalg.inv(basis)
+    properties = list(structure.site_properties) if structure.site_properties else None
+    return Crystal(
+        structure.species,
+        frac_positions,
+        Lattice(basis),
+        pbc=structure.pbc,
+        site_properties=properties,
+    )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from typing import Literal, Self
 
-    from pymatgen.core.structure import IStructure
-    from pymatgen.util.typing import Kpoint, PathLike
+    IStructure = Crystal
+    Kpoint = tuple[float, float, float]
+    PathLike = str | os.PathLike[str]
 
     UserPotcarFunctional = (
         Literal[
@@ -449,7 +500,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             self._structure = structure
             return
 
-        if isinstance(structure, SiteCollection):  # could be Structure or Molecule
+        if isinstance(structure, (Crystal, Molecule)):
             if self.user_potcar_functional == "PBE_54" and "W" in structure.symbol_set:
                 # When using 5.4 POTCARs, default Tungsten POTCAR to W_Sv but still allow user to override
                 self.user_potcar_settings = {
@@ -457,13 +508,24 @@ class VaspInputSet(InputGenerator, abc.ABC):
                     **(self.user_potcar_settings or {}),
                 }
             if self.reduce_structure:
-                structure = structure.get_reduced_structure(self.reduce_structure)
+                if not isinstance(structure, Crystal):
+                    raise TypeError("structure reduction requires a Crystal")
+                if self.reduce_structure.lower() == "niggli":
+                    from matsimpy.transformation.lattice import get_niggli_reduced
+
+                    structure = get_niggli_reduced(structure)
+                elif self.reduce_structure.lower() == "lll":
+                    structure = _get_lll_reduced_structure(structure)
+                else:
+                    raise ValueError("reduce_structure must be 'niggli', 'LLL', or None")
             if self.sort_structure:
-                structure = structure.get_sorted_structure()
+                if not isinstance(structure, Crystal):
+                    raise TypeError("VASP structure sorting requires a Crystal")
+                structure = _get_sorted_structure(structure)
             if self.validate_magmom:
                 get_valid_magmom_struct(structure, spin_mode="auto")
 
-            struct_has_Yb = any(specie.symbol == "Yb" for site in structure for specie in site.species)
+            struct_has_Yb = "Yb" in structure.symbol_set
             potcar_settings = self._config_dict.get("POTCAR", {}).copy()
             if self.user_potcar_settings:
                 potcar_settings.update(self.user_potcar_settings)
@@ -616,36 +678,36 @@ class VaspInputSet(InputGenerator, abc.ABC):
             if key == "MAGMOM":
                 mag = []
                 for site in structure:
-                    if uic_magmom := self.user_incar_settings.get("MAGMOM", {}).get(site.species_string):
+                    symbol = site.specie
+                    user_magmom = self.user_incar_settings.get("MAGMOM", {})
+                    if isinstance(user_magmom, dict) and (uic_magmom := user_magmom.get(symbol)):
                         mag.append(uic_magmom)
-                    elif hasattr(site, "magmom"):
-                        mag.append(site.magmom)
-                    elif getattr(site.specie, "spin", None) is not None:
-                        mag.append(site.specie.spin)
-                    elif str(site.specie) in setting:
-                        if site.specie.symbol == "Co" and setting[str(site.specie)] <= 1.0:
+                    elif "magmom" in site.properties:
+                        mag.append(site.properties["magmom"])
+                    elif symbol in setting:
+                        if symbol == "Co" and setting[symbol] <= 1.0:
                             warnings.warn(
                                 "Co without an oxidation state is initialized as low spin by default in Pymatgen. "
                                 "If this default behavior is not desired, please set the spin on the magmom on the "
                                 "site directly to ensure correct initialization.",
                                 stacklevel=2,
                             )
-                        mag.append(setting.get(str(site.specie)))
+                        mag.append(setting.get(symbol))
                     else:
-                        if site.specie.symbol == "Co":
+                        if symbol == "Co":
                             warnings.warn(
                                 "Co without an oxidation state is initialized as low spin by default in Pymatgen. "
                                 "If this default behavior is not desired, please set the spin on the magmom on the "
                                 "site directly to ensure correct initialization.",
                                 stacklevel=2,
                             )
-                        mag.append(setting.get(site.specie.symbol, 0.6))
+                        mag.append(setting.get(symbol, 0.6))
                 incar[key] = mag
 
             elif key in {"LDAUU", "LDAUJ", "LDAUL"}:
                 if hubbard_u:
-                    if hasattr(structure[0], key.lower()):
-                        m = {site.specie.symbol: getattr(site, key.lower()) for site in structure}
+                    if key.lower() in structure[0].properties:
+                        m = {site.specie: site.properties[key.lower()] for site in structure}
                         incar[key] = [m[sym] for sym in poscar.site_symbols]
                         # Lookup specific LDAU if specified for most_electroneg atom
                     elif most_electro_neg in setting and isinstance(setting[most_electro_neg], dict):
@@ -926,13 +988,13 @@ class VaspInputSet(InputGenerator, abc.ABC):
                 return base_kpoints
 
             sga = SpacegroupAnalyzer(self.structure, symprec=self.sym_prec)
-            mesh = sga.get_ir_reciprocal_mesh(base_kpoints.kpts[0])
+            points, weights = sga.get_ir_reciprocal_mesh(base_kpoints.kpts[0])
             base_kpoints = Kpoints(
                 comment="Uniform grid",
                 style=Kpoints.supported_modes.Reciprocal,
-                num_kpts=len(mesh),
-                kpts=tuple(i[0] for i in mesh),
-                kpts_weights=[i[1] for i in mesh],
+                num_kpts=len(points),
+                kpts=points,
+                kpts_weights=weights,
             )
 
         zero_weighted_kpoints = None
@@ -958,13 +1020,13 @@ class VaspInputSet(InputGenerator, abc.ABC):
                 self.force_gamma,
             )
             sga = SpacegroupAnalyzer(self.structure, symprec=self.sym_prec)
-            mesh = sga.get_ir_reciprocal_mesh(zero_weighted_kpoints.kpts[0])
+            points, _weights = sga.get_ir_reciprocal_mesh(zero_weighted_kpoints.kpts[0])
             zero_weighted_kpoints = Kpoints(
                 comment="Uniform grid",
                 style=Kpoints.supported_modes.Reciprocal,
-                num_kpts=len(mesh),
-                kpts=tuple(i[0] for i in mesh),
-                kpts_weights=[0 for _ in mesh],
+                num_kpts=len(points),
+                kpts=points,
+                kpts_weights=[0 for _ in points],
             )
 
         added_kpoints = None
@@ -1293,10 +1355,6 @@ def primes_less_than(max_val: int) -> list[int]:
     return res
 
 
-@due.dcite(
-    Doi("10.1016/j.commatsci.2011.02.023"),
-    description="A high-throughput infrastructure for density functional theory calculations",
-)
 @dataclass
 class MITRelaxSet(VaspInputSet):
     """
@@ -1340,18 +1398,6 @@ class MPRelaxSet(VaspInputSet):
     CONFIG = _load_yaml_config("MPRelaxSet")
 
 
-@due.dcite(
-    Doi("10.1021/acs.jpclett.0c02405"),
-    description="Accurate and Numerically Efficient r2SCAN Meta-Generalized Gradient Approximation",
-)
-@due.dcite(
-    Doi("10.1103/PhysRevLett.115.036402"),
-    description="Strongly Constrained and Appropriately Normed Semilocal Density Functional",
-)
-@due.dcite(
-    Doi("10.1103/PhysRevB.93.155109"),
-    description="Efficient generation of generalized Monkhorst-Pack grids through the use of informatics",
-)
 @dataclass
 class MPScanRelaxSet(VaspInputSet):
     """Write a relaxation input set using the accurate and numerically
@@ -2203,19 +2249,40 @@ class MPSOCSet(VaspInputSet):
     def structure(self, structure: Structure | None) -> None:
         if structure is not None:
             if self.magmom:
-                structure = structure.copy(site_properties={"magmom": self.magmom})
+                structure = _copy_with_site_property(structure, "magmom", self.magmom)
 
             # MAGMOM has to be 3D for SOC calculation
-            if not hasattr(structure[0], "magmom"):
+            if "magmom" not in structure[0].properties:
                 raise ValueError("Neither the previous structure has magmom property nor magmom provided")
 
-            if not isinstance(structure[0].magmom, list):
+            if not isinstance(structure[0].properties["magmom"], list):
                 # Project MAGMOM to z-axis
-                structure = structure.copy(site_properties={"magmom": [[0, 0, site.magmom] for site in structure]})
+                structure = _copy_with_site_property(
+                    structure, "magmom", [[0, 0, site.properties["magmom"]] for site in structure]
+                )
 
         if VaspInputSet.structure is None:
             raise ValueError("structure is None")
         VaspInputSet.structure.fset(self, structure)
+
+
+def _get_nmr_quadrupole_moment(symbol: str, isotope: str | None = None) -> float:
+    """Return the tabulated quadrupole moment for one element/isotope."""
+    moments = getattr(Element(symbol), "NMR Quadrupole Moment", None)
+    if not isinstance(moments, dict) or not moments:
+        raise ValueError(f"No NMR quadrupole moment data is available for {symbol}")
+    if isotope is None:
+        if len(moments) != 1:
+            choices = ", ".join(sorted(moments))
+            raise ValueError(f"An isotope is required for {symbol}; available isotopes: {choices}")
+        isotope = next(iter(moments))
+    try:
+        return float(moments[isotope])
+    except KeyError as exc:
+        choices = ", ".join(sorted(moments))
+        raise ValueError(
+            f"No NMR quadrupole moment data is available for {isotope}; available isotopes: {choices}"
+        ) from exc
 
 
 @dataclass
@@ -2274,7 +2341,7 @@ class MPNMRSet(VaspInputSet):
         elif self.mode.lower() == "efg" and self.structure is not None:
             isotopes = {isotope.split("-")[0]: isotope for isotope in self.isotopes}
             quad_efg = [
-                float(Species(sp.name).get_nmr_quadrupole_moment(isotopes.get(sp.name)))
+                _get_nmr_quadrupole_moment(sp, isotopes.get(sp))
                 for sp in self.structure.species
             ]
             updates.update(
@@ -2299,10 +2366,6 @@ class MPNMRSet(VaspInputSet):
         return {"reciprocal_density": self.reciprocal_density * factor}
 
 
-@due.dcite(
-    Doi("10.1149/2.0061602jes"),
-    description="Elastic Properties of Alkali Superionic Conductor Electrolytes from First Principles Calculations",
-)
 class MVLElasticSet(VaspInputSet):
     """
     MVL denotes VASP input sets that are implemented by the Materials Virtual
@@ -2523,8 +2586,8 @@ class MVLSlabSet(VaspInputSet):
             if self.set_mix:
                 updates |= {"AMIN": 0.01, "AMIX": 0.2, "BMIX": 0.001}
             if self.auto_dipole and self.structure is not None:
-                weights = [struct.species.weight for struct in self.structure]
-                center_of_mass = np.average(self.structure.frac_coords, weights=weights, axis=0).tolist()
+                weights = [Element(site.specie).atomic_mass for site in self.structure]
+                center_of_mass = np.average(self.structure.frac_positions, weights=weights, axis=0).tolist()
                 updates |= {"IDIPOL": 3, "LDIPOL": True, "DIPOL": center_of_mass}
         return updates
 
@@ -2801,16 +2864,22 @@ class NEBSet(VaspInputSet):
     @staticmethod
     def _process_structures(structures: list[Structure]) -> list[Structure]:
         """Remove any atoms jumping across the cell."""
-        input_structures = structures
-        structures = [input_structures[0]]
-        for s in input_structures[1:]:
-            prev = structures[-1]
-            for idx, site in enumerate(s):
-                translate = np.round(prev[idx].frac_coords - site.frac_coords)
-                if np.any(np.abs(translate) > 0.5):
-                    s.translate_sites([idx], translate, to_unit_cell=False)
-            structures.append(s)
-        return structures
+        processed = [structures[0]]
+        for structure in structures[1:]:
+            if not isinstance(structure, Crystal) or not isinstance(processed[-1], Crystal):
+                raise TypeError("NEB structures must be matsimpy Crystal instances")
+            frac_positions = np.asarray(structure.frac_positions, dtype=float).copy()
+            frac_positions += np.round(processed[-1].frac_positions - frac_positions)
+            processed.append(
+                Crystal(
+                    structure.species,
+                    frac_positions,
+                    structure.lattice,
+                    pbc=structure.pbc,
+                    site_properties=structure.site_properties,
+                )
+            )
+        return processed
 
     def write_input(
         self,
@@ -2860,12 +2929,17 @@ class NEBSet(VaspInputSet):
                 end_point_param.kpoints.write_file(str(output_dir / image / "KPOINTS"))
                 end_point_param.potcar.write_file(str(output_dir / image / "POTCAR"))
         if write_path_cif:
-            sites = {
-                PeriodicSite(site.species, site.frac_coords, self.structures[0].lattice)
-                for site in chain(*iter(self.structures))
-            }
-            neb_path = Structure.from_sites(sorted(sites))
-            neb_path.to(filename=f"{output_dir}/path.cif")
+            unique_sites: dict[tuple, tuple[str, np.ndarray]] = {}
+            for structure in self.structures:
+                for species, coords in zip(structure.species, structure.frac_positions, strict=True):
+                    key = (species, *np.round(coords, 12))
+                    unique_sites[key] = (species, coords)
+            neb_path = Crystal(
+                [site[0] for site in unique_sites.values()],
+                [site[1] for site in unique_sites.values()],
+                self.structures[0].lattice,
+            )
+            neb_path.to_file(str(output_dir / "path.cif"))
 
 
 class CINEBSet(NEBSet):
@@ -3175,16 +3249,24 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
             l_val = []
             s = 0
             for site in structure:
-                if site.specie.symbol not in m:
-                    m[site.specie.symbol] = vals[s]
+                if site.specie not in m:
+                    m[site.specie] = vals[s]
                     s += 1
-                l_val.append(m[site.specie.symbol])
+                l_val.append(m[site.specie])
             if len(l_val) == len(structure):
                 site_properties |= {key.lower(): l_val}
             else:
                 raise ValueError(f"length of list {l_val} not the same as structure")
 
-    return structure.copy(site_properties=site_properties)
+    result = structure.copy()
+    merged = [dict(site.properties) for site in structure]
+    for name, values in site_properties.items():
+        for props, value in zip(merged, values, strict=True):
+            props[name] = value
+    result.site_properties = merged
+    if isinstance(result, Crystal):
+        result._sites = None
+    return result
 
 
 def standardize_structure(
@@ -3204,7 +3286,10 @@ def standardize_structure(
         The symmetrized structure.
     """
     sym_finder = SpacegroupAnalyzer(structure, symprec=sym_prec)
-    new_structure = sym_finder.get_primitive_standard_structure(international_monoclinic=international_monoclinic)
+    # The native analyzer follows spglib's international standardized setting.
+    # Keep the compatibility argument accepted even though spglib does not expose
+    # pymatgen's alternate Curtarolo monoclinic convention.
+    new_structure = sym_finder.get_primitive_standard_structure()
 
     # The primitive structure finding has had several bugs in the past
     # defend through validation
@@ -3277,7 +3362,9 @@ def batch_write_input(
         else:
             d = output_dir / f"{formula}_{idx}"
         if sanitize:
-            site = site.copy(sanitize=True)
+            if not isinstance(site, Crystal):
+                raise TypeError("VASP batch sanitization requires a Crystal")
+            site = _get_sorted_structure(_get_lll_reduced_structure(site))
         v = vasp_input_set(site, **kwargs)
         v.write_input(
             str(d),
@@ -3340,13 +3427,17 @@ def get_valid_magmom_struct(
     else:
         mode = spin_mode[0].lower()
 
-    ret_struct = structure if inplace else structure.copy()
-    for site in ret_struct:
+    properties = [dict(site.properties) for site in structure]
+    for props in properties:
         if mode == "n":
-            if "magmom" in site.properties:
-                site.properties.pop("magmom")
-        elif "magmom" not in site.properties or site.properties["magmom"] is None:
-            site.properties["magmom"] = default_values[mode]
+            props.pop("magmom", None)
+        elif props.get("magmom") is None:
+            props["magmom"] = default_values[mode]
+
+    ret_struct = structure if inplace else structure.copy()
+    ret_struct.site_properties = properties
+    if isinstance(ret_struct, Crystal):
+        ret_struct._sites = None
 
     return ret_struct
 

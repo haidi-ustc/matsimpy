@@ -112,3 +112,8 @@ class SpacegroupAnalyzer:
         if result is None:
             raise ValueError("spglib could not determine the structure's space group")
         return result
+
+    def get_space_group_symbol(self) -> str:
+        """Return the international Hermann–Mauguin space-group symbol."""
+        dataset = self._dataset()
+        return str(dataset.international)
