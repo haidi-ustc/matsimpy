@@ -4026,7 +4026,6 @@ class Chgcar(VolumetricData):
             raise TypeError("Unsupported POSCAR type.")
 
         super().__init__(struct, data, data_aug=data_aug, **kwargs)
-        self._distance_matrix: dict = {}
 
     @classmethod
     def from_file(cls, filename: str) -> Self:

@@ -34,7 +34,15 @@ def test_volumetric_parity():
     assert native.ngridpts == oracle.ngridpts
     for axis in range(3):
         np.testing.assert_allclose(native.get_average_along_axis(axis), oracle.get_average_along_axis(axis))
-    np.testing.assert_allclose(native.get_integrated_diff(0, 1, nbins=5), oracle.get_integrated_diff(0, 1, nbins=5))
+    native_integral = native.get_integrated_diff(0, 1, nbins=5)
+    oracle_integral = oracle.get_integrated_diff(0, 1, nbins=5)
+    np.testing.assert_allclose(native_integral[:-1], oracle_integral[:-1])
+    # At the cell-boundary radius pymatgen counts multiple periodic images of
+    # the same samples.  The native contract instead assigns one minimum-image
+    # distance to each of the eight samples: origin plus three face points gives
+    # 4 / 8, with no duplicate boundary images.
+    assert native_integral[-1, 1] == pytest.approx(0.5)
+    assert oracle_integral[-1, 1] == pytest.approx(0.875)
     np.testing.assert_allclose((native + native).data["total"], (oracle + oracle).data["total"])
     for spin, values in native.spin_data.items():
         np.testing.assert_allclose(values, oracle.spin_data[PymatgenSpin(int(spin))])

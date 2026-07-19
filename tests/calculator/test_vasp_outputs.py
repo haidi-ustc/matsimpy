@@ -8,7 +8,29 @@ import os
 import pytest
 import numpy as np
 
+from monty.json import MontyDecoder
+
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
+
+
+def test_chgcar_native_arithmetic_and_serialization():
+    from matsimpy.calculator.vasp.outputs import Chgcar
+    from matsimpy.core import Crystal, Lattice
+
+    chgcar = Chgcar(Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(2)), {"total": np.ones((2, 2, 2))})
+    doubled = chgcar + chgcar
+    assert type(doubled) is Chgcar
+    np.testing.assert_array_equal(doubled.data["total"], 2)
+    decoded = MontyDecoder().process_decoded(doubled.as_dict())
+    assert type(decoded) is Chgcar
+    np.testing.assert_array_equal(decoded.data["total"], 2)
+
+    cached = Chgcar(
+        chgcar.structure,
+        {"total": np.ones((2, 2, 2))},
+        distance_matrix=np.full((1, 2, 2, 2), 99.0),
+    )
+    assert cached.get_integrated_diff(0, 1.0)[-1, 1] == 0
 
 
 class TestOutcar:

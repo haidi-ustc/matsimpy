@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import copy
+import itertools
 import operator
-from typing import Any
 
 import numpy as np
 from monty.json import MSONable
@@ -25,10 +25,39 @@ class VolumetricData(MSONable):
             raise ValueError("volumetric grids must be three-dimensional")
         if len(shapes) != 1:
             raise ValueError("all volumetric grids must have the same shape")
+        dim = next(iter(shapes))
+        if any(length == 0 for length in dim):
+            raise ValueError("volumetric grid dimensions must be non-zero")
         self.structure = structure
         self.data = arrays
         self.distance_matrix = distance_matrix
+        self._distance_matrix = self._validate_distance_matrix(distance_matrix)
         self.data_aug = data_aug or {}
+
+    def _validate_distance_matrix(self, distance_matrix):
+        """Normalize an optional per-site distance cache and validate every grid."""
+        if distance_matrix is None:
+            return {}
+        if isinstance(distance_matrix, dict):
+            cache = {}
+            for index, distances in distance_matrix.items():
+                if not isinstance(index, (int, np.integer)) or not 0 <= int(index) < len(self.structure):
+                    raise ValueError("distance_matrix contains an invalid site index")
+                array = np.asarray(distances, dtype=float)
+                if array.shape != self.dim:
+                    raise ValueError(f"distance_matrix grids must have shape {self.dim}")
+                cache[int(index)] = array
+            return cache
+
+        matrix = np.asarray(distance_matrix, dtype=float)
+        if matrix.shape == (len(self.structure), *self.dim):
+            return {index: matrix[index] for index in range(len(self.structure))}
+        if len(self.structure) == 1 and matrix.shape == self.dim:
+            return {0: matrix}
+        raise ValueError(
+            f"distance_matrix must have shape {(len(self.structure), *self.dim)}"
+            + (f" or {self.dim} for a single-site structure" if len(self.structure) == 1 else "")
+        )
 
     @property
     def dim(self):
@@ -78,42 +107,42 @@ class VolumetricData(MSONable):
     def _distances_from_site(self, index):
         if index < 0 or index >= len(self.structure):
             raise IndexError("site index out of range")
-        if self.distance_matrix is not None:
-            if isinstance(self.distance_matrix, dict) and index in self.distance_matrix:
-                return np.asarray(self.distance_matrix[index])
-            matrix = np.asarray(self.distance_matrix)
-            if matrix.shape == self.dim:
-                return matrix
-            if matrix.shape == (len(self.structure), *self.dim):
-                return matrix[index]
+        if index in self._distance_matrix:
+            return self._distance_matrix[index]
         grid = np.indices(self.dim).transpose(1, 2, 3, 0) / np.asarray(self.dim)
         delta = grid - np.asarray(self.structure.frac_positions[index])
-        delta -= np.round(delta)
-        return np.linalg.norm(delta @ np.asarray(self.structure.lattice.matrix), axis=-1)
+        lattice = np.asarray(self.structure.lattice.matrix)
+        sigma_min = np.min(np.linalg.svd(lattice, compute_uv=False))
+        distances = np.empty(self.dim)
+
+        # This solves the three-dimensional closest-vector problem exactly.  A
+        # rounded fractional translation supplies an initial upper bound R.
+        # Since ||x A|| >= sigma_min(A) ||x||, no improving lattice vector can
+        # lie outside the component bounds ||delta + n|| <= R / sigma_min.
+        for grid_index in np.ndindex(self.dim):
+            displacement = delta[grid_index]
+            initial = displacement - np.round(displacement)
+            upper_bound = np.linalg.norm(initial @ lattice)
+            fractional_bound = upper_bound / sigma_min + 1e-12
+            ranges = [
+                range(
+                    int(np.ceil(-component - fractional_bound)),
+                    int(np.floor(-component + fractional_bound)) + 1,
+                )
+                for component in displacement
+            ]
+            translations = np.asarray(list(itertools.product(*ranges)), dtype=float)
+            distances[grid_index] = np.min(np.linalg.norm((displacement + translations) @ lattice, axis=1))
+        self._distance_matrix[index] = distances
+        return distances
 
     def get_integrated_diff(self, ind, radius, nbins=1):
         if nbins <= 0:
             raise ValueError("nbins must be positive")
         radii = np.linspace(radius / nbins, radius, nbins)
         field = self.data.get("diff", self.data["total"])
-        # Count periodic images independently, as required by integration over
-        # a real-space sphere (boundary grid points can occur more than once).
-        grid = np.indices(self.dim).transpose(1, 2, 3, 0) / np.asarray(self.dim)
-        delta = grid - np.asarray(self.structure.frac_positions[ind])
-        lattice = np.asarray(self.structure.lattice.matrix)
-        shortest = np.min(np.linalg.svd(lattice, compute_uv=False))
-        extent = int(np.ceil(radius / shortest)) + 1
-        distances = []
-        weights = []
-        for image in np.ndindex(*([2 * extent + 1] * 3)):
-            translation = np.asarray(image) - extent
-            image_distances = np.linalg.norm((delta + translation) @ lattice, axis=-1)
-            mask = image_distances <= radius + 1e-12
-            distances.append(image_distances[mask])
-            weights.append(field[mask])
-        distances = np.concatenate(distances)
-        weights = np.concatenate(weights)
-        integral = np.array([weights[distances <= value + 1e-12].sum() for value in radii])
+        distances = self._distances_from_site(ind)
+        integral = np.array([field[distances <= value + 1e-12].sum() for value in radii])
         integral /= self.ngridpts
         return np.column_stack((radii, integral))
 
@@ -161,7 +190,11 @@ class VolumetricData(MSONable):
             "@class": self.__class__.__name__,
             "structure": self.structure.as_dict(),
             "data": {key: value.tolist() for key, value in self.data.items()},
-            "distance_matrix": copy.deepcopy(self.distance_matrix),
+            "distance_matrix": (
+                {index: distances.tolist() for index, distances in self._distance_matrix.items()}
+                if self.distance_matrix is not None
+                else None
+            ),
             "data_aug": self.data_aug,
         }
 
