@@ -2,8 +2,11 @@
 
 import importlib.util
 import importlib
+import os
 from pathlib import Path
 import sys
+import textwrap
+import subprocess
 
 
 def test_io_exports_unified_public_api():
@@ -72,3 +75,32 @@ def test_io_reimport_after_module_cache_clear_is_idempotent():
 
     reimported = importlib.import_module("matsimpy.io")
     assert "to_ase" in reimported.__all__
+
+
+def test_io_errors_import_keeps_pymatgen_converters_callable_when_dependency_is_blocked(tmp_path):
+    blocker = tmp_path / "sitecustomize.py"
+    blocker.write_text(textwrap.dedent("""
+        import builtins
+        real_import = builtins.__import__
+        def guarded(name, *args, **kwargs):
+            if name == "pymatgen" or name.startswith("pymatgen."):
+                raise ImportError("blocked optional pymatgen")
+            return real_import(name, *args, **kwargs)
+        builtins.__import__ = guarded
+    """))
+    code = textwrap.dedent("""
+        from matsimpy.io.errors import ParseError
+        from matsimpy.io import from_pymatgen, to_pymatgen
+        assert issubclass(ParseError, ValueError)
+        assert callable(to_pymatgen)
+        assert callable(from_pymatgen)
+        try:
+            from_pymatgen(object())
+        except ImportError as exc:
+            assert "pymatgen is required for conversion" in str(exc)
+        else:
+            raise AssertionError("missing pymatgen did not raise ImportError")
+    """)
+    env = {**os.environ, "PYTHONPATH": f"{tmp_path}{os.pathsep}{Path.cwd()}"}
+    result = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr

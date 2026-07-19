@@ -38,10 +38,7 @@ from .xsf import read_XSF, write_XSF
 from .json import to_json, from_json
 from .ase import read_ASE, write_ASE, to_ase, from_ase
 from .mol import read_MOL, write_MOL
-try:
-    from .pymatgen import to_pymatgen, from_pymatgen
-except ImportError:  # optional pymatgen dependency
-    to_pymatgen = from_pymatgen = None
+from matsimpy.io.pymatgen import from_pymatgen, to_pymatgen
 from .latex import (
     crystals_to_latex_table,
     molecules_to_latex_table,
