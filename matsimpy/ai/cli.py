@@ -5,6 +5,7 @@ import typer
 from .engine import AIEngine
 from .skill import SkillManager, Skill
 from .provider import DEFAULT_MODEL
+from .terminal import create_terminal
 
 app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
 
@@ -62,7 +63,7 @@ def main(
         response = engine.chat(command)
         print(response)
     else:
-        engine.repl()
+        create_terminal(engine.repl_controller).run()
 
 
 def _register_all_skills(sm: SkillManager) -> None:

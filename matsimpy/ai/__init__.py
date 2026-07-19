@@ -35,6 +35,12 @@ from .session_store import SessionStore
 from .session import AgentSession, SessionTurn
 from .agent import Agent, AgentResult
 from .repl import CommandResult, ReplController
+from .terminal import (
+    PlainTerminal,
+    PromptToolkitTerminal,
+    TerminalFrontend,
+    create_terminal,
+)
 from .engine import AIEngine
 
 __all__ = [
@@ -43,6 +49,10 @@ __all__ = [
     "AgentResult",
     "CommandResult",
     "ReplController",
+    "TerminalFrontend",
+    "PlainTerminal",
+    "PromptToolkitTerminal",
+    "create_terminal",
     "AgentRuntime",
     "ChatProvider",
     "DeepSeekProvider",
