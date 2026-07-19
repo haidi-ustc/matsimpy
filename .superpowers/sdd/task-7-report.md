@@ -135,3 +135,35 @@ work; pymatgen remains only a test oracle.
 No dependency metadata was changed.  There are no executable ASE imports in
 `matsimpy/symmetry` or its tests; mentions are limited to provenance and the
 blocked-import regression.
+
+## Third review rework: matcher and standardization parity
+
+### Root cause and implementation
+
+- The matcher compared lattice lengths and angles in their input row order,
+  so axis permutations and general unimodular basis changes were rejected
+  before site matching. It now deterministically enumerates bounded integer
+  lattice vectors, retains only unimodular transforms satisfying `ltol` and
+  `angle_tol`, maps fractional coordinates into each candidate basis, and then
+  performs the existing species-grouped translation/Hungarian matching.
+- Fractional component rounding does not solve the closest-vector problem for
+  skew lattices. Matcher costs now use an exact finite 3D closest-vector search
+  bounded by the lattice's smallest singular value. The helper lives in the
+  symmetry module and introduces no `io` dependency.
+
+### RED / GREEN and parity evidence
+
+- RED: focused matcher tests rejected both an axis permutation and a
+  determinant-one shear while the existing translation/species tests passed.
+- GREEN: dependency-free coverage passes for monoclinic/triclinic true minimum
+  images, axis permutation, unimodular shear, global translation/site
+  permutation, species mismatch, geometric mismatch, and inclusive/exclusive
+  lattice tolerance boundaries.
+- A pinned pymatgen 2025.6.14 black-box decision matrix agrees on translated,
+  permuted, skew, basis-changed, species-negative, and lattice-negative cases.
+- Space-group parity now spans diamond-like cubic, binary cubic, tetragonal,
+  and hexagonal structures. Primitive and conventional results are checked as
+  basis-equivalent lattice/species/fractional-coordinate mappings after
+  deterministic matching; shifted and unshifted irreducible meshes compare
+  representative coordinates together with weights. The Na/Cl/Ti/O cases
+  exercise atomic-number-to-symbol reconstruction.

@@ -130,6 +130,69 @@ def test_structure_matcher_rejects_composition_and_geometry(si_crystal):
     assert not StructureMatcher(stol=0.1).fit(si_crystal, distorted)
 
 
+def test_structure_matcher_uses_true_minimum_image_for_skew_cell():
+    lattice = Lattice([[1.0, 0.0, 0.0], [0.95, 0.2, 0.0], [0.0, 0.0, 3.0]])
+    original = Crystal(["Si", "Si"], [[0, 0, 0], [0.49, 0.49, 0]], lattice)
+    # The second displacement has a short image obtained by shifting only one
+    # skew fractional component; component-wise rounding chooses the wrong image.
+    moved = Crystal(["Si", "Si"], [[0, 0, 0], [0.51, -0.49, 0]], lattice)
+    assert StructureMatcher(stol=0.08).fit(original, moved)
+
+
+def test_minimum_image_distance_is_exact_for_triclinic_lattice():
+    from matsimpy.symmetry.matcher import _minimum_image_distances
+
+    lattice = np.array([[1.0, 0.0, 0.0], [0.95, 0.2, 0.0], [0.4, 0.1, 2.0]])
+    delta = np.array([0.49, 0.49, 0.0])
+    brute = min(
+        np.linalg.norm((delta + [i, j, k]) @ lattice)
+        for i in range(-2, 3)
+        for j in range(-2, 3)
+        for k in range(-2, 3)
+    )
+    rounded = np.linalg.norm((delta - np.rint(delta)) @ lattice)
+    assert brute < rounded
+    assert _minimum_image_distances(delta, lattice) == pytest.approx(brute)
+
+
+@pytest.mark.parametrize(
+    "basis",
+    [
+        np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]]),
+        np.array([[1, 1, 0], [0, 1, 0], [0, 0, 1]]),
+    ],
+    ids=["axis-permutation", "unimodular-shear"],
+)
+def test_structure_matcher_accepts_equivalent_integer_bases(basis):
+    lattice = np.array([[3.1, 0.0, 0.0], [0.4, 4.2, 0.0], [0.2, 0.6, 5.3]])
+    frac = np.array([[0.11, 0.23, 0.37], [0.41, 0.17, 0.83], [0.73, 0.61, 0.29]])
+    original = Crystal(["Si", "O", "O"], frac, Lattice(lattice))
+    transformed = Crystal(
+        ["O", "Si", "O"],
+        np.mod((frac @ np.linalg.inv(basis))[[1, 0, 2]] + 0.137, 1),
+        Lattice(basis @ lattice),
+    )
+    assert StructureMatcher(ltol=1e-6, stol=1e-6, angle_tol=1e-6).fit(
+        original, transformed
+    )
+
+
+def test_structure_matcher_tolerance_boundary_is_inclusive():
+    original = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(4.0))
+    boundary = Crystal(["Si"], [[0.2, 0, 0]], Lattice.cubic(4.4))
+    assert StructureMatcher(ltol=0.1, stol=0.3).fit(original, boundary)
+    assert not StructureMatcher(ltol=0.09, stol=0.3).fit(original, boundary)
+
+
+def _standardization_cases():
+    return [
+        Crystal(["Si", "Si"], [[0, 0, 0], [.25, .25, .25]], Lattice.cubic(5.43)),
+        Crystal(["Na", "Cl"], [[0, 0, 0], [.5, .5, .5]], Lattice.cubic(5.64)),
+        Crystal(["Ti", "O", "O"], [[0, 0, 0], [.305, .305, 0], [.695, .695, 0]], Lattice.tetragonal(4.59, 2.96)),
+        Crystal(["C", "C"], [[0, 0, 0], [1/3, 2/3, .5]], Lattice.hexagonal(2.46, 6.71)),
+    ]
+
+
 @pytest.mark.requires_spglib
 @pytest.mark.skipif(not HAS_SPGLIB, reason="spglib not installed")
 def test_cubic_kpath_is_deterministic_and_labeled(si_crystal):
@@ -293,3 +356,79 @@ def test_pymatgen_parity_for_cubic_standardization_and_mesh(si_crystal):
     _, native_weights = native.get_ir_reciprocal_mesh((4, 4, 4))
     pmg_weights = [weight for _, weight in pmg_analyzer.get_ir_reciprocal_mesh((4, 4, 4))]
     assert sorted(native_weights) == sorted(pmg_weights)
+
+
+@pytest.mark.requires_pymatgen
+@pytest.mark.skipif(not HAS_PYMATGEN, reason="pymatgen required")
+def test_pymatgen_2025_6_14_structure_matcher_decision_matrix():
+    from pymatgen.analysis.structure_matcher import StructureMatcher as PmgMatcher
+    from pymatgen.core import Lattice as PmgLattice
+    from pymatgen.core import Structure
+
+    lattice = np.array([[3.1, 0, 0], [.4, 4.2, 0], [.2, .6, 5.3]])
+    frac = np.array([[.11, .23, .37], [.41, .17, .83], [.73, .61, .29]])
+    base = Crystal(["Si", "O", "O"], frac, Lattice(lattice))
+    shear = np.array([[1, 1, 0], [0, 1, 0], [0, 0, 1]])
+    cases = [
+        Crystal(base.species[::-1], np.mod(base.frac_positions[::-1] + .173, 1), base.lattice),
+        Crystal(base.species, frac @ np.linalg.inv(shear), Lattice(shear @ lattice)),
+        Crystal(["Si", "O", "N"], frac, base.lattice),
+        Crystal(base.species, frac, Lattice(np.diag([2.0, 1.0, 1.0]) @ lattice)),
+    ]
+
+    def pmg(crystal):
+        return Structure(PmgLattice(crystal.lattice.matrix), crystal.species, crystal.frac_positions)
+
+    native = StructureMatcher()
+    reference = PmgMatcher()
+    assert [native.fit(base, case) for case in cases] == [
+        reference.fit(pmg(base), pmg(case)) for case in cases
+    ]
+    skew_lattice = Lattice([[1.0, 0, 0], [.95, .2, 0], [.4, .1, 2.0]])
+    skew_a = Crystal(["Si", "Si"], [[0, 0, 0], [.49, .49, 0]], skew_lattice)
+    skew_b = Crystal(["Si", "Si"], [[0, 0, 0], [.51, -.49, 0]], skew_lattice)
+    assert StructureMatcher(stol=.08).fit(skew_a, skew_b) == PmgMatcher(stol=.08).fit(
+        pmg(skew_a), pmg(skew_b)
+    )
+
+
+@pytest.mark.requires_pymatgen
+@pytest.mark.skipif(not (HAS_SPGLIB and HAS_PYMATGEN), reason="pymatgen and spglib required")
+@pytest.mark.parametrize("structure", _standardization_cases())
+def test_standardization_and_ir_mesh_coordinate_parity(structure):
+    from pymatgen.core import Lattice as PmgLattice
+    from pymatgen.core import Structure
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer as PmgAnalyzer
+
+    pmg_input = Structure(
+        PmgLattice(structure.lattice.matrix), structure.species, structure.frac_positions
+    )
+    native = SpacegroupAnalyzer(structure, symprec=1e-4)
+    reference = PmgAnalyzer(pmg_input, symprec=1e-4)
+    for actual, expected in [
+        (native.get_primitive_standard_structure(), reference.get_primitive_standard_structure()),
+        (native.get_conventional_standard_structure(), reference.get_conventional_standard_structure()),
+    ]:
+        expected_native = Crystal(
+            [str(species) for species in expected.species],
+            expected.frac_coords,
+            Lattice(expected.lattice.matrix),
+        )
+        assert StructureMatcher(ltol=1e-7, stol=1e-7, angle_tol=1e-7).fit(
+            actual, expected_native
+        )
+        assert sorted(actual.species) == sorted(str(species) for species in expected.species)
+        assert all(species in {"Si", "Na", "Cl", "Ti", "O", "C"} for species in actual.species)
+
+    for shift in [(0, 0, 0), (1, 0, 1)]:
+        actual_points, actual_weights = native.get_ir_reciprocal_mesh((3, 4, 2), shift)
+        expected_mesh = reference.get_ir_reciprocal_mesh((3, 4, 2), shift)
+        actual_rows = sorted(
+            (tuple(np.round(np.mod(point, 1), 8)), weight)
+            for point, weight in zip(actual_points, actual_weights)
+        )
+        expected_rows = sorted(
+            (tuple(np.round(np.mod(point, 1), 8)), weight)
+            for point, weight in expected_mesh
+        )
+        assert actual_rows == expected_rows
