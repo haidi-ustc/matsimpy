@@ -2272,9 +2272,8 @@ def _get_nmr_quadrupole_moment(symbol: str, isotope: str | None = None) -> float
     if not isinstance(moments, dict) or not moments:
         raise ValueError(f"No NMR quadrupole moment data is available for {symbol}")
     if isotope is None:
-        if len(moments) != 1:
-            choices = ", ".join(sorted(moments))
-            raise ValueError(f"An isotope is required for {symbol}; available isotopes: {choices}")
+        # Element data preserves pymatgen's pinned isotope-table order; its
+        # Species helper selects the first tabulated isotope by default.
         isotope = next(iter(moments))
     try:
         return float(moments[isotope])
@@ -3285,6 +3284,12 @@ def standardize_structure(
     Returns:
         The symmetrized structure.
     """
+    if not international_monoclinic:
+        raise NotImplementedError(
+            "international_monoclinic=False (Curtarolo monoclinic convention) "
+            "is not supported by the native symmetry analyzer"
+        )
+
     sym_finder = SpacegroupAnalyzer(structure, symprec=sym_prec)
     # The native analyzer follows spglib's international standardized setting.
     # Keep the compatibility argument accepted even though spglib does not expose

@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 from monty.json import MontyDecoder
 
+from matsimpy.calculator.vasp.inputs import Kpoints
 from matsimpy.calculator.vasp.sets import (
     DictSet,
     MITRelaxSet,
@@ -84,6 +85,61 @@ def test_standardize_structure_returns_crystal(si_crystal: Crystal) -> None:
     assert isinstance(standardized, Crystal)
 
 
+def test_standardize_structure_rejects_unsupported_monoclinic_convention(si_crystal: Crystal) -> None:
+    with pytest.raises(NotImplementedError, match="international_monoclinic=False"):
+        standardize_structure(si_crystal, international_monoclinic=False)
+
+
+@pytest.mark.parametrize(
+    ("lattice", "densities", "expected_grid", "expected_style"),
+    [
+        (Lattice.cubic(4), [16, 16, 16], (4, 4, 4), "Monkhorst"),
+        (Lattice.hexagonal(3, 5), [12, 12, 20], (4, 4, 4), "Gamma"),
+    ],
+)
+def test_automatic_density_by_lengths_uses_native_crystals(
+    lattice: Lattice,
+    densities: list[float],
+    expected_grid: tuple[int, int, int],
+    expected_style: str,
+) -> None:
+    structure = Crystal(["Si"], [[0, 0, 0]], lattice)
+    kpoints = Kpoints.automatic_density_by_lengths(structure, densities)
+    assert kpoints.kpts == [expected_grid]
+    assert kpoints.style.name == expected_style
+
+
+@pytest.mark.requires_pymatgen
+@pytest.mark.parametrize("lattice", [Lattice.cubic(4), Lattice.hexagonal(3, 5)])
+def test_optional_automatic_density_by_lengths_parity(lattice: Lattice) -> None:
+    pytest.importorskip("pymatgen")
+    from pymatgen.core import Lattice as PmgLattice
+    from pymatgen.core import Structure as PmgStructure
+    from pymatgen.io.vasp.inputs import Kpoints as PmgKpoints
+
+    native_structure = Crystal(["Si"], [[0, 0, 0]], lattice)
+    reference_structure = PmgStructure(PmgLattice(lattice.matrix), ["Si"], [[0, 0, 0]])
+    native = Kpoints.automatic_density_by_lengths(native_structure, [16, 16, 20])
+    reference = PmgKpoints.automatic_density_by_lengths(reference_structure, [16, 16, 20])
+    assert native.kpts == reference.kpts
+    assert native.style.name == reference.style.name
+
+
+def test_explicit_reciprocal_density_mesh_is_symmetry_reduced(si_crystal: Crystal) -> None:
+    input_set = DictSet(
+        si_crystal,
+        {
+            "INCAR": {},
+            "KPOINTS": {"reciprocal_density": 100, "explicit": True},
+            "POTCAR": {"Si": "Si"},
+        },
+    )
+    kpoints = input_set.kpoints
+    full_mesh_size = int(np.prod(Kpoints.automatic_density_by_vol(si_crystal, 100).kpts[0]))
+    assert kpoints.num_kpts < full_mesh_size
+    assert sum(kpoints.kpts_weights) == full_mesh_size
+
+
 def test_line_mode_kpoints_use_native_kpath(si_crystal: Crystal) -> None:
     input_set = DictSet(si_crystal, {"INCAR": {}, "KPOINTS": {"line_density": 10}, "POTCAR": {"Si": "Si"}})
     kpoints = input_set.kpoints
@@ -100,10 +156,38 @@ def test_input_set_monty_round_trip(si_crystal: Crystal) -> None:
     assert restored.user_incar_settings["ENCUT"] == 321
 
 
+def test_stateless_input_set_monty_round_trip() -> None:
+    original = MPRelaxSet()
+    restored = MontyDecoder().process_decoded(original.as_dict())
+    assert isinstance(restored, MPRelaxSet)
+    assert restored.structure is None
+
+
 def test_nmr_efg_uses_native_isotope_data() -> None:
     aluminum = Crystal(["Al"], [[0, 0, 0]], Lattice.cubic(4.05))
     nmr_set = MPNMRSet(aluminum, mode="efg", isotopes=["Al-27"])
     assert nmr_set.incar_updates["QUAD_EFG"] == pytest.approx([146.6])
+
+
+def test_nmr_efg_uses_pinned_default_isotope() -> None:
+    boron = Crystal(["B"], [[0, 0, 0]], Lattice.cubic(4))
+    assert MPNMRSet(boron, mode="efg").incar_updates["QUAD_EFG"] == pytest.approx([84.59])
+    assert MPNMRSet(boron, mode="efg", isotopes=["B-11"]).incar_updates["QUAD_EFG"] == pytest.approx([40.59])
+
+
+@pytest.mark.requires_pymatgen
+def test_optional_nmr_boron_isotope_parity() -> None:
+    pytest.importorskip("pymatgen")
+    from pymatgen.core import Lattice as PmgLattice
+    from pymatgen.core import Structure as PmgStructure
+    from pymatgen.io.vasp.sets import MPNMRSet as PmgMPNMRSet
+
+    native_structure = Crystal(["B"], [[0, 0, 0]], Lattice.cubic(4))
+    reference_structure = PmgStructure(PmgLattice.cubic(4), ["B"], [[0, 0, 0]])
+    for isotopes in ([], ["B-11"]):
+        native = MPNMRSet(native_structure, mode="efg", isotopes=isotopes)
+        reference = PmgMPNMRSet(reference_structure, mode="efg", isotopes=isotopes)
+        assert native.incar_updates["QUAD_EFG"] == pytest.approx(reference.incar_updates["QUAD_EFG"])
 
 
 def test_nmr_efg_reports_missing_isotope_data() -> None:

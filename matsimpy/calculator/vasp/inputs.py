@@ -42,6 +42,7 @@ from tabulate import tabulate
 from matsimpy.core import Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, str_delimited
 from matsimpy.electronic_structure import Magmom
+from matsimpy.symmetry import SpacegroupAnalyzer
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
@@ -1539,8 +1540,6 @@ class Kpoints(MSONable):
             and math.isclose(lattice.beta, 90, abs_tol=1e-3)
             and math.isclose(lattice.gamma, 120, abs_tol=1e-3)
         )
-        from matsimpy.symmetry import SpacegroupAnalyzer
-
         is_face_centered = SpacegroupAnalyzer(structure).get_space_group_symbol().startswith("F")
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
@@ -1666,8 +1665,13 @@ class Kpoints(MSONable):
         abc = np.linalg.norm(lattice.matrix, axis=1)
         num_div: tuple[int, int, int] = tuple(math.ceil(ld / abc[idx]) for idx, ld in enumerate(length_densities))  # type:ignore[assignment]
 
-        is_hexagonal: bool = lattice.hexagonal
-        is_face_centered: bool = structure.get_space_group_info()[0][0] == "F"
+        is_hexagonal = (
+            math.isclose(lattice.a, lattice.b, rel_tol=1e-5)
+            and math.isclose(lattice.alpha, 90, abs_tol=1e-3)
+            and math.isclose(lattice.beta, 90, abs_tol=1e-3)
+            and math.isclose(lattice.gamma, 120, abs_tol=1e-3)
+        )
+        is_face_centered = SpacegroupAnalyzer(structure).get_space_group_symbol().startswith("F")
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
             style = cls.supported_modes.Gamma
