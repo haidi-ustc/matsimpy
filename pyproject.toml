@@ -115,5 +115,6 @@ markers = [
     "requires_torch: marks tests that require torch",
     "requires_ase: marks tests that require ase",
     "requires_pymatgen: marks tests that require pymatgen",
+    "requires_spglib: marks tests that require spglib",
     "requires_storage: marks tests that require maggma",
 ]
