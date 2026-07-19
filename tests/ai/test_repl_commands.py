@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pytest
 
 from matsimpy.ai.repl import ReplController
+from matsimpy.ai.conversation import ChatMessage, ChatResponse
 
 
 @dataclass
@@ -61,6 +62,33 @@ class FakeSkillLibrary:
 
     def search(self, query):
         return [item for item in self.discover() if query in item["name"]]
+
+    def detail(self, name):
+        if name == "generated-flow":
+            return {
+                "name": name,
+                "description": "Saved workflow",
+                "source": "generated",
+                "mode": "auto_choice",
+                "body_preview": "Use tool A then B.",
+            }
+        if name != "crystals":
+            return None
+        return {
+            "name": "crystals",
+            "description": "Build crystals",
+            "source": "builtin",
+            "loaded": True,
+            "keywords": ["crystal"],
+            "functions": [
+                {
+                    "name": "make_crystal",
+                    "description": "Make one",
+                    "schema": {"type": "object"},
+                    "help": "Detailed help",
+                }
+            ],
+        }
 
 
 class FakeEvolution:
@@ -171,6 +199,54 @@ def test_aliases_completion_and_command_names(controller):
     assert "/approve" in repl.command_names()
     assert repl.complete("/res") == ("/resume",)
     assert "/approve-skill" in repl.complete("/app")
+    assert repl.execute("/reject-skill copper-flow").ok is True
+
+
+def test_skills_exact_name_returns_detail_but_non_exact_uses_search(
+    controller, capsys
+):
+    from matsimpy.ai.engine import AIEngine
+
+    repl, _, _ = controller
+
+    exact = repl.execute("/skills crystals")
+    search = repl.execute("/skills crystal")
+
+    assert exact.data["skill"]["loaded"] is True
+    assert exact.data["skill"]["functions"][0] == {
+        "name": "make_crystal",
+        "description": "Make one",
+        "schema": {"type": "object"},
+        "help": "Detailed help",
+    }
+    assert "skills" not in exact.data
+    assert [item["name"] for item in search.data["skills"]] == ["crystals"]
+
+    AIEngine._render_command_result(exact)
+    rendered = capsys.readouterr().out
+    assert "make_crystal: Make one" in rendered
+    assert 'Schema: {"type": "object"}' in rendered
+    assert "Help: Detailed help" in rendered
+
+    generated = repl.execute("/skills generated-flow").data["skill"]
+    assert generated == {
+        "name": "generated-flow",
+        "description": "Saved workflow",
+        "source": "generated",
+        "mode": "auto_choice",
+        "body_preview": "Use tool A then B.",
+    }
+
+
+def test_real_evolution_manager_rollback_is_structured_unavailable(controller):
+    repl, session, _ = controller
+    real = ReplController(session)
+
+    result = real.execute("/rollback copper-flow")
+
+    assert result.kind == "rollback"
+    assert result.ok is False
+    assert "not available" in result.display_hint
 
 
 def test_engine_commands_use_authoritative_agent_session(tmp_path, capsys):
@@ -187,3 +263,36 @@ def test_engine_commands_use_authoritative_agent_session(tmp_path, capsys):
     assert engine.repl_controller.session is engine.agent.session
     assert f"Started session {conversation_id}." in output
     assert f"{conversation_id}: engine" in output
+
+
+def test_engine_resume_rebuilds_compatibility_conversation_from_session_branch(
+    tmp_path, capsys
+):
+    from matsimpy.ai.engine import AIEngine
+
+    class Provider:
+        model = "fake"
+
+        def __init__(self):
+            self.responses = ["first answer", "second answer"]
+
+        def chat(self, messages, tools=None, tool_choice="auto"):
+            return ChatResponse(
+                ChatMessage.assistant(self.responses.pop(0)), [], "stop"
+            )
+
+    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    engine.agent.provider = engine.runtime.provider = Provider()
+    engine.chat("first question")
+    conversation_id = engine.agent.session.conversation_id
+    engine._handle_command("/new")
+    engine.chat("second question")
+
+    engine._handle_command(f"/resume {conversation_id}")
+
+    assert [(item.role, item.content) for item in engine.conversation] == [
+        ("system", engine.runtime._initial_messages()[0].content),
+        ("user", "first question"),
+        ("assistant", "first answer"),
+    ]
+    capsys.readouterr()

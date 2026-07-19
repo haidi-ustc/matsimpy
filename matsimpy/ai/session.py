@@ -138,6 +138,10 @@ class AgentSession:
         """Add explicit session context, such as an activated skill."""
         self.context_messages.append(message)
 
+    def active_messages(self) -> list[ChatMessage]:
+        """Return explicit context and complete messages for the active branch."""
+        return [*self.context_messages, *self._messages_for(self.turns)]
+
     @staticmethod
     def _messages_for(turns: list[SessionTurn]) -> list[ChatMessage]:
         messages: list[ChatMessage] = []

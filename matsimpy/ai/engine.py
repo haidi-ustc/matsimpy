@@ -73,9 +73,7 @@ class AIEngine:
         self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
-        self.conversation: list[ChatMessage] = [
-            ChatMessage.system(self._build_system_prompt()),
-        ]
+        self.conversation: list[ChatMessage] = self.agent.conversation_messages()
         self._registered_contexts: set[str] = set()
 
         # Learning state
@@ -108,7 +106,7 @@ class AIEngine:
         self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
-        self.conversation = list(self.runtime.messages)
+        self.conversation = self.agent.conversation_messages()
 
     def _build_system_prompt(self) -> str:
         """Build system prompt with available auto_choice skills."""
@@ -136,7 +134,7 @@ class AIEngine:
         self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
-        self.conversation = list(self.runtime.messages)
+        self.conversation = self.agent.conversation_messages()
         task_result = self.runtime.last_result
         self._last_tool_calls = list(result.tools)
         if task_result is not None:
@@ -554,6 +552,22 @@ class AIEngine:
         elif result.kind == "skills":
             for skill in result.data["skills"]:
                 print(f"  [{skill['name']}] {skill.get('description', '')}")
+        elif result.kind == "skill-detail":
+            skill = result.data["skill"]
+            status = "loaded" if skill.get("loaded") else "ready"
+            print(f"  {skill['name']} ({skill.get('source', 'unknown')}, {status})")
+            print(f"  {skill.get('description', '')}")
+            if skill.get("keywords"):
+                print(f"  Keywords: {', '.join(skill['keywords'])}")
+            if skill.get("mode"):
+                print(f"  Mode: {skill['mode']}")
+            if skill.get("body_preview"):
+                print(f"  {skill['body_preview']}")
+            for function in skill.get("functions", []):
+                print(f"  {function['name']}: {function.get('description', '')}")
+                print(f"    Schema: {json.dumps(function.get('schema', {}))}")
+                if function.get("help"):
+                    print(f"    Help: {function['help']}")
         elif result.kind == "drafts":
             for draft in result.data["drafts"]:
                 print(f"  {draft['name']}: {draft.get('status', 'draft')}")
@@ -598,6 +612,38 @@ class _EngineSkillSummaries:
             for summary in self.discover()
             if folded in f"{summary['name']} {summary['description']}".casefold()
         ]
+
+    def detail(self, name: str) -> dict | None:
+        skill = self.skill_manager._skills.get(name)
+        if skill is not None:
+            return {
+                "name": skill.name,
+                "description": skill.description,
+                "source": "builtin",
+                "loaded": name in self.skill_manager._active,
+                "keywords": list(skill.keywords),
+                "functions": [
+                    {
+                        "name": function.name,
+                        "description": function.description,
+                        "schema": function.parameters,
+                        "help": function.get_help(),
+                    }
+                    for function in skill.functions
+                ],
+            }
+        for generated in list_generated_skills():
+            if generated["name"] == name:
+                return {
+                    "name": generated["name"],
+                    "description": generated.get("description", ""),
+                    "source": "generated",
+                    "loaded": False,
+                    "mode": generated.get("load_mode", "auto_choice"),
+                    "body_preview": generated.get("body", "")[:1000],
+                    "functions": [],
+                }
+        return None
 
 
 __all__ = ["AIEngine"]

@@ -90,6 +90,10 @@ class Agent:
         """Add explicit context to subsequent conversation turns."""
         self.session.add_context(message)
 
+    def conversation_messages(self) -> list[ChatMessage]:
+        """Rebuild the public conversation view from the active session branch."""
+        return [*self.runtime._initial_messages(), *self.session.active_messages()]
+
     def switch_workspace(self, workspace: str | Path) -> None:
         """Move future tasks and durable state to another workspace."""
         self.provider = self.runtime.provider

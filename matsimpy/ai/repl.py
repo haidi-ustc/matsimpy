@@ -144,6 +144,14 @@ class ReplController:
         if self.skill_library is None:
             skills: list[Any] = []
         elif arg:
+            detail_getter = getattr(self.skill_library, "detail", None)
+            detail = detail_getter(arg) if detail_getter is not None else None
+            if detail is not None:
+                return CommandResult(
+                    "skill-detail",
+                    data={"skill": _record(detail)},
+                    display_hint=f"Skill: {arg}",
+                )
             skills = self.skill_library.search(arg)
         else:
             skills = self.skill_library.discover()
