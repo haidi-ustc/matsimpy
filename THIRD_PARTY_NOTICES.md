@@ -21,8 +21,8 @@ Curtarolo definitions identified in that file's source notice.
 
 This ASE-derived k-path adaptation was added during the native-runtime work
 and is distinct from the older pymatgen-derived VASP calculator modules. The
-file-level notice records ASE version 3.29.0, the upstream source path and
-revision, the adapted scope, copyright, and BSD-3-Clause license.
+file-level notice records ASE version 3.29.0, the exact upstream source paths
+and functions, the adapted scope, copyright, and BSD-2-Clause license.
 
 Copyright (C) 2010--2025 the ASE developers.
 

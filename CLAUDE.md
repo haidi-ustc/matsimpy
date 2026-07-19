@@ -194,7 +194,7 @@ Entry point groups: `matsimpy.transformations`, `matsimpy.builders`, `matsimpy.i
 All non-core deps are optional and organized as pip extras: `cli`, `ml` (torch, torch-geometric), `io` (pymatgen, ase), `builders` (pyxtal, rdkit), `analysis` (spglib), `storage` (maggma). Tests use markers (`requires_torch`, `requires_ase`, `requires_pymatgen`) to skip when deps are absent.
 
 The VASP runtime itself is pymatgen-free. `spglib` is a feature-level backend
-for symmetry-derived VASP inputs, and `h5py` is used only for VASP HDF5 output.
+for symmetry-derived VASP inputs, and `h5py` is used only for VASP HDF5 support.
 The `parity` extra pins `pymatgen==2025.6.14` as a test oracle; never introduce
 a production fallback to it. VASP parsers return native objects from
 `matsimpy.electronic_structure` and `matsimpy.core.trajectory`.

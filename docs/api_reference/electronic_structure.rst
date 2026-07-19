@@ -20,10 +20,13 @@ VASP example
    energy_entry = run.get_computed_entry(inc_structure=False)
    trajectory = run.get_trajectory()
 
-``complete_dos`` is a :class:`CompleteDos`; ``get_band_structure`` returns a
-:class:`BandStructure` or :class:`BandStructureSymmLine`; entries are
-:class:`ComputedEntry` or :class:`ComputedStructureEntry`; and trajectories
-use :class:`matsimpy.core.trajectory.Trajectory`.
+``complete_dos`` is a :class:`matsimpy.electronic_structure.dos.CompleteDos`;
+``get_band_structure`` returns a
+:class:`matsimpy.electronic_structure.bandstructure.BandStructure` or
+:class:`matsimpy.electronic_structure.bandstructure.BandStructureSymmLine`;
+entries are :class:`matsimpy.electronic_structure.entries.ComputedEntry` or
+:class:`matsimpy.electronic_structure.entries.ComputedStructureEntry`; and
+trajectories use :class:`matsimpy.core.trajectory.Trajectory`.
 
 Core enums and magnetic moments
 -------------------------------

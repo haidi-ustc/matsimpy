@@ -16,6 +16,7 @@ Welcome to MatSimPy's documentation!
    examples
    about
    contributing
+   development/index
    changelog
 
 Features
@@ -40,4 +41,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-

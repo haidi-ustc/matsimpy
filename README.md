@@ -105,8 +105,9 @@ pip install -e .[all]
 The normal VASP runtime has no pymatgen dependency. `spglib` is needed only
 when an input workflow asks MatSimPy to derive symmetry information (including
 irreducible meshes and symmetry-standardized cells). `h5py` is needed only to
-read VASP HDF5 output. The `parity` extra is for development and installs the
-pinned `pymatgen==2025.6.14` behavioral oracle; it is not a runtime fallback.
+read and rewrite VASP HDF5 data. The `parity` extra is for development and
+installs the pinned `pymatgen==2025.6.14` behavioral oracle; it is not a
+runtime fallback.
 
 ### Native VASP output objects
 
