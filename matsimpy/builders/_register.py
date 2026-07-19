@@ -16,11 +16,14 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "prototype": {"type": "string", "description": "fcc, bcc, hcp, diamond, rocksalt, etc."},
-                "element": {"type": "string"},
-                "a": {"type": "number", "description": "Lattice constant in Angstrom"},
+                "prototype": {
+                    "type": "string",
+                    "enum": ["fcc", "bcc", "hcp", "diamond", "zincblende", "rocksalt", "wurtzite", "perovskite", "sc"],
+                },
+                "species": {"type": "string"},
+                "lattice_constant": {"type": "number", "description": "Lattice constant in Angstrom"},
             },
-            "required": ["prototype", "element", "a"],
+            "required": ["prototype", "species", "lattice_constant"],
         },
     ))
 
@@ -35,12 +38,12 @@ def register_all():
                 "type": "object",
                 "properties": {
                     "dim": {"type": "integer", "default": 3},
-                    "sg": {"type": "integer"},
-                    "species": {"type": "array", "items": {"type": "string"}},
-                    "numIons": {"type": "array", "items": {"type": "integer"}},
+                    "group": {"type": "integer"},
+                    "species": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    "num_ions": {"type": "array", "items": {"type": "integer"}, "minItems": 1},
                     "factor": {"type": "number", "default": 1.0},
                 },
-                "required": ["sg", "species", "numIons"],
+                "required": ["dim", "group", "species", "num_ions"],
             },
         ))
     except ImportError:
@@ -55,7 +58,7 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "structure": {},
+                "bulk": {},
                 "miller_index": {
                     "type": "array", "items": {"type": "integer"},
                     "minItems": 3, "maxItems": 3,
@@ -63,7 +66,7 @@ def register_all():
                 "min_slab_size": {"type": "number"},
                 "min_vacuum_size": {"type": "number"},
             },
-            "required": ["structure", "miller_index", "min_slab_size", "min_vacuum_size"],
+            "required": ["bulk", "miller_index", "min_slab_size", "min_vacuum_size"],
         },
     ))
 
@@ -75,15 +78,15 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "structure": {},
-                "species": {"type": "string"},
+                "slab": {},
+                "adsorbate": {"type": "string"},
                 "position": {
                     "type": "array", "items": {"type": "number"},
                     "minItems": 2, "maxItems": 2,
                 },
                 "height": {"type": "number"},
             },
-            "required": ["structure", "species", "position", "height"],
+            "required": ["slab", "adsorbate", "position", "height"],
         },
     ))
 
@@ -101,12 +104,12 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "structure": {},
-                "new_species": {"type": "array", "items": {"type": "string"}},
-                "old_species": {"type": "string"},
+                "base_structure": {},
+                "substitution_species": {"type": "array", "items": {"type": "string"}},
+                "site_species": {"type": "string"},
                 "concentrations": {"type": "array", "items": {"type": "number"}},
             },
-            "required": ["structure", "new_species", "old_species", "concentrations"],
+            "required": ["base_structure", "substitution_species", "site_species"],
         },
     ))
     registry.register(BuilderSpec(
@@ -116,10 +119,13 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "structure": {},
-                "substitutions": {"type": "array"},
+                "base_structure": {},
+                "substitution_pattern": {
+                    "type": "object",
+                    "description": "Dict mapping site indices (int) to species (str)",
+                },
             },
-            "required": ["structure", "substitutions"],
+            "required": ["base_structure", "substitution_pattern"],
         },
     ))
     registry.register(BuilderSpec(
@@ -129,11 +135,15 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "structure_type": {"type": "string"},
+                "structure_type": {
+                    "type": "string",
+                    "enum": ["L1_2", "B2", "L1_0"],
+                },
                 "elements": {"type": "array", "items": {"type": "string"}},
-                "a": {"type": "number"},
+                "composition": {"type": "string"},
+                "lattice_constant": {"type": "number"},
             },
-            "required": ["structure_type", "elements", "a"],
+            "required": ["structure_type", "elements", "composition", "lattice_constant"],
         },
     ))
     for fn, name in [
@@ -152,9 +162,9 @@ def register_all():
                     "X": {"type": "string"},
                     "Y": {"type": "string"},
                     "Z": {"type": "string"},
-                    "a": {"type": "number"},
+                    "lattice_constant": {"type": "number"},
                 },
-                "required": ["X", "Y", "Z", "a"],
+                "required": ["X", "Y", "Z", "lattice_constant"],
             },
         ))
 
@@ -191,12 +201,12 @@ def register_all():
             "properties": {
                 "structure": {},
                 "species": {"type": "string"},
-                "position": {
+                "positions": {
                     "type": "array", "items": {"type": "number"},
                     "minItems": 3, "maxItems": 3,
                 },
             },
-            "required": ["structure", "species", "position"],
+            "required": ["structure", "species", "positions"],
         },
     ))
     registry.register(BuilderSpec(
@@ -218,29 +228,53 @@ def register_all():
             "required": ["structure", "indices", "new_species"],
         },
     ))
-    for fn, name in [
-        (create_frenkel, "create_frenkel"),
-        (create_schottky, "create_schottky"),
-        (create_antisite, "create_antisite"),
-    ]:
-        registry.register(BuilderSpec(
-            name=name, category="defects", callable=fn,
-            description=f"{name.replace('_', ' ').title()} in crystal structure",
-            output_type=Crystal,
-            parameter_schema={
-                "type": "object",
-                "properties": {
-                    "structure": {},
-                    "indices": {
-                        "oneOf": [
-                            {"type": "integer"},
-                            {"type": "array", "items": {"type": "integer"}},
-                        ],
-                    },
-                },
-                "required": ["structure", "indices"],
+    registry.register(BuilderSpec(
+        name="create_frenkel", category="defects", callable=create_frenkel,
+        description="Create Frenkel defect in crystal structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "structure": {},
+                "index": {"type": "integer"},
+                "interstitial_position": {"type": "array", "items": {"type": "number"}},
             },
-        ))
+            "required": ["structure", "index"],
+        },
+    ))
+    registry.register(BuilderSpec(
+        name="create_schottky", category="defects", callable=create_schottky,
+        description="Create Schottky defect in crystal structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "structure": {},
+                "indices": {
+                    "oneOf": [
+                        {"type": "integer"},
+                        {"type": "array", "items": {"type": "integer"}},
+                    ],
+                },
+                "num_vacancies": {"type": "integer", "default": 2},
+            },
+            "required": ["structure"],
+        },
+    ))
+    registry.register(BuilderSpec(
+        name="create_antisite", category="defects", callable=create_antisite,
+        description="Create antisite defect in crystal structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "structure": {},
+                "index1": {"type": "integer"},
+                "index2": {"type": "integer"},
+            },
+            "required": ["structure", "index1", "index2"],
+        },
+    ))
 
     # --- interface ---
     from .interface import create_simple_interface
@@ -271,8 +305,8 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "species": {"type": "array", "items": {"type": "string"}},
-                "bond_lengths": {"type": "array", "items": {"type": "number"}},
+                "species": {"type": "array", "items": {"type": "string"}, "minItems": 2},
+                "bond_lengths": {"type": "array", "items": {"type": "number"}, "minItems": 1},
             },
             "required": ["species", "bond_lengths"],
         },
@@ -284,11 +318,11 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "species": {"type": "array", "items": {"type": "string"}},
-                "bond_lengths": {"type": "array", "items": {"type": "number"}},
-                "angle": {"type": "number"},
+                "species": {"type": "array", "items": {"type": "string"}, "minItems": 3},
+                "bond_lengths": {"type": "array", "items": {"type": "number"}, "minItems": 2},
+                "angles": {"type": "array", "items": {"type": "number"}, "minItems": 1},
             },
-            "required": ["species", "bond_lengths", "angle"],
+            "required": ["species", "bond_lengths", "angles"],
         },
     ))
     registry.register(BuilderSpec(
@@ -299,10 +333,10 @@ def register_all():
             "type": "object",
             "properties": {
                 "central_atom": {"type": "string"},
-                "outer_atoms": {"type": "array", "items": {"type": "string"}},
+                "peripheral_atoms": {"type": "array", "items": {"type": "string"}, "minItems": 4, "maxItems": 4},
                 "bond_length": {"type": "number"},
             },
-            "required": ["central_atom", "outer_atoms", "bond_length"],
+            "required": ["central_atom", "peripheral_atoms", "bond_length"],
         },
     ))
 
@@ -337,11 +371,13 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "structure": {},
-                "n": {"type": "integer"},
-                "m": {"type": "integer"},
+                "base_2d": {},
+                "chirality": {
+                    "type": "array", "items": {"type": "integer"},
+                    "minItems": 2, "maxItems": 2,
+                },
             },
-            "required": ["structure", "n", "m"],
+            "required": ["base_2d", "chirality"],
         },
     ))
     registry.register(BuilderSpec(
@@ -359,24 +395,35 @@ def register_all():
             "required": ["n", "m"],
         },
     ))
-    for fn, name in [
-        (build_twisted_bilayer, "build_twisted_bilayer"),
-        (build_magic_angle_twisted, "build_magic_angle_twisted"),
-    ]:
-        registry.register(BuilderSpec(
-            name=name, category="nanostructure", callable=fn,
-            description=f"Build {name.replace('build_', '').replace('_', ' ')} structure",
-            output_type=Crystal,
-            parameter_schema={
-                "type": "object",
-                "properties": {
-                    "bottom": {},
-                    "top": {},
-                    "angle": {"type": "number"},
-                },
-                "required": ["bottom", "top", "angle"],
+    registry.register(BuilderSpec(
+        name="build_twisted_bilayer", category="nanostructure",
+        callable=build_twisted_bilayer,
+        description="Build twisted bilayer structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "layer": {},
+                "twist_angle": {"type": "number"},
             },
-        ))
+            "required": ["layer", "twist_angle"],
+        },
+    ))
+    registry.register(BuilderSpec(
+        name="build_magic_angle_twisted", category="nanostructure",
+        callable=build_magic_angle_twisted,
+        description="Build magic-angle twisted bilayer structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "layer": {},
+                "n": {"type": "integer"},
+                "m": {"type": "integer"},
+            },
+            "required": ["layer", "n", "m"],
+        },
+    ))
     registry.register(BuilderSpec(
         name="build_twisted_multilayer", category="nanostructure",
         callable=build_twisted_multilayer,
@@ -385,9 +432,10 @@ def register_all():
         parameter_schema={
             "type": "object",
             "properties": {
-                "layers": {"type": "array"},
-                "angles": {"type": "array", "items": {"type": "number"}},
+                "layer": {},
+                "num_layers": {"type": "integer"},
+                "twist_angles": {"type": "array", "items": {"type": "number"}},
             },
-            "required": ["layers", "angles"],
+            "required": ["layer", "num_layers", "twist_angles"],
         },
     ))

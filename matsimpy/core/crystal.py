@@ -58,6 +58,9 @@ from ._validation import (
     validate_site_properties,
 )
 
+
+_MAX_PERIODIC_IMAGE_CACHE_ATOMS = 1_000_000
+
 if TYPE_CHECKING:
     from ..analysis.selection import AtomSelection
     from ..calculator.base import Calculator
@@ -1310,9 +1313,8 @@ class Crystal(Structure):
         n_total_images = int(np.prod([len(r) for r in image_ranges])) - 1
 
         # Check for excessive memory usage
-        max_cache_atoms = 1_000_000  # Limit to ~1M atoms in cache
         estimated_atoms = n_atoms * n_total_images
-        if estimated_atoms > max_cache_atoms:
+        if estimated_atoms > _MAX_PERIODIC_IMAGE_CACHE_ATOMS:
             warnings.warn(
                 f"Large periodic image cache: {estimated_atoms:,} atoms. "
                 f"This may use significant memory. Consider using a smaller cutoff "

@@ -47,22 +47,19 @@ class TestIOFormatContract:
 
     def test_round_trip(self, handler, nacl, water, tmp_path):
         """Write then read produces an equivalent structure."""
-        if handler.name in ("pdb",):
-            pytest.skip("PDB format has known round-trip limitations")
         if handler.supports_crystal:
             structure = nacl
         elif handler.supports_molecule:
             structure = water
         else:
-            pytest.skip("Handler supports neither crystal nor molecule")
+            pytest.fail(
+                f"Read/write handler {handler.name!r} supports no structure type"
+            )
 
         ext = handler.extensions[0]
         path = tmp_path / f"test{ext}"
 
-        try:
-            handler.writer(structure, str(path))
-        except Exception:
-            pytest.skip(f"Writer raised exception (format-specific issue)")
+        handler.writer(structure, str(path))
 
         result = handler.reader(str(path))
         assert result is not None

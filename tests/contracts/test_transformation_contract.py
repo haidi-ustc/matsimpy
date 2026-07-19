@@ -30,19 +30,56 @@ def water():
 all_specs = registry.list_all()
 spec_ids = [s.name for s in all_specs]
 
+# Parameter names known to expect Structure-like objects in kwargs.
+_STRUCTURE_PARAMS = frozenset({"molecule2", "other"})
+
+_IDENTITY_MATRIX = [
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.0, 1.0],
+]
+
+_VALID_KWARG_OVERRIDES = {
+    "apply_deformation": {"deformation_matrix": _IDENTITY_MATRIX},
+    "optimize_lattice": {"target_volume": 180.0},
+    "rotate_lattice": {"rotation_matrix": _IDENTITY_MATRIX},
+    "transform_lattice": {"transformation_matrix": _IDENTITY_MATRIX},
+    "make_supercell": {"scaling_matrix": [1, 1, 1]},
+    "fragment_molecule": {"break_indices": [[0, 1]]},
+}
+
+
+def _structure_for_param(name, spec):
+    """Return an appropriate Crystal or Molecule fixture for a structure param."""
+    if spec.output_type == Molecule or Molecule in spec.applicable_types:
+        return Molecule(
+            ['O', 'H', 'H'],
+            [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+        )
+    return Crystal(
+        ['Na', 'Cl'],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        Lattice.cubic(5.64),
+    )
+
 
 def _minimal_kwargs(spec):
     """Build minimally valid kwargs from the spec's parameter_schema."""
     schema = spec.parameter_schema or {}
     props = schema.get("properties", {})
     kwargs = {}
-    for name, prop in props.items():
-        if "default" in prop:
+    required = schema.get("required", [])
+    for name in required:
+        prop = props[name]
+        if name in _STRUCTURE_PARAMS:
+            kwargs[name] = _structure_for_param(name, spec)
+        elif "default" in prop:
             kwargs[name] = prop["default"]
         elif "oneOf" in prop:
             kwargs[name] = _value_from_schema(prop["oneOf"][0])
         else:
             kwargs[name] = _value_from_schema(prop)
+    kwargs.update(_VALID_KWARG_OVERRIDES.get(spec.name, {}))
     return kwargs
 
 
@@ -54,9 +91,9 @@ def _value_from_schema(schema):
     if t == "string":
         if "enum" in schema:
             return schema["enum"][0]
-        return "test"
+        return "Cu"
     elif t == "number":
-        return 0.1
+        return 1.0
     elif t == "integer":
         return 0
     elif t == "boolean":
@@ -65,6 +102,8 @@ def _value_from_schema(schema):
         item_schema = schema.get("items", {"type": "number"})
         min_items = schema.get("minItems", 1)
         return [_value_from_schema(item_schema)] * min_items
+    elif t == "object":
+        return {}
     return None
 
 
@@ -74,39 +113,40 @@ class TestTransformationContract:
 
     def test_returns_new_object(self, spec, nacl, water):
         """Every transformation returns a new object."""
-        structure = nacl if Crystal in spec.applicable_types else water
         kwargs = _minimal_kwargs(spec)
-        try:
+        structures = []
+        if Crystal in spec.applicable_types:
+            structures.append(nacl)
+        if Molecule in spec.applicable_types:
+            structures.append(water)
+
+        for structure in structures:
             result = spec.callable(structure, **kwargs)
             assert id(result) != id(structure)
-        except (ValueError, TypeError, IndexError):
-            # Some transforms require specific valid kwargs that
-            # the auto-generated minimal ones can't provide.
-            # That's OK — type checking tests catch those separately.
-            pytest.skip("Requires more specific kwargs than auto-generated")
+            assert isinstance(result, spec.output_type)
+            if len(spec.applicable_types) > 1:
+                assert isinstance(result, type(structure))
 
     def test_type_constraint(self, spec, nacl, water):
         """Registry.apply rejects incompatible types."""
-        # Find a truly incompatible type
-        if Crystal in spec.applicable_types and Molecule not in spec.applicable_types:
-            bad_structure = water
-        elif Molecule in spec.applicable_types and Crystal not in spec.applicable_types:
-            bad_structure = nacl
-        else:
-            pytest.skip("Transform accepts both Crystal and Molecule")
         kwargs = _minimal_kwargs(spec)
         with pytest.raises(TypeError):
-            registry.apply(spec.name, bad_structure, **kwargs)
+            registry.apply(spec.name, object(), **kwargs)
 
     def test_registry_apply_works(self, spec, nacl, water):
         """Registry.apply works with valid type."""
-        structure = nacl if Crystal in spec.applicable_types else water
         kwargs = _minimal_kwargs(spec)
-        try:
+        structures = []
+        if Crystal in spec.applicable_types:
+            structures.append(nacl)
+        if Molecule in spec.applicable_types:
+            structures.append(water)
+
+        for structure in structures:
             result = registry.apply(spec.name, structure, **kwargs)
-            assert result is not None
-        except (ValueError, TypeError, IndexError):
-            pytest.skip("Requires more specific kwargs")
+            assert isinstance(result, spec.output_type)
+            if len(spec.applicable_types) > 1:
+                assert isinstance(result, type(structure))
 
 
 def test_transformation_registry_validates_required_parameters_before_calling(nacl):
@@ -159,3 +199,31 @@ def test_transformation_registry_validates_parameter_types_before_calling(nacl):
     with pytest.raises(TypeError, match="Parameter 'scale' must be a number"):
         local_registry.apply("dummy", nacl, scale="large")
     assert called is False
+
+
+def test_split_atom_registry_accepts_species_list():
+    molecule = Molecule(["O"], [[0.0, 0.0, 0.0]])
+
+    result = registry.apply(
+        "split_atom",
+        molecule,
+        index=0,
+        species=["H", "H"],
+        positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]],
+    )
+
+    assert isinstance(result, Molecule)
+    assert result.species == ("H", "H")
+
+
+def test_split_atom_registry_rejects_more_species_than_positions():
+    molecule = Molecule(["O"], [[0.0, 0.0, 0.0]])
+
+    with pytest.raises(ValueError, match="species.*at most 2"):
+        registry.apply(
+            "split_atom",
+            molecule,
+            index=0,
+            species=["H", "H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]],
+        )

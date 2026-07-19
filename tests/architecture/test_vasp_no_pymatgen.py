@@ -8,7 +8,10 @@ VASP_DIR = Path(__file__).parents[2] / "matsimpy" / "calculator" / "vasp"
 
 
 def test_vasp_runtime_does_not_require_pymatgen():
-    import tomllib
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
 
     data = tomllib.loads((VASP_DIR.parents[2] / "pyproject.toml").read_text())
     assert not any(dep.lower().startswith("pymatgen") for dep in data["project"]["dependencies"])

@@ -37,6 +37,7 @@ dev = [
     "pytest>=6.0",
     "pytest-cov>=2.12",
     "pytest-xdist",
+    "tomli; python_version < '3.11'",
 ]
 storage = [
     "maggma>=0.70.0",

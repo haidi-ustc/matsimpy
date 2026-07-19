@@ -8,15 +8,13 @@ from pathlib import Path
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
-    tomllib = None
+    import tomli as tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _read_pyproject():
-    if tomllib is None:
-        raise RuntimeError("tomllib is required for packaging contract tests")
     return tomllib.loads((ROOT / "pyproject.toml").read_text())
 
 

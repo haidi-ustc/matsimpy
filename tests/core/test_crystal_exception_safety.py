@@ -1,7 +1,7 @@
 """Tests for exception safety and rollback in Crystal operations."""
 import unittest
+from unittest.mock import patch
 import numpy as np
-import warnings
 
 from matsimpy.core import Crystal, Lattice
 
@@ -81,10 +81,13 @@ class TestCrystalExceptionSafety(unittest.TestCase):
 
     def test_large_supercell_warning(self):
         """Test that large periodic image cache triggers warning."""
-        # Skip this test as it requires generating too many periodic images
-        # which makes it very slow. The warning logic is tested in the code itself.
-        # To test manually, use a structure with cutoff that exceeds 1M atoms threshold.
-        self.skipTest("Skipping slow test - warning logic verified in code")
+        with patch(
+            "matsimpy.core.crystal._MAX_PERIODIC_IMAGE_CACHE_ATOMS", 1
+        ):
+            with self.assertWarnsRegex(UserWarning, "Large periodic image cache"):
+                images = self.crystal._get_periodic_images(5.0)
+
+        self.assertGreater(len(images), 1)
 
     def test_single_atom_query_optimization(self):
         """Test that single-atom query optimization works correctly."""

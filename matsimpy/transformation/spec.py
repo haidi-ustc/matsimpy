@@ -24,7 +24,8 @@ class TransformationSpec:
         description: One-line human-readable summary.
         applicable_types: Tuple of types the transform accepts,
             e.g. ``(Crystal, Molecule)`` or ``(Crystal,)``.
-        output_type: The type returned (usually same as input).
+        output_type: The returned type, or a tuple of possible returned types
+            for transformations that preserve one of several input types.
         preserves_composition: True if species/counts are unchanged.
         preserves_lattice: True if the lattice matrix is unchanged.
         preserves_site_properties: True if per-atom properties survive.
@@ -38,7 +39,7 @@ class TransformationSpec:
     callable: Callable
     description: str = ""
     applicable_types: tuple = ()
-    output_type: type | None = None
+    output_type: type | tuple[type, ...] | None = None
     preserves_composition: bool = True
     preserves_lattice: bool = True
     preserves_site_properties: bool = True

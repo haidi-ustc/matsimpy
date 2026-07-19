@@ -164,7 +164,7 @@ def write_PDB(
 
             # Format: ATOM  serial  name alt res chain resseq x y z occ temp element
             f.write(
-                "ATOM  {:5d} {:>4s} {:1s}{:3s} {:1s}{:4d}    {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}\n".format(
+                "ATOM  {:5d} {:>4s}{:1s}{:3s} {:1s}{:4d}    {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}\n".format(
                     atom_num,
                     atom_name,
                     " ",  # alt location

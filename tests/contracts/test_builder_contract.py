@@ -5,7 +5,7 @@ Tests: output_type correctness.
 """
 
 import pytest
-from matsimpy.core import Crystal, Molecule
+from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.builders.registry import BuilderRegistry, BuilderSpec, registry
 
 
@@ -13,11 +13,65 @@ all_specs = registry.list_all()
 spec_ids = [s.name for s in all_specs]
 
 
-_STRUCTURE_PARAMS = frozenset({"structure", "substrate", "film", "bottom", "top", "layers", "other"})
+@pytest.fixture
+def nacl():
+    return Crystal(
+        ['Na', 'Cl'],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        Lattice.cubic(5.64),
+    )
+
+
+@pytest.fixture
+def water():
+    return Molecule(
+        ['O', 'H', 'H'],
+        [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+    )
+
+
+# Parameter names known to expect Structure-like objects.
+# The contract test provides a real Crystal or Molecule fixture for these.
+_STRUCTURE_PARAMS = frozenset({
+    "structure", "bulk", "slab", "adsorbate",
+    "substrate", "film", "bottom", "top", "layers", "layer",
+    "base_structure", "base_2d", "other",
+})
+
+_VALID_KWARG_OVERRIDES = {
+    "generate_random_alloy": {
+        "substitution_species": ["K"],
+        "site_species": "Na",
+    },
+    "generate_ordered_alloy": {"substitution_pattern": {0: "K"}},
+    "generate_intermetallic": {
+        "elements": ["Fe", "Pt"],
+        "composition": "AB",
+        "structure_type": "L1_0",
+    },
+    "create_interstitial": {"positions": [0.25, 0.25, 0.25]},
+    "create_antisite": {"index1": 0, "index2": 1},
+    "build_from_smiles": {"smiles": "O"},
+    "build_magic_angle_twisted": {"n": 2, "m": 1},
+    "build_twisted_multilayer": {"num_layers": 2},
+}
+
+
+def _structure_for_param(name, spec):
+    """Return an appropriate Crystal or Molecule fixture for a structure param."""
+    if spec.output_type == Molecule:
+        return Molecule(['O', 'H', 'H'],
+                        [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+    # Default: Crystal
+    return Crystal(
+        ['Na', 'Cl'],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        Lattice.cubic(5.64),
+    )
 
 
 def _minimal_kwargs(spec):
-    """Build minimally valid kwargs from spec's parameter_schema, only required fields."""
+    """Build minimally valid kwargs from spec's parameter_schema."""
     schema = spec.parameter_schema or {}
     props = schema.get("properties", {})
     required = schema.get("required", [])
@@ -26,13 +80,14 @@ def _minimal_kwargs(spec):
         if name not in required:
             continue
         if name in _STRUCTURE_PARAMS:
-            continue  # needs actual Structure — caller provides
-        if "default" in prop:
+            kwargs[name] = _structure_for_param(name, spec)
+        elif "default" in prop:
             kwargs[name] = prop["default"]
         elif "oneOf" in prop:
             kwargs[name] = _value_from_schema(prop["oneOf"][0])
         else:
             kwargs[name] = _value_from_schema(prop)
+    kwargs.update(_VALID_KWARG_OVERRIDES.get(spec.name, {}))
     return kwargs
 
 
@@ -55,6 +110,8 @@ def _value_from_schema(schema):
         item_schema = schema.get("items", {"type": "number"})
         min_items = schema.get("minItems", 1)
         return [_value_from_schema(item_schema)] * min_items
+    elif t == "object":
+        return {}
     return None
 
 
@@ -63,7 +120,6 @@ class TestBuilderContract:
 
     def test_returns_correct_type(self, spec):
         """Builder returns the declared output_type."""
-        # Skip builders that require optional deps not installed
         if spec.requires_optional:
             for dep in spec.requires_optional:
                 try:
@@ -72,11 +128,8 @@ class TestBuilderContract:
                     pytest.skip(f"Optional dependency {dep} not installed")
 
         kwargs = _minimal_kwargs(spec)
-        try:
-            result = spec.callable(**kwargs)
-            assert isinstance(result, spec.output_type)
-        except (ValueError, TypeError, IndexError) as e:
-            pytest.skip(f"Requires more specific kwargs: {e}")
+        result = spec.callable(**kwargs)
+        assert isinstance(result, spec.output_type)
 
     def test_output_is_not_none(self, spec):
         """Builder output is not None."""
@@ -88,11 +141,8 @@ class TestBuilderContract:
                     pytest.skip(f"Optional dependency {dep} not installed")
 
         kwargs = _minimal_kwargs(spec)
-        try:
-            result = spec.callable(**kwargs)
-            assert result is not None
-        except (ValueError, TypeError, IndexError):
-            pytest.skip("Requires more specific kwargs")
+        result = spec.callable(**kwargs)
+        assert result is not None
 
 
 def test_builder_registry_validates_required_parameters_before_calling():
@@ -143,3 +193,15 @@ def test_builder_registry_validates_parameter_types_before_calling():
     with pytest.raises(TypeError, match="Parameter 'count' must be an integer"):
         local_registry.build("dummy", count="two")
     assert called is False
+
+
+def test_generate_intermetallic_registry_accepts_documented_composition():
+    result = registry.build(
+        "generate_intermetallic",
+        elements=["Fe", "Pt"],
+        composition="AB",
+        structure_type="L1_0",
+        lattice_constant=3.85,
+    )
+
+    assert isinstance(result, Crystal)
