@@ -6,13 +6,28 @@ import numpy as np
 import pytest
 
 from matsimpy.calculator.vasp.outputs import Vasprun
-from matsimpy.core import Crystal, Lattice
-from matsimpy.electronic_structure import BandStructure, BandStructureSymmLine, Spin
+from matsimpy.core import Crystal, Lattice, Trajectory
+from matsimpy.electronic_structure import (
+    BandStructure,
+    BandStructureSymmLine,
+    CompleteDos,
+    ComputedStructureEntry,
+    Dos,
+    Spin,
+)
 from matsimpy.io.volumetric import VolumetricData
 from matsimpy.io.wannier import Unk
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vasp" / "vasprun.xml"
+
+
+def test_supported_vasprun_results_are_native():
+    vasprun = Vasprun(FIXTURE)
+    assert isinstance(vasprun.tdos, Dos)
+    assert isinstance(vasprun.complete_dos, CompleteDos)
+    assert isinstance(vasprun.get_computed_entry(), ComputedStructureEntry)
+    assert isinstance(vasprun.get_trajectory(), Trajectory)
 
 
 @pytest.mark.requires_pymatgen

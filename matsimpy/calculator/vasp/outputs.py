@@ -73,6 +73,7 @@ def micro_pyawk(filename, search, results=None, debug=None, postdebug=None):
 def unitized(unit):
     """Compatibility decorator retained without an optional runtime dependency."""
     def decorator(func):
+        func.__unit__ = unit
         return func
     return decorator
 
@@ -90,7 +91,8 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from pymatgen.util.typing import Kpoint, PathLike
+    Kpoint = tuple[float, float, float]
+    PathLike = str | os.PathLike
 
 
 logger = logging.getLogger(__name__)

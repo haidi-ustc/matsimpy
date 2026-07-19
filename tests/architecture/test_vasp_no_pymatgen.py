@@ -7,7 +7,6 @@ import pytest
 VASP_DIR = Path(__file__).parents[2] / "matsimpy" / "calculator" / "vasp"
 
 
-@pytest.mark.xfail(strict=True, reason="migration characterization: remove in Task 9")
 def test_vasp_production_modules_do_not_import_pymatgen():
     violations = []
     for path in VASP_DIR.glob("*.py"):
