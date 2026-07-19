@@ -27,3 +27,10 @@ def test_production_electronic_structure_does_not_import_pymatgen():
             if any(name == "pymatgen" or name.startswith("pymatgen.") for name in names):
                 violations.append(f"{path.name}:{node.lineno}")
     assert violations == []
+
+
+def test_electronic_structure_docs_do_not_advertise_legacy_decoder():
+    docs = PACKAGE_DIR.parents[1] / "docs" / "api_reference" / "electronic_structure.rst"
+    text = docs.read_text(encoding="utf-8")
+    assert "decode_legacy_pymatgen_dict" not in text
+    assert "Legacy decoding" not in text

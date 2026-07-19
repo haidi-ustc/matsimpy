@@ -2,9 +2,7 @@ Electronic Structure
 ====================
 
 MatSimPy provides native electronic-structure objects used directly by its
-VASP parsers. They do not require pymatgen. Supported legacy pymatgen-shaped
-MSON dictionaries can be decoded explicitly with
-``decode_legacy_pymatgen_dict`` without importing pymatgen.
+VASP parsers. They use MatSimPy core structures and do not require pymatgen.
 
 VASP example
 ------------
@@ -52,8 +50,3 @@ Computed entries
 
 .. automodule:: matsimpy.electronic_structure.entries
    :members:
-
-Legacy decoding
----------------
-
-.. autofunction:: matsimpy.electronic_structure.decode_legacy_pymatgen_dict
