@@ -4,6 +4,7 @@ Test data copied from thirds/pymatgen-core/test-files/io/vasp/outputs/.
 Uses matsimpy constructs. May import pymatgen as optional reference oracle.
 """
 
+import json
 import os
 import pytest
 import numpy as np
@@ -31,6 +32,9 @@ def test_chgcar_native_arithmetic_and_serialization():
         distance_matrix=np.full((1, 2, 2, 2), 99.0),
     )
     assert cached.get_integrated_diff(0, 1.0)[-1, 1] == 0
+    restored = MontyDecoder().process_decoded(json.loads(json.dumps(cached.as_dict())))
+    assert type(restored) is Chgcar
+    assert restored.get_integrated_diff(0, 1.0)[-1, 1] == 0
 
 
 class TestOutcar:

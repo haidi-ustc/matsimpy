@@ -83,3 +83,27 @@ Pinned pymatgen parity still holds below the periodic boundary. At radius 1 for 
 boundary samples; the approved unique-sample minimum-image semantics return the
 mathematically expected 4 / 8 = 0.5. The parity regression documents this intentional
 oracle discrepancy.
+
+## Cached distance-matrix serialization follow-up
+
+RED:
+
+`pytest tests/io/test_volumetric.py::test_cached_distance_matrix_json_roundtrip_preserves_sparse_cache tests/io/test_volumetric.py::test_cached_distance_matrix_json_keys_are_validated tests/calculator/test_vasp_outputs.py::test_chgcar_native_arithmetic_and_serialization -q`
+
+Result: 2 failed and 4 passed. Both cached round trips failed because JSON converted
+integer site keys to strings and distance-matrix validation rejected those strings.
+
+GREEN:
+
+The same focused command completed with 6 passed. Distance caches now serialize with
+canonical decimal-string site keys and deserialize those keys back to integers.
+Sparse caches retain only their supplied sites, full VASP caches remain active after
+a real `json.dumps`/`json.loads` plus `MontyDecoder` round trip, and malformed,
+fractional, negative, and out-of-range string keys remain rejected.
+
+Final focused verification:
+
+`pytest tests/io/test_volumetric.py tests/calculator/test_vasp_outputs.py tests/calculator/test_vasp_outputs_parity.py -q`
+
+Result: 29 passed. The run emitted 20 existing missing-POTCAR warnings from VASP
+fixture parsing and no failures.

@@ -81,3 +81,26 @@ def test_supplied_distance_matrix_is_used_and_validated(si_crystal):
             {"total": np.ones((2, 2, 2))},
             distance_matrix=np.zeros((2, 2)),
         )
+
+
+def test_cached_distance_matrix_json_roundtrip_preserves_sparse_cache():
+    crystal = Crystal(["Si", "Ge"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(2))
+    distances = {1: np.full((2, 2, 2), 99.0)}
+    volume = VolumetricData(crystal, {"total": np.ones((2, 2, 2))}, distance_matrix=distances)
+
+    serialized = json.loads(json.dumps(volume.as_dict()))
+    assert serialized["distance_matrix"] == {"1": distances[1].tolist()}
+    restored = MontyDecoder().process_decoded(serialized)
+
+    assert set(restored._distance_matrix) == {1}
+    assert restored.get_integrated_diff(1, 1.0)[-1, 1] == 0
+
+
+@pytest.mark.parametrize("invalid_key", ["site-0", "1.5", "-1", "2"])
+def test_cached_distance_matrix_json_keys_are_validated(invalid_key):
+    crystal = Crystal(["Si", "Ge"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(2))
+    payload = VolumetricData(crystal, {"total": np.ones((2, 2, 2))}).as_dict()
+    payload["distance_matrix"] = {invalid_key: np.zeros((2, 2, 2)).tolist()}
+
+    with pytest.raises(ValueError, match="invalid site index"):
+        MontyDecoder().process_decoded(json.loads(json.dumps(payload)))

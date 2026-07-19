@@ -41,7 +41,15 @@ class VolumetricData(MSONable):
         if isinstance(distance_matrix, dict):
             cache = {}
             for index, distances in distance_matrix.items():
-                if not isinstance(index, (int, np.integer)) or not 0 <= int(index) < len(self.structure):
+                if isinstance(index, str):
+                    if not index.isascii() or not index.isdecimal() or str(int(index)) != index:
+                        raise ValueError("distance_matrix contains an invalid site index")
+                    index = int(index)
+                if (
+                    isinstance(index, (bool, np.bool_))
+                    or not isinstance(index, (int, np.integer))
+                    or not 0 <= int(index) < len(self.structure)
+                ):
                     raise ValueError("distance_matrix contains an invalid site index")
                 array = np.asarray(distances, dtype=float)
                 if array.shape != self.dim:
@@ -191,7 +199,7 @@ class VolumetricData(MSONable):
             "structure": self.structure.as_dict(),
             "data": {key: value.tolist() for key, value in self.data.items()},
             "distance_matrix": (
-                {index: distances.tolist() for index, distances in self._distance_matrix.items()}
+                {str(index): distances.tolist() for index, distances in self._distance_matrix.items()}
                 if self.distance_matrix is not None
                 else None
             ),
