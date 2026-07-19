@@ -55,3 +55,91 @@ def test_trajectory_recursively_serializes_extra_metadata(si_crystal):
     assert restored_extras["values"] == [1.0, 2.0]
     assert isinstance(extras["nested"][0]["lattice"], Lattice)
     assert isinstance(extras["values"], np.ndarray)
+
+
+def _metadata_trajectory(si_crystal):
+    frames = []
+    for index in range(4):
+        frame = Crystal(
+            si_crystal.species,
+            si_crystal.frac_positions + index * 0.01,
+            si_crystal.lattice,
+        )
+        frame._extra_properties = {"index": index, "nested": {"values": [index]}}
+        frames.append(frame)
+    return Trajectory(
+        frames,
+        constant_lattice=True,
+        frame_properties=[{"energy": -index} for index in range(4)],
+        charge=1.5,
+        spin=2.0,
+        spin_multiplicity=3,
+        time_step=0.5,
+        coords_are_displacement=True,
+        base_positions=si_crystal.frac_positions,
+    )
+
+
+@pytest.mark.parametrize(
+    ("selection", "expected"),
+    [
+        (slice(1, 3), [1, 2]),
+        (slice(None, None, 2), [0, 2]),
+        ([3, 1], [3, 1]),
+        (np.array([2, 0]), [2, 0]),
+    ],
+)
+def test_trajectory_selection_subsets_frames_and_preserves_metadata(
+    si_crystal, selection, expected
+):
+    trajectory = _metadata_trajectory(si_crystal)
+
+    selected = trajectory[selection]
+
+    assert [frame._extra_properties["index"] for frame in selected] == expected
+    assert selected.frame_properties == tuple({"energy": -index} for index in expected)
+    assert selected.constant_lattice is True
+    assert selected.charge == 1.5
+    assert selected.spin == 2.0
+    assert selected.spin_multiplicity == 3
+    assert selected.time_step == 0.5
+    assert selected.coords_are_displacement is True
+    assert np.array_equal(selected.base_positions, trajectory.base_positions)
+
+
+def test_trajectory_empty_slice_preserves_metadata(si_crystal):
+    trajectory = _metadata_trajectory(si_crystal)
+
+    selected = trajectory[1:1]
+
+    assert len(selected) == 0
+    assert selected.frame_properties == ()
+    assert selected.constant_lattice is True
+    assert selected.coords_are_displacement is True
+    assert np.array_equal(selected.base_positions, trajectory.base_positions)
+
+
+def test_trajectory_slice_roundtrips_metadata_and_is_independent(si_crystal):
+    trajectory = _metadata_trajectory(si_crystal)
+    selected = trajectory[1:3]
+
+    restored = MontyDecoder().process_decoded(selected.as_dict())
+    selected.frame_properties[0]["energy"] = 99
+    selected[0]._extra_properties["nested"]["values"].append(99)
+    selected.base_positions[0, 0] = 99
+
+    assert restored.frame_properties == ({"energy": -1}, {"energy": -2})
+    assert restored[0]._extra_properties["index"] == 1
+    assert trajectory.frame_properties[1] == {"energy": -1}
+    assert trajectory[1]._extra_properties["nested"]["values"] == [1]
+    assert trajectory.base_positions[0, 0] != 99
+
+
+def test_trajectory_integer_selection_remains_independent_crystal(si_crystal):
+    trajectory = _metadata_trajectory(si_crystal)
+
+    selected = trajectory[1]
+    selected._extra_properties["nested"]["values"].append(99)
+
+    assert isinstance(selected, Crystal)
+    assert trajectory[1]._extra_properties["nested"]["values"] == [1]

@@ -67,10 +67,36 @@ class Trajectory(MSONable):
     @overload
     def __getitem__(self, index: slice) -> "Trajectory": ...
 
-    def __getitem__(self, index: Union[int, slice]) -> Union[Crystal, "Trajectory"]:
+    @overload
+    def __getitem__(self, index: Union[Sequence[int], np.ndarray]) -> "Trajectory": ...
+
+    def __getitem__(
+        self, index: Union[int, slice, Sequence[int], np.ndarray]
+    ) -> Union[Crystal, "Trajectory"]:
+        if isinstance(index, (int, np.integer)):
+            return self._copy_frame(self._frames[int(index)])
+
         if isinstance(index, slice):
-            return self.__class__(self._frames[index], constant_lattice=self.constant_lattice)
-        return self._frames[index]
+            indices = list(range(len(self)))[index]
+        else:
+            array = np.asarray(index)
+            if array.ndim != 1 or not np.issubdtype(array.dtype, np.integer):
+                raise TypeError("trajectory indices must be a one-dimensional integer sequence")
+            indices = [int(value) for value in array]
+
+        return self.__class__(
+            (self._frames[value] for value in indices),
+            constant_lattice=self.constant_lattice,
+            frame_properties=[self.frame_properties[value] for value in indices],
+            charge=self.charge,
+            spin=self.spin,
+            spin_multiplicity=self.spin_multiplicity,
+            time_step=self.time_step,
+            coords_are_displacement=self.coords_are_displacement,
+            # Base positions describe the sites shared by every displacement
+            # frame, so frame selection copies rather than subsets them.
+            base_positions=self.base_positions,
+        )
 
     def __iter__(self) -> Iterator[Crystal]:
         return iter(self._frames)
