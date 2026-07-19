@@ -19,3 +19,17 @@
 - Line branches split at repeated labeled coordinates; distinct adjacent labeled endpoints remain one valid two-point branch.
 - Reconstruction preserves labels, all spin channels, projections, structure reference, and optional Fermi override.
 - `ruff` was unavailable in the environment; `compileall` and `git diff --check` were used alongside tests.
+
+## Review-fix RED evidence
+
+- Four dependency-free regressions failed before the fix: empty symmetry-line k-points raised `IndexError`, zero bands were accepted, consecutive distinct labels were not split, and Cartesian k-points lost fractional-coordinate labels.
+- The new real `Vasprun.get_band_structure()` parity initially exposed a test-side spin-enum mismatch; using each implementation's own `Spin` enum made the comparison genuine.
+
+## Review-fix GREEN evidence
+
+- Branches now split whenever the current and previous k-points are labeled, matching pinned pymatgen 2025.6.14 indices and names even when adjacent coordinates differ.
+- Empty k-point and zero-band inputs raise explicit `ValueError`s. Cartesian inputs are converted to fractional coordinates before label matching.
+- The existing `tests/calculator/fixtures/vasp/vasprun.xml` genuinely exercises both parsers' `get_band_structure()` integration. It produces ordinary 24-k-point band structures with no labels, projections, or branches; the parity test compares their class selection, Fermi energy, reciprocal lattice, k-points/labels, all spin bands, empty projections/branches, and the complete gap dictionary. The synthetic pinned-oracle parity test separately covers symmetry-line labels and branch endpoints/names.
+- `pytest tests/electronic_structure/test_bandstructure.py tests/calculator/test_vasp_outputs.py -v`: 21 passed.
+- `pytest tests/calculator/test_vasp_outputs_parity.py -k band -m requires_pymatgen -v`: 2 passed, 1 deselected.
+- `pytest tests/architecture/test_vasp_no_pymatgen.py -v`: 1 passed, 1 expected failure.

@@ -69,13 +69,16 @@ class BandStructure(MSONable):
         labels_dict = labels_dict or {}
         self.kpoints = []
         for coords_i in coords:
+            kpoint = Kpoint(coords_i, lattice, coords_are_cartesian=coords_are_cartesian)
             label = next((name for name, point in labels_dict.items()
-                          if np.linalg.norm(coords_i - np.asarray(getattr(point, "frac_coords", point))) < 1e-4), None)
-            kpoint = Kpoint(coords_i, lattice, label=label, coords_are_cartesian=coords_are_cartesian)
+                          if np.linalg.norm(kpoint.frac_coords - np.asarray(getattr(point, "frac_coords", point))) < 1e-4), None)
+            kpoint.label = label
             self.kpoints.append(kpoint)
             if label is not None:
                 self.labels_dict[label] = kpoint
         nkpoints = len(self.kpoints)
+        if nkpoints == 0:
+            raise ValueError("at least one k-point is required")
         self.bands = {Spin(int(spin)): np.asarray(values, dtype=float) for spin, values in eigenvals.items()}
         if not self.bands:
             raise ValueError("at least one spin channel is required")
@@ -84,6 +87,8 @@ class BandStructure(MSONable):
         if len(shapes) != 1 or len(shape) != 2 or shape[1] != nkpoints:
             raise ValueError("every eigenvalue array must have shape (nbands, nkpoints)")
         self.nb_bands = shape[0]
+        if self.nb_bands == 0:
+            raise ValueError("at least one band is required")
         self.projections = {Spin(int(spin)): np.asarray(values, dtype=float) for spin, values in (projections or {}).items()}
         for spin, values in self.projections.items():
             if spin not in self.bands or values.ndim < 2 or values.shape[:2] != (self.nb_bands, nkpoints):
@@ -166,11 +171,7 @@ class BandStructureSymmLine(BandStructure):
             label = point.label
             distance = distance if label is not None and previous_label is not None else distance + np.linalg.norm(point.cart_coords - previous.cart_coords)
             self.distance.append(float(distance))
-            # A repeated labelled point marks the boundary between two line
-            # segments.  Distinct adjacent labelled points form a valid
-            # two-point segment and must remain together.
-            if (label is not None and previous_label is not None and group
-                    and np.allclose(point.frac_coords, previous.frac_coords)):
+            if label is not None and previous_label is not None and group:
                 groups.append(group); group = []
             group.append(i)
             previous, previous_label = point, label

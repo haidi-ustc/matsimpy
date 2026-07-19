@@ -7,7 +7,7 @@ import pytest
 
 from matsimpy.calculator.vasp.outputs import Vasprun
 from matsimpy.core import Lattice
-from matsimpy.electronic_structure import BandStructureSymmLine, Spin
+from matsimpy.electronic_structure import BandStructure, BandStructureSymmLine, Spin
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vasp" / "vasprun.xml"
@@ -62,3 +62,38 @@ def test_band_structure_parity():
     assert native.get_vbm()["energy"] == pytest.approx(oracle.get_vbm()["energy"])
     assert native.get_cbm()["energy"] == pytest.approx(oracle.get_cbm()["energy"])
     assert native.get_band_gap()["energy"] == pytest.approx(oracle.get_band_gap()["energy"])
+
+
+@pytest.mark.requires_pymatgen
+def test_vasprun_get_band_structure_parity():
+    pytest.importorskip("pymatgen")
+    from pymatgen.electronic_structure.core import Spin as PymatgenSpin
+    from pymatgen.io.vasp.outputs import Vasprun as PymatgenVasprun
+
+    native = Vasprun(FIXTURE).get_band_structure()
+    oracle = PymatgenVasprun(FIXTURE, parse_potcar_file=False).get_band_structure()
+
+    assert isinstance(native, BandStructureSymmLine) == hasattr(oracle, "branches")
+    assert type(native) is BandStructure
+    assert native.efermi == pytest.approx(oracle.efermi)
+    np.testing.assert_allclose(native.lattice_rec.matrix, oracle.lattice_rec.matrix, atol=1e-8)
+    np.testing.assert_allclose(
+        [point.frac_coords for point in native.kpoints],
+        [point.frac_coords for point in oracle.kpoints],
+        atol=1e-8,
+    )
+    assert [point.label for point in native.kpoints] == [point.label for point in oracle.kpoints]
+    assert set(map(int, native.bands)) == set(map(int, oracle.bands))
+    for spin, bands in native.bands.items():
+        np.testing.assert_allclose(bands, oracle.bands[PymatgenSpin(int(spin))], atol=1e-8)
+    assert set(map(int, native.projections)) == set(map(int, oracle.projections))
+    for spin, projections in native.projections.items():
+        np.testing.assert_allclose(projections, oracle.projections[PymatgenSpin(int(spin))], atol=1e-8)
+    native_branches = getattr(native, "branches", [])
+    oracle_branches = getattr(oracle, "branches", [])
+    assert native_branches == oracle_branches
+    native_gap = native.get_band_gap()
+    oracle_gap = oracle.get_band_gap()
+    assert native_gap["energy"] == pytest.approx(oracle_gap["energy"])
+    assert native_gap["direct"] == oracle_gap["direct"]
+    assert native_gap["transition"] == oracle_gap["transition"]
