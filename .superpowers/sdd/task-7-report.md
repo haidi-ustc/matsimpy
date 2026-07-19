@@ -102,3 +102,36 @@ classification, and canonical primitive reciprocal metrics.
 
 The earlier limitation claiming conservative fallback paths for `tI`,
 `oF`/`oI`/`oC`, and `mC` is superseded by this rework.
+
+## Second review rework: remove ASE runtime and test coupling
+
+### RED / GREEN evidence
+
+- RED: the new subprocess regression blocked imports whose top-level package
+  was `ase` or `pymatgen`; importing `matsimpy.symmetry` failed immediately at
+  `from ase.cell import Cell` in `kpath.py`.
+- GREEN: `kpath.py` is now a self-contained NumPy implementation of the narrow
+  3D SC definition subset.  The subprocess imports `matsimpy.symmetry`, builds
+  a silicon `Crystal`, constructs `HighSymmKpath` using spglib, and samples its
+  path while both oracle packages remain blocked.
+- The independent native fixtures no longer construct expected inputs through
+  ASE or call production classification.  Numeric standardized primitive cells
+  cover all 14 families and BCT1/2, ORCF1/2/3, RHL1/2, and MCLC1/2/3/4/5.
+- Pinned pymatgen 2025.6.14 parity checks each metric subvariant's production
+  classification, complete special-point label set and coordinates, branches,
+  interpolated labels, point count, and interpolated fractional coordinates.
+- Fresh complete symmetry result: 98 passed, with no warnings.
+
+### Attribution and licensing
+
+The source header now declares the exact ASE 3.29.0 files, classes/functions,
+data scope, MatSimPy modifications, copyright, BSD-2-Clause terms, and the
+Setyawan--Curtarolo paper/DOI.  `THIRD_PARTY_NOTICES.md` reproduces the required
+BSD-2-Clause notice.  Adapted portions are explicitly identified as third-party
+work; pymatgen remains only a test oracle.
+
+### Runtime contract
+
+No dependency metadata was changed.  There are no executable ASE imports in
+`matsimpy/symmetry` or its tests; mentions are limited to provenance and the
+blocked-import regression.

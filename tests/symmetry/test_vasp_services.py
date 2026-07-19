@@ -1,4 +1,8 @@
 import importlib.util
+import os
+import subprocess
+import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -11,53 +15,85 @@ HAS_SPGLIB = importlib.util.find_spec("spglib") is not None
 HAS_PYMATGEN = importlib.util.find_spec("pymatgen") is not None
 
 
+def test_symmetry_kpath_imports_and_runs_when_ase_and_pymatgen_are_blocked(tmp_path):
+    script = tmp_path / "blocked_symmetry.py"
+    script.write_text(
+        "import builtins\n"
+        "real_import = builtins.__import__\n"
+        "def blocked(name, *args, **kwargs):\n"
+        "    if name.split('.')[0] in {'ase', 'pymatgen'}:\n"
+        "        raise ImportError('blocked optional dependency: ' + name)\n"
+        "    return real_import(name, *args, **kwargs)\n"
+        "builtins.__import__ = blocked\n"
+        "from matsimpy.core import Crystal, Lattice\n"
+        "from matsimpy.symmetry import HighSymmKpath\n"
+        "crystal = Crystal(['Si', 'Si'], [[0, 0, 0], [.25, .25, .25]], Lattice.cubic(5.43))\n"
+        "path = HighSymmKpath(crystal)\n"
+        "assert len(path.get_kpoints(2)[0]) > 0\n"
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.getcwd()
+    result = subprocess.run(
+        [sys.executable, str(script)], env=env, text=True, capture_output=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def _bravais_cases():
     """Primitive cells with generic sites, covering every SC Bravais family."""
-    from ase.cell import Cell
-    from ase.lattice import (
-        BCC, BCT, CUB, FCC, HEX, MCL, MCLC, ORC, ORCC, ORCF, ORCI, RHL, TET,
-    )
-
     lattices = [
-        ("cP", CUB(3)), ("cF", FCC(3)), ("cI", BCC(3)),
-        ("tP", TET(3, 4)), ("tI", BCT(3, 4)),
-        ("oP", ORC(2, 3, 4)), ("oF", ORCF(2, 3, 4)),
-        ("oI", ORCI(2, 3, 4)), ("oC", ORCC(2, 3, 4)),
-        ("hP", HEX(3, 5)), ("hR", RHL(3, 70)),
-        ("mP", MCL(2, 3, 5, 70)), ("mC", MCLC(2, 3, 5, 60)),
+        ("cP", _primitive_cell("cP", 3)), ("cF", _primitive_cell("cF", 3)),
+        ("cI", _primitive_cell("cI", 3)), ("tP", _primitive_cell("tP", 3, 1, 4)),
+        ("tI", _primitive_cell("tI", 3, 1, 4)), ("oP", _primitive_cell("oP", 2, 3, 4)),
+        ("oF", _primitive_cell("oF", 2, 3, 4)), ("oI", _primitive_cell("oI", 2, 3, 4)),
+        ("oC", _primitive_cell("oC", 2, 3, 4)), ("hP", _primitive_cell("hP", 3, 1, 5)),
+        ("hR", _primitive_cell("hR", 3, 1, 1, 70)), ("mP", _primitive_cell("mP", 2, 3, 5, 70)),
+        ("mC", _primitive_cell("mC", 2, 3, 5, 60)),
     ]
-    triclinic = Cell([[2, 0, 0], [.4, 3, 0], [.3, .7, 4]])
+    triclinic = np.array([[2, 0, 0], [.4, 3, 0], [.3, .7, 4]])
     lattices.append(("aP", triclinic))
     return [
-        (key, Crystal(["Si"], [[.123, .234, .345]], Lattice(np.asarray(cell.tocell() if hasattr(cell, "tocell") else cell))))
+        (key, Crystal(["Si"], [[.123, .234, .345]], Lattice(cell)))
         for key, cell in lattices
     ]
 
 
 def _metric_variant_cases():
-    from ase.lattice import BCT, MCLC, ORCF, RHL
-
     lattices = [
-        ("BCT1", BCT(3, 2)), ("BCT2", BCT(3, 5)),
-        ("ORCF1", ORCF(2, 3, 4)), ("ORCF2", ORCF(3, 4, 4.5)),
-        ("ORCF3", ORCF(2.4, 3, 4)),
-        ("RHL1", RHL(3, 70)), ("RHL2", RHL(3, 100)),
-        ("MCLC1", MCLC(3.5461038558, 5.3113186419, 5.9048393325, 86.9380988435)),
-        ("MCLC3", MCLC(4.4677886352, 2.5658580679, 4.8862046920, 38.0591791019)),
-        ("MCLC4", MCLC(4.0189289526, 4.0697563098, 4.4021938100, 49.7471371456)),
-        ("MCLC5", MCLC(4.2082802329, 4.2276386994, 5.0711981480, 68.7528333269)),
+        ("BCT1", _primitive_cell("tI", 3, 1, 2)), ("BCT2", _primitive_cell("tI", 3, 1, 5)),
+        ("ORCF1", _primitive_cell("oF", 2, 3, 4)), ("ORCF2", _primitive_cell("oF", 3, 4, 4.5)),
+        ("ORCF3", _primitive_cell("oF", 2.4, 3, 4)),
+        ("RHL1", _primitive_cell("hR", 3, 1, 1, 70)), ("RHL2", _primitive_cell("hR", 3, 1, 1, 100)),
+        ("MCLC1", _primitive_cell("mC", 3.5461038558, 5.3113186419, 5.9048393325, 86.9380988435)),
+        ("MCLC2", _primitive_cell("mC", 2.3, 2.3354812073372133, 4.3, 80)),
+        ("MCLC3", _primitive_cell("mC", 4.4677886352, 2.5658580679, 4.8862046920, 38.0591791019)),
+        ("MCLC4", _primitive_cell("mC", 2.095253697125836, 2, 3.5, 70)),
+        ("MCLC5", _primitive_cell("mC", 4.2082802329, 4.2276386994, 5.0711981480, 68.7528333269)),
     ]
     cases = [
-        (variant, Crystal(["Si"], [[.123, .234, .345]], Lattice(np.asarray(cell.tocell()))))
+        (variant, Crystal(["Si"], [[.123, .234, .345]], Lattice(cell)))
         for variant, cell in lattices
     ]
     return cases
 
 
-def test_source_definitions_cover_mclc2_boundary_variant():
-    from ase.lattice import MCLC
-
-    assert MCLC(2, 2.309401076758506, 4, 60).variant == "MCLC2"
+def _primitive_cell(key, a, b=1, c=1, alpha=60):
+    """Independent standardized primitive fixtures (SC equations)."""
+    if key == "cP": return a * np.eye(3)
+    if key == "cF": return .5 * np.array([[0, a, a], [a, 0, a], [a, a, 0]])
+    if key == "cI": return .5 * np.array([[-a, a, a], [a, -a, a], [a, a, -a]])
+    if key == "tP": return np.diag([a, a, c])
+    if key == "tI": return .5 * np.array([[-a, a, c], [a, -a, c], [a, a, -c]])
+    if key == "oP": return np.diag([a, b, c])
+    if key == "oF": return .5 * np.array([[0, b, c], [a, 0, c], [a, b, 0]])
+    if key == "oI": return .5 * np.array([[-a, b, c], [a, -b, c], [a, b, -c]])
+    if key == "oC": return np.array([[a/2, -b/2, 0], [a/2, b/2, 0], [0, 0, c]])
+    if key == "hP": return np.array([[a/2, -np.sqrt(3)*a/2, 0], [a/2, np.sqrt(3)*a/2, 0], [0, 0, c]])
+    if key == "hR":
+        co=np.cos(np.radians(alpha)); co2=np.cos(np.radians(alpha/2)); si2=np.sin(np.radians(alpha/2)); q=co/co2
+        return np.array([[a*co2, -a*si2, 0], [a*co2, a*si2, 0], [a*q, 0, a*np.sqrt(1-q*q)]])
+    if key == "mP": return np.array([[a, 0, 0], [0, b, 0], [0, c*np.cos(np.radians(alpha)), c*np.sin(np.radians(alpha))]])
+    if key == "mC": return np.array([[a/2, b/2, 0], [-a/2, b/2, 0], [0, c*np.cos(np.radians(alpha)), c*np.sin(np.radians(alpha))]])
 
 
 @pytest.fixture
@@ -180,9 +216,11 @@ def test_setyawan_curtarolo_kpath_parity_matrix(expected, structure):
         PmgLattice(structure.lattice.matrix), structure.species, structure.frac_positions
     )
     pmg_structure = PmgAnalyzer(pmg_input, symprec=1e-4).get_primitive_standard_structure()
-    reference = PmgKpath(
-        pmg_structure, path_type="setyawan_curtarolo", symprec=1e-4
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="The input structure does not match the expected standard primitive")
+        reference = PmgKpath(
+            pmg_structure, path_type="setyawan_curtarolo", symprec=1e-4
+        )
     assert native.bravais == expected
     assert native.kpath["path"] == reference.kpath["path"]
     assert set(native.kpath["kpoints"]) == set(reference.kpath["kpoints"])
@@ -201,6 +239,33 @@ def test_setyawan_curtarolo_kpath_parity_matrix(expected, structure):
 def test_metric_subvariant_classification(expected, structure):
     path = HighSymmKpath(structure, symprec=1e-5)
     assert path.kpath["variant"] == expected
+
+
+@pytest.mark.requires_pymatgen
+@pytest.mark.skipif(not (HAS_SPGLIB and HAS_PYMATGEN), reason="pymatgen and spglib required")
+@pytest.mark.parametrize("expected,structure", _metric_variant_cases(), ids=lambda value: value if isinstance(value, str) else None)
+def test_every_metric_subvariant_has_exact_pymatgen_parity(expected, structure):
+    from pymatgen.core import Lattice as PmgLattice
+    from pymatgen.core import Structure
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer as PmgAnalyzer
+    from pymatgen.symmetry.bandstructure import HighSymmKpath as PmgKpath
+
+    native = HighSymmKpath(structure, symprec=1e-5)
+    pmg = Structure(PmgLattice(structure.lattice.matrix), structure.species, structure.frac_positions)
+    standardized = PmgAnalyzer(pmg, symprec=1e-5).get_primitive_standard_structure()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="The input structure does not match the expected standard primitive")
+        reference = PmgKpath(standardized, path_type="setyawan_curtarolo", symprec=1e-5)
+    assert native.kpath["variant"] == expected
+    assert native.kpath["path"] == reference.kpath["path"]
+    assert set(native.kpath["kpoints"]) == set(reference.kpath["kpoints"])
+    for label, point in native.kpath["kpoints"].items():
+        assert np.allclose(point, reference.kpath["kpoints"][label], atol=1e-7)
+    actual_points, actual_labels = native.get_kpoints(2, coords_are_cartesian=False)
+    expected_points, expected_labels = reference.get_kpoints(2, coords_are_cartesian=False)
+    assert actual_labels == expected_labels
+    assert len(actual_points) == len(expected_points)
+    assert np.allclose(actual_points, expected_points, atol=1e-7)
 
 
 @pytest.mark.requires_pymatgen
