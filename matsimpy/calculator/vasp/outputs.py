@@ -3947,21 +3947,23 @@ class VolumetricData(BaseVolumetricData):
                 lines += "".join(f"{s:5}" for s in poscar.site_symbols) + "\n"
             lines += "".join(f"{x:6}" for x in poscar.natoms) + "\n"
             lines += "Direct\n"
-            for site in self.structure:
-                dim, b, c = site.frac_coords
-                lines += f"{dim:10.6f}{b:10.6f}{c:10.6f}\n"
+            for coord_a, coord_b, coord_c in self.structure.frac_positions:
+                lines += f"{coord_a:10.6f}{coord_b:10.6f}{coord_c:10.6f}\n"
             lines += " \n"
             file.write(lines)  # type:ignore[arg-type]
             dim = self.dim
 
             write_spin("total")
-            if self.is_spin_polarized:
-                if self.is_soc:
-                    write_spin("diff_x")
-                    write_spin("diff_y")
-                    write_spin("diff_z")
-                else:
-                    write_spin("diff")
+            noncollinear_keys = {"diff_x", "diff_y", "diff_z"}
+            present_noncollinear_keys = noncollinear_keys & self.data.keys()
+            if present_noncollinear_keys and present_noncollinear_keys != noncollinear_keys:
+                missing = ", ".join(sorted(noncollinear_keys - present_noncollinear_keys))
+                raise ValueError(f"noncollinear volumetric data is missing {missing}")
+            if present_noncollinear_keys:
+                for data_type in ("diff_x", "diff_y", "diff_z"):
+                    write_spin(data_type)
+            elif self.is_spin_polarized:
+                write_spin("diff")
 
 
 class Locpot(VolumetricData):
@@ -4799,7 +4801,7 @@ class Xdatcar:
         """Sequence of symbols associated with the Xdatcar.
         Similar to 6th line in VASP 5+ Xdatcar.
         """
-        syms = [site.specie.symbol for site in self.structures[0]]
+        syms = list(self.structures[0].species)
         return [a[0] for a in itertools.groupby(syms)]
 
     @property
@@ -4807,7 +4809,7 @@ class Xdatcar:
         """Sequence of number of sites of each type associated with the Poscar.
         Similar to 7th line in VASP 5+ Xdatcar.
         """
-        syms = [site.specie.symbol for site in self.structures[0]]
+        syms = list(self.structures[0].species)
         return [len(tuple(a[1])) for a in itertools.groupby(syms)]
 
     def concatenate(
@@ -4899,7 +4901,8 @@ class Xdatcar:
         lattice = self.structures[0].lattice
         if np.linalg.det(lattice.matrix) < 0:
             lattice = Lattice(-lattice.matrix)
-        lines = [self.comment, "1.0", str(lattice)]
+        lines = [self.comment, "1.0"]
+        lines.extend(" ".join(f"{component:.16f}" for component in vector) for vector in lattice.matrix)
         lines.extend((" ".join(self.site_symbols), " ".join(map(str, self.natoms))))
 
         format_str = f"{{:.{significant_figures}f}}"
@@ -4912,8 +4915,7 @@ class Xdatcar:
                 or ionicstep_start <= ionicstep_cnt < ionicstep_end  # type: ignore[operator]
             ):
                 lines.append(f"Direct configuration={' ' * (7 - len(str(output_cnt)))}{output_cnt}")
-                for site in structure:
-                    coords = site.frac_coords
+                for coords in structure.frac_positions:
                     line = " ".join(format_str.format(c) for c in coords)
                     lines.append(line)
                 output_cnt += 1

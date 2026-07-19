@@ -37,6 +37,82 @@ def test_chgcar_native_arithmetic_and_serialization():
     assert restored.get_integrated_diff(0, 1.0)[-1, 1] == 0
 
 
+@pytest.mark.parametrize("volumetric_cls_name", ["Chgcar", "Locpot", "Elfcar"])
+def test_scalar_volumetric_native_write_and_read(tmp_path, volumetric_cls_name):
+    from matsimpy.calculator.vasp import outputs
+    from matsimpy.core import Crystal, Lattice
+
+    volumetric_cls = getattr(outputs, volumetric_cls_name)
+    structure = Crystal(["Si"], [[0.125, 0.25, 0.375]], Lattice.cubic(2))
+    total = np.arange(8, dtype=float).reshape(2, 2, 2)
+    path = tmp_path / volumetric_cls_name.upper()
+
+    volumetric_cls(structure, {"total": total}).write_file(path)
+    restored = volumetric_cls.from_file(path)
+
+    np.testing.assert_allclose(restored.structure.frac_positions, structure.frac_positions)
+    np.testing.assert_allclose(restored.data["total"], total)
+
+
+def test_noncollinear_chgcar_native_write_and_read(tmp_path):
+    from matsimpy.calculator.vasp.outputs import Chgcar
+    from matsimpy.core import Crystal, Lattice
+
+    structure = Crystal(["Fe"], [[0.125, 0.25, 0.375]], Lattice.cubic(2))
+    total = np.arange(8, dtype=float).reshape(2, 2, 2)
+    components = {
+        "diff_x": np.full((2, 2, 2), 1.0),
+        "diff_y": np.full((2, 2, 2), 2.0),
+        "diff_z": np.full((2, 2, 2), 3.0),
+    }
+    path = tmp_path / "CHGCAR"
+
+    Chgcar(structure, {"total": total, **components}).write_file(path)
+    restored = Chgcar.from_file(path)
+
+    assert path.read_text().count("   2   2   2\n") == 4
+    np.testing.assert_allclose(restored.data["total"], total)
+    for key, values in components.items():
+        np.testing.assert_allclose(restored.data[key], values)
+
+
+def test_noncollinear_chgcar_rejects_partial_components(tmp_path):
+    from matsimpy.calculator.vasp.outputs import Chgcar
+    from matsimpy.core import Crystal, Lattice
+
+    structure = Crystal(["Fe"], [[0, 0, 0]], Lattice.cubic(2))
+    data = {"total": np.ones((1, 1, 1)), "diff_x": np.ones((1, 1, 1))}
+
+    with pytest.raises(ValueError, match="missing diff_y, diff_z"):
+        Chgcar(structure, data).write_file(tmp_path / "CHGCAR")
+
+
+def test_xdatcar_native_get_str_write_and_roundtrip(tmp_path):
+    from matsimpy.calculator.vasp.outputs import Xdatcar
+    from matsimpy.core import Crystal, Lattice
+
+    lattice = Lattice.cubic(3)
+    frames = [
+        Crystal(["Si", "O"], [[0.0, 0.0, 0.0], [0.25, 0.5, 0.75]], lattice),
+        Crystal(["Si", "O"], [[0.1, 0.2, 0.3], [0.35, 0.6, 0.85]], lattice),
+    ]
+    xdatcar = Xdatcar.__new__(Xdatcar)
+    xdatcar.structures = frames
+    xdatcar.comment = "native trajectory"
+    path = tmp_path / "XDATCAR"
+
+    text = xdatcar.get_str(significant_figures=6)
+    xdatcar.write_file(path, significant_figures=6)
+    restored = Xdatcar(path)
+
+    assert path.read_text() == text
+    assert "Si O\n1 1\n" in text
+    assert len(restored.structures) == len(frames)
+    for actual, expected in zip(restored.structures, frames):
+        assert list(actual.species) == list(expected.species)
+        np.testing.assert_allclose(actual.frac_positions, expected.frac_positions)
+
+
 class TestOutcar:
     def test_from_file(self):
         """Parse OUTCAR from real VASP fixture."""
