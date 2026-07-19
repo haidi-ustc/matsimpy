@@ -3,7 +3,7 @@
 from copy import deepcopy
 from typing import Any, Dict, Mapping, Optional, Union
 
-from monty.json import MSONable, MontyDecoder
+from monty.json import MSONable, MontyDecoder, jsanitize
 
 from matsimpy.core.composition import Composition
 from matsimpy.core.crystal import Crystal
@@ -55,8 +55,8 @@ class ComputedEntry(MSONable):
             "composition": self.composition.as_dict(),
             "energy": self.uncorrected_energy,
             "correction": self.correction,
-            "parameters": deepcopy(self.parameters),
-            "data": deepcopy(self.data),
+            "parameters": jsanitize(self.parameters, strict=True, recursive_msonable=True),
+            "data": jsanitize(self.data, strict=True, recursive_msonable=True),
             "entry_id": self.entry_id,
         }
 

@@ -1,3 +1,6 @@
+import json
+
+import numpy as np
 import pytest
 from monty.json import MontyDecoder
 
@@ -32,3 +35,23 @@ def test_trajectory_copies_frames_and_roundtrips(si_crystal):
     decoded = MontyDecoder().process_decoded(trajectory.as_dict())
     assert decoded[0] == si_crystal
     assert decoded[0]._extra_properties == si_crystal._extra_properties
+
+
+def test_trajectory_recursively_serializes_extra_metadata(si_crystal):
+    extras = {
+        "nested": [{"lattice": Lattice.cubic(3), "label": "Si"}],
+        "values": np.array([1.0, 2.0]),
+    }
+    si_crystal._extra_properties = extras
+    trajectory = Trajectory.from_structures([si_crystal])
+
+    serialized = trajectory.as_dict()
+    json.dumps(serialized)
+    restored = MontyDecoder().process_decoded(serialized)
+
+    restored_extras = restored[0]._extra_properties
+    assert restored_extras["nested"][0]["lattice"] == Lattice.cubic(3)
+    assert restored_extras["nested"][0]["label"] == "Si"
+    assert restored_extras["values"] == [1.0, 2.0]
+    assert isinstance(extras["nested"][0]["lattice"], Lattice)
+    assert isinstance(extras["values"], np.ndarray)

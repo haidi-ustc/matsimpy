@@ -3,7 +3,7 @@
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Iterator, Tuple, Union, overload
 
-from monty.json import MSONable, MontyDecoder
+from monty.json import MSONable, MontyDecoder, jsanitize
 
 from .crystal import Crystal
 
@@ -59,7 +59,11 @@ class Trajectory(MSONable):
             "frames": [
                 {
                     "structure": frame.as_dict(),
-                    "extra_properties": deepcopy(getattr(frame, "_extra_properties", None)),
+                    "extra_properties": jsanitize(
+                        getattr(frame, "_extra_properties", None),
+                        strict=True,
+                        recursive_msonable=True,
+                    ),
                 }
                 for frame in self._frames
             ],
