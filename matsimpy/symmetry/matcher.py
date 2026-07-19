@@ -7,6 +7,27 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 
+# These limits keep adversarial but nonsingular cells from turning the exact
+# integer searches below into unbounded memory or CPU use.  Candidate counts
+# are checked before constructing either ranges' products or coefficient lists.
+_MAX_MINIMUM_IMAGE_CANDIDATES = 1_000_000
+_MAX_BASIS_GRID_CANDIDATES = 1_000_000
+_MAX_BASIS_COMBINATIONS = 1_000_000
+
+
+def _checked_product_size(lengths, limit, search_name):
+    """Return a Cartesian-product size or raise before it is materialized."""
+    size = 1
+    for length in lengths:
+        size *= int(length)
+        if size > limit:
+            raise ValueError(
+                f"{search_name} requires {size} candidates, exceeding the "
+                f"documented candidate limit of {limit}"
+            )
+    return size
+
+
 def _minimum_image_distances(delta, lattice):
     """Return exact Cartesian minimum-image lengths for fractional vectors.
 
@@ -30,6 +51,11 @@ def _minimum_image_distances(delta, lattice):
             )
             for component in displacement
         ]
+        _checked_product_size(
+            (len(values) for values in ranges),
+            _MAX_MINIMUM_IMAGE_CANDIDATES,
+            "minimum-image search",
+        )
         translations = np.asarray(list(itertools.product(*ranges)), dtype=float)
         result[index] = np.min(
             np.linalg.norm((displacement + translations) @ matrix, axis=1)
@@ -70,6 +96,12 @@ class StructureMatcher:
         row_choices = []
         for length in target_lengths:
             bound = int(np.ceil(length * (1.0 + self.ltol) / sigma_min))
+            side = 2 * bound + 1
+            _checked_product_size(
+                (side, side, side),
+                _MAX_BASIS_GRID_CANDIDATES,
+                "lattice-basis search coefficient grid",
+            )
             choices = []
             for coefficients in itertools.product(range(-bound, bound + 1), repeat=3):
                 if coefficients == (0, 0, 0):
@@ -80,6 +112,11 @@ class StructureMatcher:
                     choices.append(coefficients)
             row_choices.append(choices)
 
+        _checked_product_size(
+            (len(choices) for choices in row_choices),
+            _MAX_BASIS_COMBINATIONS,
+            "lattice-basis search row combinations",
+        )
         for rows in itertools.product(*row_choices):
             transform = np.asarray(rows, dtype=int)
             determinant = np.linalg.det(transform)

@@ -155,6 +155,33 @@ def test_minimum_image_distance_is_exact_for_triclinic_lattice():
     assert _minimum_image_distances(delta, lattice) == pytest.approx(brute)
 
 
+def test_minimum_image_search_rejects_ill_conditioned_cell_before_enumeration():
+    from matsimpy.symmetry.matcher import _minimum_image_distances
+
+    nearly_collinear = np.array(
+        [[1.0, 0.0, 0.0], [1.0, 1e-9, 0.0], [0.0, 0.0, 1.0]]
+    )
+    with pytest.raises(ValueError, match="minimum-image search.*candidate limit"):
+        _minimum_image_distances(np.array([0.49, 0.49, 0.0]), nearly_collinear)
+
+
+def test_matcher_rejects_ill_conditioned_cell_before_basis_enumeration():
+    nearly_collinear = np.array(
+        [[1.0, 0.0, 0.0], [1.0, 1e-9, 0.0], [0.0, 0.0, 1.0]]
+    )
+    crystal = Crystal(["Si"], [[0, 0, 0]], Lattice(nearly_collinear))
+    with pytest.raises(ValueError, match="lattice-basis search.*candidate limit"):
+        StructureMatcher().fit(crystal, crystal)
+
+
+def test_candidate_limit_boundary_is_inclusive():
+    from matsimpy.symmetry.matcher import _checked_product_size
+
+    assert _checked_product_size((2, 3, 5), 30, "test search") == 30
+    with pytest.raises(ValueError, match="test search.*candidate limit of 29"):
+        _checked_product_size((2, 3, 5), 29, "test search")
+
+
 @pytest.mark.parametrize(
     "basis",
     [
@@ -184,13 +211,62 @@ def test_structure_matcher_tolerance_boundary_is_inclusive():
     assert not StructureMatcher(ltol=0.09, stol=0.3).fit(original, boundary)
 
 
-def _standardization_cases():
-    return [
-        Crystal(["Si", "Si"], [[0, 0, 0], [.25, .25, .25]], Lattice.cubic(5.43)),
-        Crystal(["Na", "Cl"], [[0, 0, 0], [.5, .5, .5]], Lattice.cubic(5.64)),
-        Crystal(["Ti", "O", "O"], [[0, 0, 0], [.305, .305, 0], [.695, .695, 0]], Lattice.tetragonal(4.59, 2.96)),
-        Crystal(["C", "C"], [[0, 0, 0], [1/3, 2/3, .5]], Lattice.hexagonal(2.46, 6.71)),
-    ]
+def _sorted_periodic_sites(species, frac):
+    wrapped = np.mod(np.asarray(frac, dtype=float), 1.0)
+    wrapped[np.isclose(wrapped, 1.0, atol=1e-10)] = 0.0
+    return sorted(
+        (str(symbol), *coordinates)
+        for symbol, coordinates in zip(species, wrapped)
+    )
+
+
+def _assert_standard_structures_equal(actual, expected):
+    """Direct numeric parity after deterministic basis/origin reconciliation.
+
+    Standard-cell APIs may choose a signed permutation of their lattice rows
+    and a rigid Cartesian orientation.  Enumerating the 48 signed permutation
+    matrices makes that convention difference explicit.  Fractional origins
+    are reconciled using same-species site pairs, then sites are sorted and
+    compared directly; no structure matcher participates in this assertion.
+    """
+    import itertools
+
+    expected_lattice = np.asarray(expected.lattice.matrix)
+    expected_species = [str(symbol) for symbol in expected.species]
+    expected_frac = np.asarray(expected.frac_coords)
+    assert sorted(actual.species) == sorted(expected_species)
+
+    permutations = []
+    for order in itertools.permutations(range(3)):
+        for signs in itertools.product((-1, 1), repeat=3):
+            basis = np.zeros((3, 3), dtype=int)
+            basis[np.arange(3), order] = signs
+            permutations.append(tuple(basis.ravel()))
+
+    for flattened in sorted(permutations):
+        basis = np.asarray(flattened, dtype=int).reshape(3, 3)
+        candidate_lattice = basis @ np.asarray(actual.lattice.matrix)
+        left, _, right = np.linalg.svd(candidate_lattice.T @ expected_lattice)
+        orientation = left @ right
+        if not np.allclose(candidate_lattice @ orientation, expected_lattice, atol=1e-7):
+            continue
+        candidate_frac = np.asarray(actual.frac_positions) @ np.linalg.inv(basis)
+        for actual_index, symbol in enumerate(actual.species):
+            for expected_index, expected_symbol in enumerate(expected_species):
+                if symbol != expected_symbol:
+                    continue
+                shift = expected_frac[expected_index] - candidate_frac[actual_index]
+                actual_rows = _sorted_periodic_sites(
+                    actual.species, candidate_frac + shift
+                )
+                expected_rows = _sorted_periodic_sites(expected_species, expected_frac)
+                if all(
+                    left_row[0] == right_row[0]
+                    and np.allclose(left_row[1:], right_row[1:], atol=1e-7)
+                    for left_row, right_row in zip(actual_rows, expected_rows)
+                ):
+                    return
+    pytest.fail("standard structures differ after basis/orientation reconciliation")
 
 
 @pytest.mark.requires_spglib
@@ -394,8 +470,12 @@ def test_pymatgen_2025_6_14_structure_matcher_decision_matrix():
 
 @pytest.mark.requires_pymatgen
 @pytest.mark.skipif(not (HAS_SPGLIB and HAS_PYMATGEN), reason="pymatgen and spglib required")
-@pytest.mark.parametrize("structure", _standardization_cases())
-def test_standardization_and_ir_mesh_coordinate_parity(structure):
+@pytest.mark.parametrize(
+    "family,structure",
+    _bravais_cases(),
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_standardization_and_ir_mesh_coordinate_parity(family, structure):
     from pymatgen.core import Lattice as PmgLattice
     from pymatgen.core import Structure
     from pymatgen.symmetry.analyzer import SpacegroupAnalyzer as PmgAnalyzer
@@ -409,26 +489,22 @@ def test_standardization_and_ir_mesh_coordinate_parity(structure):
         (native.get_primitive_standard_structure(), reference.get_primitive_standard_structure()),
         (native.get_conventional_standard_structure(), reference.get_conventional_standard_structure()),
     ]:
-        expected_native = Crystal(
-            [str(species) for species in expected.species],
-            expected.frac_coords,
-            Lattice(expected.lattice.matrix),
-        )
-        assert StructureMatcher(ltol=1e-7, stol=1e-7, angle_tol=1e-7).fit(
-            actual, expected_native
-        )
-        assert sorted(actual.species) == sorted(str(species) for species in expected.species)
-        assert all(species in {"Si", "Na", "Cl", "Ti", "O", "C"} for species in actual.species)
+        _assert_standard_structures_equal(actual, expected)
 
     for shift in [(0, 0, 0), (1, 0, 1)]:
-        actual_points, actual_weights = native.get_ir_reciprocal_mesh((3, 4, 2), shift)
-        expected_mesh = reference.get_ir_reciprocal_mesh((3, 4, 2), shift)
+        actual_points, actual_weights = native.get_ir_reciprocal_mesh((2, 3, 2), shift)
+        expected_mesh = reference.get_ir_reciprocal_mesh((2, 3, 2), shift)
         actual_rows = sorted(
-            (tuple(np.round(np.mod(point, 1), 8)), weight)
+            (*np.mod(point, 1), weight)
             for point, weight in zip(actual_points, actual_weights)
         )
         expected_rows = sorted(
-            (tuple(np.round(np.mod(point, 1), 8)), weight)
+            (*np.mod(point, 1), weight)
             for point, weight in expected_mesh
         )
-        assert actual_rows == expected_rows
+        assert [row[-1] for row in actual_rows] == [row[-1] for row in expected_rows]
+        assert np.allclose(
+            [row[:3] for row in actual_rows],
+            [row[:3] for row in expected_rows],
+            atol=1e-7,
+        )

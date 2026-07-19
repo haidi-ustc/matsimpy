@@ -167,3 +167,41 @@ blocked-import regression.
   deterministic matching; shifted and unshifted irreducible meshes compare
   representative coordinates together with weights. The Na/Cl/Ti/O cases
   exercise atomic-number-to-symbol reconstruction.
+
+## Final review rework: bounded searches and 14-family standardization parity
+
+### Root cause and bounded-search contract
+
+- Both exact minimum-image enumeration and lattice-basis enumeration scaled
+  their integer boxes by the inverse smallest singular value, then materialized
+  Cartesian products without checking their size. A valid nearly collinear
+  lattice could therefore exhaust memory or run indefinitely.
+- All three product boundaries (minimum-image translations, basis coefficient
+  grids, and retained-row combinations) now use a shared checked product-size
+  helper before range products or lists are materialized. Each documented
+  maximum is 1,000,000 candidates and overflow raises a deterministic targeted
+  `ValueError` naming the search and limit. Equality with the limit is allowed.
+
+### RED / GREEN evidence
+
+- RED: the nearly collinear minimum-image regression raised `MemoryError`, the
+  matcher had no bounded-search error, and the boundary helper was absent
+  (`3 failed`).
+- GREEN: the ill-conditioned minimum-image and matcher regressions, inclusive
+  candidate-limit boundary, exact triclinic minimum image, and existing
+  permutation/shear basis cases pass (`6 passed`).
+- Pinned pymatgen 2025.6.14 standardization parity now covers representative
+  independent numeric fixtures for all 14 supported Bravais families. Both
+  primitive and conventional structures compare lattice matrices after an
+  explicitly enumerated signed-axis basis reconciliation and SVD-computed
+  Cartesian orientation, followed by deterministic origin reconciliation and
+  direct sorted species/fractional-coordinate comparison at `atol=1e-7`.
+  `StructureMatcher` is not used by the assertion.
+- Shifted and unshifted `(2, 3, 2)` irreducible meshes compare complete
+  coordinate-plus-weight multisets for every family. Focused result:
+  `14 passed`; the full optional parity selection is `42 passed`.
+- Fresh full symmetry result: `121 passed`.
+- Blocked optional-import checks: `2 passed, 1 xfailed` (the xfail is the
+  architecture suite's intentional legacy-import sentinel).
+- `python -m compileall -q matsimpy/symmetry`, `git diff --check`, and the
+  blocked-import subprocess all completed successfully.
