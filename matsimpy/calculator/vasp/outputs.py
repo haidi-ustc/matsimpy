@@ -34,7 +34,17 @@ from tqdm import tqdm
 from matsimpy.core import Composition, Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
-from matsimpy.electronic_structure import CompleteDos, Dos, Magmom, Orbital, OrbitalType, Spin
+from matsimpy.electronic_structure import (
+    BandStructure,
+    BandStructureSymmLine,
+    CompleteDos,
+    Dos,
+    Magmom,
+    Orbital,
+    OrbitalType,
+    Spin,
+    get_reconstructed_band_structure,
+)
 from matsimpy.io.errors import ParseError
 
 # Structure is Crystal in matsimpy
@@ -61,9 +71,6 @@ try:
     from pymatgen.core.entries import ComputedEntry, ComputedStructureEntry
     from pymatgen.core.trajectory import Trajectory
     from pymatgen.core.units import unitized
-    from pymatgen.electronic_structure.bandstructure import (
-        BandStructure, BandStructureSymmLine, get_reconstructed_band_structure,
-    )
     from pymatgen.io.common import VolumetricData as BaseVolumetricData
     from pymatgen.io.wannier90 import Unk
     _HAS_PYMATGEN_ES = True
@@ -75,8 +82,6 @@ except ImportError:
         def decorator(func):
             return func
         return decorator
-    BandStructure = BandStructureSymmLine = None
-    get_reconstructed_band_structure = None
     # Dummy base classes so subclasses don't fail on import
     BaseVolumetricData = type("BaseVolumetricData", (), {})
     Unk = None
@@ -1069,7 +1074,7 @@ class Vasprun(MSONable):
         kpoint_file: Kpoints | None = None
         if kpoints_filename and os.path.isfile(kpoints_filename):
             kpoint_file = Kpoints.from_file(kpoints_filename)
-        lattice_new = Lattice(self.final_structure.lattice.reciprocal_lattice.matrix)
+        lattice_new = self.final_structure.lattice.get_reciprocal_lattice()
 
         if use_kpoints_opt:
             if self.kpoints_opt_props is None or self.kpoints_opt_props.actual_kpoints is None:
