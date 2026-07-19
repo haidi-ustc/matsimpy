@@ -111,7 +111,7 @@ runtime fallback.
 
 ### Native VASP output objects
 
-```python
+```python notest
 from matsimpy.calculator.vasp.outputs import Vasprun
 
 run = Vasprun("vasprun.xml")
@@ -169,8 +169,9 @@ mole_frac = comp.mole_fractions()   # {'Fe': 0.4, 'O': 0.6}
 
 ```python
 from matsimpy.analysis import MoleculeGraph, create_structure_graph
-from matsimpy import Molecule
+from matsimpy import Crystal, Lattice, Molecule
 molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
 # OOP API (recommended)
 graph = MoleculeGraph(molecule, cutoff=2.0)
 print(graph.num_nodes)       # Number of atoms
@@ -240,7 +241,7 @@ ch4 = build_tetrahedral('C', ['H', 'H', 'H', 'H'], 1.09)
 
 # Create defects
 with_vacancy = create_vacancy(fcc_cu, 0)
-with_interstitial = create_interstitial(fcc_cu, 'H', position=[0.5, 0.5, 0.5])
+with_interstitial = create_interstitial(fcc_cu, 'H', [0.5, 0.5, 0.5])
 
 # Generate alloys
 alloy = generate_random_alloy(supercell, ['Ni'], 'Cu', [0.25])
@@ -266,7 +267,10 @@ from matsimpy.transformation import (
     translate, rotate, apply_strain, scale_lattice,
     substitute, make_supercell, move_atoms,
 )
+from matsimpy.builders import from_prototype
 from matsimpy.transformation.registry import registry
+
+crystal = from_prototype('diamond', 'Si', 5.43)
 
 # Geometric transformations
 translated = translate(crystal, [1, 1, 1])
@@ -372,6 +376,10 @@ for result in results:
 
 ```python
 from matsimpy.io import read, write
+from matsimpy import Crystal, Lattice, Molecule
+
+crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
 
 # Auto-detect format from file extension
 write(crystal, 'structure.vasp')
@@ -382,7 +390,7 @@ crystal = read('structure.vasp')
 molecule = read('molecule.xyz')
 
 # Explicit format specification
-crystal = read('file.txt', format='vasp')
+crystal = read('structure.vasp', format='vasp')
 write(crystal, 'output.txt', format='cif', title='My Structure')
 ```
 
@@ -391,9 +399,14 @@ write(crystal, 'output.txt', format='cif', title='My Structure')
 ```python
 from matsimpy.io.vasp import write_POSCAR, read_POSCAR
 from matsimpy.io.xyz import write_XYZ, read_XYZ
+from matsimpy import Crystal, Lattice, Molecule
+
+crystal = Crystal(['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64))
+molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
 
 # Direct format-specific access
 write_POSCAR(crystal, 'structure.vasp')
+write_XYZ(molecule, 'molecule.xyz')
 molecule = read_XYZ('molecule.xyz')
 ```
 
@@ -401,7 +414,7 @@ molecule = read_XYZ('molecule.xyz')
 
 ```python
 from matsimpy import Crystal, Lattice
-from matsimpy.calculator import LennardJones, Mattersim
+from matsimpy.calculator import LennardJones
 
 # Classical potential calculator
 crystal = Crystal(['Ar'], [[0,0,0]], Lattice.cubic(5.0))
@@ -411,8 +424,15 @@ crystal.calc = calc
 # Get energy and forces
 energy = crystal.get_potential_energy()
 forces = crystal.get_forces()
+```
 
-# ML calculator (uses config defaults)
+MatterSim needs the separate `mattersim` package and either a valid local model
+file or a supported pretrained-model shortcut. Model weights may be downloaded
+by MatterSim and are not bundled with MatSimPy.
+
+```python notest
+from matsimpy.calculator import Mattersim
+
 ml_calc = Mattersim(model_path='model.pth', model_type='mace')
 crystal.calc = ml_calc
 energy = crystal.get_potential_energy()
@@ -509,7 +529,7 @@ matsimpy-ai -c "create fcc Cu crystal and save to cu.vasp"
 matsimpy-ai -v -c "analyze bonds in nacl.cif"
 ```
 
-```python
+```python notest
 from matsimpy.ai import AIEngine, SkillManager, Skill
 from matsimpy.ai.skills import core, builders, analysis
 
