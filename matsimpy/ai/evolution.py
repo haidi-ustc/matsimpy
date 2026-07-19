@@ -222,6 +222,12 @@ class EvolutionManager:
             )
             if isinstance(definition, FunctionDef)
         }
+        self._catalog_errors = tuple(
+            f"tool {name!r} does not resolve to a matching FunctionDef"
+            for name in self.available_tools
+            if name not in self._tool_definitions
+            or self._tool_definitions[name].name != name
+        )
         self.replay = replay
 
     def draft_skill(
@@ -255,6 +261,16 @@ class EvolutionManager:
     ) -> SkillVersion:
         """Create an inactive child version and retain its unified diff."""
         parent = self.store.get_skill_version(parent_version_id)
+        try:
+            active = self.store.get_active_skill_version(parent.name)
+        except KeyError as exc:
+            raise SkillEvolutionError(
+                "revision parent must be the active approved version"
+            ) from exc
+        if parent.status != "approved" or active.id != parent.id:
+            raise SkillEvolutionError(
+                "revision parent must be the active approved version"
+            )
         return self._create_version(
             name=parent.name,
             description=description if description is not None else parent.description,
@@ -277,6 +293,21 @@ class EvolutionManager:
         self._validate_content(
             version.name, version.description, version.body, version.allowed_tools
         )
+        if self._catalog_errors:
+            raise SkillEvolutionError(
+                "invalid executable tool catalog: " + "; ".join(self._catalog_errors)
+            )
+        unresolved = [
+            name
+            for name in version.allowed_tools
+            if name not in self._tool_definitions
+            or self._tool_definitions[name].name != name
+        ]
+        if unresolved:
+            raise SkillEvolutionError(
+                "deterministic replay requires concrete FunctionDef entries: "
+                + ", ".join(sorted(unresolved))
+            )
         if self.replay is None:
             result: Mapping[str, Any] = {
                 "passed": False,
@@ -334,7 +365,10 @@ class EvolutionManager:
         return self.store.set_skill_version_status(record.id, "rejected")
 
     def rollback(
-        self, target_version_id: int | str, *, source_trace_ids: Sequence[int] = ()
+        self,
+        target_version_id: int | str,
+        *,
+        source_trace_ids: Sequence[int] | None = None,
     ) -> SkillVersion:
         """Create and activate a new approved version containing prior content."""
         if isinstance(target_version_id, str):
@@ -355,17 +389,25 @@ class EvolutionManager:
         if target.status != "approved":
             raise SkillEvolutionError("rollback target must be an approved version")
         current = self.store.get_active_skill_version(target.name)
+        provenance = (
+            tuple(source_trace_ids)
+            if source_trace_ids is not None
+            else target.source_trace_ids
+        )
         rolled_back = self._create_version(
             name=target.name,
             description=target.description,
             body=target.body,
             tools=target.allowed_tools,
-            source_trace_ids=source_trace_ids,
+            source_trace_ids=provenance,
             parent=current,
             rollback_of_version_id=target.id,
         )
-        # The target already passed deterministic review; the new record makes that
-        # provenance explicit while materialization is still revalidated.
+        self.store.prepend_skill_version_diff(
+            rolled_back.id,
+            f"Rollback target: skill_version_id={target.id}, version={target.version}\n",
+        )
+        rolled_back = self.store.get_skill_version(rolled_back.id)
         evaluated = self.evaluate(rolled_back.id)
         return self.approve(evaluated.id)  # type: ignore[return-value]
 
@@ -544,6 +586,10 @@ class EvolutionManager:
             if published:
                 if prior_bytes is None:
                     target.unlink(missing_ok=True)
+                    try:
+                        target.parent.rmdir()
+                    except OSError:
+                        pass
                 else:
                     restore_fd, restore_name = tempfile.mkstemp(
                         prefix=".SKILL.md.restore-", dir=target.parent

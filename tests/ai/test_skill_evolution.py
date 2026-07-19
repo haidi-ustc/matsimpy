@@ -9,6 +9,7 @@ from matsimpy.ai.agent_skills import SkillLibrary
 from matsimpy.ai.evolution import EvolutionManager, SkillEvolutionError
 from matsimpy.ai.session_store import SessionStore
 from matsimpy.ai.skill import FunctionDef
+from matsimpy.ai.repl import ReplController
 from matsimpy.core import Molecule
 
 
@@ -85,6 +86,14 @@ def test_revision_has_parent_diff_and_remains_inactive(manager):
     assert manager.store.get_active_skill_version(first.name).id == first.id
 
 
+def test_revision_requires_active_approved_parent(manager):
+    draft = manager.draft_skill(
+        "draft-parent", "Draft", "Use `from_prototype`.", ["from_prototype"], [10]
+    )
+    with pytest.raises(SkillEvolutionError, match="active approved"):
+        manager.draft_revision(draft.id, body="changed", source_trace_ids=[11])
+
+
 def test_deterministic_failure_is_never_approvable_even_if_judge_passes(manager):
     draft = manager.draft_skill(
         "broken-workflow", "Broken workflow", "FAIL_REPLAY `from_prototype`.",
@@ -130,13 +139,14 @@ def test_rollback_creates_new_auditable_approved_version(manager):
     manager.evaluate(second.id)
     manager.approve(second.id)
 
-    rollback = manager.rollback(first.id, source_trace_ids=[43])
+    rollback = manager.rollback(first.id)
 
     assert rollback.version == 3
     assert rollback.parent_version_id == second.id
     assert rollback.rollback_of_version_id == first.id
     assert rollback.status == "approved"
-    assert rollback.source_trace_ids == (43,)
+    assert rollback.source_trace_ids == first.source_trace_ids
+    assert f"skill_version_id={first.id}" in rollback.diff
     assert manager.store.get_active_skill_version(first.name).id == rollback.id
     assert "First" in (manager.user_skill_root / first.name / "SKILL.md").read_text()
 
@@ -271,7 +281,7 @@ def test_first_approval_db_failure_leaves_no_active_file_or_version(manager, mon
     with pytest.raises(RuntimeError, match="injected"):
         manager.approve(draft.id)
 
-    assert not (manager.user_skill_root / draft.name / "SKILL.md").exists()
+    assert not (manager.user_skill_root / draft.name).exists()
     with pytest.raises(KeyError, match="no active"):
         manager.store.get_active_skill_version(draft.name)
     assert manager.store.get_skill_version(draft.id).status == "evaluated"
@@ -424,3 +434,52 @@ def test_missing_source_trace_is_rejected(manager):
             "missing-trace", "Missing", "Use `from_prototype`.",
             ["from_prototype"], [9999]
         )
+
+
+def test_evaluation_requires_concrete_function_definitions(manager):
+    names_only = EvolutionManager(
+        manager.store,
+        user_skill_root=manager.user_skill_root,
+        available_tools=["from_prototype"],
+        replay=lambda version, context: {"passed": True},
+    )
+    draft = names_only.draft_skill(
+        "names-only", "Names", "Use `from_prototype`.", ["from_prototype"], [97]
+    )
+    with pytest.raises(SkillEvolutionError, match="FunctionDef"):
+        names_only.evaluate(draft.id)
+
+    malformed = EvolutionManager(
+        manager.store,
+        user_skill_root=manager.user_skill_root,
+        available_tools={"from_prototype": object()},
+        replay=lambda version, context: {"passed": True},
+    )
+    second = malformed.draft_skill(
+        "malformed-catalog", "Malformed", "Use `from_prototype`.",
+        ["from_prototype"], [98]
+    )
+    with pytest.raises(SkillEvolutionError, match="FunctionDef"):
+        malformed.evaluate(second.id)
+
+
+def test_repl_rollback_numeric_id_runs_full_version_lifecycle(manager):
+    first = manager.draft_skill(
+        "repl-rollback", "Rollback", "First `from_prototype`.", ["from_prototype"], [99]
+    )
+    manager.evaluate(first.id)
+    manager.approve(first.id)
+    second = manager.draft_revision(
+        first.id, body="Second `from_prototype`.", source_trace_ids=[100]
+    )
+    manager.evaluate(second.id)
+    manager.approve(second.id)
+
+    session = type("Session", (), {"session_store": manager.store})()
+    result = ReplController(session, evolution=manager).execute(f"/rollback {first.id}")
+
+    assert result.ok is True
+    assert result.data["target_version_id"] == first.id
+    active = manager.store.get_active_skill_version(first.name)
+    assert active.rollback_of_version_id == first.id
+    assert active.source_trace_ids == first.source_trace_ids

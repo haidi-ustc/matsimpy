@@ -190,16 +190,26 @@ class ReplController:
 
     def _rollback(self, arg: str) -> CommandResult:
         if not arg:
-            return self._usage_result("/rollback <name>")
+            return self._usage_result("/rollback <version-id>")
         rollback = getattr(self.evolution, "rollback", None)
         if rollback is None:
             return self._error("Skill rollback is not available yet.", kind="rollback")
         try:
-            rollback(arg)
+            version_id = int(arg)
+            if version_id <= 0:
+                raise ValueError
+        except ValueError:
+            return self._error(
+                "Rollback requires a positive numeric version ID.", kind="rollback"
+            )
+        try:
+            rolled_back = rollback(version_id)
         except (KeyError, ValueError) as exc:
             return self._error(str(exc), kind="rollback")
         return CommandResult(
-            "rollback", data={"name": arg}, display_hint=f"Rolled back skill: {arg}"
+            "rollback",
+            data={"target_version_id": version_id, "version": rolled_back},
+            display_hint=f"Rolled back from skill version: {version_id}",
         )
 
     def _trace(self, arg: str) -> CommandResult:

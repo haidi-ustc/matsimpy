@@ -10,6 +10,19 @@ from matsimpy.ai.evolution import (
     SkillEvolutionError,
 )
 from matsimpy.ai.session_store import SessionStore
+from matsimpy.ai.skill import FunctionDef
+
+
+def _tools(*names):
+    return {
+        name: FunctionDef(
+            name=name,
+            description="test",
+            parameters={"type": "object", "properties": {}},
+            callable=lambda **kwargs: None,
+        )
+        for name in names
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +41,7 @@ def test_evolution_does_not_draft_routine_two_tool_success(tmp_path):
     manager = EvolutionManager(
         store,
         user_skill_root=tmp_path / "skills",
-        available_tools={"from_prototype", "save_structure"},
+        available_tools=_tools("from_prototype", "save_structure"),
         replay=lambda version, context: {"passed": True},
     )
     draft = manager.draft_from_trace(
@@ -252,7 +265,7 @@ def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
     manager = EvolutionManager(
         store,
         user_skill_root=tmp_path / "skills",
-        available_tools={"from_prototype", "save_structure"},
+        available_tools=_tools("from_prototype", "save_structure"),
         replay=lambda version, context: {"passed": True},
     )
     first_draft = manager.draft_from_trace(
@@ -312,7 +325,7 @@ def test_approve_and_reject_skill_draft(tmp_path):
         {"tools": ["from_prototype"]},
     )
 
-    manager = EvolutionManager(store, available_tools={"from_prototype"})
+    manager = EvolutionManager(store, available_tools=_tools("from_prototype"))
     with pytest.raises(SkillEvolutionError, match="source trace"):
         manager.approve("fcc-copper")
     assert store.list_skill_drafts("draft")[0]["name"] == "fcc-copper"
@@ -338,7 +351,7 @@ def test_approve_materializes_generated_skill_for_loader(tmp_path):
     manager = EvolutionManager(
         store,
         user_skill_root=tmp_path / "skills",
-        available_tools={"from_prototype", "relax_structure"},
+        available_tools=_tools("from_prototype", "relax_structure"),
     )
     with pytest.raises(SkillEvolutionError, match="source trace"):
         manager.approve("relax-copper")
@@ -357,7 +370,7 @@ def test_approve_materializes_unsafe_draft_name_under_generated_skills(tmp_path,
         {"tools": ["from_prototype"]},
     )
 
-    manager = EvolutionManager(store, available_tools={"from_prototype"})
+    manager = EvolutionManager(store, available_tools=_tools("from_prototype"))
     with pytest.raises(SkillEvolutionError, match="name"):
         manager.approve("../outside")
     assert not list(generated_skill_dir.glob("*.skill.md"))

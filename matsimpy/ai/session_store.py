@@ -495,6 +495,17 @@ class SessionStore:
             raise KeyError(f"no active skill version: {name}")
         return self._skill_version_from_row(row)
 
+    def prepend_skill_version_diff(self, version_id: int, marker: str) -> None:
+        """Record creation-time rollback provenance before evaluation."""
+        with self.conn:
+            cursor = self.conn.execute(
+                """UPDATE skill_versions SET diff = ? || diff
+                   WHERE id = ? AND status = 'draft' AND deterministic_pass IS NULL""",
+                (marker, version_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("rollback provenance can only annotate a new draft")
+
     def evaluate_skill_version(
         self,
         version_id: int,

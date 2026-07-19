@@ -101,8 +101,9 @@ class FakeEvolution:
     def reject(self, name):
         self.calls.append(("reject", name))
 
-    def rollback(self, name):
-        self.calls.append(("rollback", name))
+    def rollback(self, version_id):
+        self.calls.append(("rollback", version_id))
+        return {"version": version_id + 1}
 
 
 @pytest.fixture
@@ -130,7 +131,7 @@ def controller():
         ("/approve copper-flow", "approve", ("approve", "copper-flow")),
         ("/approve-skill copper-flow", "approve", ("approve", "copper-flow")),
         ("/reject copper-flow", "reject", ("reject", "copper-flow")),
-        ("/rollback copper-flow", "rollback", ("rollback", "copper-flow")),
+        ("/rollback 7", "rollback", ("rollback", 7)),
     ],
 )
 def test_mutating_commands_delegate_to_services(controller, command, kind, expected_call):
@@ -175,7 +176,7 @@ def test_inspection_commands_return_data_without_printing(
         ("/resume nope", "/resume <session_id>"),
         ("/approve", "/approve <name>"),
         ("/reject", "/reject <name>"),
-        ("/rollback", "/rollback <name>"),
+        ("/rollback", "/rollback <version-id>"),
         ("/unknown", "Unknown command"),
         ("not-a-command", "Commands must start"),
     ],
@@ -238,7 +239,7 @@ def test_skills_exact_name_returns_detail_but_non_exact_uses_search(
     }
 
 
-def test_real_evolution_manager_rollback_is_structured_unavailable(controller):
+def test_real_evolution_manager_rollback_rejects_non_numeric_id(controller):
     repl, session, _ = controller
     real = ReplController(session)
 
@@ -246,7 +247,7 @@ def test_real_evolution_manager_rollback_is_structured_unavailable(controller):
 
     assert result.kind == "rollback"
     assert result.ok is False
-    assert "not available" in result.display_hint
+    assert "numeric version ID" in result.display_hint
 
 
 def test_engine_commands_use_authoritative_agent_session(tmp_path, capsys):
