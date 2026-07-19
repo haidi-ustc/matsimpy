@@ -48,6 +48,8 @@ from matsimpy.electronic_structure import (
     get_reconstructed_band_structure,
 )
 from matsimpy.io.errors import ParseError
+from matsimpy.io.volumetric import VolumetricData as BaseVolumetricData
+from matsimpy.io.wannier import Unk
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
@@ -68,22 +70,11 @@ def micro_pyawk(filename, search, results=None, debug=None, postdebug=None):
                 import pdb; pdb.set_trace()
     return results
 
-# Advanced pymatgen types — optional, guarded by _HAS_PYMATGEN_ES
-try:
-    from pymatgen.core.units import unitized
-    from pymatgen.io.common import VolumetricData as BaseVolumetricData
-    from pymatgen.io.wannier90 import Unk
-    _HAS_PYMATGEN_ES = True
-except ImportError:
-    _HAS_PYMATGEN_ES = False
-    # No-op unitized decorator (returns function unchanged)
-    def unitized(unit):
-        def decorator(func):
-            return func
-        return decorator
-    # Dummy base classes so subclasses don't fail on import
-    BaseVolumetricData = type("BaseVolumetricData", (), {})
-    Unk = None
+def unitized(unit):
+    """Compatibility decorator retained without an optional runtime dependency."""
+    def decorator(func):
+        return func
+    return decorator
 
 try:
     import h5py

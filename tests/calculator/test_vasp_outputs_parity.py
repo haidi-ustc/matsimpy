@@ -6,11 +6,54 @@ import numpy as np
 import pytest
 
 from matsimpy.calculator.vasp.outputs import Vasprun
-from matsimpy.core import Lattice
+from matsimpy.core import Crystal, Lattice
 from matsimpy.electronic_structure import BandStructure, BandStructureSymmLine, Spin
+from matsimpy.io.volumetric import VolumetricData
+from matsimpy.io.wannier import Unk
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vasp" / "vasprun.xml"
+
+
+@pytest.mark.requires_pymatgen
+def test_volumetric_parity():
+    pytest.importorskip("pymatgen")
+    from pymatgen.core import Lattice as PymatgenLattice
+    from pymatgen.core import Structure as PymatgenStructure
+    from pymatgen.electronic_structure.core import Spin as PymatgenSpin
+    from pymatgen.io.common import VolumetricData as PymatgenVolumetricData
+
+    grid = np.arange(8.0).reshape(2, 2, 2)
+    diff = np.ones_like(grid)
+    native_structure = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(2))
+    oracle_structure = PymatgenStructure(PymatgenLattice.cubic(2), ["Si"], [[0, 0, 0]])
+    native = VolumetricData(native_structure, {"total": grid, "diff": diff})
+    oracle = PymatgenVolumetricData(oracle_structure, {"total": grid, "diff": diff})
+
+    assert native.dim == oracle.dim
+    assert native.ngridpts == oracle.ngridpts
+    for axis in range(3):
+        np.testing.assert_allclose(native.get_average_along_axis(axis), oracle.get_average_along_axis(axis))
+    np.testing.assert_allclose(native.get_integrated_diff(0, 1, nbins=5), oracle.get_integrated_diff(0, 1, nbins=5))
+    np.testing.assert_allclose((native + native).data["total"], (oracle + oracle).data["total"])
+    for spin, values in native.spin_data.items():
+        np.testing.assert_allclose(values, oracle.spin_data[PymatgenSpin(int(spin))])
+
+
+@pytest.mark.requires_pymatgen
+def test_unk_byte_parity(tmp_path):
+    pytest.importorskip("pymatgen")
+    from pymatgen.io.wannier90 import Unk as PymatgenUnk
+
+    for name, data in (
+        ("collinear", np.arange(16).reshape(2, 2, 2, 2) * (1 + 2j)),
+        ("noncollinear", np.arange(16).reshape(1, 2, 2, 2, 2) * (1 - 1j)),
+    ):
+        native_path = tmp_path / f"native-{name}"
+        oracle_path = tmp_path / f"oracle-{name}"
+        Unk(2, data).write_file(native_path)
+        PymatgenUnk(2, data).write_file(oracle_path)
+        assert native_path.read_bytes() == oracle_path.read_bytes()
 
 
 @pytest.mark.requires_pymatgen
