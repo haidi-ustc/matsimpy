@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 
 import numpy as np
 from monty.json import MSONable
@@ -25,7 +26,7 @@ def _orbital_type(orbital):
     return OrbitalType[Orbital(orbital).name[0]]
 
 
-class _SiteProjectedDos:
+class _SiteProjectedDos(Mapping):
     """Site-addressable view backed by indices because CrystalSite is unhashable."""
 
     def __init__(self, structure, values):
@@ -39,20 +40,13 @@ class _SiteProjectedDos:
         raise KeyError(site)
 
     def __getitem__(self, site):
-        return self._values[site] if isinstance(site, int) else self._values[self._index(site)]
+        return self._values[self._index(site)]
 
     def __iter__(self):
         return iter(self.structure)
 
     def __len__(self):
         return len(self._values)
-
-    def values(self):
-        return iter(self._values)
-
-    def items(self):
-        return zip(iter(self.structure), self._values, strict=True)
-
 
 class Dos(MSONable):
     """A total or projected density of states on an energy grid."""
@@ -118,10 +112,13 @@ class CompleteDos(Dos):
             total_dos.energies,
             {spin: values / factor for spin, values in total_dos.densities.items()},
         )
-        source = list(pdos.values()) if hasattr(pdos, "values") else list(pdos)
+        source = [pdos[site] for site in structure] if isinstance(pdos, Mapping) else list(pdos)
         values = [
             {
-                orbital: {Spin(int(spin)): np.asarray(values, dtype=float) / factor for spin, values in densities.items()}
+                orbital: {
+                    Spin(int(spin)): self._validated_projected_density(density, factor)
+                    for spin, density in densities.items()
+                }
                 for orbital, densities in orbitals.items()
             }
             for orbitals in source
@@ -131,6 +128,12 @@ class CompleteDos(Dos):
         self.pdos = _SiteProjectedDos(structure, values)
         self.is_normalized = bool(normalize)
         self.norm_vol = structure.volume if normalize else None
+
+    def _validated_projected_density(self, density, factor):
+        values = np.asarray(density, dtype=float)
+        if values.shape != self.energies.shape:
+            raise ValueError("DOS energies and densities must be equal-length 1D arrays")
+        return values / factor
 
     def get_normalized(self):
         """Return a volume-normalized copy, or this object if already normalized."""
