@@ -90,6 +90,8 @@ class AgentMemory:
         path.write_text(existing + content + "\n")
 
     def _validate_entry(self, content: str) -> str:
+        if not isinstance(content, str):
+            raise MemoryValidationError("memory entry must be a string")
         entry = content.strip()
         if not entry:
             raise MemoryValidationError("memory entry is empty")
@@ -198,8 +200,7 @@ class AgentMemory:
     ) -> MemoryEntry:
         """Persist a structured fact, rejecting duplicates and unsafe corrections."""
         validated = self._validate_entry(content)
-        if not 0.0 <= confidence <= 1.0:
-            raise MemoryValidationError("memory confidence must be between 0 and 1")
+        validated_confidence = self._validated_confidence(confidence)
         fingerprint = normalized_fingerprint(validated)
         entries = self.structured_entries(include_superseded=True)
         if any(entry.fingerprint == fingerprint for entry in entries):
@@ -217,7 +218,7 @@ class AgentMemory:
         new_entry = MemoryEntry(
             content=validated,
             fingerprint=fingerprint,
-            confidence=float(confidence),
+            confidence=validated_confidence,
             source_trace_ids=trace_ids,
             supersedes=supersedes,
             created_at=datetime.now().isoformat(timespec="seconds"),
@@ -264,13 +265,7 @@ class AgentMemory:
         fingerprint = item["fingerprint"]
         if not isinstance(fingerprint, str) or fingerprint != normalized_fingerprint(content):
             raise MemoryValidationError("structured memory fingerprint is invalid")
-        confidence = item["confidence"]
-        if (
-            isinstance(confidence, bool)
-            or not isinstance(confidence, (int, float))
-            or not 0.0 <= confidence <= 1.0
-        ):
-            raise MemoryValidationError("structured memory confidence is invalid")
+        confidence = self._validated_confidence(item["confidence"])
         trace_ids = self._validated_trace_ids(item["source_trace_ids"])
         supersedes = self._optional_fingerprint(item.get("supersedes"))
         superseded_by = self._optional_fingerprint(item.get("superseded_by"))
@@ -280,7 +275,7 @@ class AgentMemory:
         return MemoryEntry(
             content=content,
             fingerprint=fingerprint,
-            confidence=float(confidence),
+            confidence=confidence,
             source_trace_ids=trace_ids,
             supersedes=supersedes,
             superseded_by=superseded_by,
@@ -301,6 +296,18 @@ class AgentMemory:
         if len(set(value)) != len(value):
             raise MemoryValidationError("structured memory trace IDs are duplicated")
         return tuple(value)
+
+    @staticmethod
+    def _validated_confidence(value: Any) -> float:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 0.0 <= value <= 1.0
+        ):
+            raise MemoryValidationError(
+                "structured memory confidence must be numeric and between 0 and 1"
+            )
+        return float(value)
 
     @staticmethod
     def _optional_fingerprint(value: Any) -> str | None:

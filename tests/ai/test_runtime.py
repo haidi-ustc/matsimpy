@@ -244,6 +244,52 @@ def test_runtime_validates_corrective_recovery_and_preserves_failed_audit(tmp_pa
     ]
 
 
+def test_runtime_rejects_unrelated_success_after_failed_call(tmp_path):
+    failed_save = ToolCall(
+        id="call-save",
+        name="save_structure",
+        arguments={},
+    )
+    successful_create = ToolCall(
+        id="call-create",
+        name="create_structure",
+        arguments={},
+    )
+    provider = FakeProvider([
+        ChatResponse(
+            message=_assistant_tool_message(failed_save),
+            tool_calls=[failed_save],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=_assistant_tool_message(successful_create),
+            tool_calls=[successful_create],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=ChatMessage.assistant("Created a structure but did not save it."),
+            tool_calls=[],
+            finish_reason="stop",
+        ),
+    ])
+    store = SessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("save and inspect silicon")
+
+    assert result.status == "failure"
+    assert result.validation_status == "failure"
+    assert result.draft_skill is None
+    assert [record["status"] for record in result.tool_calls] == ["failure", "success"]
+
+
 def test_runtime_keeps_success_when_draft_generation_fails(tmp_path):
     create_call = ToolCall(id="call-create", name="create_structure", arguments={})
     save_call = ToolCall(id="call-save", name="save_structure", arguments={"path": "si.txt"})

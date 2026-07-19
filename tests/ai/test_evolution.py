@@ -83,6 +83,22 @@ def test_policy_does_not_classify_failure_after_success_as_recovery():
     assert candidate is None
 
 
+def test_policy_does_not_classify_unrelated_success_as_recovery():
+    candidate = EvolutionPolicy().classify([
+        {
+            "trace_id": 23,
+            "validation_status": "success",
+            "user_request": "save and inspect a structure",
+            "tool_calls": [
+                {"name": "save_structure", "status": "failure"},
+                {"name": "inspect_structure", "status": "success"},
+            ],
+        }
+    ])
+
+    assert candidate is None
+
+
 def test_policy_classifies_explicit_correction_as_memory():
     candidate = EvolutionPolicy().classify(
         [{"trace_id": 31, "validation_status": "success", "user_request": "save POSCAR"}],
@@ -133,6 +149,15 @@ def test_correction_rejects_invalid_explicit_trace_id():
     with pytest.raises(ValueError, match="positive integer"):
         EvolutionPolicy().classify(
             [], correction="Use VASP format.", source_trace_id=True
+        )
+
+
+def test_correction_rejects_source_trace_id_missing_from_history():
+    with pytest.raises(ValueError, match="not present"):
+        EvolutionPolicy().classify(
+            [{"trace_id": 70, "validation_status": "success"}],
+            correction="Use VASP format.",
+            source_trace_id=71,
         )
 
 

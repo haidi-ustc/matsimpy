@@ -55,6 +55,11 @@ class EvolutionPolicy:
                     or source_trace_id <= 0
                 ):
                     raise ValueError("source_trace_id must be a positive integer")
+                if not any(
+                    trace.get("trace_id") == source_trace_id
+                    for trace in trace_history
+                ):
+                    raise ValueError("source_trace_id is not present in trace_history")
                 provenance_ids = (source_trace_id,)
             elif trace_history:
                 provenance_ids = _trace_ids([trace_history[-1]])
@@ -82,7 +87,7 @@ class EvolutionPolicy:
                 {"tool_sequence": _tool_sequence(latest)},
             )
 
-        if _is_recovery(latest):
+        if has_corrective_retry(latest.get("tool_calls", ())):
             return EvolutionCandidate(
                 "skill",
                 "validated recovery from tool failure",
@@ -334,17 +339,24 @@ def _tool_sequence(trace: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _is_recovery(trace: Mapping[str, Any]) -> bool:
-    calls = trace.get("tool_calls", ())
+def has_corrective_retry(calls: Any) -> bool:
+    """Return whether every failed operation is retried successfully later."""
+    if not isinstance(calls, (list, tuple)):
+        return False
+    unresolved: set[str] = set()
     failure_seen = False
     for call in calls:
         if not isinstance(call, Mapping):
             continue
+        name = call.get("name", call.get("tool_name"))
+        if not isinstance(name, str) or not name:
+            continue
         if call.get("status") == "failure":
+            unresolved.add(name)
             failure_seen = True
-        elif failure_seen and call.get("status") == "success":
-            return True
-    return False
+        elif call.get("status") == "success":
+            unresolved.discard(name)
+    return failure_seen and not unresolved
 
 
 def _normalize_tools(tools: Any) -> list[dict]:
@@ -387,4 +399,9 @@ def _title(text: str) -> str:
     return " ".join(word.capitalize() for word in words[:8])
 
 
-__all__ = ["EvolutionCandidate", "EvolutionManager", "EvolutionPolicy"]
+__all__ = [
+    "EvolutionCandidate",
+    "EvolutionManager",
+    "EvolutionPolicy",
+    "has_corrective_retry",
+]

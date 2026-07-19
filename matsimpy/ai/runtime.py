@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .conversation import ChatMessage, ToolCall
-from .evolution import EvolutionManager
+from .evolution import EvolutionManager, has_corrective_retry
 from .executor import FunctionExecutor, active_executor
 from .memory import AgentMemory
 from .providers import ChatProvider
@@ -376,18 +376,9 @@ class AgentRuntime:
         final_outcome_completed: bool = True,
     ) -> str:
         """Validate a task, allowing an evidenced correction after a failed call."""
-        failure_indexes = [
-            index for index, record in enumerate(records)
-            if record["status"] == "failure"
-        ]
-        if not failure_indexes:
+        if not any(record["status"] == "failure" for record in records):
             return "success"
-
-        last_failure = failure_indexes[-1]
-        corrected = any(
-            record["status"] == "success"
-            for record in records[last_failure + 1:]
-        )
+        corrected = has_corrective_retry(records)
         final_outcome = final_outcome_completed and bool(final_response.strip())
         return "success" if corrected and final_outcome else "failure"
 

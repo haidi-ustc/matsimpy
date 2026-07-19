@@ -52,6 +52,22 @@ def test_structured_memory_rejects_invalid_confidence(tmp_path, confidence):
         memory.remember("A safe fact", confidence=confidence)
 
 
+@pytest.mark.parametrize("content", [None, 42, True, "", "   "])
+def test_remember_rejects_non_string_or_empty_content(tmp_path, content):
+    memory = AgentMemory(tmp_path)
+
+    with pytest.raises(MemoryValidationError):
+        memory.remember(content)
+
+
+@pytest.mark.parametrize("confidence", [True, False, "1", None])
+def test_remember_rejects_non_numeric_or_boolean_confidence(tmp_path, confidence):
+    memory = AgentMemory(tmp_path)
+
+    with pytest.raises(MemoryValidationError, match="confidence"):
+        memory.remember("A safe fact", confidence=confidence)
+
+
 @pytest.mark.parametrize(
     "payload",
     [
