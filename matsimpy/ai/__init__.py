@@ -42,6 +42,7 @@ from .terminal import (
     create_terminal,
 )
 from .engine import AIEngine
+from .doctor import Diagnostic, Doctor
 
 __all__ = [
     "AIEngine",
@@ -56,6 +57,8 @@ __all__ = [
     "AgentRuntime",
     "ChatProvider",
     "DeepSeekProvider",
+    "Diagnostic",
+    "Doctor",
     "TaskResult",
     "SessionStore",
     "AgentSession",

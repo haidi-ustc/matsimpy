@@ -2,6 +2,7 @@
 
 import os
 import typer
+from .doctor import Doctor, render_diagnostics
 from .engine import AIEngine
 from .skill import SkillManager, Skill
 from .provider import DEFAULT_MODEL
@@ -10,8 +11,9 @@ from .terminal import create_terminal
 app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     workspace: str = typer.Option(
         None, "--workspace", "-w",
         help="Working directory for file operations (default: ~/.matsimpy/ai/workspace)",
@@ -45,6 +47,12 @@ def main(
         matsimpy-ai -w ~/my-project -m deepseek-v4-flash
         matsimpy-ai -v -c "analyze bonds in nacl.cif"
     """
+    if ctx.invoked_subcommand is not None:
+        return
+    _run_agent(workspace, model, api_key, base_url, command, verbose)
+
+
+def _run_agent(workspace, model, api_key, base_url, command, verbose) -> None:
     engine = AIEngine(
         api_key=api_key,
         model=model or os.getenv("MATSIMPY_AI_MODEL", DEFAULT_MODEL),
@@ -64,6 +72,22 @@ def main(
         print(response)
     else:
         create_terminal(engine.repl_controller).run()
+
+
+@app.command("doctor")
+def doctor_command(
+    workspace: str = typer.Option(
+        None, "--workspace", "-w", help="Workspace path to inspect."
+    ),
+    network: bool = typer.Option(
+        False,
+        "--network",
+        help="Make one provider connectivity request (may incur provider usage).",
+    ),
+) -> None:
+    """Check agent configuration; remains offline unless --network is supplied."""
+
+    typer.echo(render_diagnostics(Doctor(workspace=workspace).run(network=network)))
 
 
 def _register_all_skills(sm: SkillManager) -> None:
