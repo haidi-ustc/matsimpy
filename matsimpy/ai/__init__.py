@@ -2,7 +2,8 @@
 AI module for MatSimPy — LLM function calling + interactive REPL.
 
 Provides:
-- AIEngine: orchestrates LLM conversation with tool execution
+- Agent: simple, structured Python interface
+- AIEngine: deprecated REPL compatibility interface
 - DeepSeekProvider: OpenAI-compatible client for DeepSeek API
 - SkillManager: progressive skill loading (like Claude skills)
 - FunctionDef/Skill: metadata for LLM-callable functions
@@ -11,11 +12,9 @@ Provides:
 
 Usage::
 
-    >>> from matsimpy.ai import AIEngine
-    >>> engine = AIEngine()
-    >>> engine.skill_manager.load("builders")
-    >>> response = engine.chat("Create an FCC copper crystal")
-    >>> print(response)
+    >>> from matsimpy.ai import Agent
+    >>> result = Agent(workspace="project").run("Create an FCC copper crystal")
+    >>> print(result.response)
 
     # Or launch the interactive REPL:
     >>> from matsimpy.ai.cli import main
@@ -23,7 +22,7 @@ Usage::
 
 Requirements:
     - requests
-    - DEEPSEEK_API_KEY environment variable (or pass api_key= to AIEngine)
+    - DEEPSEEK_API_KEY environment variable (or inject a provider into Agent)
 """
 
 from .conversation import ChatMessage, ToolCall, ChatResponse
@@ -34,10 +33,13 @@ from .executor import FunctionExecutor
 from .runtime import AgentRuntime, TaskResult
 from .session_store import SessionStore
 from .session import AgentSession, SessionTurn
+from .agent import Agent, AgentResult
 from .engine import AIEngine
 
 __all__ = [
     "AIEngine",
+    "Agent",
+    "AgentResult",
     "AgentRuntime",
     "ChatProvider",
     "DeepSeekProvider",

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 import json
-from .conversation import ChatMessage, ToolCall
+import warnings
+from .agent import Agent
+from .conversation import ChatMessage
 from .evolution import EvolutionManager
 from .provider import DeepSeekProvider
-from .runtime import AgentRuntime
-from .session_store import SessionStore
-from .skill import SkillManager, Skill
-from .executor import FunctionExecutor
-from .workspace import Workspace
+from .skill import SkillManager
 from .memory import AgentMemory
-from .skill_loader import list_generated_skills, save_skill_md, parse_skill_md
+from .skill_loader import list_generated_skills
 
 
 SYSTEM_PROMPT = """You are a materials science AI assistant powered by MatSimPy.
@@ -45,12 +43,13 @@ class AIEngine:
         workspace_path: str | None = None,
         system_prompt: str | None = None,
     ):
-        self.provider = DeepSeekProvider(api_key, model, base_url)
+        warnings.warn(
+            "AIEngine is deprecated; construct matsimpy.ai.Agent instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        provider = DeepSeekProvider(api_key, model, base_url)
         self.skill_manager = SkillManager()
-        self.executor = FunctionExecutor(self.skill_manager)
-        from .executor import _set_active_executor
-        _set_active_executor(self.executor)
-        self.workspace = Workspace(workspace_path)
         self.memory = AgentMemory()
         self.verbose = False
 
@@ -59,16 +58,17 @@ class AIEngine:
         base_prompt = system_prompt or SYSTEM_PROMPT
         self.system_prompt = f"{base_prompt}\n\n{soul}" if soul.strip() else base_prompt
 
-        self.runtime = AgentRuntime(
-            provider=self.provider,
+        self.agent = Agent(
+            workspace=workspace_path,
+            provider=provider,
             skill_manager=self.skill_manager,
-            session_store=SessionStore(self.workspace.path / "ai-state.db"),
             memory=self.memory,
-            workspace_path=self.workspace.path,
             source="engine",
             system_prompt=self._build_system_prompt(),
             verbose_hook=print,
         )
+        self.provider = self.agent.provider
+        self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
         self.conversation: list[ChatMessage] = [
@@ -91,111 +91,35 @@ class AIEngine:
         return self.system_prompt.replace("{available_skills}", skill_list)
 
     def chat(self, user_message: str) -> str:
-        """One turn: user message → runtime task lifecycle → response."""
+        """Compatibility wrapper around :meth:`Agent.run`."""
 
         self._last_tool_results = []
         self._last_tool_calls = []
 
-        result = self.runtime.run(
-            user_message,
-            extra_messages=self._explicit_context_messages(),
-        )
+        self.agent.extra_messages = self._explicit_context_messages()
+        result = self.agent.run(user_message)
+        self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
-        self.workspace.enter()
         self.conversation = list(self.runtime.messages)
-        self._last_tool_calls = [record["name"] for record in result.tool_calls]
-        self._last_tool_results = [record["result"] for record in result.tool_calls]
+        task_result = self.runtime.last_result
+        self._last_tool_calls = list(result.tools)
+        if task_result is not None:
+            self._last_tool_results = [
+                record["result"] for record in task_result.tool_calls
+            ]
 
-        if result.draft_skill:
-            print(f"💾 draft skill: {result.draft_skill['name']} (/drafts to review)")
+        if result.evolution_candidates:
+            print(
+                f"💾 draft skill: {result.evolution_candidates[0]['name']} "
+                "(/drafts to review)"
+            )
 
-        return result.final_response
+        return result.response
 
     def _explicit_context_messages(self) -> list[ChatMessage]:
         """Return prior conversation for continuity across turns."""
         return list(self.conversation[1:])
-
-    def _chat_loop(self, tools: list[dict]) -> str:
-        """Core loop: LLM → tool_calls → execute → repeat until stop."""
-        max_turns = 10
-        for _ in range(max_turns):
-            response = self.provider.chat(self.conversation, tools if tools else None)
-            self.conversation.append(response.message)
-
-            if response.finish_reason == "stop":
-                return response.message.content
-
-            if response.finish_reason == "length":
-                return response.message.content + "\n[response truncated]"
-
-            if response.tool_calls:
-                for tc in response.tool_calls:
-                    args_str = ", ".join(f"{k}={v}" for k, v in tc.arguments.items())
-                    print(f"🔧 {tc.name}({args_str})")
-                    result = self.executor.execute(tc)
-                    if "error" in result:
-                        print(f"❌ {tc.name}: {result['error'][:100]}")
-                    else:
-                        print(f"✅ {tc.name}")
-                    self._last_tool_calls.append(tc.name)
-                    self._last_tool_results.append(result)
-                    self.conversation.append(ChatMessage.tool(
-                        content=json.dumps(result, default=str),
-                        tool_call_id=tc.id,
-                    ))
-
-        return self.conversation[-1].content or "[max turns reached]"
-
-    def _learn(self, user_message: str, response: str) -> None:
-        """Learn from this interaction — append to memory."""
-        if not self._last_tool_results:
-            return
-
-        errors = [r for r in self._last_tool_results if "error" in r]
-        success = [r for r in self._last_tool_results if "error" not in r]
-        outcome = "success" if not errors else ("partial" if success else "failure")
-
-        self.memory.append_learning({
-            "user_intent": user_message[:200],
-            "outcome": outcome,
-            "tools_used": self._last_tool_calls,
-            "insight": f"Used {', '.join(self._last_tool_calls)}. "
-                       f"{len(success)} succeeded, {len(errors)} failed."
-                       if errors else
-                       f"All {len(success)} tool calls succeeded.",
-        })
-
-        # Auto-save skill for multi-step successes (3+ tools)
-        if len(success) >= 3 and not errors:
-            self._auto_save_skill(user_message)
-
-    def _auto_save_skill(self, user_message: str) -> None:
-        """Auto-save a multi-step success as a generated skill."""
-        # Generate a short name from the first few tool calls
-        name = "-".join(self._last_tool_calls[:3])
-        if len(name) > 60:
-            name = name[:57] + "..."
-
-        # Don't save if skill already exists
-        from .skill_loader import SKILLS_DIR
-        existing = list(SKILLS_DIR.glob(f"{name}*.skill.md"))
-        if existing:
-            return
-
-        tools = [{"function": tc, "args_template": {}} for tc in self._last_tool_calls]
-        desc = f"Auto-saved workflow: {' → '.join(self._last_tool_calls)}"
-        keywords = [w for w in user_message.lower().split() if len(w) > 3][:5]
-
-        path = save_skill_md(
-            name=name,
-            description=desc,
-            tools=tools,
-            trigger_keywords=keywords,
-            load_mode="auto_choice",
-            body=f"# {desc}\n\nAuto-saved from: _{user_message[:100]}_\n",
-        )
-        print(f"💾 auto-saved skill: {path.name}")
 
     def repl(self) -> None:
         """Interactive REPL loop with /commands."""
@@ -259,14 +183,10 @@ class AIEngine:
 
         elif command == "/workspace":
             if arg:
-                new_path = arg
-                self.workspace = Workspace(new_path)
-                self.workspace.enter()
-                self.runtime.workspace = self.workspace
-                self.runtime.session_store.close()
-                self.runtime.session_store = SessionStore(
-                    self.workspace.path / "ai-state.db"
-                )
+                self.agent.switch_workspace(arg)
+                self.runtime = self.agent.runtime
+                self.executor = self.runtime.executor
+                self.workspace = self.runtime.workspace
                 print(f"  Workspace changed to: {self.workspace.path}")
             else:
                 print(f"  Current workspace: {self.workspace.path}")
@@ -501,6 +421,7 @@ class AIEngine:
         elif command == "/system":
             if arg:
                 self.system_prompt = arg
+                self.agent.system_prompt = arg
                 self.runtime.system_prompt = arg
                 self.conversation[0] = ChatMessage.system(arg)
                 print(f"  System prompt updated ({len(arg)} chars).")

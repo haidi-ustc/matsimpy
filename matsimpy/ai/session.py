@@ -63,7 +63,11 @@ class AgentSession:
         self._replacement_parent_id = None
         return self
 
-    def run(self, text: str) -> SessionTurn:
+    def run(
+        self,
+        text: str,
+        extra_messages: list[ChatMessage] | None = None,
+    ) -> SessionTurn:
         """Execute and append one conversational turn."""
         parent_id = self._replacement_parent_id
         self._replacement_parent_id = None
@@ -71,6 +75,7 @@ class AgentSession:
             text,
             parent_attempt_id=parent_id,
             replace_parent=False,
+            extra_messages=extra_messages,
         )
 
     def retry(self) -> SessionTurn:
@@ -82,6 +87,7 @@ class AgentSession:
             parent.user_request,
             parent_attempt_id=parent.attempt_id,
             replace_parent=True,
+            extra_messages=None,
         )
 
     def undo(self) -> SessionTurn:
@@ -97,6 +103,7 @@ class AgentSession:
         text: str,
         parent_attempt_id: int | None,
         replace_parent: bool,
+        extra_messages: list[ChatMessage] | None,
     ) -> SessionTurn:
         if self.conversation_id is None:
             self.new()
@@ -107,7 +114,11 @@ class AgentSession:
             parent_attempt_id=parent_attempt_id,
         )
         context_turns = self.turns[:-1] if replace_parent else self.turns
-        context = self._messages_for(context_turns)
+        context = (
+            list(extra_messages)
+            if extra_messages is not None
+            else self._messages_for(context_turns)
+        )
         try:
             result = self.runtime.run(text, extra_messages=context)
         except (KeyboardInterrupt, asyncio.CancelledError) as exc:
