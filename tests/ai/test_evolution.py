@@ -3,7 +3,12 @@
 import pytest
 
 from matsimpy.ai import skill_loader
-from matsimpy.ai.evolution import EvolutionCandidate, EvolutionManager, EvolutionPolicy
+from matsimpy.ai.evolution import (
+    EvolutionCandidate,
+    EvolutionManager,
+    EvolutionPolicy,
+    SkillEvolutionError,
+)
 from matsimpy.ai.session_store import SessionStore
 
 
@@ -20,7 +25,12 @@ def test_evolution_does_not_draft_routine_two_tool_success(tmp_path):
     store.add_tool_call(session_id, "from_prototype", {"prototype": "fcc"}, {"formula": "Cu4"}, "success")
     store.add_tool_call(session_id, "save_structure", {"path": "cu.vasp"}, {"saved_to": "cu.vasp"}, "success")
 
-    manager = EvolutionManager(store)
+    manager = EvolutionManager(
+        store,
+        user_skill_root=tmp_path / "skills",
+        available_tools={"from_prototype", "save_structure"},
+        replay=lambda version, context: {"passed": True},
+    )
     draft = manager.draft_from_trace(
         session_id=session_id,
         user_request="create fcc copper and save it",
@@ -239,7 +249,12 @@ def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
     store.add_tool_call(first_session_id, "from_prototype", {"prototype": "fcc"}, {"formula": "Cu4"}, "success")
     store.add_tool_call(first_session_id, "save_structure", {"path": "cu.vasp"}, {"saved_to": "cu.vasp"}, "success")
 
-    manager = EvolutionManager(store)
+    manager = EvolutionManager(
+        store,
+        user_skill_root=tmp_path / "skills",
+        available_tools={"from_prototype", "save_structure"},
+        replay=lambda version, context: {"passed": True},
+    )
     first_draft = manager.draft_from_trace(
         session_id=first_session_id,
         user_request="remember this workflow: create fcc copper and save it",
@@ -247,7 +262,11 @@ def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
         validation_status="success",
     )
     assert first_draft is not None
-    manager.approve(first_draft["name"])
+    with pytest.raises(SkillEvolutionError, match="migrated to version"):
+        manager.approve(first_draft["name"])
+    first_version = store.get_skill_version(1)
+    manager.evaluate(first_version.id)
+    manager.approve(first_version.id)
 
     second_session_id = store.start_session("test", str(tmp_path), "fake", "fake")
     store.add_tool_call(second_session_id, "from_prototype", {"prototype": "fcc"}, {"formula": "Cu4"}, "success")
@@ -267,7 +286,8 @@ def test_evolution_preserves_approved_draft_when_slug_collides(tmp_path):
 
     approved = store.list_skill_drafts("approved")
     drafts = store.list_skill_drafts("draft")
-    assert [draft["name"] for draft in approved] == [first_draft["name"]]
+    assert approved == []
+    assert [draft["name"] for draft in store.list_skill_drafts("archived")] == [first_draft["name"]]
     assert [draft["name"] for draft in drafts] == [second_draft["name"]]
 
 
@@ -292,10 +312,10 @@ def test_approve_and_reject_skill_draft(tmp_path):
         {"tools": ["from_prototype"]},
     )
 
-    manager = EvolutionManager(store)
-    manager.approve("fcc-copper")
-    assert store.list_skill_drafts("approved")[0]["name"] == "fcc-copper"
-
+    manager = EvolutionManager(store, available_tools={"from_prototype"})
+    with pytest.raises(SkillEvolutionError, match="source trace"):
+        manager.approve("fcc-copper")
+    assert store.list_skill_drafts("draft")[0]["name"] == "fcc-copper"
     manager.reject("fcc-copper")
     assert store.list_skill_drafts("archived")[0]["name"] == "fcc-copper"
 
@@ -315,23 +335,14 @@ def test_approve_materializes_generated_skill_for_loader(tmp_path):
         },
     )
 
-    manager = EvolutionManager(store)
-    manager.approve("relax-copper")
-
-    approved_drafts = store.list_skill_drafts("approved")
-    assert [draft["name"] for draft in approved_drafts] == ["relax-copper"]
-
-    approved_skills = skill_loader.list_generated_skills(status="approved")
-    assert len(approved_skills) == 1
-    assert approved_skills[0]["name"] == "relax-copper"
-    assert approved_skills[0]["status"] == "approved"
-    assert approved_skills[0]["body"] == "# Relax Copper\n\nUse the stored relaxation workflow."
-    assert approved_skills[0]["description"] == "Relax a copper structure"
-    assert approved_skills[0]["load_mode"] == "auto_choice"
-    assert approved_skills[0]["tools"] == [
-        {"function": "from_prototype"},
-        {"function": "relax_structure"},
-    ]
+    manager = EvolutionManager(
+        store,
+        user_skill_root=tmp_path / "skills",
+        available_tools={"from_prototype", "relax_structure"},
+    )
+    with pytest.raises(SkillEvolutionError, match="source trace"):
+        manager.approve("relax-copper")
+    assert not (tmp_path / "skills" / "relax-copper").exists()
 
 
 def test_approve_materializes_unsafe_draft_name_under_generated_skills(tmp_path, generated_skill_dir):
@@ -346,20 +357,10 @@ def test_approve_materializes_unsafe_draft_name_under_generated_skills(tmp_path,
         {"tools": ["from_prototype"]},
     )
 
-    manager = EvolutionManager(store)
-    manager.approve("../outside")
-
-    paths = list(generated_skill_dir.glob("*.skill.md"))
-    assert len(paths) == 1
-    assert paths[0].resolve().is_relative_to(generated_skill_dir.resolve())
-    assert paths[0].name == "outside.skill.md"
-    assert (tmp_path / "outside.skill.md").exists() is False
-
-    approved_skills = skill_loader.list_generated_skills(status="approved")
-    assert [skill["name"] for skill in approved_skills] == ["outside"]
-    assert ".." not in approved_skills[0]["name"]
-    assert "/" not in approved_skills[0]["name"]
-    assert "\\" not in approved_skills[0]["name"]
+    manager = EvolutionManager(store, available_tools={"from_prototype"})
+    with pytest.raises(SkillEvolutionError, match="name"):
+        manager.approve("../outside")
+    assert not list(generated_skill_dir.glob("*.skill.md"))
 
 
 def test_reject_does_not_materialize_generated_skill(tmp_path):

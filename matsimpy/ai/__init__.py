@@ -47,6 +47,7 @@ from .evolution import (
     EvolutionCandidate,
     EvolutionManager,
     EvolutionPolicy,
+    ReplayContext,
     SkillEvolutionError,
 )
 from .memory import AgentMemory, MemoryEntry, MemoryValidationError
@@ -69,6 +70,7 @@ __all__ = [
     "EvolutionCandidate",
     "EvolutionManager",
     "EvolutionPolicy",
+    "ReplayContext",
     "SkillEvolutionError",
     "SkillVersion",
     "AgentMemory",

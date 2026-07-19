@@ -7,11 +7,12 @@ import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from types import MappingProxyType
+from typing import Any, Literal, Mapping
 
 STATE_DB = Path.home() / ".matsimpy" / "ai" / "state.db"
 _SEARCH_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 AttemptState = Literal["pending", "running", "interrupted", "succeeded", "failed"]
 _FINISHED_ATTEMPT_STATES = frozenset({"succeeded", "failed"})
 
@@ -62,8 +63,9 @@ class SkillVersion:
     diff: str
     status: str
     deterministic_pass: bool | None
-    deterministic_result: dict[str, Any] | None
-    judge_result: dict[str, Any] | None
+    deterministic_result: Mapping[str, Any] | None
+    judge_result: Mapping[str, Any] | None
+    evaluated_hash: str | None
     approvable: bool
     created_at: str
     evaluated_at: str | None
@@ -437,33 +439,45 @@ class SessionStore:
         status: str = "draft",
     ) -> SkillVersion:
         """Append an immutable skill version."""
-        row = self.conn.execute(
-            "SELECT COALESCE(MAX(version), 0) + 1 FROM skill_versions WHERE name = ?",
-            (name,),
-        ).fetchone()
-        version = int(row[0])
-        with self.conn:
-            cursor = self.conn.execute(
-                """INSERT INTO skill_versions (
-                    name, version, description, body, allowed_tools_json,
-                    source_trace_ids_json, content_hash, parent_version_id,
-                    rollback_of_version_id, diff, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    name,
-                    version,
-                    description,
-                    body,
-                    self._json_dump(allowed_tools),
-                    self._json_dump(source_trace_ids),
-                    content_hash,
-                    parent_version_id,
-                    rollback_of_version_id,
-                    diff,
-                    status,
-                ),
-            )
-        return self.get_skill_version(int(cursor.lastrowid))
+        for attempt in range(3):
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self.conn.execute(
+                    "SELECT COALESCE(MAX(version), 0) + 1 FROM skill_versions WHERE name = ?",
+                    (name,),
+                ).fetchone()
+                version = int(row[0])
+                cursor = self.conn.execute(
+                    """INSERT INTO skill_versions (
+                        name, version, description, body, allowed_tools_json,
+                        source_trace_ids_json, content_hash, parent_version_id,
+                        rollback_of_version_id, diff, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        name,
+                        version,
+                        description,
+                        body,
+                        self._json_dump(allowed_tools),
+                        self._json_dump(source_trace_ids),
+                        content_hash,
+                        parent_version_id,
+                        rollback_of_version_id,
+                        diff,
+                        status,
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                self.conn.rollback()
+                if attempt == 2:
+                    raise
+            except Exception:
+                self.conn.rollback()
+                raise
+            else:
+                self.conn.commit()
+                return self.get_skill_version(int(cursor.lastrowid))
+        raise RuntimeError("unable to allocate skill version")
 
     def get_skill_version(self, version_id: int) -> SkillVersion:
         row = self.conn.execute(
@@ -487,28 +501,45 @@ class SessionStore:
         deterministic_pass: bool,
         deterministic_result: dict[str, Any],
         judge_result: dict[str, Any] | None,
+        evaluated_hash: str,
         approvable: bool,
     ) -> SkillVersion:
         with self.conn:
-            self.conn.execute(
+            cursor = self.conn.execute(
                 """UPDATE skill_versions SET deterministic_pass = ?,
                     deterministic_result_json = ?, judge_result_json = ?,
-                    approvable = ?, status = 'evaluated',
-                    evaluated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+                    evaluated_hash = ?, approvable = ?, status = 'evaluated',
+                    evaluated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND status = 'draft'
+                    AND deterministic_pass IS NULL""",
                 (
                     int(deterministic_pass),
                     self._json_dump(deterministic_result),
                     self._json_dump(judge_result),
+                    evaluated_hash,
                     int(approvable),
                     version_id,
                 ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("skill version has already been evaluated or is not a draft")
         return self.get_skill_version(version_id)
 
     def set_skill_version_status(
-        self, version_id: int, status: str, *, activate: bool = False
+        self, version_id: int, status: str, *, activate: bool = False,
+        expected_status: str | None = None,
     ) -> SkillVersion:
         version = self.get_skill_version(version_id)
+        permitted = {
+            "draft": {"evaluated", "rejected"},
+            "evaluated": {"approved", "rejected"},
+            "approved": set(),
+            "rejected": set(),
+        }
+        if status not in permitted.get(version.status, set()):
+            raise ValueError(
+                f"invalid skill version transition: {version.status} -> {status}"
+            )
         with self.conn:
             if activate:
                 self.conn.execute(
@@ -516,12 +547,31 @@ class SessionStore:
                     (version.name,),
                 )
             approved_at = "CURRENT_TIMESTAMP" if status == "approved" else "approved_at"
-            self.conn.execute(
+            cursor = self.conn.execute(
                 "UPDATE skill_versions SET status = ?, active = ?, "
-                f"approved_at = {approved_at} WHERE id = ?",
-                (status, int(activate), version_id),
+                f"approved_at = {approved_at} WHERE id = ? AND status = ?",
+                (status, int(activate), version_id, expected_status or version.status),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("skill version status changed concurrently")
         return self.get_skill_version(version_id)
+
+    def restore_skill_activation(
+        self, failed_version_id: int, prior_version_id: int | None
+    ) -> None:
+        """Compensate a failed filesystem publication after DB activation."""
+        with self.conn:
+            failed = self.get_skill_version(failed_version_id)
+            self.conn.execute(
+                """UPDATE skill_versions SET status = 'evaluated', active = 0,
+                   approved_at = NULL WHERE id = ? AND status = 'approved'""",
+                (failed_version_id,),
+            )
+            if prior_version_id is not None:
+                self.conn.execute(
+                    "UPDATE skill_versions SET active = 1 WHERE id = ? AND name = ?",
+                    (prior_version_id, failed.name),
+                )
 
     def close(self) -> None:
         self.conn.close()
@@ -546,7 +596,12 @@ class SessionStore:
             raise RuntimeError(
                 f"database schema version {version} is newer than supported version {_SCHEMA_VERSION}"
             )
-        migrations = (self._migrate_to_v1, self._migrate_to_v2, self._migrate_to_v3)
+        migrations = (
+            self._migrate_to_v1,
+            self._migrate_to_v2,
+            self._migrate_to_v3,
+            self._migrate_to_v4,
+        )
         for target_version in range(version + 1, _SCHEMA_VERSION + 1):
             self.conn.execute("BEGIN IMMEDIATE")
             try:
@@ -690,6 +745,13 @@ class SessionStore:
                 FOREIGN KEY (rollback_of_version_id) REFERENCES skill_versions(id)
             )"""
         )
+
+    def _migrate_to_v4(self) -> None:
+        columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info(skill_versions)")
+        }
+        if "evaluated_hash" not in columns:
+            self.conn.execute("ALTER TABLE skill_versions ADD COLUMN evaluated_hash TEXT")
         self.conn.execute(
             """CREATE UNIQUE INDEX IF NOT EXISTS one_active_skill_version
                ON skill_versions(name) WHERE active = 1"""
@@ -828,10 +890,14 @@ class SessionStore:
         data["source_trace_ids"] = tuple(
             self._json_load(data.pop("source_trace_ids_json"), [])
         )
-        data["deterministic_result"] = self._json_load(
-            data.pop("deterministic_result_json"), None
+        deterministic = self._json_load(data.pop("deterministic_result_json"), None)
+        judge = self._json_load(data.pop("judge_result_json"), None)
+        data["deterministic_result"] = (
+            MappingProxyType(deterministic) if isinstance(deterministic, dict) else None
         )
-        data["judge_result"] = self._json_load(data.pop("judge_result_json"), None)
+        data["judge_result"] = (
+            MappingProxyType(judge) if isinstance(judge, dict) else None
+        )
         data["deterministic_pass"] = (
             None if data["deterministic_pass"] is None else bool(data["deterministic_pass"])
         )

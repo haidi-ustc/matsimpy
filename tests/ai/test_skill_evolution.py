@@ -1,5 +1,6 @@
 """Lifecycle and security tests for approval-gated skill evolution."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -7,18 +8,41 @@ import pytest
 from matsimpy.ai.agent_skills import SkillLibrary
 from matsimpy.ai.evolution import EvolutionManager, SkillEvolutionError
 from matsimpy.ai.session_store import SessionStore
+from matsimpy.ai.skill import FunctionDef
+from matsimpy.core import Molecule
+
+
+def _tool(name):
+    return FunctionDef(
+        name=name,
+        description="test tool",
+        parameters={"type": "object", "properties": {}},
+        callable=lambda **kwargs: {"ok": True},
+    )
 
 
 @pytest.fixture
 def manager(tmp_path):
     store = SessionStore(tmp_path / "state.db")
+    session_id = store.start_session("test", str(tmp_path), "fake", "fake")
+    for index in range(100):
+        store.add_task_trace(
+            session_id,
+            f"request {index}",
+            "plan",
+            "success",
+            "done",
+        )
     return EvolutionManager(
         store,
         user_skill_root=tmp_path / "skills",
-        available_tools={"from_prototype", "write_structure"},
-        replay=lambda version, workspace: {
+        available_tools={
+            "from_prototype": _tool("from_prototype"),
+            "write_structure": _tool("write_structure"),
+        },
+        replay=lambda version, context: {
             "passed": "FAIL_REPLAY" not in version.body,
-            "details": {"workspace": str(workspace)},
+            "details": {"workspace": str(context.workspace.path)},
         },
     )
 
@@ -153,3 +177,250 @@ def test_approval_refuses_existing_bundled_script(manager):
 
     with pytest.raises(SkillEvolutionError, match="scripts.*resources"):
         manager.approve(draft.id)
+
+
+def test_approval_refuses_symlinked_active_manifest(manager, tmp_path):
+    draft = manager.draft_skill(
+        "linked-skill", "Linked", "Use `from_prototype`.", ["from_prototype"], [72]
+    )
+    manager.evaluate(draft.id)
+    destination = manager.user_skill_root / draft.name
+    destination.mkdir(parents=True)
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside")
+    (destination / "SKILL.md").symlink_to(outside)
+
+    with pytest.raises(SkillEvolutionError, match="symlink"):
+        manager.approve(draft.id)
+
+
+def test_content_tampering_before_evaluation_is_detected(manager):
+    draft = manager.draft_skill(
+        "tamper-skill", "Tamper", "Use `from_prototype`.", ["from_prototype"], [81]
+    )
+    manager.store.conn.execute(
+        "UPDATE skill_versions SET body = 'changed' WHERE id = ?", (draft.id,)
+    )
+    manager.store.conn.commit()
+
+    with pytest.raises(SkillEvolutionError, match="content hash"):
+        manager.evaluate(draft.id)
+
+
+def test_content_tampering_after_evaluation_is_detected(manager):
+    draft = manager.draft_skill(
+        "tamper-skill", "Tamper", "Use `from_prototype`.", ["from_prototype"], [82]
+    )
+    manager.evaluate(draft.id)
+    manager.store.conn.execute(
+        "UPDATE skill_versions SET body = 'changed' WHERE id = ?", (draft.id,)
+    )
+    manager.store.conn.commit()
+
+    with pytest.raises(SkillEvolutionError, match="changed after evaluation"):
+        manager.approve(draft.id)
+
+
+def test_evaluation_is_append_once_and_state_transitions_are_strict(manager):
+    draft = manager.draft_skill(
+        "once-skill", "Once", "Use `from_prototype`.", ["from_prototype"], [83]
+    )
+    manager.evaluate(draft.id)
+    with pytest.raises(SkillEvolutionError, match="cannot evaluate"):
+        manager.evaluate(draft.id)
+    with pytest.raises(ValueError, match="invalid.*transition"):
+        manager.store.set_skill_version_status(draft.id, "draft")
+
+
+def test_approval_db_failure_restores_prior_file_and_activation(manager, monkeypatch):
+    first = manager.draft_skill(
+        "restore-skill", "Restore", "First `from_prototype`.", ["from_prototype"], [84]
+    )
+    manager.evaluate(first.id)
+    manager.approve(first.id)
+    prior_bytes = (manager.user_skill_root / first.name / "SKILL.md").read_bytes()
+    second = manager.draft_revision(
+        first.id, body="Second `from_prototype`.", source_trace_ids=[85]
+    )
+    manager.evaluate(second.id)
+    original = manager.store.set_skill_version_status
+
+    def fail_after_commit(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected database failure")
+
+    monkeypatch.setattr(manager.store, "set_skill_version_status", fail_after_commit)
+    with pytest.raises(RuntimeError, match="injected"):
+        manager.approve(second.id)
+
+    assert (manager.user_skill_root / first.name / "SKILL.md").read_bytes() == prior_bytes
+    assert manager.store.get_active_skill_version(first.name).id == first.id
+    assert manager.store.get_skill_version(second.id).status == "evaluated"
+
+
+def test_first_approval_db_failure_leaves_no_active_file_or_version(manager, monkeypatch):
+    draft = manager.draft_skill(
+        "first-failure", "Failure", "Use `from_prototype`.", ["from_prototype"], [93]
+    )
+    manager.evaluate(draft.id)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("injected database failure")
+
+    monkeypatch.setattr(manager.store, "set_skill_version_status", fail)
+    with pytest.raises(RuntimeError, match="injected"):
+        manager.approve(draft.id)
+
+    assert not (manager.user_skill_root / draft.name / "SKILL.md").exists()
+    with pytest.raises(KeyError, match="no active"):
+        manager.store.get_active_skill_version(draft.name)
+    assert manager.store.get_skill_version(draft.id).status == "evaluated"
+
+
+def test_legacy_approval_only_migrates_to_inactive_version(manager):
+    session_id = manager.store.conn.execute("SELECT id FROM sessions LIMIT 1").fetchone()[0]
+    manager.store.save_skill_draft(
+        "legacy-skill",
+        "draft",
+        session_id,
+        [],
+        "Use `from_prototype`.",
+        {"tools": ["from_prototype"], "evolution": {"source_trace_ids": [94]}},
+    )
+
+    with pytest.raises(SkillEvolutionError, match="migrated to version"):
+        manager.approve("legacy-skill")
+
+    migrated = manager.store.get_skill_version(1)
+    assert migrated.status == "draft"
+    assert not (manager.user_skill_root / "legacy-skill").exists()
+
+
+def test_rollback_uses_current_replay_and_cannot_fabricate_pass(manager):
+    first = manager.draft_skill(
+        "rollback-skill", "Rollback", "First `from_prototype`.", ["from_prototype"], [86]
+    )
+    manager.evaluate(first.id)
+    manager.approve(first.id)
+    second = manager.draft_revision(
+        first.id, body="Second `from_prototype`.", source_trace_ids=[87]
+    )
+    manager.evaluate(second.id)
+    manager.approve(second.id)
+    manager.replay = lambda version, context: {"passed": False}
+
+    with pytest.raises(SkillEvolutionError, match="not approvable"):
+        manager.rollback(first.id, source_trace_ids=[88])
+
+
+def test_replay_context_restores_cwd_and_restricts_tools(manager):
+    caller = Path.cwd()
+
+    def replay(version, context):
+        assert Path.cwd() == context.workspace.path
+        assert "error" in context.execute("shell", {})
+        assert context.execute("from_prototype", {}) == {"ok": True}
+        return {"passed": True}
+
+    manager.replay = replay
+    draft = manager.draft_skill(
+        "context-skill", "Context", "Use `from_prototype`.", ["from_prototype"], [89]
+    )
+    manager.evaluate(draft.id)
+    assert Path.cwd() == caller
+
+
+def test_replay_context_preserves_executor_structure_references(manager):
+    make = FunctionDef(
+        name="make_molecule",
+        description="make",
+        parameters={"type": "object", "properties": {}},
+        callable=lambda: Molecule(["H"], [[0.0, 0.0, 0.0]]),
+    )
+    count = FunctionDef(
+        name="count_atoms",
+        description="count",
+        parameters={
+            "type": "object",
+            "properties": {"structure": {"type": "object"}},
+            "required": ["structure"],
+        },
+        callable=lambda structure: len(structure),
+    )
+    replay_manager = EvolutionManager(
+        manager.store,
+        user_skill_root=manager.user_skill_root,
+        available_tools={"make_molecule": make, "count_atoms": count},
+    )
+
+    def replay(version, context):
+        structure = context.execute("make_molecule", {})
+        assert context.execute("count_atoms", {"structure": structure}) == {"result": 1}
+        return {"passed": True}
+
+    replay_manager.replay = replay
+    draft = replay_manager.draft_skill(
+        "reference-skill", "Reference", "Use both registered tools.",
+        ["make_molecule", "count_atoms"], [96]
+    )
+    assert replay_manager.evaluate(draft.id).deterministic_pass is True
+
+
+def test_replay_rejects_path_escape_and_symlink_artifacts(manager, tmp_path):
+    def escape(version, context):
+        context.artifact_path("../escape")
+        return {"passed": True}
+
+    manager.replay = escape
+    draft = manager.draft_skill(
+        "escape-skill", "Escape", "Use `from_prototype`.", ["from_prototype"], [90]
+    )
+    with pytest.raises(SkillEvolutionError, match="escapes"):
+        manager.evaluate(draft.id)
+
+    def symlink(version, context):
+        (context.workspace.path / "link").symlink_to(tmp_path)
+        return {"passed": True, "artifacts": ["link"]}
+
+    manager.replay = symlink
+    second = manager.draft_skill(
+        "symlink-skill", "Symlink", "Use `from_prototype`.", ["from_prototype"], [91]
+    )
+    with pytest.raises(SkillEvolutionError, match="symlink"):
+        manager.evaluate(second.id)
+
+
+def test_replay_rejects_declared_missing_artifact(manager):
+    manager.replay = lambda version, context: {
+        "passed": True,
+        "artifacts": ["missing.cif"],
+    }
+    draft = manager.draft_skill(
+        "missing-artifact", "Artifact", "Use `from_prototype`.",
+        ["from_prototype"], [95]
+    )
+    with pytest.raises(SkillEvolutionError, match="not a regular file"):
+        manager.evaluate(draft.id)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "python -m pip install bad",
+        "PYTHON -m PIP   INSTALL bad",
+        "Run scripts / run.sh",
+        "modify MATSIMPY / core / structure.py",
+        "rewrite soul.md",
+    ],
+)
+def test_adversarial_unsafe_instruction_variants_are_rejected(manager, body):
+    with pytest.raises(SkillEvolutionError):
+        manager.draft_skill("adversarial", "Unsafe", body, ["from_prototype"], [92])
+
+
+def test_missing_source_trace_is_rejected(manager):
+    with pytest.raises(SkillEvolutionError, match="do not exist"):
+        manager.draft_skill(
+            "missing-trace", "Missing", "Use `from_prototype`.",
+            ["from_prototype"], [9999]
+        )

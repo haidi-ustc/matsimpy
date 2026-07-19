@@ -10,13 +10,17 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Literal, Mapping, Sequence
 
 import yaml
 
 from .agent_skills import SkillValidationError, parse_skill, validate_skill_name
+from .conversation import ToolCall
+from .executor import FunctionExecutor, active_executor
 from .session_store import SessionStore, SkillVersion
-from .skill_loader import save_skill_md
+from .skill import FunctionDef, Skill, SkillManager
+from .workspace import Workspace
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 _LEARN_RE = re.compile(
@@ -37,7 +41,37 @@ class EvolutionCandidate:
 
 
 SemanticEvaluator = Callable[[Sequence[Mapping[str, Any]]], EvolutionCandidate | None]
-ReplayRunner = Callable[[SkillVersion, Path], Mapping[str, Any]]
+
+
+@dataclass(frozen=True)
+class ReplayContext:
+    """Capability-limited deterministic replay environment."""
+
+    workspace: Workspace
+    executor: FunctionExecutor
+    allowed_tools: frozenset[str]
+    tool_catalog: Mapping[str, FunctionDef]
+
+    def execute(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
+        """Execute only a tool explicitly granted to this skill version."""
+        if name not in self.allowed_tools:
+            return {"error": f"Tool is not allowed during replay: {name}"}
+        return self.executor.execute(
+            ToolCall(id="evolution-replay", name=name, arguments=dict(arguments))
+        )
+
+    def artifact_path(self, relative_path: str) -> Path:
+        """Resolve a non-symlink artifact path constrained to the workspace."""
+        requested = Path(relative_path)
+        if requested.is_absolute():
+            raise SkillEvolutionError("artifact path escapes replay workspace")
+        candidate = (self.workspace.path / requested).resolve(strict=False)
+        if not candidate.is_relative_to(self.workspace.path):
+            raise SkillEvolutionError("artifact path escapes replay workspace")
+        return candidate
+
+
+ReplayRunner = Callable[[SkillVersion, ReplayContext], Mapping[str, Any]]
 
 
 class SkillEvolutionError(ValueError):
@@ -46,7 +80,7 @@ class SkillEvolutionError(ValueError):
 
 _FORBIDDEN_INSTRUCTIONS = (
     (
-        re.compile(r"\bscripts?[/\\]", re.IGNORECASE),
+        re.compile(r"\bscripts?\s*[/\\]", re.IGNORECASE),
         "scripts cannot be executed by evolved skills",
     ),
     (
@@ -56,7 +90,7 @@ _FORBIDDEN_INSTRUCTIONS = (
     (
         re.compile(
             r"\b(?:edit|modify|patch|rewrite|update)\b.{0,80}"
-            r"\b(?:matsimpy[/\\]|\.py\b)",
+            r"\b(?:matsimpy\s*[/\\]|\.py\b)",
             re.IGNORECASE,
         ),
         "source edits are not allowed in evolved skills",
@@ -181,6 +215,13 @@ class EvolutionManager:
             if isinstance(available_tools, Mapping)
             else (available_tools or ())
         )
+        self._tool_definitions = {
+            name: definition
+            for name, definition in (
+                available_tools.items() if isinstance(available_tools, Mapping) else ()
+            )
+            if isinstance(definition, FunctionDef)
+        }
         self.replay = replay
 
     def draft_skill(
@@ -228,8 +269,11 @@ class EvolutionManager:
     ) -> SkillVersion:
         """Validate and replay a draft in isolation before it can be approved."""
         version = self.store.get_skill_version(version_id)
-        if version.status not in {"draft", "evaluated"}:
+        if version.status != "draft":
             raise SkillEvolutionError(f"cannot evaluate {version.status} skill version")
+        content_hash = self._content_hash(version)
+        if content_hash != version.content_hash:
+            raise SkillEvolutionError("skill content hash does not match immutable draft")
         self._validate_content(
             version.name, version.description, version.body, version.allowed_tools
         )
@@ -242,7 +286,10 @@ class EvolutionManager:
             with tempfile.TemporaryDirectory(
                 prefix="matsimpy-skill-replay-"
             ) as workspace:
-                result = self.replay(version, Path(workspace))
+                context = self._replay_context(Path(workspace), version.allowed_tools)
+                with context.workspace.activate(), active_executor(context.executor):
+                    result = self.replay(version, context)
+                self._validate_replay_artifacts(context, result)
         if not isinstance(result, Mapping) or not isinstance(result.get("passed"), bool):
             raise SkillEvolutionError("deterministic replay must return a boolean 'passed' result")
         deterministic_pass = bool(result["passed"])
@@ -250,22 +297,31 @@ class EvolutionManager:
         judge_pass = judge is None or judge.get("passed") is True
         return self.store.evaluate_skill_version(
             version_id, deterministic_pass, dict(result), judge,
+            content_hash,
             approvable=deterministic_pass and judge_pass,
         )
 
     def approve(self, version: int | str) -> SkillVersion | None:
         """Atomically materialize an evaluated version, or support legacy names."""
         if isinstance(version, str):
-            self._approve_legacy(version)
-            return None
+            migrated = self._migrate_legacy_draft(version)
+            raise SkillEvolutionError(
+                f"legacy draft migrated to version {migrated.id}; "
+                "evaluate and approve that version id"
+            )
         record = self.store.get_skill_version(version)
         if record.status != "evaluated" or not record.approvable:
             raise SkillEvolutionError("skill version is not approvable")
+        content_hash = self._content_hash(record)
+        if (
+            content_hash != record.content_hash
+            or record.evaluated_hash != record.content_hash
+        ):
+            raise SkillEvolutionError("skill content changed after evaluation")
         self._validate_content(
             record.name, record.description, record.body, record.allowed_tools
         )
-        self._materialize(record)
-        return self.store.set_skill_version_status(record.id, "approved", activate=True)
+        return self._approve_with_compensation(record)
 
     def reject(self, version: int | str) -> SkillVersion | None:
         """Reject a version without deleting its evidence; retain legacy support."""
@@ -310,15 +366,8 @@ class EvolutionManager:
         )
         # The target already passed deterministic review; the new record makes that
         # provenance explicit while materialization is still revalidated.
-        evaluated = self.store.evaluate_skill_version(
-            rolled_back.id,
-            True,
-            {"passed": True, "rollback_of_version_id": target.id},
-            None,
-            True,
-        )
-        self._materialize(evaluated)
-        return self.store.set_skill_version_status(evaluated.id, "approved", activate=True)
+        evaluated = self.evaluate(rolled_back.id)
+        return self.approve(evaluated.id)  # type: ignore[return-value]
 
     def _create_version(
         self,
@@ -332,13 +381,26 @@ class EvolutionManager:
         rollback_of_version_id: int | None = None,
     ) -> SkillVersion:
         normalized_tools = tuple(dict.fromkeys(tools))
+        self._validate_content(name, description, body, normalized_tools)
         traces = tuple(source_trace_ids)
+        if not traces:
+            raise SkillEvolutionError("at least one source trace id is required")
         if any(
             isinstance(item, bool) or not isinstance(item, int) or item <= 0
             for item in traces
         ):
             raise SkillEvolutionError("source trace ids must be positive integers")
-        self._validate_content(name, description, body, normalized_tools)
+        if traces:
+            placeholders = ",".join("?" for _ in traces)
+            rows = self.store.conn.execute(
+                f"SELECT id FROM task_traces WHERE id IN ({placeholders})", traces
+            ).fetchall()
+            found = {int(row[0]) for row in rows}
+            missing = sorted(set(traces) - found)
+            if missing:
+                raise SkillEvolutionError(
+                    f"source trace ids do not exist: {', '.join(map(str, missing))}"
+                )
         content = self._standard_content(
             name, description, body, normalized_tools, "draft"
         )
@@ -418,7 +480,7 @@ class EvolutionManager:
         dumped = yaml.safe_dump(frontmatter, sort_keys=False)
         return f"---\n{dumped}---\n{body.strip()}\n"
 
-    def _materialize(self, version: SkillVersion) -> None:
+    def _stage_materialization(self, version: SkillVersion) -> tuple[Path, bytes | None]:
         self.user_skill_root.mkdir(parents=True, exist_ok=True)
         root = self.user_skill_root.resolve(strict=True)
         if self.user_skill_root.is_symlink():
@@ -445,16 +507,136 @@ class EvolutionManager:
             version.allowed_tools,
             "approved",
         )
+        target = destination / "SKILL.md"
+        if target.is_symlink():
+            raise SkillEvolutionError("active SKILL.md must not be a symlink")
+        prior = target.read_bytes() if target.exists() else None
         fd, temporary = tempfile.mkstemp(prefix=".SKILL.md.tmp-", dir=destination)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 stream.write(content)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, destination / "SKILL.md")
         except BaseException:
             Path(temporary).unlink(missing_ok=True)
             raise
+        return Path(temporary), prior
+
+    def _approve_with_compensation(self, version: SkillVersion) -> SkillVersion:
+        try:
+            prior = self.store.get_active_skill_version(version.name)
+        except KeyError:
+            prior = None
+        staged, prior_bytes = self._stage_materialization(version)
+        target = self.user_skill_root / version.name / "SKILL.md"
+        published = False
+        activated = False
+        try:
+            os.replace(staged, target)
+            published = True
+            approved = self.store.set_skill_version_status(
+                version.id, "approved", activate=True, expected_status="evaluated"
+            )
+            activated = True
+            return approved
+        except BaseException:
+            staged.unlink(missing_ok=True)
+            if published:
+                if prior_bytes is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    restore_fd, restore_name = tempfile.mkstemp(
+                        prefix=".SKILL.md.restore-", dir=target.parent
+                    )
+                    with os.fdopen(restore_fd, "wb") as stream:
+                        stream.write(prior_bytes)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(restore_name, target)
+            try:
+                persisted = self.store.get_active_skill_version(version.name)
+                activated = persisted.id == version.id
+            except KeyError:
+                pass
+            if activated:
+                self.store.restore_skill_activation(
+                    version.id, prior.id if prior is not None else None
+                )
+            raise
+
+    def _replay_context(
+        self, workspace: Path, allowed_tools: Sequence[str]
+    ) -> ReplayContext:
+        definitions = [
+            self._tool_definitions[name]
+            for name in allowed_tools
+            if name in self._tool_definitions
+        ]
+        skill = Skill("evolution-replay", "Restricted skill replay", definitions)
+        manager = SkillManager({skill.name: skill})
+        manager.load(skill.name)
+        return ReplayContext(
+            workspace=Workspace(workspace),
+            executor=FunctionExecutor(manager),
+            allowed_tools=frozenset(allowed_tools),
+            tool_catalog=MappingProxyType(
+                {definition.name: definition for definition in definitions}
+            ),
+        )
+
+    def _validate_replay_artifacts(
+        self, context: ReplayContext, result: Mapping[str, Any]
+    ) -> None:
+        for item in context.workspace.path.rglob("*"):
+            if item.is_symlink():
+                raise SkillEvolutionError("replay artifact must not be a symlink")
+            if not item.resolve().is_relative_to(context.workspace.path):
+                raise SkillEvolutionError("replay artifact escapes workspace")
+        artifacts = result.get("artifacts", ()) if isinstance(result, Mapping) else ()
+        if isinstance(artifacts, (str, bytes)):
+            artifacts = (artifacts,)
+        for artifact in artifacts:
+            if not isinstance(artifact, str):
+                raise SkillEvolutionError("replay artifact paths must be strings")
+            path = context.artifact_path(artifact)
+            if not path.exists() or not path.is_file() or path.is_symlink():
+                raise SkillEvolutionError(
+                    f"declared replay artifact is not a regular file: {artifact}"
+                )
+
+    def _content_hash(self, version: SkillVersion) -> str:
+        content = self._standard_content(
+            version.name,
+            version.description,
+            version.body,
+            version.allowed_tools,
+            "draft",
+        )
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def _migrate_legacy_draft(self, name: str) -> SkillVersion:
+        draft = self._find_draft(name)
+        if draft is None:
+            raise KeyError(f"Unknown generated skill draft: {name}")
+        metadata = draft.get("metadata", {})
+        evolution = metadata.get("evolution", {})
+        trace_ids = evolution.get("source_trace_ids", [])
+        if not trace_ids and draft.get("source_session_id") is not None:
+            rows = self.store.conn.execute(
+                "SELECT id FROM task_traces WHERE session_id = ? ORDER BY id",
+                (draft["source_session_id"],),
+            ).fetchall()
+            trace_ids = [int(row[0]) for row in rows]
+        version = self.draft_skill(
+            name=name,
+            description=metadata.get("description")
+            or f"Generated skill draft for {name}",
+            body=draft.get("body", ""),
+            tools=[item["function"] for item in _normalize_tools(metadata.get("tools", []))],
+            source_trace_ids=trace_ids,
+        )
+        self.store.set_skill_draft_status(name, "archived")
+        return version
 
     def _versions_for(self, name: str) -> list[int]:
         rows = self.store.conn.execute(
@@ -476,8 +658,16 @@ class EvolutionManager:
         tool_calls = self._tool_calls(session_id)
         trace_history = self._trace_history()
         if not any(trace.get("session_id") == session_id for trace in trace_history):
+            trace_id = self.store.add_task_trace(
+                session_id=session_id,
+                user_request=user_request,
+                plan_summary="generated evolution evidence",
+                validation_status=validation_status,
+                final_response=final_response,
+                tool_names=[call["tool_name"] for call in tool_calls],
+            )
             trace_history.append({
-                "trace_id": session_id,
+                "trace_id": trace_id,
                 "session_id": session_id,
                 "user_request": user_request,
                 "validation_status": validation_status,
@@ -537,24 +727,6 @@ class EvolutionManager:
         while f"{base_name}-{suffix}" in existing_names:
             suffix += 1
         return f"{base_name}-{suffix}"
-
-    def _approve_legacy(self, name: str) -> None:
-        """Approve a generated legacy skill draft."""
-        draft = self._find_draft(name)
-        if draft is None:
-            raise KeyError(f"Unknown generated skill draft: {name}")
-
-        self.store.set_skill_draft_status(name, "approved")
-        metadata = draft.get("metadata", {})
-        save_skill_md(
-            name=name,
-            description=metadata.get("description") or f"Generated skill draft for {name}",
-            tools=_normalize_tools(metadata.get("tools", [])),
-            trigger_keywords=draft.get("trigger_keywords", []),
-            body=draft.get("body", ""),
-            load_mode=metadata.get("load_mode", "auto_choice"),
-            status="approved",
-        )
 
     def _find_draft(self, name: str) -> dict | None:
         for draft in self.store.list_skill_drafts(status=None):
