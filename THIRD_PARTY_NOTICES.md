@@ -1,9 +1,28 @@
 # Third-party notices
 
+## Historical pymatgen-derived calculator modules
+
+The VASP modules `matsimpy/calculator/vasp/inputs.py`, `outputs.py`, and
+`sets.py`, along with their package data, are historical adaptations that
+predate the native-runtime work. Their source headers identify the upstream
+`pymatgen.io.vasp` paths, pymatgen Development Team copyright, and MIT license.
+The native-runtime work preserves those notices; it does not represent those
+historical modules as newly original implementations.
+
+Pymatgen 2025.6.14 is separately used as a black-box behavioral oracle by
+tests. That testing role does not make pymatgen a production dependency and is
+not the source of the new native electronic-structure or symmetry service
+implementations.
+
 ## Atomic Simulation Environment (ASE) 3.29.0 lattice definitions
 
 MatSimPy's `matsimpy/symmetry/kpath.py` narrowly adapts the Setyawan--
 Curtarolo definitions identified in that file's source notice.
+
+This ASE-derived k-path adaptation was added during the native-runtime work
+and is distinct from the older pymatgen-derived VASP calculator modules. The
+file-level notice records ASE version 3.29.0, the upstream source path and
+revision, the adapted scope, copyright, and BSD-3-Clause license.
 
 Copyright (C) 2010--2025 the ASE developers.
 

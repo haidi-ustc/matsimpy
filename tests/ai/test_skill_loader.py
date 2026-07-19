@@ -386,25 +386,30 @@ def test_io_skill_get_functions_does_not_import_runtime_io_dependencies():
             if cached == module_name or cached.startswith(f"{module_name}."):
                 sys.modules.pop(cached, None)
 
-    for module_name in (
+    module_names = (
         "matsimpy.io",
         "matsimpy.io.ase",
         "matsimpy.io.pymatgen",
         "ase",
         "pymatgen",
-    ):
-        pop_module_tree(module_name)
+    )
+    original_modules = {
+        cached: module
+        for cached, module in sys.modules.items()
+        if any(cached == name or cached.startswith(f"{name}.") for name in module_names)
+    }
+    try:
+        for module_name in module_names:
+            pop_module_tree(module_name)
 
-    io_skill.get_functions()
+        io_skill.get_functions()
 
-    for module_name in (
-        "matsimpy.io",
-        "matsimpy.io.ase",
-        "matsimpy.io.pymatgen",
-        "ase",
-        "pymatgen",
-    ):
-        assert not any(
-            cached == module_name or cached.startswith(f"{module_name}.")
-            for cached in sys.modules
-        )
+        for module_name in module_names:
+            assert not any(
+                cached == module_name or cached.startswith(f"{module_name}.")
+                for cached in sys.modules
+            )
+    finally:
+        for module_name in module_names:
+            pop_module_tree(module_name)
+        sys.modules.update(original_modules)

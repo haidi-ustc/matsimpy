@@ -7,6 +7,7 @@ This section provides detailed API documentation for all MatSimPy modules.
    :maxdepth: 2
 
    core
+   electronic_structure
    builders
    transformation
    calculator
@@ -22,6 +23,7 @@ Overview
 The API reference is organized by module:
 
 * :doc:`core` - Core data structures (Crystal, Molecule, Lattice, Composition, Element)
+* :doc:`electronic_structure` - DOS, band structures, orbitals, spins, and computed entries
 * :doc:`builders` - Structure builders (bulk, surface, alloy, molecule, defects, nanostructures)
 * :doc:`transformation` - Transformation operations (geometric, lattice, atomic, chemical, structural)
 * :doc:`calculator` - Calculators (classical, ML, DFT)
@@ -32,4 +34,3 @@ The API reference is organized by module:
 * :doc:`utils` - Utility functions and helpers
 
 For usage examples and tutorials, see the :doc:`../user_guide/index`.
-

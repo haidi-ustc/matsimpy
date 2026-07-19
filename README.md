@@ -32,6 +32,9 @@
 - **Extensibility**: Plugin entry points for registries, including IO formats
 - **AI REPL**: Optional LLM function calling via DeepSeek models. Built-in MatSimPy skills expose core, builders, transformations, analysis, IO, storage, calculators, and symmetry tools. Use `matsimpy-ai -c "build fcc Cu"` for single-shot mode
 - **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT file/workflow interfaces for VASP, Gaussian, and LAMMPS — optional
+- **Native VASP compatibility layer**: read and write VASP inputs and outputs without
+  installing pymatgen. Native DOS, band-structure, computed-entry, and trajectory
+  objects are returned by the VASP parsers.
 
 ## Installation
 
@@ -77,7 +80,7 @@ MatSimPy supports optional features through extra dependencies:
 # Machine learning calculators (torch, torch-geometric)
 pip install -e .[ml]
 
-# I/O converters (pymatgen, ase)
+# I/O converters and VASP HDF5 (pymatgen, ase, h5py)
 pip install -e .[io]
 
 # Structure builders (pyxtal, rdkit)
@@ -85,6 +88,9 @@ pip install -e .[builders]
 
 # Symmetry analysis (spglib)
 pip install -e .[analysis]
+
+# Reproduce VASP compatibility checks against the pinned oracle
+pip install -e '.[dev,parity]'
 
 # Data storage (maggma)
 pip install -e .[storage]
@@ -95,6 +101,27 @@ pip install -e .[ai]
 # Everything
 pip install -e .[all]
 ```
+
+The normal VASP runtime has no pymatgen dependency. `spglib` is needed only
+when an input workflow asks MatSimPy to derive symmetry information (including
+irreducible meshes and symmetry-standardized cells). `h5py` is needed only to
+read VASP HDF5 output. The `parity` extra is for development and installs the
+pinned `pymatgen==2025.6.14` behavioral oracle; it is not a runtime fallback.
+
+### Native VASP output objects
+
+```python
+from matsimpy.calculator.vasp.outputs import Vasprun
+
+run = Vasprun("vasprun.xml")
+dos = run.complete_dos
+bands = run.get_band_structure()       # reads a neighboring KPOINTS when needed
+entry = run.get_computed_entry()       # ComputedStructureEntry by default
+trajectory = run.get_trajectory()      # ionic/MD structures and forces
+```
+
+These results use classes from `matsimpy.electronic_structure` and
+`matsimpy.core.trajectory`; no conversion through pymatgen occurs.
 
 ## Quick Start
 

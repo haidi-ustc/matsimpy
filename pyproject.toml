@@ -48,6 +48,7 @@ ml = [
 io = [
     "pymatgen>=2024.0.0",
     "ase>=3.20.0",
+    "h5py",
 ]
 builders = [
     "pyxtal>=1.0.0",
@@ -74,6 +75,7 @@ all = [
     "torch-geometric>=2.0.0",
     "pymatgen>=2024.0.0",
     "ase>=3.20.0",
+    "h5py",
     "pyxtal>=1.0.0",
     "rdkit",
     "spglib",

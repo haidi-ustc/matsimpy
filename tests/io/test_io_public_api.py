@@ -68,13 +68,23 @@ def test_no_runtime_imports_from_removed_adapter_or_export_packages():
 def test_io_reimport_after_module_cache_clear_is_idempotent():
     import matsimpy.io
 
-    for cached in list(sys.modules):
-        if cached == "matsimpy.io" or cached.startswith("matsimpy.io."):
+    original_modules = {
+        cached: module
+        for cached, module in sys.modules.items()
+        if cached == "matsimpy.io" or cached.startswith("matsimpy.io.")
+    }
+    try:
+        for cached in original_modules:
             if cached != "matsimpy.io.registry":
-                sys.modules.pop(cached)
+                sys.modules.pop(cached, None)
 
-    reimported = importlib.import_module("matsimpy.io")
-    assert "to_ase" in reimported.__all__
+        reimported = importlib.import_module("matsimpy.io")
+        assert "to_ase" in reimported.__all__
+    finally:
+        for cached in list(sys.modules):
+            if cached == "matsimpy.io" or cached.startswith("matsimpy.io."):
+                sys.modules.pop(cached)
+        sys.modules.update(original_modules)
 
 
 def test_io_errors_import_keeps_pymatgen_converters_callable_when_dependency_is_blocked(tmp_path):

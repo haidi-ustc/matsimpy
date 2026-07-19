@@ -7,6 +7,17 @@ import pytest
 VASP_DIR = Path(__file__).parents[2] / "matsimpy" / "calculator" / "vasp"
 
 
+def test_vasp_runtime_does_not_require_pymatgen():
+    import tomllib
+
+    data = tomllib.loads((VASP_DIR.parents[2] / "pyproject.toml").read_text())
+    assert not any(dep.lower().startswith("pymatgen") for dep in data["project"]["dependencies"])
+    assert data["project"]["optional-dependencies"]["parity"] == [
+        "pymatgen==2025.6.14",
+        "spglib",
+    ]
+
+
 def test_vasp_production_modules_do_not_import_pymatgen():
     violations = []
     for path in VASP_DIR.glob("*.py"):
