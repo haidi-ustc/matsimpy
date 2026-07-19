@@ -1,6 +1,7 @@
 """Tests for dynamic skill discovery — basic and edge cases."""
 import os
 import sys
+import yaml
 import pytest
 from matsimpy.ai.skill_loader import discover_builtin_skills, SKILLS_PKG
 
@@ -268,6 +269,92 @@ def test_generated_skill_status_none_returns_all(tmp_path, monkeypatch):
     skills = skill_loader.list_generated_skills(status=None)
 
     assert [s["name"] for s in skills] == ["approved-skill", "draft-skill"]
+
+
+def _write_legacy_skill(
+    path,
+    *,
+    name="legacy-skill",
+    status="draft",
+    body="# Legacy\n\nKeep this body.\n",
+):
+    frontmatter = {
+        "name": name,
+        "description": "Legacy generated skill",
+        "status": status,
+        "load_mode": "manual",
+        "tools": [{"function": "from_prototype"}],
+    }
+    path.write_text(
+        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n{body}",
+        encoding="utf-8",
+    )
+    return body
+
+
+def test_migrate_legacy_skill_dry_run_then_idempotent_migration(tmp_path):
+    from matsimpy.ai.agent_skills import parse_skill
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    source = tmp_path / "legacy-skill.skill.md"
+    body = _write_legacy_skill(source)
+    destination = tmp_path / "standard"
+
+    planned = migrate_legacy_skill(source, destination, dry_run=True)
+
+    assert planned.status == "planned"
+    assert planned.destination == destination / "legacy-skill" / "SKILL.md"
+    assert not destination.exists()
+
+    migrated = migrate_legacy_skill(source, destination)
+    repeated = migrate_legacy_skill(source, destination)
+    manifest = parse_skill(destination / "legacy-skill")
+
+    assert migrated.status == "migrated"
+    assert repeated.status == "already_migrated"
+    assert manifest.metadata["matsimpy"]["status"] == "draft"
+    assert manifest.body + "\n" == body
+    assert source.exists()
+
+
+@pytest.mark.parametrize("name", ["Bad Name", "-bad", "bad-", "x" * 65])
+def test_migrate_legacy_skill_rejects_invalid_name(tmp_path, name):
+    from matsimpy.ai.agent_skills import SkillValidationError
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    source = tmp_path / "legacy.skill.md"
+    _write_legacy_skill(source, name=name)
+
+    with pytest.raises(SkillValidationError, match="name"):
+        migrate_legacy_skill(source, tmp_path / "standard")
+
+
+def test_migrate_legacy_skill_rejects_existing_destination(tmp_path):
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    source = tmp_path / "legacy-skill.skill.md"
+    _write_legacy_skill(source)
+    target = tmp_path / "standard" / "legacy-skill"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text("unrelated", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="collision"):
+        migrate_legacy_skill(source, tmp_path / "standard")
+
+    assert (target / "SKILL.md").read_text(encoding="utf-8") == "unrelated"
+
+
+def test_migrate_legacy_skill_preserves_body_exactly(tmp_path):
+    from matsimpy.ai.skill_loader import migrate_legacy_skill
+
+    source = tmp_path / "legacy-skill.skill.md"
+    body = "\n# Heading\n\n  indented text  \n\n"
+    _write_legacy_skill(source, body=body)
+
+    result = migrate_legacy_skill(source, tmp_path / "standard")
+    content = result.destination.read_text(encoding="utf-8")
+
+    assert content[content.index("---\n", 4) + 4 :] == body
 
 
 def test_skill_schema_describes_structure_parameters_as_references():

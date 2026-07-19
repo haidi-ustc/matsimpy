@@ -58,6 +58,21 @@ def _validation_error(path: Path, message: str) -> SkillValidationError:
     return SkillValidationError(f"Invalid skill at {path}: {message}")
 
 
+def validate_skill_name(name: object, path: Path) -> str:
+    """Validate and return a standard Agent Skill name."""
+
+    if (
+        not isinstance(name, str)
+        or len(name) > 64
+        or _NAME_PATTERN.fullmatch(name) is None
+    ):
+        raise _validation_error(
+            path,
+            "'name' must be 1-64 lowercase letters, digits, or single hyphens",
+        )
+    return name
+
+
 def _resolve_skill_file(root: Path) -> tuple[Path, Path]:
     try:
         resolved_root = root.resolve(strict=True)
@@ -188,12 +203,7 @@ def _build_manifest(
     manifest: dict[str, Any],
     body: str,
 ) -> SkillManifest:
-    name = _required_string(manifest, "name", path)
-    if len(name) > 64 or _NAME_PATTERN.fullmatch(name) is None:
-        raise _validation_error(
-            path,
-            "'name' must be 1-64 lowercase letters, digits, or single hyphens",
-        )
+    name = validate_skill_name(_required_string(manifest, "name", path), path)
     description = _required_string(manifest, "description", path)
     if len(description) > 1024:
         raise _validation_error(path, "'description' must not exceed 1024 characters")
