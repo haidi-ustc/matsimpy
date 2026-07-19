@@ -34,12 +34,15 @@ from .runtime import AgentRuntime, TaskResult
 from .session_store import SessionStore
 from .session import AgentSession, SessionTurn
 from .agent import Agent, AgentResult
+from .repl import CommandResult, ReplController
 from .engine import AIEngine
 
 __all__ = [
     "AIEngine",
     "Agent",
     "AgentResult",
+    "CommandResult",
+    "ReplController",
     "AgentRuntime",
     "ChatProvider",
     "DeepSeekProvider",

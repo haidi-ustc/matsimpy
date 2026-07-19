@@ -9,6 +9,7 @@ from .evolution import EvolutionManager
 from .provider import DeepSeekProvider
 from .skill import SkillManager
 from .memory import AgentMemory
+from .repl import CommandResult, ReplController
 from .skill_loader import list_generated_skills
 
 
@@ -80,6 +81,34 @@ class AIEngine:
         # Learning state
         self._last_tool_results: list[dict] = []
         self._last_tool_calls: list[str] = []
+        self.repl_controller = self._make_repl_controller()
+
+    def _make_repl_controller(self) -> ReplController:
+        return ReplController(
+            self.agent.session,
+            skill_library=_EngineSkillSummaries(self.skill_manager),
+            usage_getter=lambda: {},
+            skill_loader=self._load_generated_skill,
+        )
+
+    def _load_generated_skill(self, name: str) -> dict:
+        for skill in list_generated_skills():
+            if skill["name"] != name:
+                continue
+            message = ChatMessage.system(
+                f"[Loaded skill: {name}]\n{skill.get('body', '')}"
+            )
+            self.agent.add_context(message)
+            self.conversation.append(message)
+            self._registered_contexts.add(message.content)
+            return {"name": name, "loaded": True}
+        raise KeyError(f"Generated skill '{name}' not found.")
+
+    def _sync_agent_state(self) -> None:
+        self.runtime = self.agent.runtime
+        self.executor = self.runtime.executor
+        self.workspace = self.runtime.workspace
+        self.conversation = list(self.runtime.messages)
 
     def _build_system_prompt(self) -> str:
         """Build system prompt with available auto_choice skills."""
@@ -181,11 +210,16 @@ class AIEngine:
         command = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if command in ("/quit", "/q", "/exit"):
-            print("Goodbye.")
-            raise EOFError
+        if command in self.repl_controller.command_names():
+            result = self.repl_controller.execute(cmd)
+            if result.kind in {"new", "resume", "retry", "undo"}:
+                self._sync_agent_state()
+            self._render_command_result(result)
+            if result.exit_requested:
+                raise EOFError
+            return
 
-        elif command == "/workspace":
+        if command == "/workspace":
             if arg:
                 if self._repl_active:
                     self.workspace.leave()
@@ -193,6 +227,7 @@ class AIEngine:
                 self.runtime = self.agent.runtime
                 self.executor = self.runtime.executor
                 self.workspace = self.runtime.workspace
+                self.repl_controller = self._make_repl_controller()
                 if self._repl_active:
                     self.workspace.enter()
                 print(f"  Workspace changed to: {self.workspace.path}")
@@ -506,6 +541,63 @@ class AIEngine:
 
         else:
             print(f"  Unknown: {command}. Try /help.")
+
+    @staticmethod
+    def _render_command_result(result: CommandResult) -> None:
+        """Render structured command data for the compatibility terminal."""
+        if result.kind == "sessions":
+            for session in result.data["sessions"]:
+                print(
+                    f"  {session['id']}: {session.get('source', 'unknown')} "
+                    f"{session.get('workspace', '')}"
+                )
+        elif result.kind == "skills":
+            for skill in result.data["skills"]:
+                print(f"  [{skill['name']}] {skill.get('description', '')}")
+        elif result.kind == "drafts":
+            for draft in result.data["drafts"]:
+                print(f"  {draft['name']}: {draft.get('status', 'draft')}")
+        elif result.kind in {"trace", "usage"}:
+            values = result.data.get(result.kind, {})
+            for key, value in values.items():
+                print(f"  {key.replace('_', ' ').title()}: {value}")
+        if result.display_hint:
+            prefix = "  " if result.ok else "  ⚠️ "
+            print(f"{prefix}{result.display_hint}")
+
+
+class _EngineSkillSummaries:
+    """Adapt legacy skills to the standard skill-summary interface."""
+
+    def __init__(self, skill_manager: SkillManager) -> None:
+        self.skill_manager = skill_manager
+
+    def discover(self) -> list[dict]:
+        summaries = [
+            {
+                "name": skill.name,
+                "description": skill.description,
+                "source": "builtin",
+            }
+            for skill in self.skill_manager._skills.values()
+        ]
+        summaries.extend(
+            {
+                "name": skill["name"],
+                "description": skill.get("description", ""),
+                "source": "generated",
+            }
+            for skill in list_generated_skills()
+        )
+        return sorted(summaries, key=lambda item: item["name"])
+
+    def search(self, query: str) -> list[dict]:
+        folded = query.casefold()
+        return [
+            summary
+            for summary in self.discover()
+            if folded in f"{summary['name']} {summary['description']}".casefold()
+        ]
 
 
 __all__ = ["AIEngine"]
