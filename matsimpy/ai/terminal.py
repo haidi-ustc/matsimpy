@@ -86,6 +86,7 @@ class PromptToolkitTerminal(PlainTerminal):
         from prompt_toolkit import PromptSession
         from prompt_toolkit.completion import Completer, Completion
         from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.key_binding import KeyBindings
 
         if output_writer is None:
             try:
@@ -105,10 +106,21 @@ class PromptToolkitTerminal(PlainTerminal):
 
         path = Path(history_path or Path.home() / ".matsimpy" / "ai_history")
         path.parent.mkdir(parents=True, exist_ok=True)
+        bindings = KeyBindings()
+
+        @bindings.add("c-m", eager=True)
+        def _submit(event) -> None:
+            event.current_buffer.validate_and_handle()
+
+        @bindings.add("escape", "c-m", eager=True)
+        def _insert_newline(event) -> None:
+            event.current_buffer.insert_text("\n")
+
         session_options = {
             "history": FileHistory(str(path)),
             "completer": AgentCompleter(),
             "multiline": True,
+            "key_bindings": bindings,
             "bottom_toolbar": self.bottom_toolbar,
         }
         if input is not None:
@@ -143,7 +155,7 @@ class PromptToolkitTerminal(PlainTerminal):
     def bottom_toolbar(self) -> str:
         """Show the active durable session without performing I/O."""
         session_id = getattr(self.controller.session, "conversation_id", None)
-        return f" session {session_id or 'new'} | Esc+Enter submit | Ctrl+C cancel "
+        return f" session {session_id or 'new'} | Enter submit | Esc+Enter newline | Ctrl+C cancel "
 
 
 def _prompt_toolkit_available() -> bool:

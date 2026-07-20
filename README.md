@@ -576,6 +576,9 @@ evidence-backed approval using a positive numeric version ID.
 
 Runtime commands:
 
+In the enhanced terminal, Enter submits and Esc+Enter inserts a newline for
+multiline input.
+
 ```text
 /new                         /sessions
 /resume <session-id>         /retry                 /undo

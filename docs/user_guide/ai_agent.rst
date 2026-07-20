@@ -44,6 +44,8 @@ REPL commands
 
 Start with ``matsimpy-ai --workspace project``. Commands return structured data
 through ``ReplController``; terminal rendering is a separate layer.
+In the enhanced terminal, Enter submits the current prompt and Esc+Enter inserts
+a newline for multiline input.
 
 ============================  ===============================================
 Command                       Effect

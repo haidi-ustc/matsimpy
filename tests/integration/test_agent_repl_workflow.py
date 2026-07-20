@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sqlite3
+from threading import Event, Thread
 
 import pytest
 
@@ -229,7 +230,7 @@ def test_interactive_completion_skips_legacy_and_invalid_user_skill_directories(
             output_writer=rendered.append,
         )
         assert terminal.completion_candidates("valid") == ("valid-flow",)
-        pipe.send_text("normal prompt\x1b\r/quit\x1b\r")
+        pipe.send_text("normal prompt\r/quit\r")
         terminal.run()
 
     assert "submitted" in rendered
@@ -241,6 +242,46 @@ def test_interactive_completion_skips_legacy_and_invalid_user_skill_directories(
         ("legacy-generated-root", "generated"),
         ("invalid-skill", "invalid-skill"),
     }
+
+
+def test_prompt_toolkit_plain_enter_submits_to_real_controller(tmp_path, monkeypatch):
+    pytest.importorskip("prompt_toolkit")
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    called = Event()
+
+    def respond(self, messages, tools=None, tool_choice="auto"):
+        called.set()
+        return ChatResponse(ChatMessage.assistant("submitted"), [], "stop")
+
+    monkeypatch.setattr("matsimpy.ai.provider.DeepSeekProvider.chat", respond)
+    engine = AIEngine(api_key="unused", workspace_path=str(tmp_path / "workspace"))
+    _register_all_skills(engine.skill_manager)
+    rendered = []
+    submitted_by_enter = Event()
+    with create_pipe_input() as pipe:
+        terminal = PromptToolkitTerminal(
+            engine.repl_controller,
+            history_path=tmp_path / "history",
+            input=pipe,
+            output=DummyOutput(),
+            output_writer=rendered.append,
+        )
+        def feed_input():
+            pipe.send_text("ordinary prompt\r")
+            if called.wait(1):
+                submitted_by_enter.set()
+            pipe.send_text("\x03/quit\r\x1b\r")
+
+        worker = Thread(target=feed_input, daemon=True)
+        worker.start()
+        terminal.run()
+        worker.join(timeout=2)
+
+    assert not worker.is_alive()
+    assert submitted_by_enter.is_set(), "ordinary Enter did not submit the prompt"
+    assert "submitted" in rendered
 
 
 def test_skill_requires_review_then_approval_before_repl_can_use_it(tmp_path):

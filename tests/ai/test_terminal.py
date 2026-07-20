@@ -255,7 +255,7 @@ def test_prompt_toolkit_pipe_input_submits_multiline_and_handles_interrupt(tmp_p
             output=DummyOutput(),
             output_writer=rendered.append,
         )
-        pipe.send_text("first line\nsecond line\x1b\r\x03/quit\x1b\r")
+        pipe.send_text("first line\x1b\rsecond line\r\x03/quit\r")
         terminal.run()
 
     assert controller.session.requests == ["first line\nsecond line"]
