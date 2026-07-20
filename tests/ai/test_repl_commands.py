@@ -241,6 +241,12 @@ def test_help_is_structured_complete_and_offline(controller, capsys):
         "newline": "Esc+Enter",
         "cancel": "Ctrl+C",
     }
+    assert result.data["lifecycle"] == [
+        {"stage": "discover", "command": "/skills [query]"},
+        {"stage": "load", "command": "/load-skill <name>"},
+        {"stage": "review", "command": "/evolve review [version-id]"},
+        {"stage": "approve", "command": "/approve <version-id>"},
+    ]
     assert {item["command"] for item in result.data["examples"]} >= {
         "/skills crystal",
         "/load-skill <name>",

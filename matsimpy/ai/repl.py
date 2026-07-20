@@ -122,6 +122,12 @@ class ReplController:
             "newline": "Esc+Enter",
             "cancel": "Ctrl+C",
         }
+        lifecycle = [
+            {"stage": "discover", "command": "/skills [query]"},
+            {"stage": "load", "command": "/load-skill <name>"},
+            {"stage": "review", "command": "/evolve review [version-id]"},
+            {"stage": "approve", "command": "/approve <version-id>"},
+        ]
         examples = [
             {"command": "/skills crystal", "purpose": "Discover crystal skills."},
             {"command": "/load-skill <name>", "purpose": "Activate a skill."},
@@ -142,8 +148,11 @@ class ReplController:
         )
         lines.append("Keys: Enter submit; Esc+Enter newline; Ctrl+C cancel.")
         lines.append(
-            "Skills: discover with /skills, activate with /load-skill, review with "
-            "/evolve review, then explicitly /approve or /reject."
+            "Lifecycle: "
+            + " -> ".join(
+                f"{item['stage']} ({item['command']})" for item in lifecycle
+            )
+            + ". Use /reject instead of approval when evidence is insufficient."
         )
         lines.append("Examples: " + "; ".join(item["command"] for item in examples))
         return CommandResult(
@@ -152,6 +161,7 @@ class ReplController:
                 "commands": commands,
                 "aliases": aliases,
                 "keys": keys,
+                "lifecycle": lifecycle,
                 "examples": examples,
             },
             display_hint="\n".join(lines),
