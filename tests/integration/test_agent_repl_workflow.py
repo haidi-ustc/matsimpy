@@ -190,6 +190,51 @@ def test_engine_repl_discovers_precedence_and_activates_standard_skill(
     )
 
 
+def test_public_workspace_switch_rebinds_standard_skill_roots(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    _write_standard_skill(
+        first / ".matsimpy/skills",
+        "shared-flow",
+        "First workspace flow",
+        "FIRST WORKSPACE INSTRUCTIONS",
+    )
+    _write_standard_skill(
+        first / ".matsimpy/skills",
+        "first-only",
+        "First only",
+        "FIRST ONLY",
+    )
+    _write_standard_skill(
+        second / ".matsimpy/skills",
+        "shared-flow",
+        "Second workspace flow",
+        "SECOND WORKSPACE INSTRUCTIONS",
+    )
+    _write_standard_skill(
+        second / ".matsimpy/skills",
+        "second-only",
+        "Second only",
+        "SECOND ONLY",
+    )
+    engine = AIEngine(api_key="unused", workspace_path=str(first))
+    _register_all_skills(engine.skill_manager)
+    assert engine.repl_controller.execute("/skills first-only").ok
+
+    engine.agent.switch_workspace(second)
+    listed = engine.repl_controller.execute("/skills")
+    loaded = engine.repl_controller.execute("/load-skill shared-flow")
+
+    names = {item["name"] for item in listed.data["skills"]}
+    assert "first-only" not in names
+    assert "second-only" in names
+    assert loaded.ok
+    assert engine.agent.session.context_messages[-1].content.endswith(
+        "SECOND WORKSPACE INSTRUCTIONS"
+    )
+
+
 def test_interactive_completion_skips_legacy_and_invalid_user_skill_directories(
     tmp_path, monkeypatch
 ):

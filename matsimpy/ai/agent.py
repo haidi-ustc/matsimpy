@@ -131,15 +131,21 @@ class Agent:
     def refresh_skill_library(self) -> SkillLibrary:
         """Bind standard Agent Skill roots to the current workspace and tools."""
         definitions = self._tool_definitions()
-        signature = tuple(
-            (name, id(definition)) for name, definition in definitions.items()
+        roots = (
+            PACKAGED_AGENT_SKILLS.resolve(),
+            (Path.home() / ".matsimpy" / "ai" / "skills").resolve(),
+            (self.workspace.path / ".matsimpy" / "skills").resolve(),
+        )
+        signature = (
+            roots,
+            tuple((name, id(definition)) for name, definition in definitions.items()),
         )
         if getattr(self, "_skill_library_signature", None) == signature:
             return self.skill_library
         self.skill_library = SkillLibrary(
-            packaged=PACKAGED_AGENT_SKILLS,
-            user=Path.home() / ".matsimpy" / "ai" / "skills",
-            workspace=self.workspace.path / ".matsimpy" / "skills",
+            packaged=roots[0],
+            user=roots[1],
+            workspace=roots[2],
             available_tools=definitions,
         )
         self._skill_library_signature = signature
