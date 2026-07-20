@@ -7,7 +7,7 @@
   ],
   "tool_calls": [
     {
-      "id": "call_00_sgW5S8rTgtZqkjK81p7e4520",
+      "id": "call_00_2bIlCPxRi0tRnJgRD4KK4642",
       "name": "from_prototype",
       "arguments": {
         "prototype": "diamond",
@@ -36,26 +36,29 @@
       "status": "success"
     },
     {
-      "id": "call_00_8HfmBgBuoRRmRZKxUJeK7176",
+      "id": "call_00_Sy9uPUe9myVAJNdcBLuq4618",
       "name": "apply_strain",
       "arguments": {
         "crystal": {
-          "structure_ref": "structure:1"
+          "structure_ref": "structure:1",
+          "type": "crystal",
+          "formula": "Si2",
+          "num_atoms": 2
         },
         "strain_matrix": [
           [
             0.01,
-            0,
-            0
+            0.0,
+            0.0
           ],
           [
-            0,
+            0.0,
             0.01,
-            0
+            0.0
           ],
           [
-            0,
-            0,
+            0.0,
+            0.0,
             0.01
           ]
         ]
@@ -82,12 +85,15 @@
       "status": "success"
     },
     {
-      "id": "call_00_cVQcinxHfQwsX6I3XrJA3479",
+      "id": "call_00_w8acuY6NFqK0z9oCJMBk1480",
       "name": "write_structure",
       "arguments": {
         "path": "strained_si.cif",
         "structure": {
-          "structure_ref": "structure:2"
+          "structure_ref": "structure:2",
+          "type": "crystal",
+          "formula": "Si2",
+          "num_atoms": 2
         }
       },
       "result": {
@@ -101,7 +107,7 @@
     }
   ],
   "final_outputs": [
-    "Done! Here's a summary of the pipeline:\n\n| Step | Action | Result |\n|------|--------|--------|\n| 1 | **Build** diamond Si with `a = 5.43 \u00c5` | Si\u2082, 2 atoms, primitive diamond cell |\n| 2 | **Apply** 1% isotropic strain (`\u03b5 = 0.01` on diagonal) | Lattice vectors scaled by \u00d71.01 (a \u2192 3.878 \u00c5) |\n| 3 | **Save** as CIF | `strained_si.cif` |\n\nThe strained structure has been written to **`strained_si.cif`**."
+    "Done. Here's what happened:\n\n1. **Built diamond Si** with the conventional lattice constant a = 5.43 \u00c5. The primitive cell contains 2 Si atoms with a = b = c = 3.8396 \u00c5, \u03b1 = \u03b2 = \u03b3 = 60\u00b0.\n2. **Applied +1% isotropic strain** (diagonal strain tensor with \u03b5 = 0.01). The primitive lattice expanded to a = b = c = 3.878 \u00c5.\n3. **Saved** to `strained_si.cif`."
   ],
   "artifacts": [
     {
@@ -110,7 +116,7 @@
     },
     {
       "path": "state.db-wal",
-      "bytes": 135992
+      "bytes": 193672
     },
     {
       "path": "strained_si.cif",
@@ -126,8 +132,8 @@
     "pass": true,
     "score": 100,
     "unsupported_claims": [],
-    "analysis": "The workflow correctly built diamond Si with cubic lattice constant 5.43 \u00c5 (primitive cell a=3.8396 \u00c5), applied 1% isotropic strain via a diagonal strain matrix (resulting lattice a=3.878 \u00c5, a 1.01\u00d7 scaling), and saved the structure to 'strained_si.cif' using write_structure. All required actions were completed successfully with no tool errors or unsupported claims. The final output accurately reflects the tool results.",
-    "raw": "{\n  \"pass\": true,\n  \"score\": 100,\n  \"unsupported_claims\": [],\n  \"analysis\": \"The workflow correctly built diamond Si with cubic lattice constant 5.43 \u00c5 (primitive cell a=3.8396 \u00c5), applied 1% isotropic strain via a diagonal strain matrix (resulting lattice a=3.878 \u00c5, a 1.01\u00d7 scaling), and saved the structure to 'strained_si.cif' using write_structure. All required actions were completed successfully with no tool errors or unsupported claims. The final output accurately reflects the tool results.\"\n}"
+    "analysis": "The workflow correctly executed the request: built diamond Si primitive cell with conventional a=5.43 \u00c5 (primitive a=3.8396 \u00c5), applied +1% isotropic strain via diagonal strain tensor [0.01,0.01,0.01] yielding a=3.878 \u00c5, and saved the strained structure to 'strained_si.cif'. All tool calls returned expected results, no deterministic errors, and the final output matches the steps.",
+    "raw": "{\n  \"pass\": true,\n  \"score\": 100,\n  \"unsupported_claims\": [],\n  \"analysis\": \"The workflow correctly executed the request: built diamond Si primitive cell with conventional a=5.43 \u00c5 (primitive a=3.8396 \u00c5), applied +1% isotropic strain via diagonal strain tensor [0.01,0.01,0.01] yielding a=3.878 \u00c5, and saved the strained structure to 'strained_si.cif'. All tool calls returned expected results, no deterministic errors, and the final output matches the steps.\"\n}"
   },
   "judge_pass": true
 }

@@ -11,27 +11,29 @@
 ## Artifacts
 
 - `state.db-shm` (32768 bytes, formula=n/a, atoms=n/a)
-- `state.db-wal` (127752 bytes, formula=n/a, atoms=n/a)
+- `state.db-wal` (185432 bytes, formula=n/a, atoms=n/a)
 
 ## Final assistant output
 
-The structure has been created (reference `structure:1`). Here is a summary of the supplied geometry:
+Here is the structure created from the supplied geometry:
 
 | Property | Value |
 |---|---|
 | **Formula** | LiF |
 | **Atoms** | 2 |
-| **Lattice** | Cubic, *a* = 4.02 Å, α = β = γ = 90° |
-| **Periodic** | [True, True, True] |
+| **Lattice type** | Cubic |
+| **Lattice constant** | a = 4.02 Å |
+| **Angles** | α = β = γ = 90° |
+| **Periodic** | [T, T, T] |
 
 **Fractional coordinates:**
 
 | Species | x | y | z |
-|---------|---|---|---|
+|---|---|---|---|
 | Li | 0.0 | 0.0 | 0.0 |
 | F | 0.5 | 0.5 | 0.5 |
 
-No prototype is inferred — this is simply the geometry as specified.
+This is a simple two-atom cubic cell with Li at the corner and F at the body center — no prototype is inferred or assigned. The structure reference (`structure:1`) is available for further transformations, calculations, or export.
 
 ## Deterministic validation
 
@@ -42,4 +44,4 @@ No prototype is inferred — this is simply the geometry as specified.
 
 - Pass: True
 - Score: 100
-- Analysis: The workflow successfully created a cubic crystal with species Li and F at the specified coordinates and lattice parameter. The final output strictly reports geometry, explicitly states no prototype is inferred, and contains no unsupported claims.
+- Analysis: The tool call correctly created a cubic cell with a=4.02 Å, Li at (0,0,0) and F at (0.5,0.5,0.5). The lattice_type 'cubic' is appropriate for the supplied simple-cubic lattice; no prototype was inferred or named. The final output reports only the supplied geometry and explicitly states no prototype is assigned, fully complying with the request.

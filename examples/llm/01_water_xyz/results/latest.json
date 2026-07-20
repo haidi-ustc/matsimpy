@@ -7,7 +7,7 @@
   ],
   "tool_calls": [
     {
-      "id": "call_00_A3vWtm0ytBfktiSEqQ4N5881",
+      "id": "call_00_a9jz9qfoTM1KruAt8qR03343",
       "name": "create_molecule",
       "arguments": {
         "species": [
@@ -42,13 +42,12 @@
       "status": "success"
     },
     {
-      "id": "call_00_N1dsaHmLPsP9NlkF5Yf47835",
+      "id": "call_00_JVxQsw2VwcnZS2ukwGlH0154",
       "name": "write_structure",
       "arguments": {
         "path": "water.xyz",
         "structure": {
           "structure_ref": "structure:1",
-          "type": "molecule",
           "formula": "OH2",
           "num_atoms": 3
         }
@@ -64,7 +63,7 @@
     }
   ],
   "final_outputs": [
-    "The water molecule (H\u2082O) has been created and saved to `water.xyz`. It contains 3 atoms: one oxygen at the origin and two hydrogens at the specified positions (0.96, 0, 0) and (\u22120.24, 0.93, 0), giving the molecule its characteristic bent geometry with a bond angle of ~104.5\u00b0."
+    "The water molecule has been created and saved to `water.xyz`. Here's a summary:\n\n| Atom | x (\u00c5) | y (\u00c5) | z (\u00c5) |\n|------|-------|-------|-------|\n| O    | 0.00  | 0.00  | 0.00  |\n| H    | 0.96  | 0.00  | 0.00  |\n| H    | -0.24 | 0.93  | 0.00  |\n\nThe molecule has formula **OH\u2082** (3 atoms) and was saved as `water.xyz` in auto-detected XYZ format."
   ],
   "artifacts": [
     {
@@ -73,7 +72,7 @@
     },
     {
       "path": "state.db-wal",
-      "bytes": 135992
+      "bytes": 185432
     },
     {
       "path": "water.xyz",
@@ -89,8 +88,8 @@
     "pass": true,
     "score": 100,
     "unsupported_claims": [],
-    "analysis": "All required tools were invoked correctly. create_molecule received the requested species and Cartesian positions, producing a structure reference. write_structure saved that structure to 'water.xyz', as confirmed by the artifact metadata and result. The final output mentions the bond angle of ~104.5\u00b0, which can be directly verified from the supplied coordinates (dot product yields approximately 104.5\u00b0). No unsupported claims are present.",
-    "raw": "{\n  \"pass\": true,\n  \"score\": 100,\n  \"unsupported_claims\": [],\n  \"analysis\": \"All required tools were invoked correctly. create_molecule received the requested species and Cartesian positions, producing a structure reference. write_structure saved that structure to 'water.xyz', as confirmed by the artifact metadata and result. The final output mentions the bond angle of ~104.5\u00b0, which can be directly verified from the supplied coordinates (dot product yields approximately 104.5\u00b0). No unsupported claims are present.\"\n}"
+    "analysis": "The workflow successfully created the water molecule with the requested positions, saved it as water.xyz. All tool calls succeeded and file artifact confirms output.",
+    "raw": "{\n  \"pass\": true,\n  \"score\": 100,\n  \"unsupported_claims\": [],\n  \"analysis\": \"The workflow successfully created the water molecule with the requested positions, saved it as water.xyz. All tool calls succeeded and file artifact confirms output.\"\n}"
   },
   "judge_pass": true
 }
