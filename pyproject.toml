@@ -67,6 +67,10 @@ ai = [
     "requests",
     "pyyaml",
 ]
+repl = [
+    "prompt-toolkit>=3.0",
+    "rich>=13",
+]
 all = [
     "pytest>=6.0",
     "pytest-cov>=2.12",
@@ -82,6 +86,8 @@ all = [
     "spglib",
     "typer",
     "requests",
+    "prompt-toolkit>=3.0",
+    "rich>=13",
 ]
 
 [project.scripts]
@@ -121,4 +127,6 @@ markers = [
     "requires_pymatgen: marks tests that require pymatgen",
     "requires_spglib: marks tests that require spglib",
     "requires_storage: marks tests that require maggma",
+    "requires_repl: marks tests that require optional interactive REPL packages",
+    "pty: marks interactive terminal behavior tests using a terminal input abstraction",
 ]

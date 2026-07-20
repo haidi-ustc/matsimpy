@@ -7,7 +7,7 @@
 ## Tool trace
 
 - `from_prototype` — success — args: `{"lattice_constant": 4.05, "prototype": "fcc", "species": "Al"}`
-- `write_structure` — success — args: `{"path": "aluminum.cif", "structure": {"formula": "Al", "num_atoms": 1, "structure_ref": "structure:1", "type": "crystal"}}`
+- `write_structure` — success — args: `{"format": "cif", "path": "aluminum.cif", "structure": {"formula": "Al", "num_atoms": 1, "structure_ref": "structure:1", "type": "crystal"}}`
 - `store_structure` — success — args: `{"metadata": {"project": "demo"}, "path": "aluminum.cif"}`
 - `retrieve_structure` — success — args: `{"doc_id": "26c8b10d94accbe6000495cc8f823845c4f1c4fa6fba4f50bc14d2c32835731b"}`
 
@@ -15,20 +15,20 @@
 
 - `aluminum.cif` (424 bytes, formula=Al, atoms=1)
 - `state.db-shm` (32768 bytes, formula=n/a, atoms=n/a)
-- `state.db-wal` (135992 bytes, formula=n/a, atoms=n/a)
+- `state.db-wal` (193672 bytes, formula=n/a, atoms=n/a)
 
 ## Final assistant output
 
-All four steps completed successfully. Here's the summary:
+All done. Here's a summary:
 
-| Step | Action | Result |
-|------|--------|--------|
-| 1. **Build** | `from_prototype("fcc", "Al", 4.05)` | `structure:1` — fcc Al, 1 atom (primitive cell) |
-| 2. **Save** | `write_structure` → `aluminum.cif` | CIF file written |
-| 3. **Store** | `store_structure` with `project=demo` | Doc ID: `26c8b10d…` |
-| 4. **Retrieve** | `retrieve_structure` | Confirmed: fcc Al, 1 atom, density 2.70 g/cm³ |
+| Step | Detail |
+|---|---|
+| **Built** | FCC aluminum, conventional `a = 4.05 Å` → primitive cell with `a = b = c = 2.8638 Å`, `α = β = γ = 60°` |
+| **Saved** | `aluminum.cif` (1 Al atom, primitive cell) |
+| **Stored** | Doc ID `26c8b10d…` with metadata `project=demo` |
+| **Retrieved** | Confirmed: Al, 1 atom, volume 16.61 Å³, density 2.70 g/cm³ |
 
-A few notes on the lattice: the primitive cell has vectors at 60° angles with edge length ~2.86 Å, which is the primitive representation of the conventional 4.05 Å fcc cell. The CIF file is ready at `aluminum.cif`.
+The primitive FCC cell contains one aluminum atom at the origin — this is the standard rhombohedral representation of the FCC lattice, not the conventional 4-atom cubic cell.
 
 ## Deterministic validation
 
@@ -39,4 +39,4 @@ A few notes on the lattice: the primitive cell has vectors at 60° angles with e
 
 - Pass: True
 - Score: 100
-- Analysis: All four required tools were called in sequence. The from_prototype call correctly built fcc Al with conventional lattice constant 4.05 Å (generating a primitive cell with a=2.8638 Å, angles 60°). The structure was saved as aluminum.cif via write_structure, stored with metadata project=demo via store_structure, and successfully retrieved with retrieve_structure. The retrieved structure matches the built one, and the final output accurately notes the primitive representation. No tool errors, unsupported claims, or deterministic issues detected.
+- Analysis: The workflow correctly executed the requested tasks: building an fcc aluminum structure with a conventional lattice constant of 4.05 Å (resulting in a primitive cell with a=b=c=2.8638 Å, angles 60°), saving it as aluminum.cif, storing it with metadata project=demo, and retrieving it to confirm. All tool calls succeeded, no deterministic errors occurred, and the final output accurately describes the primitive representation. The structure conforms to the scientific expectation of an fcc lattice with the given parameter.

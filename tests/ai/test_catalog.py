@@ -116,6 +116,9 @@ def test_prototype_schema_matches_supported_domain_inputs():
 
     assert {option["type"] for option in species_options} == {"string", "array"}
     assert {option["type"] for option in lattice_options} == {"number", "array"}
+    description = tool.parameters["properties"]["lattice_constant"]["description"].lower()
+    assert "conventional" in description
+    assert "primitive" in description
 
 
 def test_builder_skill_routes_named_prototypes_and_common_rocksalt_misspelling():

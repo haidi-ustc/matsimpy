@@ -511,7 +511,8 @@ storage.close()
 
 ### AI REPL
 
-Interactive LLM-powered assistant. Chat in natural language — the AI calls MatSimPy functions.
+Interactive LLM-powered assistant. The REPL, single-shot CLI, and public
+``Agent`` facade use the same durable runtime.
 
 ```bash
 # Install with AI extras
@@ -527,21 +528,26 @@ matsimpy-ai --workspace ~/my-project --model deepseek-v4-pro
 # Single-shot command
 matsimpy-ai -c "create fcc Cu crystal and save to cu.vasp"
 matsimpy-ai -v -c "analyze bonds in nacl.cif"
+
+# Offline-by-default, secret-safe configuration checks
+matsimpy-ai doctor --workspace ~/my-project
 ```
 
-```python notest
-from matsimpy.ai import AIEngine, SkillManager, Skill
-from matsimpy.ai.skills import core, builders, analysis
+```python
+from matsimpy.ai import Agent
 
-engine = AIEngine(model="deepseek-v4-pro")
-for mod in (core, builders, analysis):
-    engine.skill_manager.register(Skill(mod.SKILL_NAME, mod.SKILL_DESCRIPTION, mod.get_functions()))
-engine.skill_manager.load("core")
-
-# Natural language → function calls
-response = engine.chat("Create an FCC Cu crystal and analyze its structure")
-print(response)
+agent = Agent(workspace="project")
+result = agent.run("Create FCC copper, analyze it, and save copper.cif")
+print(result.response, result.status)
+print(result.tools, result.artifacts, result.trace_id)
 ```
+
+`AgentResult` also exposes `usage` and inactive `evolution_candidates`.
+`Agent.add_context()`, `conversation_messages()`, and `switch_workspace()` manage
+explicit context and isolation. `review_evolution()`, `approve_skill()`,
+`reject_skill()`, and `rollback_skill()` expose the reviewed lifecycle. Lower
+level `AgentSession`, `AgentRuntime`, and `ReplController` remain public for
+custom clients. `AIEngine` is retained as a deprecated compatibility facade.
 
 Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
 
@@ -564,15 +570,73 @@ pytest tests/ai/ -q -m "not requires_llm"
 pytest tests/ai/test_live_llm.py -q -m requires_llm
 ```
 
-The AI REPL and `matsimpy-ai -c` share the same agent runtime. The runtime records searchable task traces in `~/.matsimpy/ai/state.db`, keeps compact memory files in `~/.matsimpy/ai/memory/`, and proposes reusable workflow skills as drafts. Draft skills are disabled until approved with `/approve-skill <name>`.
+The runtime records searchable task traces in its SQLite state database and
+keeps bounded memory files. Reusable workflows are drafts until an explicit,
+evidence-backed approval using a positive numeric version ID.
 
 Runtime commands:
 
+In the enhanced terminal, Enter submits and Esc+Enter inserts a newline for
+multiline input. LLM responses render as Rich Markdown when Rich is installed;
+commands and status messages remain plain text.
+
 ```text
+/help
+/new                         /sessions
+/resume <session-id>         /retry                 /undo
+/skills [query]              /load-skill <name>
 /trace
-/drafts
-/approve-skill <name>
+/usage                       /drafts
+/evolve review [candidate]
+/approve <version-id>        /reject <version-id>
+/rollback <version-id>
+/quit                        /q                     /exit
 ```
+
+`/approve-skill` and `/reject-skill` remain aliases for compatibility.
+
+Standard Agent Skills use a directory containing `SKILL.md` (and optional
+`references/` resources):
+
+```text
+inspect-crystal/
+├── SKILL.md
+└── references/workflow.md
+```
+
+```yaml
+---
+name: inspect-crystal
+description: Inspect a saved crystal
+allowed-tools: read_structure analyze_structure
+---
+Read references/workflow.md before execution.
+```
+
+Skill source precedence is `workspace > user > packaged`; the roots are
+`<workspace>/.matsimpy/skills`, `~/.matsimpy/ai/skills`, and installed package
+skills. Discovery reads bounded metadata, while activation and reference reads
+are explicit. Resolved `SKILL.md` and resource paths must remain inside the
+skill root, and `allowed-tools` is intersected with the live tool catalog.
+Invalid UTF-8, oversized files, escaping symlinks, absolute paths, and `..`
+escapes are rejected.
+
+Legacy `*.skill.md` files can be converted with
+`matsimpy.ai.skill_loader.migrate_legacy_skill(source, destination, dry_run=True)`.
+Migration never overwrites a non-identical destination and never activates a
+skill; migrated drafts remain undiscoverable until approval.
+
+Approval lifecycle: a successful trace may create an inactive draft;
+`/evolve review <version-id>` performs static validation and capability-limited
+deterministic replay; the user inspects provenance, diff, evidence, and the
+`approvable` flag before `/approve <version-id>` or `/reject <version-id>`.
+Revisions repeat that lifecycle, and `/rollback <version-id>` creates a new
+audited version. Approval rechecks the reviewed content hash and current live
+`FunctionDef` bindings. Evolved skills cannot install dependencies, execute
+bundled scripts, edit MatSimPy source, or exceed their allowed-tool set.
+
+See the [AI Agent user guide](docs/user_guide/ai_agent.rst) for the complete API,
+command, migration, security, restart/retry, and approval reference.
 
 ## Core Conventions
 

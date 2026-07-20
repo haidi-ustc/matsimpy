@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 import json
-from .conversation import ChatMessage, ToolCall
+import warnings
+from .agent import Agent
+from .conversation import ChatMessage
 from .evolution import EvolutionManager
 from .provider import DeepSeekProvider
-from .runtime import AgentRuntime
-from .session_store import SessionStore
-from .skill import SkillManager, Skill
-from .executor import FunctionExecutor
-from .workspace import Workspace
+from .skill import SkillManager
 from .memory import AgentMemory
-from .skill_loader import list_generated_skills, save_skill_md, parse_skill_md
+from .repl import CommandResult, ReplController
+from .skill_loader import list_generated_skills
 
 
 SYSTEM_PROMPT = """You are a materials science AI assistant powered by MatSimPy.
@@ -45,39 +44,83 @@ class AIEngine:
         workspace_path: str | None = None,
         system_prompt: str | None = None,
     ):
-        self.provider = DeepSeekProvider(api_key, model, base_url)
+        warnings.warn(
+            "AIEngine is deprecated; construct matsimpy.ai.Agent instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        provider = DeepSeekProvider(api_key, model, base_url)
         self.skill_manager = SkillManager()
-        self.executor = FunctionExecutor(self.skill_manager)
-        from .executor import _set_active_executor
-        _set_active_executor(self.executor)
-        self.workspace = Workspace(workspace_path)
         self.memory = AgentMemory()
         self.verbose = False
+        self._repl_active = False
 
         # Inject soul into system prompt
         soul = self.memory.get_soul_prompt()
         base_prompt = system_prompt or SYSTEM_PROMPT
         self.system_prompt = f"{base_prompt}\n\n{soul}" if soul.strip() else base_prompt
 
-        self.runtime = AgentRuntime(
-            provider=self.provider,
+        self.agent = Agent(
+            workspace=workspace_path,
+            provider=provider,
             skill_manager=self.skill_manager,
-            session_store=SessionStore(self.workspace.path / "ai-state.db"),
             memory=self.memory,
-            workspace_path=self.workspace.path,
             source="engine",
             system_prompt=self._build_system_prompt(),
             verbose_hook=print,
         )
+        self.provider = self.agent.provider
+        self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
-        self.conversation: list[ChatMessage] = [
-            ChatMessage.system(self._build_system_prompt()),
-        ]
+        self.conversation: list[ChatMessage] = self.agent.conversation_messages()
+        self._registered_contexts: set[str] = set()
 
         # Learning state
         self._last_tool_results: list[dict] = []
         self._last_tool_calls: list[str] = []
+        self.repl_controller = self._make_repl_controller()
+
+    def _make_repl_controller(self) -> ReplController:
+        return ReplController(
+            self.agent.session,
+            evolution=self.agent,
+            skill_library=_EngineSkillSummaries(self.agent),
+            usage_getter=lambda: {},
+            skill_loader=self._load_skill,
+        )
+
+    def _load_skill(self, name: str) -> dict:
+        library = self.agent.refresh_skill_library()
+        library.discover(strict=False)
+        try:
+            skill = library.activate(name)
+        except KeyError:
+            return self._load_generated_skill(name)
+        message = ChatMessage.system(f"[Loaded skill: {name}]\n{skill.body}")
+        self.agent.add_context(message)
+        self.conversation.append(message)
+        self._registered_contexts.add(message.content)
+        return {"name": name, "loaded": True}
+
+    def _load_generated_skill(self, name: str) -> dict:
+        for skill in list_generated_skills():
+            if skill["name"] != name:
+                continue
+            message = ChatMessage.system(
+                f"[Loaded skill: {name}]\n{skill.get('body', '')}"
+            )
+            self.agent.add_context(message)
+            self.conversation.append(message)
+            self._registered_contexts.add(message.content)
+            return {"name": name, "loaded": True}
+        raise KeyError(f"Generated skill '{name}' not found.")
+
+    def _sync_agent_state(self) -> None:
+        self.runtime = self.agent.runtime
+        self.executor = self.runtime.executor
+        self.workspace = self.runtime.workspace
+        self.conversation = self.agent.conversation_messages()
 
     def _build_system_prompt(self) -> str:
         """Build system prompt with available auto_choice skills."""
@@ -91,115 +134,40 @@ class AIEngine:
         return self.system_prompt.replace("{available_skills}", skill_list)
 
     def chat(self, user_message: str) -> str:
-        """One turn: user message → runtime task lifecycle → response."""
+        """Compatibility wrapper around :meth:`Agent.run`."""
 
         self._last_tool_results = []
         self._last_tool_calls = []
 
-        result = self.runtime.run(
-            user_message,
-            extra_messages=self._explicit_context_messages(),
-        )
+        for message in self.conversation[1:]:
+            if message.role != "system" or message.content in self._registered_contexts:
+                continue
+            self.agent.add_context(message)
+            self._registered_contexts.add(message.content)
+        result = self.agent.run(user_message)
+        self.runtime = self.agent.runtime
         self.executor = self.runtime.executor
         self.workspace = self.runtime.workspace
-        self.workspace.enter()
-        self.conversation = list(self.runtime.messages)
-        self._last_tool_calls = [record["name"] for record in result.tool_calls]
-        self._last_tool_results = [record["result"] for record in result.tool_calls]
+        self.conversation = self.agent.conversation_messages()
+        task_result = self.runtime.last_result
+        self._last_tool_calls = list(result.tools)
+        if task_result is not None:
+            self._last_tool_results = [
+                record["result"] for record in task_result.tool_calls
+            ]
 
-        if result.draft_skill:
-            print(f"💾 draft skill: {result.draft_skill['name']} (/drafts to review)")
+        if result.evolution_candidates:
+            print(
+                f"💾 draft skill: {result.evolution_candidates[0]['name']} "
+                "(/drafts to review)"
+            )
 
-        return result.final_response
-
-    def _explicit_context_messages(self) -> list[ChatMessage]:
-        """Return prior conversation for continuity across turns."""
-        return list(self.conversation[1:])
-
-    def _chat_loop(self, tools: list[dict]) -> str:
-        """Core loop: LLM → tool_calls → execute → repeat until stop."""
-        max_turns = 10
-        for _ in range(max_turns):
-            response = self.provider.chat(self.conversation, tools if tools else None)
-            self.conversation.append(response.message)
-
-            if response.finish_reason == "stop":
-                return response.message.content
-
-            if response.finish_reason == "length":
-                return response.message.content + "\n[response truncated]"
-
-            if response.tool_calls:
-                for tc in response.tool_calls:
-                    args_str = ", ".join(f"{k}={v}" for k, v in tc.arguments.items())
-                    print(f"🔧 {tc.name}({args_str})")
-                    result = self.executor.execute(tc)
-                    if "error" in result:
-                        print(f"❌ {tc.name}: {result['error'][:100]}")
-                    else:
-                        print(f"✅ {tc.name}")
-                    self._last_tool_calls.append(tc.name)
-                    self._last_tool_results.append(result)
-                    self.conversation.append(ChatMessage.tool(
-                        content=json.dumps(result, default=str),
-                        tool_call_id=tc.id,
-                    ))
-
-        return self.conversation[-1].content or "[max turns reached]"
-
-    def _learn(self, user_message: str, response: str) -> None:
-        """Learn from this interaction — append to memory."""
-        if not self._last_tool_results:
-            return
-
-        errors = [r for r in self._last_tool_results if "error" in r]
-        success = [r for r in self._last_tool_results if "error" not in r]
-        outcome = "success" if not errors else ("partial" if success else "failure")
-
-        self.memory.append_learning({
-            "user_intent": user_message[:200],
-            "outcome": outcome,
-            "tools_used": self._last_tool_calls,
-            "insight": f"Used {', '.join(self._last_tool_calls)}. "
-                       f"{len(success)} succeeded, {len(errors)} failed."
-                       if errors else
-                       f"All {len(success)} tool calls succeeded.",
-        })
-
-        # Auto-save skill for multi-step successes (3+ tools)
-        if len(success) >= 3 and not errors:
-            self._auto_save_skill(user_message)
-
-    def _auto_save_skill(self, user_message: str) -> None:
-        """Auto-save a multi-step success as a generated skill."""
-        # Generate a short name from the first few tool calls
-        name = "-".join(self._last_tool_calls[:3])
-        if len(name) > 60:
-            name = name[:57] + "..."
-
-        # Don't save if skill already exists
-        from .skill_loader import SKILLS_DIR
-        existing = list(SKILLS_DIR.glob(f"{name}*.skill.md"))
-        if existing:
-            return
-
-        tools = [{"function": tc, "args_template": {}} for tc in self._last_tool_calls]
-        desc = f"Auto-saved workflow: {' → '.join(self._last_tool_calls)}"
-        keywords = [w for w in user_message.lower().split() if len(w) > 3][:5]
-
-        path = save_skill_md(
-            name=name,
-            description=desc,
-            tools=tools,
-            trigger_keywords=keywords,
-            load_mode="auto_choice",
-            body=f"# {desc}\n\nAuto-saved from: _{user_message[:100]}_\n",
-        )
-        print(f"💾 auto-saved skill: {path.name}")
+        return result.response
 
     def repl(self) -> None:
         """Interactive REPL loop with /commands."""
         self.workspace.enter()
+        self._repl_active = True
         from .provider import MODELS
         from .skill_loader import discover_builtin_skills
 
@@ -246,6 +214,7 @@ class AIEngine:
                 print(f"\n🤖 › {response}")
             except Exception as e:
                 print(f"\n⚠️ › Error: {e}")
+        self._repl_active = False
 
     def _handle_command(self, cmd: str) -> None:
         """Handle REPL /commands."""
@@ -253,20 +222,26 @@ class AIEngine:
         command = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if command in ("/quit", "/q", "/exit"):
-            print("Goodbye.")
-            raise EOFError
+        if command in self.repl_controller.command_names():
+            result = self.repl_controller.execute(cmd)
+            if result.kind in {"new", "resume", "retry", "undo"}:
+                self._sync_agent_state()
+            self._render_command_result(result)
+            if result.exit_requested:
+                raise EOFError
+            return
 
-        elif command == "/workspace":
+        if command == "/workspace":
             if arg:
-                new_path = arg
-                self.workspace = Workspace(new_path)
-                self.workspace.enter()
-                self.runtime.workspace = self.workspace
-                self.runtime.session_store.close()
-                self.runtime.session_store = SessionStore(
-                    self.workspace.path / "ai-state.db"
-                )
+                if self._repl_active:
+                    self.workspace.leave()
+                self.agent.switch_workspace(arg)
+                self.runtime = self.agent.runtime
+                self.executor = self.runtime.executor
+                self.workspace = self.runtime.workspace
+                self.repl_controller = self._make_repl_controller()
+                if self._repl_active:
+                    self.workspace.enter()
                 print(f"  Workspace changed to: {self.workspace.path}")
             else:
                 print(f"  Current workspace: {self.workspace.path}")
@@ -501,6 +476,7 @@ class AIEngine:
         elif command == "/system":
             if arg:
                 self.system_prompt = arg
+                self.agent.system_prompt = arg
                 self.runtime.system_prompt = arg
                 self.conversation[0] = ChatMessage.system(arg)
                 print(f"  System prompt updated ({len(arg)} chars).")
@@ -577,6 +553,147 @@ class AIEngine:
 
         else:
             print(f"  Unknown: {command}. Try /help.")
+
+    @staticmethod
+    def _render_command_result(result: CommandResult) -> None:
+        """Render structured command data for the compatibility terminal."""
+        if result.kind == "sessions":
+            for session in result.data["sessions"]:
+                print(
+                    f"  {session['id']}: {session.get('source', 'unknown')} "
+                    f"{session.get('workspace', '')}"
+                )
+        elif result.kind == "skills":
+            for skill in result.data["skills"]:
+                print(f"  [{skill['name']}] {skill.get('description', '')}")
+        elif result.kind == "skill-detail":
+            skill = result.data["skill"]
+            status = "loaded" if skill.get("loaded") else "ready"
+            print(f"  {skill['name']} ({skill.get('source', 'unknown')}, {status})")
+            print(f"  {skill.get('description', '')}")
+            if skill.get("keywords"):
+                print(f"  Keywords: {', '.join(skill['keywords'])}")
+            if skill.get("mode"):
+                print(f"  Mode: {skill['mode']}")
+            if skill.get("body_preview"):
+                print(f"  {skill['body_preview']}")
+            for function in skill.get("functions", []):
+                print(f"  {function['name']}: {function.get('description', '')}")
+                print(f"    Schema: {json.dumps(function.get('schema', {}))}")
+                if function.get("help"):
+                    print(f"    Help: {function['help']}")
+        elif result.kind == "drafts":
+            for draft in result.data["drafts"]:
+                print(f"  {draft['name']}: {draft.get('status', 'draft')}")
+        elif result.kind in {"trace", "usage"}:
+            values = result.data.get(result.kind, {})
+            for key, value in values.items():
+                print(f"  {key.replace('_', ' ').title()}: {value}")
+        if result.display_hint:
+            prefix = "  " if result.ok else "  ⚠️ "
+            print(f"{prefix}{result.display_hint}")
+
+
+class _EngineSkillSummaries:
+    """Combine standard Agent Skills with builtin and legacy summaries."""
+
+    def __init__(self, agent: Agent) -> None:
+        self.agent = agent
+
+    @property
+    def skill_manager(self) -> SkillManager:
+        return self.agent.skill_manager
+
+    def _standard(self):
+        return self.agent.refresh_skill_library()
+
+    def discover(self) -> list[dict]:
+        standard = self._standard().discover(strict=False)
+        standard_names = {summary.name for summary in standard}
+        summaries = [
+            {
+                "name": skill.name,
+                "description": skill.description,
+                "source": "builtin",
+            }
+            for skill in self.skill_manager._skills.values()
+            if skill.name not in standard_names
+        ]
+        summaries.extend(
+            {
+                "name": skill["name"],
+                "description": skill.get("description", ""),
+                "source": "generated",
+            }
+            for skill in list_generated_skills()
+            if skill["name"] not in standard_names
+        )
+        summaries.extend(
+            {
+                "name": summary.name,
+                "description": summary.description,
+                "source": summary.source,
+                "compatibility": summary.compatibility,
+                "allowed_tools": list(summary.allowed_tools),
+            }
+            for summary in standard
+        )
+        return sorted(summaries, key=lambda item: item["name"])
+
+    def search(self, query: str) -> list[dict]:
+        folded = query.casefold()
+        return [
+            summary
+            for summary in self.discover()
+            if folded in f"{summary['name']} {summary['description']}".casefold()
+        ]
+
+    def detail(self, name: str) -> dict | None:
+        standard = self._standard()
+        by_name = {
+            summary.name: summary for summary in standard.discover(strict=False)
+        }
+        if name in by_name:
+            summary = by_name[name]
+            return {
+                "name": summary.name,
+                "description": summary.description,
+                "source": summary.source,
+                "compatibility": summary.compatibility,
+                "allowed_tools": list(summary.allowed_tools),
+                "loaded": name in standard.activated,
+                "functions": [],
+            }
+        skill = self.skill_manager._skills.get(name)
+        if skill is not None:
+            return {
+                "name": skill.name,
+                "description": skill.description,
+                "source": "builtin",
+                "loaded": name in self.skill_manager._active,
+                "keywords": list(skill.keywords),
+                "functions": [
+                    {
+                        "name": function.name,
+                        "description": function.description,
+                        "schema": function.parameters,
+                        "help": function.get_help(),
+                    }
+                    for function in skill.functions
+                ],
+            }
+        for generated in list_generated_skills():
+            if generated["name"] == name:
+                return {
+                    "name": generated["name"],
+                    "description": generated.get("description", ""),
+                    "source": "generated",
+                    "loaded": False,
+                    "mode": generated.get("load_mode", "auto_choice"),
+                    "body_preview": generated.get("body", "")[:1000],
+                    "functions": [],
+                }
+        return None
 
 
 __all__ = ["AIEngine"]

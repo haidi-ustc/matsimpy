@@ -6,28 +6,29 @@
 
 ## Tool trace
 
-- `from_prototype` — success — args: `{"lattice_constant": 5.64, "prototype": "rocksalt", "species": "NaCl"}`
-- `write_structure` — success — args: `{"path": "nacl.cif", "structure": {"formula": "NaCl", "num_atoms": 2, "structure_ref": "structure:1"}}`
+- `from_prototype` — success — args: `{"lattice_constant": 5.64, "prototype": "rocksalt", "species": ["Na", "Cl"]}`
+- `write_structure` — success — args: `{"path": "nacl.cif", "structure": {"structure_ref": "structure:1"}}`
 
 ## Artifacts
 
 - `nacl.cif` (483 bytes, formula=NaCl, atoms=2)
 - `state.db-shm` (32768 bytes, formula=n/a, atoms=n/a)
-- `state.db-wal` (135992 bytes, formula=n/a, atoms=n/a)
+- `state.db-wal` (185432 bytes, formula=n/a, atoms=n/a)
 
 ## Final assistant output
 
-The rocksalt NaCl structure has been built and saved to **nacl.cif**.
+The rocksalt NaCl structure has been built and saved to **`nacl.cif`**. Here's a summary:
 
-Here's a summary:
+| Property | Value |
+|---|---|
+| **Prototype** | Rocksalt (B1) |
+| **Formula** | NaCl |
+| **Conventional** _a_ | 5.64 Å |
+| **Primitive cell** _a_ | 3.988 Å (≈ 5.64/√2) |
+| **Primitive atoms** | 2 (1 Na, 1 Cl) |
+| **Primitive angles** | α = β = γ = 60° |
 
-- **Prototype**: Rocksalt (B1)
-- **Formula**: NaCl
-- **Conventional lattice constant**: 5.64 Å
-- **Atoms in primitive cell**: 2 (one Na⁺, one Cl⁻)
-- **Saved to**: `nacl.cif`
-
-The primitive cell returned has lattice vectors of ~3.988 Å with rhombohedral angles of 60°, which corresponds to the standard primitive cell of the FCC-based rocksalt structure (where the conventional cubic parameter 5.64 Å gives a primitive vector of 5.64/√2 ≈ 3.988 Å). Na⁺ and Cl⁻ occupy alternating octahedral sites in the classic rocksalt arrangement.
+The primitive cell contains one Na at (0,0,0) and one Cl at (½,½,½) in fractional coordinates, which is exactly what's expected for the rocksalt structure.
 
 ## Deterministic validation
 
@@ -38,4 +39,4 @@ The primitive cell returned has lattice vectors of ~3.988 Å with rhombohedral a
 
 - Pass: True
 - Score: 100
-- Analysis: The workflow correctly built the rocksalt NaCl structure using from_prototype with lattice constant 5.64 Å, producing the expected primitive rhombohedral cell with vectors 3.9881 Å and 60° angles. The structure was saved to nacl.cif using write_structure. All required tools were used successfully, and no deterministic errors occurred. The final output accurately describes the resulting structure and aligns with the request.
+- Analysis: The workflow correctly used `from_prototype` with prototype 'rocksalt', species ['Na','Cl'], and lattice_constant 5.64 Å, producing a primitive rhombohedral cell with a=3.9881 Å (≈5.64/√2) and angles 60°. The resulting structure was saved as `nacl.cif` via `write_structure`. All tool outputs match the request and the final text accurately describes the structure, backing every claim with tool-call evidence. No deterministic errors or unsupported claims are present.

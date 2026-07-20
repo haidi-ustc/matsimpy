@@ -1,6 +1,186 @@
 """Tests for SQLite AI session and trace storage."""
 
-from matsimpy.ai.session_store import SessionStore
+import sqlite3
+
+import pytest
+
+from matsimpy.ai.session_store import AttemptRecord, ConversationRecord, SessionStore
+
+
+def test_legacy_database_migrates_without_losing_existing_rows(tmp_path):
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            id INTEGER PRIMARY KEY, source TEXT NOT NULL, workspace TEXT NOT NULL,
+            model TEXT NOT NULL, provider TEXT NOT NULL, status TEXT NOT NULL,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, ended_at TEXT
+        );
+        CREATE TABLE task_traces (
+            id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+            user_request TEXT NOT NULL, plan_summary TEXT NOT NULL,
+            validation_status TEXT NOT NULL, final_response TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO sessions VALUES
+            (7, 'legacy', '/work', 'old-model', 'old-provider', 'success',
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO task_traces (
+            id, session_id, user_request, plan_summary, validation_status, final_response
+        ) VALUES (9, 7, 'keep me', 'kept', 'success', 'still here');
+        """
+    )
+    conn.close()
+
+    store = SessionStore(path)
+
+    assert store.conn.execute("SELECT user_request FROM task_traces WHERE id = 9").fetchone()[0] == "keep me"
+    assert store.conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 4
+    assert {"conversations", "attempts"} <= {
+        row[0] for row in store.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+
+
+def test_conversation_and_linked_attempts_round_trip(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    conversation = store.create_conversation("repl", str(tmp_path), "model", "provider")
+    assert isinstance(conversation, ConversationRecord)
+
+    first = store.start_attempt(conversation.id, "build copper")
+    assert first.state == "running"
+    first = store.finish_attempt(first.id, "failed", error="retryable")
+    second = store.start_attempt(conversation.id, "build copper", parent_attempt_id=first.id)
+    second = store.finish_attempt(second.id, "succeeded", final_response="Created Cu4", trace_id=None)
+
+    loaded, attempts = store.load_conversation(conversation.id)
+    assert loaded == conversation
+    assert [attempt.state for attempt in attempts] == ["failed", "succeeded"]
+    assert attempts[1].parent_attempt_id == attempts[0].id
+    assert attempts[1].final_response == "Created Cu4"
+    assert all(isinstance(attempt, AttemptRecord) for attempt in attempts)
+
+
+def test_conversations_and_attempts_are_ordered_oldest_first(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    first = store.create_conversation("repl", "/one", "m1", "p1")
+    second = store.create_conversation("command", "/two", "m2", "p2")
+    attempt_one = store.start_attempt(first.id, "first")
+    attempt_two = store.start_attempt(first.id, "second", attempt_one.id)
+
+    assert [item.id for item in store.list_conversations()] == [first.id, second.id]
+    assert [item.id for item in store.load_conversation(first.id)[1]] == [
+        attempt_one.id,
+        attempt_two.id,
+    ]
+
+
+def test_attempt_can_be_marked_interrupted_and_cannot_be_finished_twice(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    conversation = store.create_conversation("repl", "/work", "model", "provider")
+    attempt = store.start_attempt(conversation.id, "long calculation")
+
+    interrupted = store.mark_attempt_interrupted(attempt.id, error="process stopped")
+
+    assert interrupted.state == "interrupted"
+    assert interrupted.error == "process stopped"
+    assert interrupted.finished_at is not None
+    with pytest.raises(ValueError, match="already interrupted"):
+        store.finish_attempt(attempt.id, "failed")
+
+
+@pytest.mark.parametrize("losing_transition", ["finish", "interrupt"])
+def test_attempt_terminal_transition_compare_and_set_preserves_two_connection_winner(
+    tmp_path, monkeypatch, losing_transition
+):
+    path = tmp_path / "state.db"
+    winner = SessionStore(path)
+    conversation = winner.create_conversation("repl", "/work", "model", "provider")
+    attempt = winner.start_attempt(conversation.id, "race")
+    loser = SessionStore(path)
+
+    real_get_attempt = loser._get_attempt
+    stale_read_used = False
+
+    def stale_then_current(attempt_id):
+        nonlocal stale_read_used
+        if not stale_read_used:
+            stale_read_used = True
+            return attempt
+        return real_get_attempt(attempt_id)
+
+    monkeypatch.setattr(loser, "_get_attempt", stale_then_current)
+    if losing_transition == "finish":
+        winner.mark_attempt_interrupted(attempt.id, error="winner")
+        with pytest.raises(ValueError, match="already interrupted"):
+            loser.finish_attempt(attempt.id, "succeeded", final_response="loser")
+        expected = ("interrupted", None, "winner")
+    else:
+        winner.finish_attempt(attempt.id, "succeeded", final_response="winner")
+        with pytest.raises(ValueError, match="already succeeded"):
+            loser.mark_attempt_interrupted(attempt.id, error="loser")
+        expected = ("succeeded", "winner", None)
+
+    row = winner.conn.execute(
+        "SELECT state, final_response, error FROM attempts WHERE id = ?", (attempt.id,)
+    ).fetchone()
+    assert tuple(row) == expected
+
+
+def test_attempt_api_rejects_unknown_ids_invalid_states_and_cross_links(tmp_path):
+    store = SessionStore(tmp_path / "state.db")
+    first = store.create_conversation("repl", "/one", "model", "provider")
+    second = store.create_conversation("repl", "/two", "model", "provider")
+    attempt = store.start_attempt(first.id, "request")
+
+    with pytest.raises(KeyError, match="unknown conversation"):
+        store.load_conversation(999)
+    with pytest.raises(KeyError, match="unknown attempt"):
+        store.mark_attempt_interrupted(999)
+    with pytest.raises(ValueError, match="succeeded.*failed"):
+        store.finish_attempt(attempt.id, "interrupted")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="different conversation"):
+        store.start_attempt(second.id, "retry", parent_attempt_id=attempt.id)
+
+
+def test_pending_state_parses_and_migrated_database_reopens(tmp_path):
+    path = tmp_path / "state.db"
+    store = SessionStore(path)
+    conversation = store.create_conversation("repl", "/work", "model", "provider")
+    cursor = store.conn.execute(
+        """
+        INSERT INTO attempts (conversation_id, state, user_request)
+        VALUES (?, 'pending', 'queued request')
+        """,
+        (conversation.id,),
+    )
+    store.conn.commit()
+    pending_id = int(cursor.lastrowid)
+    store.close()
+
+    reopened = SessionStore(path)
+
+    assert reopened.load_conversation(conversation.id)[1][0].state == "pending"
+    assert reopened.conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 4
+    assert reopened.conn.execute("SELECT COUNT(*) FROM attempts WHERE id = ?", (pending_id,)).fetchone()[0] == 1
+
+
+def test_failed_migration_rolls_back_its_schema_and_version(tmp_path):
+    path = tmp_path / "state.db"
+
+    class FailingMigrationStore(SessionStore):
+        def _migrate_to_v2(self):
+            super()._migrate_to_v2()
+            raise RuntimeError("injected migration failure")
+
+    with pytest.raises(RuntimeError, match="injected migration failure"):
+        FailingMigrationStore(path)
+
+    conn = sqlite3.connect(path)
+    assert conn.execute("SELECT version FROM schema_meta").fetchone()[0] == 1
+    assert conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'attempts'"
+    ).fetchone()[0] == 0
 
 
 def test_session_store_records_session_message_tool_and_trace(tmp_path):

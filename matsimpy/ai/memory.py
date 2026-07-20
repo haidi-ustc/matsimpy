@@ -1,9 +1,15 @@
 """Agent memory — user.md, agent.md, soul.md, memory.md persistence."""
 
 from __future__ import annotations
+import hashlib
+import json
 import os
-from pathlib import Path
+import re
+import unicodedata
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 MEMORY_DIR = Path.home() / ".matsimpy" / "ai" / "memory"
 
@@ -19,10 +25,47 @@ FILES = {
 }
 
 MUTABLE_TARGETS = {"memory", "user", "agent"}
+STRUCTURED_MEMORY_FILE = "entries.json"
+_FINGERPRINT_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
 class MemoryValidationError(ValueError):
     """Raised when a memory entry is invalid or unsafe."""
+
+
+@dataclass(frozen=True)
+class MemoryEntry:
+    """A durable fact with deduplication and provenance metadata."""
+
+    content: str
+    fingerprint: str
+    confidence: float
+    source_trace_ids: tuple[int, ...]
+    supersedes: str | None = None
+    superseded_by: str | None = None
+    created_at: str = ""
+
+
+def normalized_fingerprint(content: str) -> str:
+    """Return an NFKC, casefolded, Unicode-alphanumeric fingerprint."""
+    folded = unicodedata.normalize("NFKC", content).casefold()
+    tokens: list[str] = []
+    token: list[str] = []
+    for character in folded:
+        if character.isalnum():
+            token.append(character)
+        elif token:
+            tokens.append("".join(token))
+            token = []
+    if token:
+        tokens.append("".join(token))
+    normalized = " ".join(tokens)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _legacy_fingerprint(content: str) -> str:
+    normalized = " ".join(_FINGERPRINT_TOKEN_RE.findall(content.casefold()))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 class AgentMemory:
@@ -64,6 +107,8 @@ class AgentMemory:
         path.write_text(existing + content + "\n")
 
     def _validate_entry(self, content: str) -> str:
+        if not isinstance(content, str):
+            raise MemoryValidationError("memory entry must be a string")
         entry = content.strip()
         if not entry:
             raise MemoryValidationError("memory entry is empty")
@@ -162,6 +207,199 @@ class AgentMemory:
             markdown += f"- **Insight**: {insight}\n"
         self.append("memory", markdown)
 
+    def remember(
+        self,
+        content: str,
+        *,
+        confidence: float = 1.0,
+        source_trace_ids: list[int] | tuple[int, ...] = (),
+        supersedes: str | None = None,
+    ) -> MemoryEntry:
+        """Persist a structured fact, rejecting duplicates and unsafe corrections."""
+        validated = self._validate_entry(content)
+        validated_confidence = self._validated_confidence(confidence)
+        fingerprint = normalized_fingerprint(validated)
+        entries = self.structured_entries(include_superseded=True)
+        if any(entry.fingerprint == fingerprint for entry in entries):
+            raise MemoryValidationError("duplicate memory entry")
+
+        if supersedes is not None:
+            matches = [
+                entry for entry in entries
+                if entry.fingerprint == supersedes and entry.superseded_by is None
+            ]
+            if not matches:
+                raise MemoryValidationError("memory entry to supersede was not found or is inactive")
+
+        trace_ids = self._validated_trace_ids(source_trace_ids)
+        new_entry = MemoryEntry(
+            content=validated,
+            fingerprint=fingerprint,
+            confidence=validated_confidence,
+            source_trace_ids=trace_ids,
+            supersedes=supersedes,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        updated = []
+        for entry in entries:
+            if entry.fingerprint == supersedes:
+                entry = MemoryEntry(**{**asdict(entry), "superseded_by": fingerprint})
+            updated.append(entry)
+        updated.append(new_entry)
+        self._write_structured_entries(updated)
+        return new_entry
+
+    def structured_entries(self, include_superseded: bool = False) -> list[MemoryEntry]:
+        """Load structured facts, hiding superseded entries by default."""
+        path = self.dir / STRUCTURED_MEMORY_FILE
+        if not path.exists():
+            return []
+        try:
+            raw: Any = json.loads(path.read_text())
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise MemoryValidationError(
+                "structured memory ledger is not valid JSON"
+            ) from exc
+        if not isinstance(raw, list):
+            raise MemoryValidationError("structured memory ledger is malformed")
+        migrated = self._migrate_legacy_fingerprints(raw)
+        entries = [self._parse_structured_entry(item) for item in raw]
+        self._validate_supersession_graph(entries)
+        if migrated:
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n")
+            temporary.replace(path)
+        if include_superseded:
+            return entries
+        return [entry for entry in entries if entry.superseded_by is None]
+
+    @staticmethod
+    def _migrate_legacy_fingerprints(raw: list[Any]) -> bool:
+        """Upgrade legacy ASCII-only hashes while retaining stable ASCII hashes."""
+        replacements: dict[str, str] = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            fingerprint = item.get("fingerprint")
+            if not isinstance(content, str) or not isinstance(fingerprint, str):
+                continue
+            current = normalized_fingerprint(content)
+            if fingerprint == _legacy_fingerprint(content) and fingerprint != current:
+                replacements[fingerprint] = current
+        if not replacements:
+            return False
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            for field in ("fingerprint", "supersedes", "superseded_by"):
+                value = item.get(field)
+                if value in replacements:
+                    item[field] = replacements[value]
+        return True
+
+    def _parse_structured_entry(self, item: Any) -> MemoryEntry:
+        if not isinstance(item, dict):
+            raise MemoryValidationError("structured memory entry must be an object")
+        required = {"content", "fingerprint", "confidence", "source_trace_ids"}
+        allowed = required | {"supersedes", "superseded_by", "created_at"}
+        if not required <= item.keys() or not item.keys() <= allowed:
+            raise MemoryValidationError("structured memory entry has invalid fields")
+        try:
+            content = self._validate_entry(item["content"])
+        except (MemoryValidationError, TypeError, AttributeError) as exc:
+            raise MemoryValidationError("structured memory content is invalid") from exc
+        fingerprint = item["fingerprint"]
+        if not isinstance(fingerprint, str) or fingerprint != normalized_fingerprint(content):
+            raise MemoryValidationError("structured memory fingerprint is invalid")
+        confidence = self._validated_confidence(item["confidence"])
+        trace_ids = self._validated_trace_ids(item["source_trace_ids"])
+        supersedes = self._optional_fingerprint(item.get("supersedes"))
+        superseded_by = self._optional_fingerprint(item.get("superseded_by"))
+        created_at = item.get("created_at", "")
+        if not isinstance(created_at, str):
+            raise MemoryValidationError("structured memory timestamp is invalid")
+        return MemoryEntry(
+            content=content,
+            fingerprint=fingerprint,
+            confidence=confidence,
+            source_trace_ids=trace_ids,
+            supersedes=supersedes,
+            superseded_by=superseded_by,
+            created_at=created_at,
+        )
+
+    @staticmethod
+    def _validated_trace_ids(value: Any) -> tuple[int, ...]:
+        if not isinstance(value, (list, tuple)):
+            raise MemoryValidationError("structured memory trace IDs are invalid")
+        if any(
+            isinstance(trace_id, bool)
+            or not isinstance(trace_id, int)
+            or trace_id <= 0
+            for trace_id in value
+        ):
+            raise MemoryValidationError("structured memory trace IDs are invalid")
+        if len(set(value)) != len(value):
+            raise MemoryValidationError("structured memory trace IDs are duplicated")
+        return tuple(value)
+
+    @staticmethod
+    def _validated_confidence(value: Any) -> float:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 0.0 <= value <= 1.0
+        ):
+            raise MemoryValidationError(
+                "structured memory confidence must be numeric and between 0 and 1"
+            )
+        return float(value)
+
+    @staticmethod
+    def _optional_fingerprint(value: Any) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value:
+            raise MemoryValidationError("structured memory supersession is invalid")
+        return value
+
+    @staticmethod
+    def _validate_supersession_graph(entries: list[MemoryEntry]) -> None:
+        by_fingerprint = {entry.fingerprint: entry for entry in entries}
+        if len(by_fingerprint) != len(entries):
+            raise MemoryValidationError("structured memory fingerprints are duplicated")
+        for entry in entries:
+            if entry.supersedes == entry.fingerprint or entry.superseded_by == entry.fingerprint:
+                raise MemoryValidationError("structured memory entry cannot supersede itself")
+            if entry.supersedes is not None:
+                parent = by_fingerprint.get(entry.supersedes)
+                if parent is None or parent.superseded_by != entry.fingerprint:
+                    raise MemoryValidationError("structured memory supersession reference is invalid")
+            if entry.superseded_by is not None:
+                child = by_fingerprint.get(entry.superseded_by)
+                if child is None or child.supersedes != entry.fingerprint:
+                    raise MemoryValidationError("structured memory replacement reference is invalid")
+
+        for entry in entries:
+            seen: set[str] = set()
+            current: MemoryEntry | None = entry
+            while current is not None and current.supersedes is not None:
+                if current.fingerprint in seen:
+                    raise MemoryValidationError("structured memory supersession cycle detected")
+                seen.add(current.fingerprint)
+                current = by_fingerprint.get(current.supersedes)
+
+    def _write_structured_entries(self, entries: list[MemoryEntry]) -> None:
+        payload = [
+            {**asdict(entry), "source_trace_ids": list(entry.source_trace_ids)}
+            for entry in entries
+        ]
+        path = self.dir / STRUCTURED_MEMORY_FILE
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        temporary.replace(path)
+
     def get_soul_prompt(self) -> str:
         """Get soul.md content for system prompt injection."""
         return self.read("soul")
@@ -175,4 +413,9 @@ class AgentMemory:
         }
 
 
-__all__ = ["AgentMemory", "MemoryValidationError"]
+__all__ = [
+    "AgentMemory",
+    "MemoryEntry",
+    "MemoryValidationError",
+    "normalized_fingerprint",
+]

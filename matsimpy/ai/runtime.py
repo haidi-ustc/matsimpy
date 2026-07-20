@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 from .conversation import ChatMessage, ToolCall
-from .evolution import EvolutionManager
-from .executor import FunctionExecutor, _set_active_executor
+from .evolution import EvolutionManager, has_corrective_retry
+from .executor import FunctionExecutor, active_executor
 from .memory import AgentMemory
 from .providers import ChatProvider
 from .session_store import SessionStore
@@ -29,8 +30,10 @@ Core rules:
 3. Keep tool-call arguments compact. Pass one structure per call unless a function
    explicitly accepts a collection.
 4. For pipelines, follow create/read -> modify -> analyze/calculate -> save/export.
-   Pass returned structure references or result dictionaries through the executor
-   instead of expanding full structure data into later arguments.
+   Pass returned structure references through the executor and reuse structure_ref
+   values from prior tool results, including results from prior user turns. Do not
+   omit a required structure argument, guess a file path, or rebuild a structure
+   that is already available by reference.
 5. You may show returned data only when the user explicitly asks to see it.
 6. For a named crystal prototype such as fcc, bcc, hcp, diamond, zincblende,
    rocksalt, wurtzite, or perovskite, use the named prototype builder. Use the
@@ -42,6 +45,12 @@ Core rules:
    from low-level coordinates. Distinguish a builder's conventional lattice
    parameter input from the primitive cell vectors it returns, and never call a
    one-atom FCC primitive cell a conventional cell.
+9. Do not add derived scientific claims, default parameter values, or physical
+   interpretations unless the user requested them and tool results support them.
+10. Treat symmetry labels as setting-specific evidence. In final summaries,
+   reproduce every returned Wyckoff letter and multiplicity exactly for the
+   analyzed cell. Do not convert to a conventional setting or substitute prior
+   crystallographic knowledge unless a tool explicitly returns that mapping.
 
 If a tool fails, explain the failure, stop inventing evidence, and choose a smaller
 MatSimPy-backed next step only when the user request can still be satisfied safely."""
@@ -116,7 +125,6 @@ class AgentRuntime:
         self.max_turns = max_turns
         self.verbose_hook = verbose_hook
         self.executor = FunctionExecutor(skill_manager)
-        _set_active_executor(self.executor)
         self.messages = self._initial_messages()
         self.last_result: TaskResult | None = None
 
@@ -131,15 +139,26 @@ class AgentRuntime:
         extra_messages: list[ChatMessage] | None = None,
     ) -> TaskResult:
         """Execute one user task and return persisted runtime evidence."""
+        with self.workspace.activate(), active_executor(self.executor):
+            return self._run_in_workspace(
+                user_message=user_message,
+                extra_messages=extra_messages,
+            )
+
+    def _run_in_workspace(
+        self,
+        user_message: str,
+        extra_messages: list[ChatMessage] | None = None,
+    ) -> TaskResult:
+        """Execute after workspace and executor contexts have been selected."""
         self.messages = self._initial_messages()
         if extra_messages:
             self.messages.extend(extra_messages)
         self.executor._call_count = 0
-        _set_active_executor(self.executor)
-        self.workspace.enter()
         session_id: int | None = None
         tool_records: list[dict] = []
         final_response = ""
+        final_outcome_completed = False
         max_turns_reached = False
         trace_id: int | None = None
         pending_messages: list[dict] = []
@@ -182,6 +201,7 @@ class AgentRuntime:
                     continue
 
                 final_response = response.message.content
+                final_outcome_completed = response.finish_reason == "stop"
                 if response.finish_reason == "length":
                     final_response = f"{final_response}\n[response truncated]"
                 break
@@ -189,7 +209,11 @@ class AgentRuntime:
                 max_turns_reached = True
                 final_response = self.messages[-1].content or "[max turns reached]"
 
-            validation_status = self._validate_tool_records(tool_records)
+            validation_status = self._validate_tool_records(
+                tool_records,
+                final_response=final_response,
+                final_outcome_completed=final_outcome_completed,
+            )
             if max_turns_reached:
                 validation_status = "failure"
             status = "success" if validation_status == "success" else "failure"
@@ -230,6 +254,17 @@ class AgentRuntime:
                 draft_skill=draft_skill,
             )
             return self.last_result
+        except (KeyboardInterrupt, asyncio.CancelledError) as exc:
+            if session_id is not None:
+                self._persist_interrupted_run(
+                    session_id=session_id,
+                    user_message=user_message,
+                    tool_records=tool_records,
+                    pending_messages=pending_messages,
+                    pending_tool_calls=pending_tool_calls,
+                    cancellation=exc,
+                )
+            raise
         except Exception as exc:
             self.last_result = self._finalize_runtime_failure(
                 session_id=session_id,
@@ -239,8 +274,40 @@ class AgentRuntime:
                 exc=exc,
             )
             return self.last_result
+
+    def _persist_interrupted_run(
+        self,
+        session_id: int,
+        user_message: str,
+        tool_records: list[dict],
+        pending_messages: list[dict],
+        pending_tool_calls: list[dict],
+        cancellation: BaseException,
+    ) -> None:
+        """Flush buffered evidence, then durably mark a cancelled run interrupted."""
+        final_response = f"Execution interrupted: {type(cancellation).__name__}"
+        try:
+            self.session_store.add_messages_batch(session_id, pending_messages)
+            self.session_store.add_tool_calls_batch(session_id, pending_tool_calls)
+            self.session_store.add_task_trace(
+                session_id=session_id,
+                user_request=user_message,
+                plan_summary=self._plan_summary(
+                    tool_records, max_turns_reached=False
+                ),
+                validation_status="failure",
+                final_response=final_response,
+                tool_names=[record["name"] for record in tool_records],
+            )
+        except Exception as exc:
+            # Cancellation remains the control-flow signal even if audit storage
+            # itself is degraded; surface the secondary issue through diagnostics.
+            self._emit(f"failed to persist interruption evidence: {exc}")
         finally:
-            self.workspace.leave()
+            try:
+                self.session_store.end_session(session_id, "interrupted")
+            except Exception as exc:
+                self._emit(f"failed to mark runtime session interrupted: {exc}")
 
     def _initial_messages(self) -> list[ChatMessage]:
         prompt = self.system_prompt.strip()
@@ -310,10 +377,18 @@ class AgentRuntime:
             "status": status,
         }
 
-    def _validate_tool_records(self, records: list[dict]) -> str:
-        if any(record["status"] == "failure" for record in records):
-            return "failure"
-        return "success"
+    def _validate_tool_records(
+        self,
+        records: list[dict],
+        final_response: str = "",
+        final_outcome_completed: bool = True,
+    ) -> str:
+        """Validate a task, allowing an evidenced correction after a failed call."""
+        if not any(record["status"] == "failure" for record in records):
+            return "success"
+        corrected = has_corrective_retry(records)
+        final_outcome = final_outcome_completed and bool(final_response.strip())
+        return "success" if corrected and final_outcome else "failure"
 
     def _validate_tool_result(self, result: dict[str, Any]) -> str:
         if "error" in result:

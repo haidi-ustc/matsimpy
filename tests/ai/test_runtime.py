@@ -173,7 +173,7 @@ def test_runtime_executes_tools_persists_trace_and_drafts_skill(tmp_path):
         source="test",
     )
 
-    result = runtime.run("create silicon and save it")
+    result = runtime.run("remember this workflow: create silicon and save it")
 
     assert result.status == "success"
     assert result.final_response == "Created and saved silicon."
@@ -191,6 +191,103 @@ def test_runtime_executes_tools_persists_trace_and_drafts_skill(tmp_path):
     assert [trace["id"] for trace in traces] == [result.trace_id]
     drafts = store.list_skill_drafts("draft")
     assert [draft["name"] for draft in drafts] == [result.draft_skill["name"]]
+
+
+def test_runtime_validates_corrective_recovery_and_preserves_failed_audit(tmp_path):
+    invalid = ToolCall(
+        id="call-invalid",
+        name="create_structure",
+        arguments={"unexpected": True},
+    )
+    corrected = ToolCall(id="call-corrected", name="create_structure", arguments={})
+    provider = FakeProvider([
+        ChatResponse(
+            message=_assistant_tool_message(invalid),
+            tool_calls=[invalid],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=_assistant_tool_message(corrected),
+            tool_calls=[corrected],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=ChatMessage.assistant("Created silicon after correcting the call."),
+            tool_calls=[],
+            finish_reason="stop",
+        ),
+    ])
+    store = SessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("create silicon")
+
+    assert result.status == "success"
+    assert [record["status"] for record in result.tool_calls] == ["failure", "success"]
+    assert result.draft_skill is not None
+    assert result.draft_skill["metadata"]["evolution"]["rationale"] == (
+        "validated recovery from tool failure"
+    )
+    audit = store.conn.execute(
+        "SELECT tool_name, status FROM tool_calls ORDER BY id"
+    ).fetchall()
+    assert [(row["tool_name"], row["status"]) for row in audit] == [
+        ("create_structure", "failure"),
+        ("create_structure", "success"),
+    ]
+
+
+def test_runtime_rejects_unrelated_success_after_failed_call(tmp_path):
+    failed_save = ToolCall(
+        id="call-save",
+        name="save_structure",
+        arguments={},
+    )
+    successful_create = ToolCall(
+        id="call-create",
+        name="create_structure",
+        arguments={},
+    )
+    provider = FakeProvider([
+        ChatResponse(
+            message=_assistant_tool_message(failed_save),
+            tool_calls=[failed_save],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=_assistant_tool_message(successful_create),
+            tool_calls=[successful_create],
+            finish_reason="tool_calls",
+        ),
+        ChatResponse(
+            message=ChatMessage.assistant("Created a structure but did not save it."),
+            tool_calls=[],
+            finish_reason="stop",
+        ),
+    ])
+    store = SessionStore(tmp_path / "state.db")
+    runtime = AgentRuntime(
+        provider=provider,
+        skill_manager=_runtime_skill_manager(tmp_path),
+        session_store=store,
+        memory=AgentMemory(tmp_path / "memory"),
+        workspace_path=tmp_path,
+        source="test",
+    )
+
+    result = runtime.run("save and inspect silicon")
+
+    assert result.status == "failure"
+    assert result.validation_status == "failure"
+    assert result.draft_skill is None
+    assert [record["status"] for record in result.tool_calls] == ["failure", "success"]
 
 
 def test_runtime_keeps_success_when_draft_generation_fails(tmp_path):
@@ -736,6 +833,11 @@ def test_runtime_prompt_forbids_invented_scientific_tool_arguments():
     assert "energies" in prompt
     assert "tool-call arguments" in prompt
     assert "pass returned structure references" in prompt
+    assert "reuse" in prompt and "prior tool results" in prompt
+    assert "do not add derived" in prompt
+    assert "wyckoff" in prompt
+    assert "letter and multiplicity exactly" in prompt
+    assert "do not convert" in prompt and "conventional setting" in prompt
 
 
 def test_runtime_initial_prompt_keeps_memory_after_core_rules(tmp_path):

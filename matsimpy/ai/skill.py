@@ -132,5 +132,14 @@ class SkillManager:
     def active_skills(self) -> list[str]:
         return sorted(self._active)
 
+    def function_definitions(self, *, active_only: bool = False) -> dict[str, FunctionDef]:
+        """Return the live function catalog keyed by tool name."""
+        names = self._active if active_only else self._skills
+        return {
+            function.name: function
+            for name in names
+            for function in self._skills[name].functions
+        }
+
 
 __all__ = ["FunctionDef", "Skill", "SkillManager"]

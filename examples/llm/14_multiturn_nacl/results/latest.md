@@ -8,37 +8,32 @@
 ## Tool trace
 
 - `from_prototype` — success — args: `{"lattice_constant": 5.64, "prototype": "rocksalt", "species": "NaCl"}`
-- `from_prototype` — success — args: `{"lattice_constant": 5.64, "prototype": "rocksalt", "species": ["Na", "Cl"]}`
-- `make_supercell` — success — args: `{"crystal": {"structure_ref": "structure:2"}, "scaling_matrix": [2, 1, 1]}`
-- `write_structure` — success — args: `{"path": "nacl_supercell.cif", "structure": {"structure_ref": "structure:3"}}`
+- `make_supercell` — success — args: `{"crystal": {"structure_ref": "structure:1"}, "scaling_matrix": [2, 1, 1]}`
+- `write_structure` — success — args: `{"path": "nacl_supercell.cif", "structure": {"structure_ref": "structure:2"}}`
 
 ## Artifacts
 
 - `nacl_supercell.cif` (599 bytes, formula=Na2Cl2, atoms=4)
 - `state.db-shm` (32768 bytes, formula=n/a, atoms=n/a)
-- `state.db-wal` (189552 bytes, formula=n/a, atoms=n/a)
+- `state.db-wal` (280192 bytes, formula=n/a, atoms=n/a)
 
 ## Final assistant output
 
-Done! Here's a summary:
+The rocksalt NaCl structure has been built successfully:
 
-| Step | Details |
-|------|---------|
-| **Prototype** | Rocksalt NaCl |
-| **Lattice constant** | 5.64 Å (conventional cubic) |
-| **Formula** | NaCl |
-| **Atoms** | 2 (1 Na + 1 Cl in the primitive cell) |
+- **Formula**: NaCl
+- **Atoms in primitive cell**: 2 (1 Na, 1 Cl)
+- **Primitive cell vectors**: a = b = c = 3.988 Å, α = β = γ = 60°
 
-The structure is now stored as `structure:1`. Note that the primitive cell reported here has a lattice parameter of ~3.99 Å with rhombohedral angles of 60°, which is the primitive representation of the conventional 5.64 Å cubic rocksalt cell. If you'd like to convert it to the conventional cubic cell, create a supercell, or save it to a file, just let me know!
+The primitive cell has a rhombohedral shape (as expected for the rocksalt prototype), derived from the conventional FCC-based rocksalt lattice with the specified conventional lattice constant of 5.64 Å. The relationship is \(a_{\text{primitive}} = a_{\text{conventional}} / \sqrt{2} \approx 3.988\) Å.
 
-Done! Here's a summary:
+The structure is stored as `structure_ref: 1` for further operations.
 
-| Step | Details |
-|------|---------|
-| **Prototype** | Rocksalt NaCl, a = 5.64 Å |
-| **Supercell** | 2×1×1 (doubled along first lattice vector) |
-| **Result** | 4 atoms (Na₂Cl₂) |
-| **Saved to** | `nacl_supercell.cif` |
+The 2×1×1 supercell has been created and saved:
+
+- **Formula**: Na₂Cl₂ (4 atoms: 2 Na, 2 Cl)
+- **Supercell lattice**: a = 7.976 Å (doubled along the first primitive vector), b = c = 3.988 Å, α = β = γ = 60°
+- **Saved to**: `nacl_supercell.cif`
 
 ## Deterministic validation
 
@@ -49,4 +44,4 @@ Done! Here's a summary:
 
 - Pass: True
 - Score: 100
-- Analysis: The workflow successfully executed the requested actions: building rocksalt NaCl with lattice constant 5.64 Å using from_prototype (which correctly generated the primitive cell with a=3.9881 Å, the rhombohedral equivalent of the cubic 5.64 Å cell), making a 2x1x1 supercell via make_supercell (resulting in a Na₂Cl₂ structure with doubled a lattice parameter), and saving to nacl_supercell.cif with write_structure. All required tools were used appropriately, and the saved CIF file matches the expected supercell. No deterministic errors or unsupported claims are present.
+- Analysis: The workflow correctly used from_prototype with prototype='rocksalt', species='NaCl' and the conventional lattice constant 5.64 Å. The returned primitive cell has a=b=c=3.9881 Å, α=β=γ=60°, consistent with a_prim = a_conv/√2. A 2×1×1 supercell was created by scaling the first primitive vector, resulting in a doubled a vector (7.9762 Å) with 4 atoms (Na₂Cl₂). The structure was saved as 'nacl_supercell.cif' in CIF format. All tool calls succeeded and matched the requested operations; no deterministic errors or unsupported claims detected.

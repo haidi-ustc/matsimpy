@@ -1,12 +1,36 @@
 """Load and save Claude-compatible .skill.md files."""
 
 from __future__ import annotations
-import re
-from pathlib import Path
+
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
+import os
+from pathlib import Path
+import re
+import tempfile
+
+import yaml
+
+from matsimpy.ai.agent_skills import (
+    MAX_SKILL_BYTES,
+    SkillValidationError,
+    validate_skill_name,
+)
 
 SKILLS_DIR = Path.home() / ".matsimpy" / "ai" / "skills" / "generated"
 _UNSAFE_SKILL_NAME_RE = re.compile(r"[^a-z0-9-]+")
+_SECRET_KEYS = {
+    "access_token",
+    "api_key",
+    "authorization",
+    "client_secret",
+    "credentials",
+    "password",
+    "private_key",
+    "secret",
+    "token",
+}
 
 
 def _safe_skill_name(name: str) -> str:
@@ -103,6 +127,171 @@ def list_generated_skills(status: str | None = "approved") -> list[dict]:
     return skills
 
 
+@dataclass(frozen=True)
+class MigrationResult:
+    """Outcome of converting one legacy generated skill."""
+
+    source: Path
+    destination: Path
+    name: str
+    status: str
+    dry_run: bool
+
+    @property
+    def migrated(self) -> bool:
+        """Whether this call created the standard skill."""
+
+        return self.status == "migrated"
+
+
+def _parse_legacy_for_migration(path: Path) -> tuple[dict, str]:
+    try:
+        with path.open("rb") as legacy_file:
+            content_bytes = legacy_file.read(MAX_SKILL_BYTES + 1)
+        if len(content_bytes) > MAX_SKILL_BYTES:
+            raise SkillValidationError(
+                f"Invalid legacy skill at {path}: exceeds the "
+                f"{MAX_SKILL_BYTES}-byte size limit"
+            )
+        content = content_bytes.decode("utf-8", errors="strict")
+    except SkillValidationError:
+        raise
+    except UnicodeDecodeError as exc:
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: content is not valid UTF-8: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise SkillValidationError(f"Invalid legacy skill at {path}: {exc}") from exc
+    match = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n(.*)\Z", content, re.DOTALL)
+    if match is None:
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: expected YAML frontmatter"
+        )
+    try:
+        metadata = yaml.safe_load(match.group(1))
+    except yaml.YAMLError as exc:
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: invalid YAML frontmatter: {exc}"
+        ) from exc
+    if not isinstance(metadata, dict):
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: frontmatter must be a mapping"
+        )
+    _reject_secret_keys(metadata, path)
+    return metadata, match.group(2)
+
+
+def _reject_secret_keys(value: object, path: Path) -> None:
+    pending = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            if id(current) in visited:
+                continue
+            visited.add(id(current))
+            for key, nested in current.items():
+                if isinstance(key, str) and key.casefold() in _SECRET_KEYS:
+                    raise SkillValidationError(
+                        f"Invalid legacy skill at {path}: secret-bearing metadata "
+                        f"key {key!r} is not allowed"
+                    )
+                pending.append(nested)
+        elif isinstance(current, (list, tuple)):
+            if id(current) in visited:
+                continue
+            visited.add(id(current))
+            pending.extend(current)
+
+
+def _standard_skill_content(metadata: dict, body: str, path: Path) -> tuple[str, str]:
+    name = validate_skill_name(metadata.get("name"), path)
+    description = metadata.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: 'description' is required"
+        )
+    if len(description) > 1024:
+        raise SkillValidationError(
+            f"Invalid legacy skill at {path}: 'description' exceeds 1024 characters"
+        )
+    standard = {
+        "name": name,
+        "description": description,
+        "metadata": {
+            "matsimpy": {
+                key: value
+                for key, value in metadata.items()
+                if key not in {"name", "description"}
+            }
+        },
+    }
+    frontmatter = yaml.safe_dump(standard, sort_keys=False, allow_unicode=True)
+    return name, f"---\n{frontmatter}---\n{body}"
+
+
+def migrate_legacy_skill(
+    path: Path, destination: Path, dry_run: bool = False
+) -> MigrationResult:
+    """Convert a legacy ``*.skill.md`` file to a standard skill directory.
+
+    Existing byte-identical migrations are reported as idempotent. Any other
+    existing destination is treated as a collision and is never overwritten.
+    Migration only writes the manifest; it does not discover or activate it.
+    """
+
+    source = Path(path)
+    destination_root = Path(destination)
+    legacy_metadata, body = _parse_legacy_for_migration(source)
+    name, content = _standard_skill_content(legacy_metadata, body, source)
+    skill_path = destination_root / name / "SKILL.md"
+    result_kwargs = {
+        "source": source,
+        "destination": skill_path,
+        "name": name,
+        "dry_run": dry_run,
+    }
+
+    if skill_path.exists():
+        if skill_path.is_file() and skill_path.read_text(encoding="utf-8") == content:
+            return MigrationResult(status="already_migrated", **result_kwargs)
+        raise FileExistsError(f"Skill migration collision at {skill_path}")
+    if skill_path.parent.exists():
+        raise FileExistsError(f"Skill migration collision at {skill_path.parent}")
+    if dry_run:
+        return MigrationResult(status="planned", **result_kwargs)
+
+    destination_root.mkdir(parents=True, exist_ok=True)
+    try:
+        skill_path.parent.mkdir()
+    except FileExistsError as exc:
+        raise FileExistsError(f"Skill migration collision at {skill_path.parent}") from exc
+    try:
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=".SKILL.md-", dir=skill_path.parent
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
+                temporary_file.write(content)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+            os.link(temporary, skill_path)
+        except FileExistsError as exc:
+            raise FileExistsError(
+                f"Skill migration collision at {skill_path}"
+            ) from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+    except OSError:
+        try:
+            skill_path.parent.rmdir()
+        except OSError:
+            pass
+        raise
+    return MigrationResult(status="migrated", **result_kwargs)
+
+
 import importlib
 import warnings
 from pathlib import Path
@@ -163,4 +352,13 @@ def discover_builtin_skills() -> list[dict]:
     return skills
 
 
-__all__ = ["parse_skill_md", "save_skill_md", "list_generated_skills", "discover_builtin_skills", "SKILLS_DIR", "SKILLS_PKG"]
+__all__ = [
+    "MigrationResult",
+    "migrate_legacy_skill",
+    "parse_skill_md",
+    "save_skill_md",
+    "list_generated_skills",
+    "discover_builtin_skills",
+    "SKILLS_DIR",
+    "SKILLS_PKG",
+]
