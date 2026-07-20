@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import sqlite3
 
 from matsimpy import io
-from matsimpy.ai import Agent, ChatMessage, ChatResponse, FunctionDef, Skill, ToolCall
+from matsimpy.ai import (
+    Agent,
+    AgentMemory,
+    ChatMessage,
+    ChatResponse,
+    FunctionDef,
+    Skill,
+    ToolCall,
+)
 from matsimpy.ai.cli import _register_all_skills
+from matsimpy.ai.doctor import Doctor, render_diagnostics
+from matsimpy.ai.engine import AIEngine
 from matsimpy.ai.repl import ReplController
 from matsimpy.ai.skill import SkillManager
 
@@ -43,6 +55,16 @@ def _manager():
     for skill in manager.list_skills():
         manager.load(skill["name"])
     return manager
+
+
+def _write_standard_skill(root, name, description, body, allowed_tools=""):
+    skill = root / name
+    skill.mkdir(parents=True)
+    restriction = f"allowed-tools: {allowed_tools}\n" if allowed_tools else ""
+    (skill / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: {description}\n{restriction}---\n{body}\n",
+        encoding="utf-8",
+    )
 
 
 def test_documentation_exposes_executable_agent_entry_points_and_lifecycle():
@@ -128,13 +150,64 @@ def test_restart_resume_and_retry_replace_failed_turn(tmp_path):
     assert restarted.session.turns[-1].parent_attempt_id == failed.attempt_id
 
 
+def test_engine_repl_discovers_precedence_and_activates_standard_skill(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    monkeypatch.setenv("HOME", str(home))
+    _write_standard_skill(
+        home / ".matsimpy/ai/skills",
+        "shared-flow",
+        "User flow",
+        "USER INSTRUCTIONS",
+    )
+    _write_standard_skill(
+        workspace / ".matsimpy/skills",
+        "shared-flow",
+        "Workspace flow",
+        "WORKSPACE INSTRUCTIONS",
+        "create_molecule unavailable_tool",
+    )
+    engine = AIEngine(api_key="unused", workspace_path=str(workspace))
+    _register_all_skills(engine.skill_manager)
+
+    listed = engine.repl_controller.execute("/skills shared-flow")
+    loaded = engine.repl_controller.execute("/load-skill shared-flow")
+
+    assert listed.ok
+    assert listed.data["skill"]["source"] == "workspace"
+    assert listed.data["skill"]["description"] == "Workspace flow"
+    assert listed.data["skill"]["allowed_tools"] == ["create_molecule"]
+    assert loaded.ok
+    assert loaded.data["skill"] == {"name": "shared-flow", "loaded": True}
+    assert engine.agent.session.context_messages[-1].content.endswith(
+        "WORKSPACE INSTRUCTIONS"
+    )
+
+
 def test_skill_requires_review_then_approval_before_repl_can_use_it(tmp_path):
+    call = ToolCall("offline", "offline_step", {})
     agent = Agent(
         workspace=tmp_path,
-        provider=ScriptedProvider([ChatResponse(ChatMessage.assistant("ok"), [], "stop")]),
+        provider=ScriptedProvider(
+            [
+                ChatResponse(
+                    ChatMessage.assistant(
+                        "",
+                        tool_calls=[{
+                            "id": call.id,
+                            "type": "function",
+                            "function": {"name": call.name, "arguments": {}},
+                        }],
+                    ),
+                    [call],
+                    "tool_calls",
+                ),
+                ChatResponse(ChatMessage.assistant("ok"), [], "stop"),
+            ]
+        ),
     )
-    trace_id = agent.run("record evidence").trace_id
-    assert trace_id is not None
     tool = FunctionDef(
         "offline_step", "Offline step", {"type": "object", "properties": {}},
         lambda: {"ok": True},
@@ -142,7 +215,8 @@ def test_skill_requires_review_then_approval_before_repl_can_use_it(tmp_path):
     )
     agent.skill_manager.register(Skill("seed", "Seed", [tool]))
     agent.skill_manager.load("seed")
-    agent.evolution.replay = lambda version, context: {"passed": True}
+    trace_id = agent.run("record evidence").trace_id
+    assert trace_id is not None
     draft = agent.evolution.draft_skill(
         "offline-flow",
         "Offline flow",
@@ -155,6 +229,87 @@ def test_skill_requires_review_then_approval_before_repl_can_use_it(tmp_path):
     assert "offline-flow" not in agent.skill_manager.active_skills
     review = controller.execute(f"/evolve review {draft.id}")
     assert review.data["candidates"][0]["approvable"] is True
+    assert review.data["candidates"][0]["deterministic_evidence"] == {
+        "passed": True,
+        "source_trace_ids": [trace_id],
+        "replayed_tools": ["offline_step"],
+    }
     approved = controller.execute(f"/approve {draft.id}")
     assert approved.ok
     assert "offline-flow" in {item["name"] for item in agent.skill_manager.list_skills()}
+
+
+def test_credentials_are_absent_from_runtime_doctor_and_evolution_state(
+    tmp_path, monkeypatch
+):
+    sentinel = "TASK13_CREDENTIAL_SENTINEL_74b91f36"
+    home = tmp_path / "isolated-home"
+    workspace = home / "workspace"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", sentinel)
+    call = ToolCall("safe", "safe_step", {})
+    provider = ScriptedProvider([
+        ChatResponse(
+            ChatMessage.assistant(
+                "",
+                tool_calls=[{
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": {}},
+                }],
+            ),
+            [call],
+            "tool_calls",
+        ),
+        ChatResponse(ChatMessage.assistant("complete"), [], "stop"),
+    ])
+    provider.api_key = sentinel
+    agent = Agent(
+        workspace=workspace,
+        provider=provider,
+        memory=AgentMemory(home / ".matsimpy/ai/memory"),
+    )
+    definition = FunctionDef(
+        "safe_step",
+        "Safe offline step",
+        {"type": "object", "properties": {}},
+        lambda: {"safe": True},
+        skill="safe",
+    )
+    agent.skill_manager.register(Skill("safe", "Safe", [definition]))
+    agent.skill_manager.load("safe")
+    trace_id = agent.run("execute safe workflow").trace_id
+    assert trace_id is not None
+    draft = agent.evolution.draft_skill(
+        "safe-flow", "Safe flow", "Run `safe_step`.", ["safe_step"], [trace_id]
+    )
+    reviewed = agent.review_evolution(draft.id)
+    agent.approve_skill(reviewed["version_id"])
+    rendered = render_diagnostics(
+        Doctor(
+            workspace=workspace,
+            state_dir=workspace,
+            database=workspace / "ai-state.db",
+            environ=os.environ,
+        ).run()
+    )
+
+    assert sentinel not in rendered
+    for path in home.rglob("*"):
+        if path.is_file() and path.suffix not in {".db", ".sqlite", ".sqlite3"}:
+            assert sentinel.encode() not in path.read_bytes(), path
+    database = workspace / "ai-state.db"
+    with sqlite3.connect(database) as connection:
+        tables = [
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        ]
+        for table in tables:
+            for row in connection.execute(f'SELECT * FROM "{table}"'):
+                for value in row:
+                    if isinstance(value, str):
+                        assert sentinel not in value, (table, value)
+                    elif isinstance(value, bytes):
+                        assert sentinel.encode() not in value, table

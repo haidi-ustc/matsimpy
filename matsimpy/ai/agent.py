@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .conversation import ChatMessage
+from .agent_skills import SkillLibrary
 from .memory import AgentMemory
 from .provider import DeepSeekProvider
 from .providers import ChatProvider
@@ -17,6 +18,9 @@ from .session_store import SessionStore, SkillVersion
 from .skill import SkillManager
 from .evolution import EvolutionManager
 from .workspace import Workspace
+
+
+PACKAGED_AGENT_SKILLS = Path(__file__).resolve().parent / "standard_skills"
 
 
 @dataclass(frozen=True)
@@ -56,6 +60,7 @@ class Agent:
         self._evolution = evolution
         self._workspace_path = Workspace(workspace).path
         self._create_session()
+        self.refresh_skill_library()
 
     def _create_session(self) -> None:
         store = self._evolution.store if self._evolution is not None else SessionStore(
@@ -121,6 +126,24 @@ class Agent:
         self._evolution = None
         self._workspace_path = Path(workspace).expanduser().resolve()
         self._create_session()
+        self.refresh_skill_library()
+
+    def refresh_skill_library(self) -> SkillLibrary:
+        """Bind standard Agent Skill roots to the current workspace and tools."""
+        definitions = self._tool_definitions()
+        signature = tuple(
+            (name, id(definition)) for name, definition in definitions.items()
+        )
+        if getattr(self, "_skill_library_signature", None) == signature:
+            return self.skill_library
+        self.skill_library = SkillLibrary(
+            packaged=PACKAGED_AGENT_SKILLS,
+            user=Path.home() / ".matsimpy" / "ai" / "skills",
+            workspace=self.workspace.path / ".matsimpy" / "skills",
+            available_tools=definitions,
+        )
+        self._skill_library_signature = signature
+        return self.skill_library
 
     def review_evolution(
         self, candidate: int | str | None = None

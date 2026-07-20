@@ -85,10 +85,23 @@ class AIEngine:
         return ReplController(
             self.agent.session,
             evolution=self.agent,
-            skill_library=_EngineSkillSummaries(self.skill_manager),
+            skill_library=_EngineSkillSummaries(self.agent),
             usage_getter=lambda: {},
-            skill_loader=self._load_generated_skill,
+            skill_loader=self._load_skill,
         )
+
+    def _load_skill(self, name: str) -> dict:
+        library = self.agent.refresh_skill_library()
+        library.discover()
+        try:
+            skill = library.activate(name)
+        except KeyError:
+            return self._load_generated_skill(name)
+        message = ChatMessage.system(f"[Loaded skill: {name}]\n{skill.body}")
+        self.agent.add_context(message)
+        self.conversation.append(message)
+        self._registered_contexts.add(message.content)
+        return {"name": name, "loaded": True}
 
     def _load_generated_skill(self, name: str) -> dict:
         for skill in list_generated_skills():
@@ -582,12 +595,21 @@ class AIEngine:
 
 
 class _EngineSkillSummaries:
-    """Adapt legacy skills to the standard skill-summary interface."""
+    """Combine standard Agent Skills with builtin and legacy summaries."""
 
-    def __init__(self, skill_manager: SkillManager) -> None:
-        self.skill_manager = skill_manager
+    def __init__(self, agent: Agent) -> None:
+        self.agent = agent
+
+    @property
+    def skill_manager(self) -> SkillManager:
+        return self.agent.skill_manager
+
+    def _standard(self):
+        return self.agent.refresh_skill_library()
 
     def discover(self) -> list[dict]:
+        standard = self._standard().discover()
+        standard_names = {summary.name for summary in standard}
         summaries = [
             {
                 "name": skill.name,
@@ -595,6 +617,7 @@ class _EngineSkillSummaries:
                 "source": "builtin",
             }
             for skill in self.skill_manager._skills.values()
+            if skill.name not in standard_names
         ]
         summaries.extend(
             {
@@ -603,6 +626,17 @@ class _EngineSkillSummaries:
                 "source": "generated",
             }
             for skill in list_generated_skills()
+            if skill["name"] not in standard_names
+        )
+        summaries.extend(
+            {
+                "name": summary.name,
+                "description": summary.description,
+                "source": summary.source,
+                "compatibility": summary.compatibility,
+                "allowed_tools": list(summary.allowed_tools),
+            }
+            for summary in standard
         )
         return sorted(summaries, key=lambda item: item["name"])
 
@@ -615,6 +649,19 @@ class _EngineSkillSummaries:
         ]
 
     def detail(self, name: str) -> dict | None:
+        standard = self._standard()
+        by_name = {summary.name: summary for summary in standard.discover()}
+        if name in by_name:
+            summary = by_name[name]
+            return {
+                "name": summary.name,
+                "description": summary.description,
+                "source": summary.source,
+                "compatibility": summary.compatibility,
+                "allowed_tools": list(summary.allowed_tools),
+                "loaded": name in standard.activated,
+                "functions": [],
+            }
         skill = self.skill_manager._skills.get(name)
         if skill is not None:
             return {
