@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import requests
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from matsimpy.ai.conversation import ChatMessage
 from matsimpy.ai.memory import AgentMemory
 from matsimpy.ai.provider import DeepSeekProvider
 from matsimpy.ai.runtime import AgentRuntime
+from matsimpy.ai.session import AgentSession
 from matsimpy.ai.session_store import SessionStore
 from matsimpy.ai.skill import Skill, SkillManager
 from matsimpy.ai.skill_loader import discover_builtin_skills
@@ -102,14 +104,23 @@ def _judge(provider: DeepSeekProvider, scenario: Scenario, evidence: dict) -> di
         "deterministic_errors": evidence["deterministic_errors"],
         "final_outputs": evidence["final_outputs"],
     })
-    response = provider.chat([
+    messages = [
         ChatMessage.system(
             "You are a strict materials-workflow auditor. Judge only supplied evidence. "
-            "Return JSON with pass (boolean), score (0-100), unsupported_claims (array), "
-            "and analysis (string). Deterministic errors always require pass=false."
+            "A named prototype builder's lattice_constant is the conventional prototype "
+            "parameter even when its returned cell is primitive. Return JSON with pass "
+            "(boolean), score (0-100), unsupported_claims (array), and analysis (string). "
+            "Deterministic errors always require pass=false."
         ),
         ChatMessage.user(json.dumps(payload, default=str)),
-    ])
+    ]
+    for attempt in range(3):
+        try:
+            response = provider.chat(messages)
+            break
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            if attempt == 2:
+                raise
     raw = response.message.content.strip()
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     try:
@@ -118,6 +129,18 @@ def _judge(provider: DeepSeekProvider, scenario: Scenario, evidence: dict) -> di
         parsed = {"pass": False, "score": 0, "unsupported_claims": [], "analysis": raw, "parse_error": True}
     parsed["raw"] = raw
     return parsed
+
+
+def _execute_prompts(session: AgentSession, prompts: tuple[str, ...]) -> tuple[list[dict], list[str]]:
+    """Execute scenario prompts on one active conversation branch."""
+    records: list[dict] = []
+    final_outputs: list[str] = []
+    for prompt in prompts:
+        turn = session.run(prompt)
+        assert turn.result is not None
+        records.extend(turn.result.tool_calls)
+        final_outputs.append(turn.result.final_response)
+    return records, final_outputs
 
 
 def execute_once(scenario: Scenario, run_number: int, *, judge: bool = True) -> dict:
@@ -129,21 +152,18 @@ def execute_once(scenario: Scenario, run_number: int, *, judge: bool = True) -> 
         if child.is_file():
             child.unlink()
 
-    provider = DeepSeekProvider(request_timeout=45)
+    provider = DeepSeekProvider()
+    store = SessionStore(workspace / "state.db")
     runtime = AgentRuntime(
         provider=provider,
         skill_manager=_manager(),
-        session_store=SessionStore(workspace / "state.db"),
+        session_store=store,
         memory=AgentMemory(workspace / "memory"),
         workspace_path=workspace,
         source="llm-example",
     )
-    records = []
-    final_outputs = []
-    for prompt in scenario.prompts:
-        result = runtime.run(prompt)
-        records.extend(result.tool_calls)
-        final_outputs.append(result.final_response)
+    session = AgentSession(lambda: runtime, store)
+    records, final_outputs = _execute_prompts(session, scenario.prompts)
 
     evidence = {
         "scenario": f"{scenario.id}_{scenario.slug}",
@@ -223,7 +243,7 @@ def refresh_markdown_records() -> None:
 
 def rejudge_failures() -> int:
     """Retry only saved deterministic passes whose independent judge failed."""
-    provider = DeepSeekProvider(request_timeout=45)
+    provider = DeepSeekProvider()
     retried = 0
     for scenario_dir in sorted(ROOT.glob("[0-9][0-9]_*")):
         try:

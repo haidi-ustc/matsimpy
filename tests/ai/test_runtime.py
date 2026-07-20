@@ -833,6 +833,8 @@ def test_runtime_prompt_forbids_invented_scientific_tool_arguments():
     assert "energies" in prompt
     assert "tool-call arguments" in prompt
     assert "pass returned structure references" in prompt
+    assert "reuse" in prompt and "prior tool results" in prompt
+    assert "do not add derived" in prompt
 
 
 def test_runtime_initial_prompt_keeps_memory_after_core_rules(tmp_path):

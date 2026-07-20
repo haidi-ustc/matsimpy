@@ -35,7 +35,11 @@ def register_all():
                         {"type": "number"},
                         {"type": "array", "items": {"type": "number"}, "minItems": 1},
                     ],
-                    "description": "Lattice constant in Angstrom; anisotropic prototypes accept a list",
+                    "description": (
+                        "Conventional prototype lattice parameter(s) in Angstrom. "
+                        "The builder may return primitive cell vectors with different lengths; "
+                        "anisotropic prototypes accept a list."
+                    ),
                 },
             },
             "required": ["prototype", "species", "lattice_constant"],

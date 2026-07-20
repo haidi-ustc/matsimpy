@@ -3,9 +3,68 @@
 import json
 from pathlib import Path
 
+import requests
+
+from examples.llm import harness
 from examples.llm.harness import DEFAULT_REPETITIONS, EvaluationReport, sanitize_evidence
 from examples.llm.run_all import load_saved_reports, scenarios_needing_runs
 from examples.llm.scenarios import SCENARIOS
+from matsimpy.ai.conversation import ChatMessage, ChatResponse
+
+
+class _TranscriptSession:
+    def __init__(self):
+        self.prompts = []
+
+    def run(self, prompt):
+        self.prompts.append(prompt)
+        number = len(self.prompts)
+        result = type("Result", (), {
+            "tool_calls": [{"name": f"tool-{number}"}],
+            "final_response": f"answer-{number}",
+        })()
+        return type("Turn", (), {"result": result})()
+
+
+def test_multiturn_prompt_execution_uses_one_conversation_session():
+    session = _TranscriptSession()
+
+    records, outputs = harness._execute_prompts(session, ("build it", "transform it"))
+
+    assert session.prompts == ["build it", "transform it"]
+    assert records == [{"name": "tool-1"}, {"name": "tool-2"}]
+    assert outputs == ["answer-1", "answer-2"]
+
+
+def test_judge_retries_transport_timeout_without_rejudging_semantic_response():
+    class Provider:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, messages):
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.exceptions.ReadTimeout("transient")
+            return ChatResponse(
+                ChatMessage.assistant(
+                    '{"pass": true, "score": 100, "unsupported_claims": [], '
+                    '"analysis": "grounded"}'
+                ),
+                [],
+                "stop",
+            )
+
+    provider = Provider()
+    scenario = SCENARIOS[0]
+    evidence = {
+        "tool_calls": [], "artifacts": [], "deterministic_errors": [],
+        "final_outputs": ["done"],
+    }
+
+    judgement = harness._judge(provider, scenario, evidence)
+
+    assert judgement["pass"] is True
+    assert provider.calls == 2
 
 
 def test_corpus_has_fifteen_unique_ordered_scenarios():
