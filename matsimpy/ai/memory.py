@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -46,7 +47,23 @@ class MemoryEntry:
 
 
 def normalized_fingerprint(content: str) -> str:
-    """Return a stable fingerprint insensitive to case and punctuation."""
+    """Return an NFKC, casefolded, Unicode-alphanumeric fingerprint."""
+    folded = unicodedata.normalize("NFKC", content).casefold()
+    tokens: list[str] = []
+    token: list[str] = []
+    for character in folded:
+        if character.isalnum():
+            token.append(character)
+        elif token:
+            tokens.append("".join(token))
+            token = []
+    if token:
+        tokens.append("".join(token))
+    normalized = " ".join(tokens)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _legacy_fingerprint(content: str) -> str:
     normalized = " ".join(_FINGERPRINT_TOKEN_RE.findall(content.casefold()))
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
@@ -245,11 +262,41 @@ class AgentMemory:
             ) from exc
         if not isinstance(raw, list):
             raise MemoryValidationError("structured memory ledger is malformed")
+        migrated = self._migrate_legacy_fingerprints(raw)
         entries = [self._parse_structured_entry(item) for item in raw]
         self._validate_supersession_graph(entries)
+        if migrated:
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n")
+            temporary.replace(path)
         if include_superseded:
             return entries
         return [entry for entry in entries if entry.superseded_by is None]
+
+    @staticmethod
+    def _migrate_legacy_fingerprints(raw: list[Any]) -> bool:
+        """Upgrade legacy ASCII-only hashes while retaining stable ASCII hashes."""
+        replacements: dict[str, str] = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            fingerprint = item.get("fingerprint")
+            if not isinstance(content, str) or not isinstance(fingerprint, str):
+                continue
+            current = normalized_fingerprint(content)
+            if fingerprint == _legacy_fingerprint(content) and fingerprint != current:
+                replacements[fingerprint] = current
+        if not replacements:
+            return False
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            for field in ("fingerprint", "supersedes", "superseded_by"):
+                value = item.get(field)
+                if value in replacements:
+                    item[field] = replacements[value]
+        return True
 
     def _parse_structured_entry(self, item: Any) -> MemoryEntry:
         if not isinstance(item, dict):

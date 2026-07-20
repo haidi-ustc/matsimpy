@@ -490,12 +490,11 @@ class EvolutionManager:
             source_trace_ids=provenance,
             parent=current,
             rollback_of_version_id=target.id,
+            diff_prefix=(
+                f"Rollback target: skill_version_id={target.id}, "
+                f"version={target.version}\n"
+            ),
         )
-        self.store.prepend_skill_version_diff(
-            rolled_back.id,
-            f"Rollback target: skill_version_id={target.id}, version={target.version}\n",
-        )
-        rolled_back = self.store.get_skill_version(rolled_back.id)
         evaluated = self.evaluate(rolled_back.id)
         return self.approve(evaluated.id)  # type: ignore[return-value]
 
@@ -509,6 +508,7 @@ class EvolutionManager:
         source_trace_ids: Sequence[int],
         parent: SkillVersion | None,
         rollback_of_version_id: int | None = None,
+        diff_prefix: str = "",
     ) -> SkillVersion:
         normalized_tools = tuple(dict.fromkeys(tools))
         self._validate_content(name, description, body, normalized_tools)
@@ -567,7 +567,7 @@ class EvolutionManager:
             content_hash=hashlib.sha256(content.encode()).hexdigest(),
             parent_version_id=parent.id if parent else None,
             rollback_of_version_id=rollback_of_version_id,
-            diff=diff,
+            diff=diff_prefix + diff,
         )
 
     def _validate_content(
@@ -627,37 +627,47 @@ class EvolutionManager:
             raise SkillEvolutionError("skill destination escapes user skill root")
         if destination.is_symlink():
             raise SkillEvolutionError("skill destination must not be a symlink")
-        if destination.exists():
-            unexpected = [
-                item for item in destination.iterdir() if item.name != "SKILL.md"
-            ]
-            if unexpected:
-                raise SkillEvolutionError(
-                    "approval will not retain scripts or other bundled resources"
-                )
-        else:
-            destination.mkdir()
-        content = self._standard_content(
-            version.name,
-            version.description,
-            version.body,
-            version.allowed_tools,
-            "approved",
-        )
-        target = destination / "SKILL.md"
-        if target.is_symlink():
-            raise SkillEvolutionError("active SKILL.md must not be a symlink")
-        prior = target.read_bytes() if target.exists() else None
-        fd, temporary = tempfile.mkstemp(prefix=".SKILL.md.tmp-", dir=destination)
+        created_destination = False
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
+            if destination.exists():
+                unexpected = [
+                    item for item in destination.iterdir() if item.name != "SKILL.md"
+                ]
+                if unexpected:
+                    raise SkillEvolutionError(
+                        "approval will not retain scripts or other bundled resources"
+                    )
+            else:
+                destination.mkdir()
+                created_destination = True
+            content = self._standard_content(
+                version.name,
+                version.description,
+                version.body,
+                version.allowed_tools,
+                "approved",
+            )
+            target = destination / "SKILL.md"
+            if target.is_symlink():
+                raise SkillEvolutionError("active SKILL.md must not be a symlink")
+            prior = target.read_bytes() if target.exists() else None
+            fd, temporary = tempfile.mkstemp(prefix=".SKILL.md.tmp-", dir=destination)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    stream.write(content)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except BaseException:
+                Path(temporary).unlink(missing_ok=True)
+                raise
+            return Path(temporary), prior
         except BaseException:
-            Path(temporary).unlink(missing_ok=True)
+            if created_destination:
+                try:
+                    destination.rmdir()
+                except OSError:
+                    pass
             raise
-        return Path(temporary), prior
 
     def _approve_with_compensation(self, version: SkillVersion) -> SkillVersion:
         try:

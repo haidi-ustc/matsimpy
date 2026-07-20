@@ -151,6 +151,49 @@ def test_rollback_creates_new_auditable_approved_version(manager):
     assert "First" in (manager.user_skill_root / first.name / "SKILL.md").read_text()
 
 
+def test_rollback_provenance_is_part_of_initial_version_insert(manager, monkeypatch):
+    first = manager.draft_skill(
+        "rollback-provenance",
+        "Rollback",
+        "First `from_prototype`.",
+        ["from_prototype"],
+        [41],
+    )
+    manager.evaluate(first.id)
+    manager.approve(first.id)
+    captured = {}
+
+    def fail_after_capturing(**kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop at version insert")
+
+    monkeypatch.setattr(manager.store, "create_skill_version", fail_after_capturing)
+    with pytest.raises(RuntimeError, match="stop at version insert"):
+        manager.rollback(first.id)
+
+    assert f"skill_version_id={first.id}" in captured["diff"]
+
+
+def test_staging_failure_removes_new_empty_skill_directory(manager, monkeypatch):
+    draft = manager.draft_skill(
+        "staging-failure",
+        "Failure",
+        "Use `from_prototype`.",
+        ["from_prototype"],
+        [41],
+    )
+    manager.evaluate(draft.id)
+
+    def fail_mkstemp(*args, **kwargs):
+        raise OSError("injected staging failure")
+
+    monkeypatch.setattr("matsimpy.ai.evolution.tempfile.mkstemp", fail_mkstemp)
+    with pytest.raises(OSError, match="injected staging failure"):
+        manager.approve(draft.id)
+
+    assert not (manager.user_skill_root / draft.name).exists()
+
+
 @pytest.mark.parametrize(
     "body,tools,error",
     [

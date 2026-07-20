@@ -66,6 +66,36 @@ def test_doctor_reports_unwritable_workspace(monkeypatch, tmp_path):
     assert "writable" in item.action
 
 
+def test_doctor_rejects_regular_files_for_workspace_and_state_directory(tmp_path):
+    workspace = tmp_path / "workspace"
+    state = tmp_path / "state"
+    workspace.write_text("not a directory")
+    state.write_text("not a directory")
+    workspace.chmod(0o700)
+    state.chmod(0o700)
+
+    results = _by_code(Doctor(workspace=workspace, state_dir=state).run())
+
+    assert results["workspace"].status == "fail"
+    assert results["state-directory"].status == "fail"
+
+
+def test_doctor_rejects_missing_paths_below_regular_file_ancestor(tmp_path):
+    ancestor = tmp_path / "file"
+    ancestor.write_text("not a directory")
+    ancestor.chmod(0o700)
+
+    results = _by_code(
+        Doctor(
+            workspace=ancestor / "missing-workspace",
+            state_dir=ancestor / "missing-state",
+        ).run()
+    )
+
+    assert results["workspace"].status == "fail"
+    assert results["state-directory"].status == "fail"
+
+
 def test_doctor_reports_invalid_skill_without_echoing_malicious_content(tmp_path):
     skills = tmp_path / "skills"
     bad = skills / "bad"

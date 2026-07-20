@@ -89,6 +89,44 @@ def test_attempt_can_be_marked_interrupted_and_cannot_be_finished_twice(tmp_path
         store.finish_attempt(attempt.id, "failed")
 
 
+@pytest.mark.parametrize("losing_transition", ["finish", "interrupt"])
+def test_attempt_terminal_transition_compare_and_set_preserves_two_connection_winner(
+    tmp_path, monkeypatch, losing_transition
+):
+    path = tmp_path / "state.db"
+    winner = SessionStore(path)
+    conversation = winner.create_conversation("repl", "/work", "model", "provider")
+    attempt = winner.start_attempt(conversation.id, "race")
+    loser = SessionStore(path)
+
+    real_get_attempt = loser._get_attempt
+    stale_read_used = False
+
+    def stale_then_current(attempt_id):
+        nonlocal stale_read_used
+        if not stale_read_used:
+            stale_read_used = True
+            return attempt
+        return real_get_attempt(attempt_id)
+
+    monkeypatch.setattr(loser, "_get_attempt", stale_then_current)
+    if losing_transition == "finish":
+        winner.mark_attempt_interrupted(attempt.id, error="winner")
+        with pytest.raises(ValueError, match="already interrupted"):
+            loser.finish_attempt(attempt.id, "succeeded", final_response="loser")
+        expected = ("interrupted", None, "winner")
+    else:
+        winner.finish_attempt(attempt.id, "succeeded", final_response="winner")
+        with pytest.raises(ValueError, match="already succeeded"):
+            loser.mark_attempt_interrupted(attempt.id, error="loser")
+        expected = ("succeeded", "winner", None)
+
+    row = winner.conn.execute(
+        "SELECT state, final_response, error FROM attempts WHERE id = ?", (attempt.id,)
+    ).fetchone()
+    assert tuple(row) == expected
+
+
 def test_attempt_api_rejects_unknown_ids_invalid_states_and_cross_links(tmp_path):
     store = SessionStore(tmp_path / "state.db")
     first = store.create_conversation("repl", "/one", "model", "provider")

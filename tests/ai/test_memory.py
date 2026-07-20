@@ -1,5 +1,6 @@
 """Tests for bounded AI memory operations."""
 
+import hashlib
 import json
 
 import pytest
@@ -26,6 +27,64 @@ def test_structured_memory_rejects_normalized_duplicate(tmp_path):
 
     with pytest.raises(MemoryValidationError, match="duplicate"):
         memory.remember("  user PREFERS cif output  ", source_trace_ids=[2])
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [
+        ("用户喜欢晶体。", "用户喜欢分子。"),
+        ("結晶を保存", "分子を保存"),
+        ("Сохранить кристалл", "Удалить кристалл"),
+        ("احفظ البلورة", "احذف البلورة"),
+    ],
+)
+def test_unicode_only_memories_have_distinct_fingerprints(left, right):
+    assert normalized_fingerprint(left) != normalized_fingerprint(right)
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [
+        ("ＡＢＣ，用户。", "abc 用户"),
+        ("ПРИВЕТ, МИР!", "привет мир"),
+        ("カタカナ。", "カタカナ"),
+    ],
+)
+def test_unicode_fingerprints_are_nfkc_case_and_punctuation_insensitive(left, right):
+    assert normalized_fingerprint(left) == normalized_fingerprint(right)
+
+
+def test_legacy_ascii_and_empty_fingerprints_remain_loadable_and_migrate_unicode(
+    tmp_path,
+):
+    memory = AgentMemory(tmp_path)
+    ascii_content = "User prefers CIF output."
+    unicode_content = "用户喜欢晶体格式。"
+    ascii_legacy = hashlib.sha256(b"user prefers cif output").hexdigest()
+    empty_legacy = hashlib.sha256(b"").hexdigest()
+    records = [
+        {
+            "content": ascii_content,
+            "fingerprint": ascii_legacy,
+            "confidence": 1.0,
+            "source_trace_ids": [1],
+        },
+        {
+            "content": unicode_content,
+            "fingerprint": empty_legacy,
+            "confidence": 1.0,
+            "source_trace_ids": [2],
+        },
+    ]
+    path = tmp_path / "entries.json"
+    path.write_text(json.dumps(records))
+
+    entries = memory.structured_entries()
+
+    assert entries[0].fingerprint == ascii_legacy
+    assert entries[1].fingerprint == normalized_fingerprint(unicode_content)
+    assert entries[1].fingerprint != empty_legacy
+    assert json.loads(path.read_text())[1]["fingerprint"] == entries[1].fingerprint
 
 
 def test_structured_memory_correction_supersedes_previous_entry(tmp_path):

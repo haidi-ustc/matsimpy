@@ -95,7 +95,11 @@ class Doctor:
     @staticmethod
     def _path_check(code: str, path: Path) -> Diagnostic:
         target = path if path.exists() else Doctor._nearest_existing_parent(path)
-        if target is not None and os.access(target, os.W_OK | os.X_OK):
+        if (
+            target is not None
+            and target.is_dir()
+            and os.access(target, os.W_OK | os.X_OK)
+        ):
             return Diagnostic(code, "pass", "writable", "")
         return Diagnostic(
             code,

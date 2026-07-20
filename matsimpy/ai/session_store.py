@@ -162,15 +162,18 @@ class SessionStore:
         if attempt.state != "running":
             raise ValueError(f"attempt {attempt_id} is already {attempt.state}")
         with self.conn:
-            self.conn.execute(
+            cursor = self.conn.execute(
                 """
                 UPDATE attempts
                 SET state = ?, final_response = ?, trace_id = ?, error = ?,
                     finished_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = ? AND state = 'running'
                 """,
                 (state, final_response, trace_id, error, attempt_id),
             )
+            if cursor.rowcount != 1:
+                current = self._get_attempt(attempt_id)
+                raise ValueError(f"attempt {attempt_id} is already {current.state}")
             self._touch_conversation(attempt.conversation_id)
         return self._get_attempt(attempt_id)
 
@@ -182,14 +185,17 @@ class SessionStore:
         if attempt.state != "running":
             raise ValueError(f"attempt {attempt_id} is already {attempt.state}")
         with self.conn:
-            self.conn.execute(
+            cursor = self.conn.execute(
                 """
                 UPDATE attempts
                 SET state = 'interrupted', error = ?, finished_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = ? AND state = 'running'
                 """,
                 (error, attempt_id),
             )
+            if cursor.rowcount != 1:
+                current = self._get_attempt(attempt_id)
+                raise ValueError(f"attempt {attempt_id} is already {current.state}")
             self._touch_conversation(attempt.conversation_id)
         return self._get_attempt(attempt_id)
 
