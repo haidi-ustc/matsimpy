@@ -242,7 +242,7 @@ def refresh_markdown_records() -> None:
 
 
 def rejudge_failures() -> int:
-    """Retry only saved deterministic passes whose independent judge failed."""
+    """Retry only saved deterministic passes whose judge was unavailable."""
     provider = DeepSeekProvider()
     retried = 0
     for scenario_dir in sorted(ROOT.glob("[0-9][0-9]_*")):
@@ -253,7 +253,12 @@ def rejudge_failures() -> int:
         result_paths = sorted((scenario_dir / "results").glob("run-*.json"))
         for path in result_paths:
             evidence = json.loads(path.read_text())
-            if not evidence.get("deterministic_pass") or evidence.get("judge_pass"):
+            judge_unavailable = bool(evidence.get("judge", {}).get("judge_error"))
+            if (
+                not evidence.get("deterministic_pass")
+                or evidence.get("judge_pass")
+                or not judge_unavailable
+            ):
                 continue
             judgement = _judge(provider, scenario, evidence)
             evidence["judge"] = judgement

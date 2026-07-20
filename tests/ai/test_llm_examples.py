@@ -67,6 +67,57 @@ def test_judge_retries_transport_timeout_without_rejudging_semantic_response():
     assert provider.calls == 2
 
 
+def test_rejudge_failures_retries_only_saved_transport_errors(tmp_path, monkeypatch):
+    results = tmp_path / "01_water_xyz" / "results"
+    results.mkdir(parents=True)
+    common = {
+        "scenario": "01_water_xyz",
+        "model": "test",
+        "requests": list(SCENARIOS[0].prompts),
+        "tool_calls": [],
+        "artifacts": [],
+        "deterministic_errors": [],
+        "deterministic_pass": True,
+        "judge_pass": False,
+    }
+    semantic = {
+        **common,
+        "run": 1,
+        "final_outputs": ["unsupported claim"],
+        "judge": {"pass": False, "score": 40, "analysis": "semantic failure"},
+    }
+    transport = {
+        **common,
+        "run": 2,
+        "final_outputs": ["grounded"],
+        "judge": {
+            "pass": False,
+            "score": 0,
+            "analysis": "judge unavailable: ReadTimeout",
+            "judge_error": True,
+        },
+    }
+    semantic_path = results / "run-1.json"
+    transport_path = results / "run-2.json"
+    semantic_path.write_text(json.dumps(semantic, indent=2) + "\n")
+    transport_path.write_text(json.dumps(transport, indent=2) + "\n")
+    calls = []
+
+    monkeypatch.setattr(harness, "ROOT", tmp_path)
+    monkeypatch.setattr(harness, "DeepSeekProvider", lambda: object())
+
+    def judge(provider, scenario, evidence):
+        calls.append(evidence["run"])
+        return {"pass": True, "score": 100, "analysis": "available"}
+
+    monkeypatch.setattr(harness, "_judge", judge)
+
+    assert harness.rejudge_failures() == 1
+    assert calls == [2]
+    assert json.loads(semantic_path.read_text()) == semantic
+    assert json.loads(transport_path.read_text())["judge_pass"] is True
+
+
 def test_corpus_has_fifteen_unique_ordered_scenarios():
     assert len(SCENARIOS) == 15
     assert [scenario.id for scenario in SCENARIOS] == [f"{index:02d}" for index in range(1, 16)]

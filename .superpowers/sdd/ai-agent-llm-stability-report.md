@@ -58,3 +58,24 @@ pytest tests/ai/test_llm_examples.py tests/ai/test_runtime.py::test_runtime_prom
 
 The full live corpus was intentionally not rerun; the controller will rerun only
 failed scenarios/judges.
+
+## Review follow-up: saved semantic judgments
+
+Review identified that the controller-level `rejudge_failures()` selector still
+included every deterministic run with `judge_pass=false`. That could overwrite a
+valid parsed semantic failure even though the in-call retry loop itself was
+transport-only.
+
+The selector now requires the persisted `judge.judge_error` unavailable marker in
+addition to deterministic success and failed judge status. Parsed semantic
+`pass=false` judgments are left byte-for-byte unchanged. Aggregate summary/latest
+refresh and the returned retry count retain their existing behavior for the
+records actually retried.
+
+The regression was run RED first with one semantic failure and one unavailable
+judge record: the old implementation called both and returned `2`. After the fix:
+
+```text
+pytest tests/ai/test_llm_examples.py -q
+12 passed in 0.52s
+```
