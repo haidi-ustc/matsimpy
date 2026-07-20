@@ -16,6 +16,7 @@ from .session import AgentSession
 from .session_store import SessionStore, SkillVersion
 from .skill import SkillManager
 from .evolution import EvolutionManager
+from .workspace import Workspace
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ class Agent:
         self.verbose_hook = verbose_hook
         self.source = source
         self._evolution = evolution
-        self._workspace_path = Path(workspace).expanduser().resolve() if workspace else None
+        self._workspace_path = Workspace(workspace).path
         self._create_session()
 
     def _create_session(self) -> None:

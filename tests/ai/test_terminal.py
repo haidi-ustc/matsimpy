@@ -177,6 +177,33 @@ def test_cli_command_mode_does_not_construct_interactive_terminal(monkeypatch):
     assert "answer: build copper" in result.output
 
 
+def test_cli_command_uses_default_workspace_when_workspace_is_omitted(
+    monkeypatch, tmp_path
+):
+    from typer.testing import CliRunner
+
+    from matsimpy.ai import cli
+    from matsimpy.ai.conversation import ChatMessage, ChatResponse
+
+    default_workspace = tmp_path / ".matsimpy" / "ai" / "workspace"
+    monkeypatch.setattr(
+        "matsimpy.ai.workspace.DEFAULT_WORKSPACE", default_workspace
+    )
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "offline-test-key")
+    monkeypatch.setattr(
+        "matsimpy.ai.provider.DeepSeekProvider.chat",
+        lambda self, messages, tools=None, tool_choice="auto": ChatResponse(
+            ChatMessage.assistant("OK"), [], "stop"
+        ),
+    )
+
+    result = CliRunner().invoke(cli.app, ["-c", "Reply with exactly OK"])
+
+    assert result.exit_code == 0
+    assert result.output.rstrip().endswith("OK")
+    assert (default_workspace / "ai-state.db").is_file()
+
+
 @pytest.mark.requires_repl
 @pytest.mark.pty
 def test_prompt_toolkit_terminal_configures_history_multiline_and_completion(tmp_path):
