@@ -577,9 +577,11 @@ evidence-backed approval using a positive numeric version ID.
 Runtime commands:
 
 In the enhanced terminal, Enter submits and Esc+Enter inserts a newline for
-multiline input.
+multiline input. LLM responses render as Rich Markdown when Rich is installed;
+commands and status messages remain plain text.
 
 ```text
+/help
 /new                         /sessions
 /resume <session-id>         /retry                 /undo
 /skills [query]              /load-skill <name>

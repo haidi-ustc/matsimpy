@@ -61,8 +61,12 @@ class PlainTerminal(TerminalFrontend):
             self.render_command(result)
             return result.exit_requested
         turn = self.controller.session.run(text)
-        self._output(turn.final_response)
+        self.render_response(turn.final_response)
         return False
+
+    def render_response(self, response: str) -> None:
+        """Render an LLM response as safe plain text."""
+        self._output(response)
 
     def render_command(self, result: CommandResult) -> None:
         """Render the controller's concise display text."""
@@ -88,13 +92,20 @@ class PromptToolkitTerminal(PlainTerminal):
         from prompt_toolkit.history import FileHistory
         from prompt_toolkit.key_binding import KeyBindings
 
+        markdown_output = output_writer
         if output_writer is None:
             try:
                 from rich.console import Console
+                from rich.markdown import Markdown
 
-                output_writer = Console(markup=False).print
+                console = Console(markup=False)
+                output_writer = console.print
+
+                def markdown_output(text: str) -> None:
+                    console.print(Markdown(text))
             except ImportError:
                 output_writer = print
+                markdown_output = output_writer
 
         terminal = self
 
@@ -133,6 +144,11 @@ class PromptToolkitTerminal(PlainTerminal):
             input_reader=lambda prompt: self.prompt_session.prompt(prompt),
             output_writer=output_writer,
         )
+        self._markdown_output = markdown_output or self._output
+
+    def render_response(self, response: str) -> None:
+        """Render an LLM response as Markdown when Rich is available."""
+        self._markdown_output(response)
 
     def completion_candidates(self, prefix: str) -> tuple[str, ...]:
         """Return slash-command and skill-name completion candidates."""

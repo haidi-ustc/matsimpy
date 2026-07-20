@@ -45,11 +45,14 @@ REPL commands
 Start with ``matsimpy-ai --workspace project``. Commands return structured data
 through ``ReplController``; terminal rendering is a separate layer.
 In the enhanced terminal, Enter submits the current prompt and Esc+Enter inserts
-a newline for multiline input.
+a newline for multiline input. LLM responses use Rich Markdown when Rich is
+installed, while commands and status messages remain plain text. Without Rich,
+responses safely fall back to plain text.
 
 ============================  ===============================================
 Command                       Effect
 ============================  ===============================================
+``/help``                     Show offline commands, keys, lifecycle, examples
 ``/new``                      Start a clean durable conversation
 ``/sessions``                 List saved conversations
 ``/resume <session-id>``      Restore the active branch after restart

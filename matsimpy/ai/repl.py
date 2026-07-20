@@ -43,6 +43,7 @@ class ReplController:
         self.trace_getter = trace_getter or self._runtime_trace
         self.skill_loader = skill_loader
         self._handlers = {
+            "/help": self._help,
             "/new": self._new,
             "/sessions": self._sessions,
             "/resume": self._resume,
@@ -89,6 +90,72 @@ class ReplController:
         """Return command-name completions for *prefix*."""
         folded = prefix.casefold()
         return tuple(name for name in self.command_names() if name.startswith(folded))
+
+    def _help(self, arg: str) -> CommandResult:
+        if arg:
+            return self._usage_result("/help")
+        descriptions = {
+            "/help": "Show this offline command reference.",
+            "/new": "Start a new durable conversation.",
+            "/sessions": "List saved conversations.",
+            "/resume": "Resume a saved conversation: /resume <session-id>.",
+            "/retry": "Retry and replace the active final turn.",
+            "/undo": "Remove the final turn from active context.",
+            "/skills": "Discover, search, or inspect skills: /skills [query].",
+            "/load-skill": "Explicitly activate instructions: /load-skill <name>.",
+            "/trace": "Show the latest trace identity and status.",
+            "/usage": "Show provider usage when available.",
+            "/drafts": "List legacy skill drafts.",
+            "/evolve": "Review evidence: /evolve review [version-id].",
+            "/approve": "Approve an evaluated skill: /approve <version-id>.",
+            "/reject": "Reject a skill candidate: /reject <version-id>.",
+            "/rollback": "Create an audited rollback: /rollback <version-id>.",
+            "/quit": "Exit the REPL.",
+        }
+        commands = [
+            {"command": name, "description": descriptions[name]}
+            for name in self._handlers
+        ]
+        aliases = dict(self._aliases)
+        keys = {
+            "submit": "Enter",
+            "newline": "Esc+Enter",
+            "cancel": "Ctrl+C",
+        }
+        examples = [
+            {"command": "/skills crystal", "purpose": "Discover crystal skills."},
+            {"command": "/load-skill <name>", "purpose": "Activate a skill."},
+            {
+                "command": "/evolve review <version-id>",
+                "purpose": "Inspect replay evidence before approval.",
+            },
+            {
+                "command": "/approve <version-id>",
+                "purpose": "Approve an evaluated workflow.",
+            },
+        ]
+        lines = ["MatSimPy AI commands (offline help)"]
+        lines.extend(f"{item['command']}: {item['description']}" for item in commands)
+        lines.append(
+            "Aliases: "
+            + ", ".join(f"{key} -> {value}" for key, value in aliases.items())
+        )
+        lines.append("Keys: Enter submit; Esc+Enter newline; Ctrl+C cancel.")
+        lines.append(
+            "Skills: discover with /skills, activate with /load-skill, review with "
+            "/evolve review, then explicitly /approve or /reject."
+        )
+        lines.append("Examples: " + "; ".join(item["command"] for item in examples))
+        return CommandResult(
+            "help",
+            data={
+                "commands": commands,
+                "aliases": aliases,
+                "keys": keys,
+                "examples": examples,
+            },
+            display_hint="\n".join(lines),
+        )
 
     def _new(self, arg: str) -> CommandResult:
         if arg:

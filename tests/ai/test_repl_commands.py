@@ -219,6 +219,41 @@ def test_aliases_completion_and_command_names(controller):
     assert repl.execute("/reject-skill 3").ok is True
 
 
+def test_help_is_structured_complete_and_offline(controller, capsys):
+    repl, session, evolution = controller
+
+    result = repl.execute("/help")
+
+    assert result.ok is True
+    assert result.kind == "help"
+    assert "/help" in repl.command_names()
+    assert repl.complete("/he") == ("/help",)
+    assert set(result.data["aliases"]) == {
+        "/q",
+        "/exit",
+        "/approve-skill",
+        "/reject-skill",
+    }
+    commands = {item["command"] for item in result.data["commands"]}
+    assert set(repl._handlers) <= commands
+    assert result.data["keys"] == {
+        "submit": "Enter",
+        "newline": "Esc+Enter",
+        "cancel": "Ctrl+C",
+    }
+    assert {item["command"] for item in result.data["examples"]} >= {
+        "/skills crystal",
+        "/load-skill <name>",
+        "/evolve review <version-id>",
+        "/approve <version-id>",
+    }
+    assert "discover" in result.display_hint.casefold()
+    assert "approve" in result.display_hint.casefold()
+    assert session.calls == []
+    assert evolution.calls == []
+    assert capsys.readouterr().out == ""
+
+
 def test_lifecycle_commands_return_complete_service_records(controller):
     repl, _, _ = controller
 

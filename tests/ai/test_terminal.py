@@ -223,6 +223,81 @@ def test_prompt_toolkit_terminal_configures_history_multiline_and_completion(tmp
 
 
 @pytest.mark.requires_repl
+def test_prompt_toolkit_renders_only_llm_responses_as_rich_markdown(
+    tmp_path, monkeypatch
+):
+    pytest.importorskip("prompt_toolkit")
+    pytest.importorskip("rich")
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+    import rich.console
+    import rich.markdown
+
+    rendered = []
+
+    class FakeMarkdown:
+        def __init__(self, text):
+            self.text = text
+
+    class FakeConsole:
+        def __init__(self, **kwargs):
+            pass
+
+        def print(self, value):
+            rendered.append(value)
+
+    monkeypatch.setattr(rich.console, "Console", FakeConsole)
+    monkeypatch.setattr(rich.markdown, "Markdown", FakeMarkdown)
+    with create_pipe_input() as pipe:
+        terminal = __import__(
+            "matsimpy.ai.terminal", fromlist=["PromptToolkitTerminal"]
+        ).PromptToolkitTerminal(
+            FakeController(),
+            history_path=tmp_path / "history",
+            input=pipe,
+            output=DummyOutput(),
+        )
+        terminal.render_response("# Result\n\n- one\n- two\n\n```python\npass\n```")
+        terminal.render_command(CommandResult("help", display_hint="/help [status] safe"))
+
+    assert isinstance(rendered[0], FakeMarkdown)
+    assert rendered[0].text.startswith("# Result")
+    assert rendered[1] == "/help [status] safe"
+
+
+@pytest.mark.requires_repl
+def test_prompt_toolkit_markdown_falls_back_to_plain_text_without_rich(
+    tmp_path, monkeypatch
+):
+    pytest.importorskip("prompt_toolkit")
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    real_import = builtins.__import__
+    rendered = []
+
+    def without_rich(name, *args, **kwargs):
+        if name.split(".")[0] == "rich":
+            raise ImportError("rich unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_rich)
+    monkeypatch.setattr(builtins, "print", rendered.append)
+    with create_pipe_input() as pipe:
+        terminal = __import__(
+            "matsimpy.ai.terminal", fromlist=["PromptToolkitTerminal"]
+        ).PromptToolkitTerminal(
+            FakeController(),
+            history_path=tmp_path / "history",
+            input=pipe,
+            output=DummyOutput(),
+        )
+        terminal.render_response("## Plain fallback")
+
+    assert rendered == ["## Plain fallback"]
+
+
+@pytest.mark.requires_repl
 @pytest.mark.pty
 def test_prompt_toolkit_history_is_reused(tmp_path):
     pytest.importorskip("prompt_toolkit")
