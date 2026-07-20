@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 from matsimpy import io
 from matsimpy.ai import (
     Agent,
@@ -21,6 +23,7 @@ from matsimpy.ai.doctor import Doctor, render_diagnostics
 from matsimpy.ai.engine import AIEngine
 from matsimpy.ai.repl import ReplController
 from matsimpy.ai.skill import SkillManager
+from matsimpy.ai.terminal import PromptToolkitTerminal
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -184,6 +187,60 @@ def test_engine_repl_discovers_precedence_and_activates_standard_skill(
     assert engine.agent.session.context_messages[-1].content.endswith(
         "WORKSPACE INSTRUCTIONS"
     )
+
+
+def test_interactive_completion_skips_legacy_and_invalid_user_skill_directories(
+    tmp_path, monkeypatch
+):
+    pytest.importorskip("prompt_toolkit")
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    monkeypatch.setenv("HOME", str(home))
+    legacy = home / ".matsimpy/ai/skills/generated"
+    legacy.mkdir(parents=True)
+    (legacy / "legacy.skill.md").write_text("legacy")
+    invalid = home / ".matsimpy/ai/skills/invalid-skill"
+    invalid.mkdir()
+    (invalid / "SKILL.md").write_text("not frontmatter")
+    _write_standard_skill(
+        workspace / ".matsimpy/skills",
+        "valid-flow",
+        "Valid flow",
+        "VALID INSTRUCTIONS",
+    )
+    monkeypatch.setattr(
+        "matsimpy.ai.provider.DeepSeekProvider.chat",
+        lambda self, messages, tools=None, tool_choice="auto": ChatResponse(
+            ChatMessage.assistant("submitted"), [], "stop"
+        ),
+    )
+    engine = AIEngine(api_key="unused", workspace_path=str(workspace))
+    _register_all_skills(engine.skill_manager)
+    rendered = []
+    with create_pipe_input() as pipe:
+        terminal = PromptToolkitTerminal(
+            engine.repl_controller,
+            history_path=tmp_path / "history",
+            input=pipe,
+            output=DummyOutput(),
+            output_writer=rendered.append,
+        )
+        assert terminal.completion_candidates("valid") == ("valid-flow",)
+        pipe.send_text("normal prompt\x1b\r/quit\x1b\r")
+        terminal.run()
+
+    assert "submitted" in rendered
+    listed = engine.repl_controller.execute("/skills")
+    assert listed.ok
+    assert "valid-flow" in {item["name"] for item in listed.data["skills"]}
+    diagnostics = engine.agent.skill_library.diagnostics
+    assert {(item.code, item.skill_name) for item in diagnostics} == {
+        ("legacy-generated-root", "generated"),
+        ("invalid-skill", "invalid-skill"),
+    }
 
 
 def test_skill_requires_review_then_approval_before_repl_can_use_it(tmp_path):

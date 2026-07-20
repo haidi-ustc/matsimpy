@@ -283,8 +283,12 @@ class SkillLibrary:
         self._skill_paths: dict[str, Path] = {}
         self._discovered = False
 
-    def discover(self) -> list[SkillSummary]:
-        """Index skills by metadata, applying source precedence."""
+    def discover(self, *, strict: bool = True) -> list[SkillSummary]:
+        """Index skills by metadata, applying source precedence.
+
+        ``strict=False`` retains valid entries and records safe diagnostics for
+        malformed directories, which is suitable for interactive completion.
+        """
 
         self.diagnostics.clear()
         self._summaries.clear()
@@ -297,7 +301,31 @@ class SkillLibrary:
             for skill_path in sorted(root.iterdir(), key=lambda item: item.name):
                 if not skill_path.is_dir():
                     continue
-                manifest = _parse_skill_summary(skill_path)
+                if source == "user" and skill_path.name == "generated":
+                    self.diagnostics.append(
+                        SkillDiagnostic(
+                            code="legacy-generated-root",
+                            skill_name="generated",
+                            message="legacy generated skills are indexed separately",
+                        )
+                    )
+                    continue
+                try:
+                    manifest = _parse_skill_summary(skill_path)
+                except (SkillValidationError, OSError, UnicodeError):
+                    if strict:
+                        raise
+                    self.diagnostics.append(
+                        SkillDiagnostic(
+                            code="invalid-skill",
+                            skill_name=skill_path.name,
+                            message=(
+                                f"{source} skill {skill_path.name!r} has invalid "
+                                "metadata and was skipped"
+                            ),
+                        )
+                    )
+                    continue
                 if not self._is_approved(manifest, source):
                     continue
                 if manifest.name in level:

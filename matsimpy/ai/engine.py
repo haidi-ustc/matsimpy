@@ -92,7 +92,7 @@ class AIEngine:
 
     def _load_skill(self, name: str) -> dict:
         library = self.agent.refresh_skill_library()
-        library.discover()
+        library.discover(strict=False)
         try:
             skill = library.activate(name)
         except KeyError:
@@ -608,7 +608,7 @@ class _EngineSkillSummaries:
         return self.agent.refresh_skill_library()
 
     def discover(self) -> list[dict]:
-        standard = self._standard().discover()
+        standard = self._standard().discover(strict=False)
         standard_names = {summary.name for summary in standard}
         summaries = [
             {
@@ -650,7 +650,9 @@ class _EngineSkillSummaries:
 
     def detail(self, name: str) -> dict | None:
         standard = self._standard()
-        by_name = {summary.name: summary for summary in standard.discover()}
+        by_name = {
+            summary.name: summary for summary in standard.discover(strict=False)
+        }
         if name in by_name:
             summary = by_name[name]
             return {
