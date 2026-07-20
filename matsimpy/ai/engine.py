@@ -84,6 +84,7 @@ class AIEngine:
     def _make_repl_controller(self) -> ReplController:
         return ReplController(
             self.agent.session,
+            evolution=self.agent,
             skill_library=_EngineSkillSummaries(self.skill_manager),
             usage_getter=lambda: {},
             skill_loader=self._load_generated_skill,

@@ -177,6 +177,34 @@ def test_agent_skill_revision_remains_inactive_until_separate_approval(tmp_path)
     )
 
 
+def test_agent_approval_rejects_catalog_change_before_materialization(tmp_path):
+    from matsimpy.ai import Agent, SkillEvolutionError
+
+    agent = Agent(
+        workspace=tmp_path,
+        provider=FakeProvider([ChatResponse(ChatMessage.assistant("ok"), [], "stop")]),
+    )
+    trace_id = agent.run("answer").trace_id
+    definition = FunctionDef(
+        "step", "step", {"type": "object", "properties": {}}, lambda: {"ok": True}
+    )
+    skill = Skill("workflow", "workflow", [definition])
+    agent.skill_manager.register(skill)
+    agent.skill_manager.load("workflow")
+    agent.evolution.replay = lambda version, context: {"passed": True}
+    draft = agent.evolution.draft_skill(
+        "catalog-race", "Catalog race", "Run `step`.", ["step"], [trace_id]
+    )
+    reviewed = agent.review_evolution(draft.id)
+    agent.skill_manager._skills["workflow"].functions.clear()
+
+    with pytest.raises(SkillEvolutionError, match="current live FunctionDef"):
+        agent.approve_skill(reviewed["version_id"])
+
+    assert not (tmp_path / "skills" / "catalog-race" / "SKILL.md").exists()
+    assert agent.evolution.store.get_skill_version(draft.id).status == "evaluated"
+
+
 def test_agent_run_restores_callers_working_directory(tmp_path):
     from matsimpy.ai import Agent
 

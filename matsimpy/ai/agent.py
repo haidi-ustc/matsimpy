@@ -130,9 +130,10 @@ class Agent:
 
     def approve_skill(self, version_id: int) -> Mapping[str, Any]:
         """Approve an evaluated version and make it discoverable."""
+        definitions = self._tool_definitions()
         version = self.evolution.approve(version_id)
         assert version is not None
-        self._register_approved_skill(version)
+        self._register_approved_skill(version, definitions)
         return self._version_record(version)
 
     def reject_skill(self, version_id: int) -> Mapping[str, Any]:
@@ -141,9 +142,24 @@ class Agent:
         return self._version_record(version)
 
     def rollback_skill(self, version_id: int) -> Mapping[str, Any]:
+        definitions = self._tool_definitions()
         version = self.evolution.rollback(version_id)
-        self._register_approved_skill(version)
+        self._register_approved_skill(version, definitions)
         return self._version_record(version)
+
+    # Data-only lifecycle protocol used by ReplController.  The explicit
+    # ``*_skill`` names remain the preferred public Python API.
+    def review(self, candidate: int | str | None = None):
+        return self.review_evolution(candidate)
+
+    def approve(self, version_id: int) -> Mapping[str, Any]:
+        return self.approve_skill(version_id)
+
+    def reject(self, version_id: int) -> Mapping[str, Any]:
+        return self.reject_skill(version_id)
+
+    def rollback(self, version_id: int) -> Mapping[str, Any]:
+        return self.rollback_skill(version_id)
 
     def _tool_definitions(self) -> dict[str, Any]:
         return self.skill_manager.function_definitions()
@@ -180,15 +196,20 @@ class Agent:
             "replayed_tools": [item["tool"] for item in results],
         }
 
-    def _register_approved_skill(self, version: SkillVersion) -> None:
+    def _register_approved_skill(
+        self,
+        version: SkillVersion,
+        definitions: Mapping[str, Any] | None = None,
+    ) -> None:
         from .skill import Skill
 
-        definitions = self._tool_definitions()
-        functions = [
-            definitions[name]
-            for name in version.allowed_tools
-            if name in definitions
-        ]
+        definitions = definitions or self._tool_definitions()
+        missing = [name for name in version.allowed_tools if name not in definitions]
+        if missing:
+            raise RuntimeError(
+                "approved skill has unresolved live tools: " + ", ".join(missing)
+            )
+        functions = [definitions[name] for name in version.allowed_tools]
         skill = Skill(version.name, version.description, functions)
         skill.keywords = [version.name]
         self.skill_manager.register(skill)
@@ -196,11 +217,33 @@ class Agent:
     @staticmethod
     def _version_record(version: SkillVersion) -> Mapping[str, Any]:
         return {
+            "id": version.id,
             "version_id": version.id,
             "name": version.name,
             "version": version.version,
-            "status": version.status,
+            "description": version.description,
+            "body": version.body,
+            "allowed_tools": list(version.allowed_tools),
             "source_trace_ids": list(version.source_trace_ids),
+            "content_hash": version.content_hash,
+            "parent_version_id": version.parent_version_id,
+            "rollback_of_version_id": version.rollback_of_version_id,
+            "diff": version.diff,
+            "status": version.status,
+            "deterministic_pass": version.deterministic_pass,
+            "deterministic_result": (
+                dict(version.deterministic_result)
+                if version.deterministic_result is not None
+                else None
+            ),
+            "judge_result": (
+                dict(version.judge_result) if version.judge_result is not None else None
+            ),
+            "evaluated_hash": version.evaluated_hash,
+            "approvable": version.approvable,
+            "created_at": version.created_at,
+            "evaluated_at": version.evaluated_at,
+            "approved_at": version.approved_at,
         }
 
     def _normalize(self, result: TaskResult) -> AgentResult:

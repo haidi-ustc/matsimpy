@@ -417,6 +417,20 @@ class EvolutionManager:
         record = self.store.get_skill_version(version)
         if record.status != "evaluated" or not record.approvable:
             raise SkillEvolutionError("skill version is not approvable")
+        unresolved = [
+            name
+            for name in record.allowed_tools
+            if name not in self._tool_definitions
+            or not isinstance(self._tool_definitions[name], FunctionDef)
+            or self._tool_definitions[name].name != name
+        ]
+        if self._catalog_errors or unresolved:
+            details = [*self._catalog_errors]
+            details.extend(f"unresolved tool {name!r}" for name in unresolved)
+            raise SkillEvolutionError(
+                "approval requires every allowed tool to resolve to a matching "
+                "current live FunctionDef: " + "; ".join(details)
+            )
         content_hash = self._content_hash(record)
         if (
             content_hash != record.content_hash

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Callable, Mapping
 
 from .evolution import EvolutionManager
@@ -34,7 +34,11 @@ class ReplController:
     ) -> None:
         self.session = session
         self.skill_library = skill_library
-        self.evolution = evolution or EvolutionManager(session.session_store)
+        self.evolution = (
+            evolution
+            or getattr(session, "evolution", None)
+            or EvolutionManager(session.session_store)
+        )
         self.usage_getter = usage_getter or (lambda: {})
         self.trace_getter = trace_getter or self._runtime_trace
         self.skill_loader = skill_loader
@@ -175,19 +179,40 @@ class ReplController:
 
     def _approve(self, arg: str) -> CommandResult:
         if not arg:
-            return self._usage_result("/approve <name>")
-        self.evolution.approve(arg)
+            return self._usage_result("/approve <version-id>")
+        version_id = self._version_id(arg, "approve")
+        if isinstance(version_id, CommandResult):
+            return version_id
+        approved = self.evolution.approve(version_id)
         return CommandResult(
-            "approve", data={"name": arg}, display_hint=f"Approved skill draft: {arg}"
+            "approve",
+            data={"version": _record(approved)},
+            display_hint=f"Approved skill version: {version_id}",
         )
 
     def _reject(self, arg: str) -> CommandResult:
         if not arg:
-            return self._usage_result("/reject <name>")
-        self.evolution.reject(arg)
+            return self._usage_result("/reject <version-id>")
+        version_id = self._version_id(arg, "reject")
+        if isinstance(version_id, CommandResult):
+            return version_id
+        rejected = self.evolution.reject(version_id)
         return CommandResult(
-            "reject", data={"name": arg}, display_hint=f"Rejected skill draft: {arg}"
+            "reject",
+            data={"version": _record(rejected)},
+            display_hint=f"Rejected skill version: {version_id}",
         )
+
+    def _version_id(self, value: str, kind: str) -> int | CommandResult:
+        try:
+            version_id = int(value)
+            if version_id <= 0:
+                raise ValueError
+        except ValueError:
+            return self._error(
+                f"{kind.title()} requires a positive numeric version ID.", kind=kind
+            )
+        return version_id
 
     def _rollback(self, arg: str) -> CommandResult:
         if not arg:
@@ -287,9 +312,11 @@ class ReplController:
 
 def _record(value: Any) -> Any:
     if is_dataclass(value):
-        return asdict(value)
+        return {item.name: _record(getattr(value, item.name)) for item in fields(value)}
     if isinstance(value, Mapping):
-        return dict(value)
+        return {key: _record(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_record(item) for item in value]
     return value
 
 

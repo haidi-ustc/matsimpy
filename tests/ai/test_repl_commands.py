@@ -97,9 +97,11 @@ class FakeEvolution:
 
     def approve(self, name):
         self.calls.append(("approve", name))
+        return {"id": name, "status": "approved", "allowed_tools": ["step"]}
 
     def reject(self, name):
         self.calls.append(("reject", name))
+        return {"id": name, "status": "rejected", "allowed_tools": ["step"]}
 
     def rollback(self, version_id):
         self.calls.append(("rollback", version_id))
@@ -139,9 +141,9 @@ def controller():
         ("/resume 8", "resume", ("resume", 8)),
         ("/retry", "retry", ("retry",)),
         ("/undo", "undo", ("undo",)),
-        ("/approve copper-flow", "approve", ("approve", "copper-flow")),
-        ("/approve-skill copper-flow", "approve", ("approve", "copper-flow")),
-        ("/reject copper-flow", "reject", ("reject", "copper-flow")),
+        ("/approve 3", "approve", ("approve", 3)),
+        ("/approve-skill 3", "approve", ("approve", 3)),
+        ("/reject 3", "reject", ("reject", 3)),
         ("/rollback 7", "rollback", ("rollback", 7)),
         ("/evolve review", "evolve-review", ("review", None)),
     ],
@@ -186,8 +188,9 @@ def test_inspection_commands_return_data_without_printing(
     [
         ("/resume", "/resume <session_id>"),
         ("/resume nope", "/resume <session_id>"),
-        ("/approve", "/approve <name>"),
-        ("/reject", "/reject <name>"),
+        ("/approve", "/approve <version-id>"),
+        ("/approve nope", "positive numeric version ID"),
+        ("/reject", "/reject <version-id>"),
         ("/rollback", "/rollback <version-id>"),
         ("/evolve", "/evolve review [candidate]"),
         ("/unknown", "Unknown command"),
@@ -213,7 +216,25 @@ def test_aliases_completion_and_command_names(controller):
     assert "/approve" in repl.command_names()
     assert repl.complete("/res") == ("/resume",)
     assert "/approve-skill" in repl.complete("/app")
-    assert repl.execute("/reject-skill copper-flow").ok is True
+    assert repl.execute("/reject-skill 3").ok is True
+
+
+def test_lifecycle_commands_return_complete_service_records(controller):
+    repl, _, _ = controller
+
+    approved = repl.execute("/approve 3")
+    rejected = repl.execute("/reject 4")
+
+    assert approved.data["version"] == {
+        "id": 3,
+        "status": "approved",
+        "allowed_tools": ["step"],
+    }
+    assert rejected.data["version"] == {
+        "id": 4,
+        "status": "rejected",
+        "allowed_tools": ["step"],
+    }
 
 
 def test_evolve_review_exposes_all_approval_evidence(controller):
@@ -291,6 +312,26 @@ def test_engine_commands_use_authoritative_agent_session(tmp_path, capsys):
     assert engine.repl_controller.session is engine.agent.session
     assert f"Started session {conversation_id}." in output
     assert f"{conversation_id}: engine" in output
+
+
+def test_engine_repl_uses_agent_backed_evolution_lifecycle(tmp_path, monkeypatch):
+    from matsimpy.ai.engine import AIEngine
+
+    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    calls = []
+
+    def approve(version_id):
+        calls.append(version_id)
+        return {"version_id": version_id, "status": "approved"}
+
+    monkeypatch.setattr(engine.agent, "approve", approve)
+
+    result = engine.repl_controller.execute("/approve 7")
+
+    assert result.ok is True
+    assert result.data["version"]["status"] == "approved"
+    assert calls == [7]
+    assert engine.repl_controller.evolution is engine.agent
 
 
 def test_engine_resume_rebuilds_compatibility_conversation_from_session_branch(
