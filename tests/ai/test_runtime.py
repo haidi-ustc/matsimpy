@@ -835,6 +835,9 @@ def test_runtime_prompt_forbids_invented_scientific_tool_arguments():
     assert "pass returned structure references" in prompt
     assert "reuse" in prompt and "prior tool results" in prompt
     assert "do not add derived" in prompt
+    assert "wyckoff" in prompt
+    assert "letter and multiplicity exactly" in prompt
+    assert "do not convert" in prompt and "conventional setting" in prompt
 
 
 def test_runtime_initial_prompt_keeps_memory_after_core_rules(tmp_path):

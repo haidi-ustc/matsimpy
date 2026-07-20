@@ -13,6 +13,24 @@ from matsimpy.ai.agent_skills import (
 )
 
 
+def test_symmetry_result_marks_wyckoff_values_as_setting_specific(monkeypatch):
+    from matsimpy.ai.skills import symmetry
+
+    returned = {
+        "space_group_number": 227,
+        "wyckoff_positions": [{"letter": "b", "multiplicity": 2, "atoms": []}],
+    }
+    monkeypatch.setattr(symmetry, "_analyze_symmetry_api", lambda *args, **kwargs: returned)
+
+    result = symmetry._analyze_symmetry(object())
+
+    assert result["wyckoff_positions"] == returned["wyckoff_positions"]
+    note = result["wyckoff_setting_note"].lower()
+    assert "analyzed input cell" in note
+    assert "letter and multiplicity exactly" in note
+    assert "conventional" in note
+
+
 def write_skill(tmp_path: Path, *, name: str) -> Path:
     root = tmp_path / "skill"
     root.mkdir()

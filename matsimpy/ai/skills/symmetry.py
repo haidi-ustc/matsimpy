@@ -32,11 +32,17 @@ def _require_structure(structure):
 
 def _analyze_symmetry(structure=None, symprec: float = 1e-5, angle_tolerance: float = -1.0):
     structure = _require_structure(structure)
-    return _analyze_symmetry_api(
+    result = dict(_analyze_symmetry_api(
         structure,
         symprec=symprec,
         angle_tolerance=angle_tolerance,
+    ))
+    result["wyckoff_setting_note"] = (
+        "Wyckoff values describe the analyzed input cell. Reproduce each returned "
+        "letter and multiplicity exactly; do not convert to a conventional setting "
+        "unless a tool explicitly returns that mapping."
     )
+    return result
 
 
 def _get_conventional_cell(structure=None, symprec: float = 1e-5):

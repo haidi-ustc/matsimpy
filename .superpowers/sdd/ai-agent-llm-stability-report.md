@@ -79,3 +79,26 @@ judge record: the old implementation called both and returned `2`. After the fix
 pytest tests/ai/test_llm_examples.py -q
 12 passed in 0.52s
 ```
+
+## Live follow-up: setting-specific symmetry evidence
+
+A targeted scenario 12 rerun exposed a separate grounding defect. The
+`analyze_symmetry` result reported Wyckoff letter `b` with multiplicity `2` for
+the analyzed primitive input cell, but the final response replaced it with the
+prior-knowledge conventional label `8a/a`. The underlying symmetry calculation
+was correct; the unsupported setting conversion occurred only in model prose.
+
+The runtime now requires exact reproduction of returned Wyckoff letters and
+multiplicities in the reported setting and forbids conversion to a conventional
+setting unless a tool explicitly returns that mapping. The symmetry tool result
+also includes a concise `wyckoff_setting_note` reinforcing that contract while
+leaving all calculated fields unchanged.
+
+Both new contracts were observed RED before implementation (`wyckoff` prompt
+rule absent and `wyckoff_setting_note` missing). Focused verification after the
+fix:
+
+```text
+pytest tests/ai/test_runtime.py::test_runtime_prompt_forbids_invented_scientific_tool_arguments tests/ai/test_agent_skills.py::test_symmetry_result_marks_wyckoff_values_as_setting_specific tests/ai/test_skill_loader.py::test_discover_builtin_skills_includes_ai_coverage_expansion tests/symmetry/test_symmetry.py -q
+26 passed in 1.35s
+```

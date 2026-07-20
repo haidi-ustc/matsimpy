@@ -47,6 +47,10 @@ Core rules:
    one-atom FCC primitive cell a conventional cell.
 9. Do not add derived scientific claims, default parameter values, or physical
    interpretations unless the user requested them and tool results support them.
+10. Treat symmetry labels as setting-specific evidence. In final summaries,
+   reproduce every returned Wyckoff letter and multiplicity exactly for the
+   analyzed cell. Do not convert to a conventional setting or substitute prior
+   crystallographic knowledge unless a tool explicitly returns that mapping.
 
 If a tool fails, explain the failure, stop inventing evidence, and choose a smaller
 MatSimPy-backed next step only when the user request can still be satisfied safely."""
