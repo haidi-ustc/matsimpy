@@ -34,8 +34,48 @@ def test_volumetric_data_detects_soc_from_four_channels(si_crystal):
 
     volume = VolumetricData(si_crystal, data)
 
-    assert volume.is_spin_polarized
+    assert not volume.is_spin_polarized
     assert volume.is_soc
+
+
+def test_volumetric_data_soc_requires_expected_vector_keys(si_crystal):
+    volume = VolumetricData(
+        si_crystal,
+        {
+            "total": np.zeros((2, 2, 2)),
+            "a": np.ones((2, 2, 2)),
+            "b": np.ones((2, 2, 2)),
+            "c": np.ones((2, 2, 2)),
+        },
+    )
+    incomplete_soc = VolumetricData(
+        si_crystal,
+        {
+            "total": np.zeros((2, 2, 2)),
+            "diff_x": np.ones((2, 2, 2)),
+            "diff_y": np.ones((2, 2, 2)),
+        },
+    )
+
+    assert not volume.is_soc
+    assert not volume.is_spin_polarized
+    assert not incomplete_soc.is_soc
+    assert not incomplete_soc.is_spin_polarized
+
+
+def test_volumetric_data_rejects_collinear_spin_data_for_soc(si_crystal):
+    volume = VolumetricData(
+        si_crystal,
+        {
+            "total": np.zeros((2, 2, 2)),
+            "diff_x": np.ones((2, 2, 2)),
+            "diff_y": np.ones((2, 2, 2)),
+            "diff_z": np.ones((2, 2, 2)),
+        },
+    )
+
+    with pytest.raises(ValueError, match="SOC"):
+        _ = volume.spin_data
 
 
 def test_volumetric_data_requires_matching_three_dimensional_shapes(si_crystal):
@@ -47,6 +87,11 @@ def test_volumetric_data_requires_matching_three_dimensional_shapes(si_crystal):
             si_crystal,
             {"total": np.zeros((2, 2, 2)), "diff": np.zeros((2, 2, 3))},
         )
+
+
+def test_volumetric_data_rejects_non_positive_grid_extents(si_crystal):
+    with pytest.raises(ValueError, match="positive"):
+        VolumetricData(si_crystal, {"total": np.zeros((0, 2, 2))})
 
 
 def test_get_axis_grid_uses_native_lattice_lengths(si_crystal):

@@ -11,6 +11,8 @@ from monty.json import MSONable
 
 from matsimpy.electronic_structure import Spin
 
+_SOC_VECTOR_KEYS = {"diff_x", "diff_y", "diff_z"}
+
 
 class VolumetricData(MSONable):
     """Native representation of regular volumetric grid data."""
@@ -30,8 +32,8 @@ class VolumetricData(MSONable):
         self.dim = self.data["total"].shape
         self.data_aug = data_aug if data_aug is not None else {}
         self.ngridpts = int(np.prod(self.dim))
-        self.is_spin_polarized = len(self.data) >= 2
-        self.is_soc = len(self.data) >= 4
+        self.is_soc = _SOC_VECTOR_KEYS.issubset(self.data)
+        self.is_spin_polarized = "diff" in self.data and not self.is_soc
         self._spin_data: dict[Spin, np.ndarray] = {}
         self._distance_matrix = distance_matrix if distance_matrix is not None else {}
         self.name = type(self).__name__
@@ -51,6 +53,11 @@ class VolumetricData(MSONable):
 
     @property
     def spin_data(self) -> dict[Spin, np.ndarray]:
+        if self.is_soc:
+            raise ValueError(
+                "SOC volumetric data does not have collinear "
+                "Spin.up/Spin.down channels"
+            )
         if not self._spin_data:
             diff = self.data.get("diff", 0)
             self._spin_data = {
@@ -123,6 +130,8 @@ def _validated_grid_map(
         array = np.asarray(value)
         if array.ndim != 3:
             raise ValueError(f"{name} channel '{key}' must be three-dimensional")
+        if any(dim <= 0 for dim in array.shape):
+            raise ValueError(f"{name} channel '{key}' must have positive grid extents")
         if shape is None:
             shape = array.shape
         elif array.shape != shape:

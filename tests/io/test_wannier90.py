@@ -14,6 +14,38 @@ def test_unk_writes_fortran_records(tmp_path):
     assert path.stat().st_size > data.nbytes
 
 
+def test_unk_accepts_positive_integer_kpoint_index():
+    unk = Unk(np.int64(2), np.ones((1, 2, 2, 2), dtype=np.complex128))
+
+    assert unk.ik == 2
+
+
+@pytest.mark.parametrize("ik", [0, -1, True, 1.0, np.float64(1.0)])
+def test_unk_rejects_non_positive_bool_and_float_kpoint_indices(ik):
+    with pytest.raises(ValueError, match="positive integer"):
+        Unk(ik, np.ones((1, 2, 2, 2), dtype=np.complex128))
+
+
+def test_unk_rejects_non_complex_data_before_casting():
+    with pytest.raises(TypeError, match="complex"):
+        Unk(1, np.ones((1, 2, 2, 2), dtype=float))
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (0, 2, 2, 2),
+        (1, 0, 2, 2),
+        (1, 2, 0, 2),
+        (1, 2, 2, 0),
+        (1, 2, 0, 2, 2),
+    ],
+)
+def test_unk_rejects_zero_band_and_grid_extents(shape):
+    with pytest.raises(ValueError, match="positive"):
+        Unk(1, np.zeros(shape, dtype=np.complex128))
+
+
 def test_unk_writes_collinear_records_in_fortran_order(tmp_path):
     data = np.arange(16, dtype=float).reshape(2, 2, 2, 2) + 1j
     path = tmp_path / "UNK00003.1"

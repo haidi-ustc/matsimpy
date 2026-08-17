@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Integral
 from os import PathLike
 from typing import Any
 
@@ -13,6 +14,8 @@ class Unk:
     """Container for Wannier90 UNK wavefunction grid data."""
 
     def __init__(self, ik: int, data: Any) -> None:
+        if isinstance(ik, bool) or not isinstance(ik, Integral) or ik <= 0:
+            raise ValueError("UNK kpoint index must be a positive integer")
         self.ik = int(ik)
         self.data = data
 
@@ -22,6 +25,10 @@ class Unk:
 
     @data.setter
     def data(self, value: Any) -> None:
+        raw = np.asarray(value)
+        if not np.iscomplexobj(raw):
+            raise TypeError("UNK data must be complex before casting")
+
         data = np.array(value, dtype=np.complex128)
         if data.ndim not in (4, 5):
             raise ValueError(
@@ -30,6 +37,8 @@ class Unk:
             )
         if data.ndim == 5 and data.shape[1] != 2:
             raise ValueError("invalid noncollinear data shape, expected spinor count 2")
+        if any(dim <= 0 for dim in data.shape):
+            raise ValueError("UNK data band and grid extents must be positive")
 
         self._data = data
         self.is_noncollinear = data.ndim == 5
