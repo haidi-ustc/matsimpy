@@ -7,7 +7,9 @@ from typing import Any
 import numpy as np
 from monty.json import MSONable
 
-from .core import Spin
+from .core import Orbital, OrbitalType, Spin
+
+_KEY_ENUMS = {"Spin": Spin, "Orbital": Orbital, "OrbitalType": OrbitalType}
 
 
 def _spin_from_key(key: Spin | str | int) -> Spin:
@@ -35,15 +37,61 @@ def _scaled_pdos(value: Any, factor: float) -> Any:
     return np.asarray(value, dtype=float) / factor
 
 
-def _pdos_as_dict(value: Any) -> Any:
+def _encode_pdos_key(key: Any) -> dict[str, Any]:
+    if isinstance(key, (Spin, Orbital, OrbitalType)):
+        return {"type": key.__class__.__name__, "name": key.name}
+    if isinstance(key, bool):
+        return {"type": "bool", "value": key}
+    if isinstance(key, int):
+        return {"type": "int", "value": key}
+    if isinstance(key, float):
+        return {"type": "float", "value": key}
+    if key is None:
+        return {"type": "none", "value": None}
+    return {"type": "str", "value": str(key)}
+
+
+def _decode_pdos_key(data: dict[str, Any]) -> Any:
+    key_type = data["type"]
+    if key_type in _KEY_ENUMS:
+        return _KEY_ENUMS[key_type][data["name"]]
+    if key_type == "bool":
+        return bool(data["value"])
+    if key_type == "int":
+        return int(data["value"])
+    if key_type == "float":
+        return float(data["value"])
+    if key_type == "none":
+        return None
+    if key_type == "str":
+        return str(data["value"])
+    raise ValueError(f"Unsupported projected DOS key type: {key_type}")
+
+
+def _pdos_as_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return {
-            key.name if isinstance(key, Spin) else key: _pdos_as_dict(item)
-            for key, item in value.items()
+            "@type": "dict",
+            "entries": [
+                {"key": _encode_pdos_key(key), "value": _pdos_as_dict(item)}
+                for key, item in value.items()
+            ],
         }
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    return value
+    return {"@type": "ndarray", "data": np.asarray(value, dtype=float).tolist()}
+
+
+def _pdos_from_dict(data: Any) -> Any:
+    if not isinstance(data, dict) or "@type" not in data:
+        return np.asarray(data, dtype=float)
+    data_type = data["@type"]
+    if data_type == "dict":
+        return {
+            _decode_pdos_key(entry["key"]): _pdos_from_dict(entry["value"])
+            for entry in data["entries"]
+        }
+    if data_type == "ndarray":
+        return np.asarray(data["data"], dtype=float)
+    raise ValueError(f"Unsupported projected DOS payload type: {data_type}")
 
 
 class Dos(MSONable):
@@ -122,4 +170,8 @@ class CompleteDos(MSONable):
         structure = data["structure"]
         if isinstance(structure, dict) and structure.get("@class") == "Crystal":
             structure = Crystal.from_dict(structure)
-        return cls(structure, Dos.from_dict(data["total_dos"]), data.get("pdos", {}))
+        return cls(
+            structure,
+            Dos.from_dict(data["total_dos"]),
+            _pdos_from_dict(data.get("pdos", {"@type": "dict", "entries": []})),
+        )
