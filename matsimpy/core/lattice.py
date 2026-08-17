@@ -914,6 +914,16 @@ class Lattice(MSONable):
             and abs(self.gamma - 90) < tol
         )
 
+    def is_hexagonal(self, length_tol: float = 1e-8, angle_tol: float = 1e-8) -> bool:
+        """Return True for hexagonal metric cells."""
+        length_scale = max(abs(self.a), abs(self.b), 1.0)
+        return (
+            abs(self.a - self.b) <= length_tol * length_scale
+            and abs(self.alpha - 90.0) <= angle_tol
+            and abs(self.beta - 90.0) <= angle_tol
+            and abs(abs(self.gamma) - 120.0) <= angle_tol
+        )
+
     @property
     def parameters(self) -> Dict[str, float]:
         """

@@ -65,10 +65,7 @@ def get_el_sp(el):
 
 def _has_face_centered_lattice(structure: Structure) -> bool:
     """Return True when native symmetry identifies an F-centered space group."""
-    try:
-        symbol = SymmetryAnalyzer(structure).analyze_crystal(structure).get("space_group_symbol")
-    except Exception:
-        return False
+    symbol = SymmetryAnalyzer(structure).analyze_crystal(structure).get("space_group_symbol")
     return bool(symbol and symbol.strip().startswith("F"))
 
 # Magmom: simple local class (adapted from pymatgen)
@@ -1559,7 +1556,7 @@ class Kpoints(MSONable):
             "tuple[int, int, int]", [math.floor(max(mult / length, 1)) for length in lengths]
         )
 
-        is_hexagonal: bool = lattice.hexagonal
+        is_hexagonal: bool = lattice.is_hexagonal()
         is_face_centered: bool = _has_face_centered_lattice(structure)
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
@@ -1685,7 +1682,7 @@ class Kpoints(MSONable):
         abc = np.linalg.norm(lattice.matrix, axis=1)
         num_div: tuple[int, int, int] = tuple(math.ceil(ld / abc[idx]) for idx, ld in enumerate(length_densities))  # type:ignore[assignment]
 
-        is_hexagonal: bool = lattice.hexagonal
+        is_hexagonal: bool = lattice.is_hexagonal()
         is_face_centered: bool = _has_face_centered_lattice(structure)
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:

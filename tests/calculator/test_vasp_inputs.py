@@ -116,6 +116,43 @@ class TestKpoints:
         text = fpath.read_text()
         assert "3 3 3" in text or "Automatic" in text
 
+    def test_automatic_density_tetragonal_even_mesh_uses_monkhorst_pack(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.tetragonal(3.0, 6.0))
+
+        kpt = Kpoints.automatic_density(crystal, 41)
+
+        assert kpt.kpts == [(4, 4, 2)]
+        assert kpt.style == Kpoints.supported_modes.Monkhorst
+
+    def test_automatic_density_by_lengths_tetragonal_even_mesh_uses_monkhorst_pack(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.tetragonal(3.0, 6.0))
+
+        kpt = Kpoints.automatic_density_by_lengths(crystal, [10.0, 10.0, 10.0])
+
+        assert kpt.kpts == [(4, 4, 2)]
+        assert kpt.style == Kpoints.supported_modes.Monkhorst
+
+    def test_automatic_density_propagates_symmetry_failures(self, monkeypatch):
+        import matsimpy.calculator.vasp.inputs as inputs
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        class FailingSymmetryAnalyzer:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def analyze_crystal(self, structure):
+                raise RuntimeError("native symmetry failure")
+
+        monkeypatch.setattr(inputs, "SymmetryAnalyzer", FailingSymmetryAnalyzer)
+        crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.tetragonal(3.0, 6.0))
+
+        with pytest.raises(RuntimeError, match="native symmetry failure"):
+            Kpoints.automatic_density(crystal, 41)
+
 
 class TestPoscar:
     @pytest.fixture

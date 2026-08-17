@@ -58,3 +58,38 @@
 - Native high-symmetry k-path support remains intentionally limited by the existing native `HighSymmetryKpath` implementation.
 - Native NEB CIF export is explicitly unsupported and raises `NotImplementedError`.
 - Existing deprecation warnings for `DictSet` and `Kpoints.automatic()` remain.
+
+## Fix Round 1
+
+### Files Changed
+- `matsimpy/core/lattice.py`
+  - Added native `Lattice.is_hexagonal()` metric/angle classification.
+- `matsimpy/calculator/vasp/inputs.py`
+  - Replaced accidental truthy `lattice.hexagonal` constructor checks with `lattice.is_hexagonal()`.
+  - Removed broad exception suppression from `_has_face_centered_lattice()` so native symmetry failures propagate.
+- `tests/calculator/test_vasp_inputs.py`
+  - Added regressions proving tetragonal all-even meshes select Monkhorst-Pack in both `automatic_density()` and `automatic_density_by_lengths()`.
+  - Added a regression proving symmetry-analysis failures propagate from automatic-density generation.
+
+### Commands and Results
+- Red run:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_inputs.py -q`
+  - Result: failed as expected because tetragonal all-even meshes selected Gamma and symmetry failures were swallowed.
+- Focused green run:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_inputs.py -q`
+  - Result: `27 passed, 2 warnings`
+- Task 7 verification:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_sets.py tests/calculator/test_vasp_inputs.py tests/calculator/test_vasp_imports.py tests/core/test_periodic_table_comprehensive.py -q`
+  - Result: `84 passed, 5 warnings`
+- Lattice/VASP focused verification:
+  - `conda run -n pmg python -m pytest tests/core/test_lattice_comprehensive.py tests/calculator/test_vasp_inputs.py -q`
+  - Result: `64 passed, 2 warnings`
+- Syntax check:
+  - `conda run -n pmg python -m py_compile matsimpy/calculator/vasp/inputs.py matsimpy/core/lattice.py`
+  - Result: exit 0
+- Diff hygiene:
+  - `git diff --check`
+  - Result: exit 0
+- Search:
+  - `rg -n "\.hexagonal|is_hexagonal|_has_face_centered_lattice|except Exception" matsimpy/calculator/vasp/inputs.py matsimpy/calculator/vasp/sets.py matsimpy/core/lattice.py tests/calculator/test_vasp_inputs.py`
+  - Result: no remaining `lattice.hexagonal` boolean checks in Task 7 production code.
