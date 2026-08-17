@@ -1448,7 +1448,7 @@ class Vasprun(MSONable):
         vin["potcar_spec"] = self.potcar_spec
         vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
         vin["parameters"] = dict(self.parameters.items())
-        vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
+        vin["lattice_rec"] = self.final_structure.lattice.get_reciprocal_lattice().as_dict()
         dct["input"] = vin
 
         n_sites = len(self.final_structure)
@@ -1990,7 +1990,7 @@ class BSVasprun(Vasprun):
         vin["potcar_spec"] = self.potcar_spec
         vin["potcar_type"] = [s.split(" ")[0] for s in self.potcar_symbols]
         vin["parameters"] = dict(self.parameters)
-        vin["lattice_rec"] = self.final_structure.lattice.reciprocal_lattice.as_dict()
+        vin["lattice_rec"] = self.final_structure.lattice.get_reciprocal_lattice().as_dict()
         dct["input"] = vin
 
         vout: dict[str, Any] = {

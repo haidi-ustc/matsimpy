@@ -8,7 +8,7 @@ from pathlib import Path
 from matsimpy.calculator.vasp import outputs
 import pytest
 
-from matsimpy.calculator.vasp.outputs import Vasprun, get_adjusted_fermi_level
+from matsimpy.calculator.vasp.outputs import BSVasprun, Vasprun, get_adjusted_fermi_level
 from matsimpy.core import Crystal, Lattice
 from matsimpy.core.entries import ComputedStructureEntry
 from matsimpy.core.trajectory import Trajectory
@@ -37,6 +37,22 @@ def test_vasprun_get_band_structure_returns_native_model():
     band_structure = run.get_band_structure()
 
     assert isinstance(band_structure, BandStructure)
+
+
+def test_vasprun_as_dict_serializes_native_reciprocal_lattice():
+    run = Vasprun(VASP_FIXTURES / "vasprun.xml")
+
+    data = run.as_dict()
+
+    assert data["input"]["lattice_rec"]["@class"] == "Lattice"
+
+
+def test_bsvasprun_as_dict_serializes_native_reciprocal_lattice():
+    run = BSVasprun(VASP_FIXTURES / "vasprun.xml")
+
+    data = run.as_dict()
+
+    assert data["input"]["lattice_rec"]["@class"] == "Lattice"
 
 
 def test_adjusted_fermi_level_returns_in_gap_candidate():

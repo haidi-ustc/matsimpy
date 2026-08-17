@@ -79,3 +79,33 @@
 - Relevant Task 6 parser/import suite:
   - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py tests/calculator/test_vasp_outputs.py tests/calculator/test_vasp_imports.py -q`
   - Result: 26 passed, 17 warnings.
+
+## Fix Round 2: Native Reciprocal Lattice Serialization
+
+### Files Changed
+
+- `matsimpy/calculator/vasp/outputs.py`
+  - Replaced both remaining `self.final_structure.lattice.reciprocal_lattice.as_dict()` calls with `self.final_structure.lattice.get_reciprocal_lattice().as_dict()`.
+  - Searched `outputs.py` and confirmed no `.reciprocal_lattice` attribute access remains.
+
+- `tests/calculator/test_vasp_native_outputs.py`
+  - Added fixture-backed `Vasprun.as_dict()` coverage for native reciprocal-lattice serialization.
+  - Added fixture-backed `BSVasprun.as_dict()` coverage for native reciprocal-lattice serialization.
+
+### Test Commands and Results
+
+- Red check before fix:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py -q`
+  - Result: failed as expected with 2 failures. `Vasprun.as_dict()` and `BSVasprun.as_dict()` both raised `AttributeError: 'Lattice' object has no attribute 'reciprocal_lattice'`.
+
+- Source search:
+  - `rg -n "\\.reciprocal_lattice" matsimpy/calculator/vasp/outputs.py`
+  - Result: no matches.
+
+- Focused native-output regressions:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py -q`
+  - Result: 6 passed, 6 warnings.
+
+- Relevant Task 6 parser/import suite:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py tests/calculator/test_vasp_outputs.py tests/calculator/test_vasp_imports.py -q`
+  - Result: 28 passed, 19 warnings.
