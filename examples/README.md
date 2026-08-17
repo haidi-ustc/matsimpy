@@ -27,7 +27,7 @@ This directory contains comprehensive examples demonstrating how to use differen
 - **`io_basic.py`** - Reading and writing structure files (VASP, XYZ, JSON)
 
 ### Calculator Module
-- **`calculator_basic.py`** - Using calculators (LJ, ML) for energy and force calculations
+- **`calculator_basic.py`** - Using calculators (Lennard-Jones and the MatterSim ML potential) for energy, force, and stress calculations
 
 ### Configuration Module
 - **`config_basic.py`** - Global configuration system usage
@@ -62,6 +62,15 @@ All examples assume MatSimPy is installed. Some examples may require additional 
 - PyXtal (for random crystal generation)
 - MatterSim (for ML calculator examples)
 - maggma (for `storage_basic.py` - install with `pip install MatSimPy[storage]`)
+
+## MatterSim ML Calculator
+
+`calculator_basic.py` demonstrates the `Mattersim` calculator, which drives MatterSim's M3GNet-based potentials directly from MatSimPy structures (no ASE required). To use it:
+
+1. Install the dependencies: `pip install mattersim` (plus `torch`/`torch_geometric`).
+2. Place a model checkpoint at `~/.matsimpy/models/`, e.g. `mattersim-v1.0.0-1M.pth.tar`, or pass `model_path` explicitly.
+
+The MatSimPy `Mattersim` calculator is validated to reproduce the ASE-based MatterSim calculator (energy, forces, and stress agree to float32 precision) for both the diamond-Si example and arbitrary random cells. Note the stress units: `Mattersim.results["stress"]` is a **3×3 tensor in eV/Å³**, whereas ASE's `MatterSimCalculator.get_stress()` returns a **Voigt 6-vector in eV/Å³** — the same physical quantity, different shape.
 
 ## Example Output
 

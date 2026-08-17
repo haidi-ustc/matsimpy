@@ -78,7 +78,7 @@ try:
     from pathlib import Path
     
     # Try to load MatterSim model (if available)
-    model_path = Path.home() / '.matsimpy' / 'models' / 'mattersim-v1.0.0-5M.pth.tar'
+    model_path = Path.home() / '.matsimpy' / 'models' / 'mattersim-v1.0.0-1M.pth.tar'
     
     if model_path.exists():
         print(f"Loading MatterSim model from: {model_path}")
@@ -102,7 +102,7 @@ try:
         print(f"Expected: {model_path}")
         print("\nTo use MatterSim calculator:")
         print("1. Install mattersim: pip install mattersim")
-        print("2. Place model file at ~/.matsimpy/models/mattersim-v1.0.0-5M.pth.tar")
+        print("2. Place model file at ~/.matsimpy/models/mattersim-v1.0.0-1M.pth.tar")
         print("3. Or specify model_path when creating calculator")
     
 except ImportError:
