@@ -28,6 +28,8 @@ For the format registry (plugin extension point)::
 
 # High-level interface (recommended)
 from .core import read, write, read_file, write_file
+from .common import VolumetricData
+from .wannier90 import Unk
 
 # Format-specific readers/writers (for advanced use)
 from .vasp import read_POSCAR, write_POSCAR, read_CONTCAR, write_CONTCAR
@@ -55,6 +57,8 @@ __all__ = [
     "write",
     "read_file",
     "write_file",
+    "VolumetricData",
+    "Unk",
     # VASP
     "read_POSCAR",
     "write_POSCAR",
