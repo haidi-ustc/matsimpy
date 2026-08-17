@@ -41,6 +41,7 @@ from tabulate import tabulate
 
 from matsimpy.core import Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, str_delimited
+from matsimpy.symmetry import HighSymmetryKpath, SymmetryAnalyzer
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
@@ -60,6 +61,15 @@ def get_el_sp(el):
     if isinstance(el, Element):
         return el
     return Element(el)
+
+
+def _has_face_centered_lattice(structure: Structure) -> bool:
+    """Return True when native symmetry identifies an F-centered space group."""
+    try:
+        symbol = SymmetryAnalyzer(structure).analyze_crystal(structure).get("space_group_symbol")
+    except Exception:
+        return False
+    return bool(symbol and symbol.strip().startswith("F"))
 
 # Magmom: simple local class (adapted from pymatgen)
 class Magmom:
@@ -142,7 +152,7 @@ class Poscar(MSONable):
 
     def __init__(
         self,
-        structure: Structure | IStructure,
+        structure: Structure,
         comment: str | None = None,
         selective_dynamics: ArrayLike | None = None,
         true_names: bool = True,
@@ -1512,7 +1522,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_density(
         cls,
-        structure: Structure | IStructure,
+        structure: Structure,
         kppa: float,
         force_gamma: bool = False,
         comment: str | None = None,
@@ -1550,7 +1560,7 @@ class Kpoints(MSONable):
         )
 
         is_hexagonal: bool = lattice.hexagonal
-        is_face_centered: bool = structure.get_space_group_info()[0][0] == "F"
+        is_face_centered: bool = _has_face_centered_lattice(structure)
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
             style = cls.supported_modes.Gamma
@@ -1568,7 +1578,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_gamma_density(
         cls,
-        structure: Structure | IStructure,
+        structure: Structure,
         kppa: float,
         comment: str | None = None,
     ) -> Self:
@@ -1614,7 +1624,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_density_by_vol(
         cls,
-        structure: Structure | IStructure,
+        structure: Structure,
         kppvol: int,
         force_gamma: bool = False,
         comment: str | None = None,
@@ -1634,14 +1644,14 @@ class Kpoints(MSONable):
         Returns:
             Kpoints
         """
-        vol = structure.lattice.reciprocal_lattice.volume
+        vol = structure.lattice.get_reciprocal_lattice().volume
         kppa = kppvol * vol * len(structure)
         return cls.automatic_density(structure, kppa, force_gamma=force_gamma, comment=comment)
 
     @classmethod
     def automatic_density_by_lengths(
         cls,
-        structure: Structure | IStructure,
+        structure: Structure,
         length_densities: Sequence[float],
         force_gamma: bool = False,
         comment: str | None = None,
@@ -1676,7 +1686,7 @@ class Kpoints(MSONable):
         num_div: tuple[int, int, int] = tuple(math.ceil(ld / abc[idx]) for idx, ld in enumerate(length_densities))  # type:ignore[assignment]
 
         is_hexagonal: bool = lattice.hexagonal
-        is_face_centered: bool = structure.get_space_group_info()[0][0] == "F"
+        is_face_centered: bool = _has_face_centered_lattice(structure)
         has_odd: bool = any(idx % 2 == 1 for idx in num_div)
         if has_odd or is_hexagonal or is_face_centered or force_gamma:
             style = cls.supported_modes.Gamma
@@ -1697,7 +1707,7 @@ class Kpoints(MSONable):
     def automatic_linemode(
         cls,
         divisions: int,
-        ibz: HighSymmKpath,
+        ibz: HighSymmetryKpath,
         comment: str = "Line_mode KPOINTS file",
     ) -> Self:
         """
@@ -1708,7 +1718,7 @@ class Kpoints(MSONable):
 
         Args:
             divisions (int): Parameter determining the number of k-points along each high symmetry line.
-            ibz (HighSymmKpath): HighSymmKpath object (pymatgen.symmetry.bandstructure).
+            ibz (HighSymmetryKpath): Native high-symmetry k-path object.
             comment (str): Comment in Kpoints.
 
         Returns:

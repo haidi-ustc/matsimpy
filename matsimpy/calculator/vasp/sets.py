@@ -49,47 +49,22 @@ from monty.dev import deprecated
 from monty.json import MSONable
 from monty.serialization import loadfn
 
-from matsimpy.core import Element, Crystal, Lattice
+from matsimpy.core import Element, Crystal, Lattice, CrystalSite
+from matsimpy.calculator.input_generator import InputGenerator
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
+from matsimpy.symmetry import HighSymmetryKpath, StructureMatcher, SymmetryAnalyzer
 
 # Structure → Crystal alias
 Structure = Crystal
 
-# Optional symmetry features — require pymatgen/spglib
-try:
-    from pymatgen.core.structure_matcher import StructureMatcher
-    from pymatgen.io.core import InputGenerator
-    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-    from pymatgen.symmetry.bandstructure import HighSymmKpath
-    from pymatgen.util.due import Doi, due
-    _HAS_SYMMETRY = True
-except ImportError:
-    _HAS_SYMMETRY = False
-    StructureMatcher = None
-    InputGenerator = type("InputGenerator", (), {})
-    SpacegroupAnalyzer = None
-    HighSymmKpath = None
-    class _NoOpDue:
-        @staticmethod
-        def dcite(*args, **kwargs):
-            return lambda f: f
-    due = _NoOpDue()
-    Doi = lambda x: x  # no-op stub for pymatgen.util.due.Doi
-
-# PeriodicSite / SiteCollection / Species — used less frequently,
-# gate them behind pymatgen availability
-try:
-    from pymatgen.core import PeriodicSite, SiteCollection, Species
-except ImportError:
-    PeriodicSite = SiteCollection = Species = None
-
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from typing import Literal, Self
+    from pathlib import Path as _Path
 
-    from pymatgen.core.structure import IStructure
-    from pymatgen.util.typing import Kpoint, PathLike
+    Kpoint = tuple[float, float, float]
+    PathLike = str | _Path
 
     UserPotcarFunctional = (
         Literal[
@@ -304,8 +279,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
             warnings.warn(
                 "You have specified KSPACING and also supplied KPOINTS "
                 "settings. KSPACING only has effect when there is no "
-                "KPOINTS file. Since both settings were given, pymatgen"
-                "will generate a KPOINTS file and ignore KSPACING."
+                "KPOINTS file. Since both settings were given, MatSimPy "
+                "will generate a KPOINTS file and ignore KSPACING. "
                 "Remove the `user_kpoints_settings` argument to enable KSPACING.",
                 BadInputSetWarning,
                 stacklevel=2,
@@ -449,21 +424,34 @@ class VaspInputSet(InputGenerator, abc.ABC):
             self._structure = structure
             return
 
-        if isinstance(structure, SiteCollection):  # could be Structure or Molecule
-            if self.user_potcar_functional == "PBE_54" and "W" in structure.symbol_set:
+        if structure is None:
+            self._structure = None
+            return
+
+        if not isinstance(structure, Crystal):
+            raise TypeError(f"VASP input sets require a matsimpy Crystal, got {type(structure).__name__}")
+
+        if isinstance(structure, Crystal):
+            if self.user_potcar_functional == "PBE_54" and "W" in set(structure.species):
                 # When using 5.4 POTCARs, default Tungsten POTCAR to W_Sv but still allow user to override
                 self.user_potcar_settings = {
                     "W": "W_sv",
                     **(self.user_potcar_settings or {}),
                 }
             if self.reduce_structure:
-                structure = structure.get_reduced_structure(self.reduce_structure)
+                raise NotImplementedError("Native VASP input sets do not yet support reduce_structure")
             if self.sort_structure:
-                structure = structure.get_sorted_structure()
+                sorted_sites = structure._get_sorted_sites()
+                structure = Crystal(
+                    [site.specie for site in sorted_sites],
+                    [site.frac_position for site in sorted_sites],
+                    structure.lattice,
+                    site_properties=[site.properties for site in sorted_sites],
+                )
             if self.validate_magmom:
                 get_valid_magmom_struct(structure, spin_mode="auto")
 
-            struct_has_Yb = any(specie.symbol == "Yb" for site in structure for specie in site.species)
+            struct_has_Yb = "Yb" in set(structure.species)
             potcar_settings = self._config_dict.get("POTCAR", {}).copy()
             if self.user_potcar_settings:
                 potcar_settings.update(self.user_potcar_settings)
@@ -897,9 +885,10 @@ class VaspInputSet(InputGenerator, abc.ABC):
             return Kpoints.automatic(kconfig["length"])
 
         base_kpoints = None
+        force_gamma = bool(kconfig.get("force_gamma", self.force_gamma))
         if kconfig.get("line_density"):
             # Handle line density generation
-            kpath = HighSymmKpath(self.structure, **kconfig.get("kpath_kwargs", {}))
+            kpath = HighSymmetryKpath(self.structure, **kconfig.get("kpath_kwargs", {}))
             frac_k_points, k_points_labels = kpath.get_kpoints(
                 line_density=kconfig["line_density"], coords_are_cartesian=False
             )
@@ -915,17 +904,17 @@ class VaspInputSet(InputGenerator, abc.ABC):
         elif kconfig.get("grid_density") or kconfig.get("reciprocal_density"):
             # Handle regular weighted k-point grid generation
             if kconfig.get("grid_density"):
-                base_kpoints = Kpoints.automatic_density(self.structure, int(kconfig["grid_density"]), self.force_gamma)
+                base_kpoints = Kpoints.automatic_density(self.structure, int(kconfig["grid_density"]), force_gamma)
             elif kconfig.get("reciprocal_density"):
                 density = kconfig["reciprocal_density"]
-                base_kpoints = Kpoints.automatic_density_by_vol(self.structure, density, self.force_gamma)
+                base_kpoints = Kpoints.automatic_density_by_vol(self.structure, density, force_gamma)
 
             if not explicit or base_kpoints is None:
                 # If not explicit that means no other options have been specified
                 # so we can return the k-points as is
                 return base_kpoints
 
-            sga = SpacegroupAnalyzer(self.structure, symprec=self.sym_prec)
+            sga = SymmetryAnalyzer(self.structure, symprec=self.sym_prec)
             mesh = sga.get_ir_reciprocal_mesh(base_kpoints.kpts[0])
             base_kpoints = Kpoints(
                 comment="Uniform grid",
@@ -938,7 +927,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
         zero_weighted_kpoints = None
         if kconfig.get("zero_weighted_line_density"):
             # zero_weighted k-points along line mode path
-            kpath = HighSymmKpath(self.structure)
+            kpath = HighSymmetryKpath(self.structure)
             frac_k_points, k_points_labels = kpath.get_kpoints(
                 line_density=kconfig["zero_weighted_line_density"],
                 coords_are_cartesian=False,
@@ -955,9 +944,9 @@ class VaspInputSet(InputGenerator, abc.ABC):
             zero_weighted_kpoints = Kpoints.automatic_density_by_vol(
                 self.structure,
                 kconfig["zero_weighted_reciprocal_density"],
-                self.force_gamma,
+                force_gamma,
             )
-            sga = SpacegroupAnalyzer(self.structure, symprec=self.sym_prec)
+            sga = SymmetryAnalyzer(self.structure, symprec=self.sym_prec)
             mesh = sga.get_ir_reciprocal_mesh(zero_weighted_kpoints.kpts[0])
             zero_weighted_kpoints = Kpoints(
                 comment="Uniform grid",
@@ -990,6 +979,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
         if zero_weighted_kpoints and not base_kpoints:
             raise ValueError("Zero weighted k-points must be used with reciprocal_density or grid_density options")
         if not (base_kpoints or zero_weighted_kpoints or added_kpoints):
+            if not kconfig:
+                return None
             raise ValueError(
                 "Invalid k-point generation algo. Supported Keys are 'grid_density' "
                 "for Kpoints.automatic_density generation, 'reciprocal_density' for "
@@ -1242,10 +1233,6 @@ class VaspInputSet(InputGenerator, abc.ABC):
         return int((emax - emin) / dedos)
 
 
-# Create VaspInputGenerator alias to follow atomate2 terminology
-VaspInputGenerator = VaspInputSet
-
-
 @deprecated(VaspInputSet, deadline=(2025, 12, 31))
 class DictSet(VaspInputSet):
     """Alias for VaspInputSet."""
@@ -1293,10 +1280,6 @@ def primes_less_than(max_val: int) -> list[int]:
     return res
 
 
-@due.dcite(
-    Doi("10.1016/j.commatsci.2011.02.023"),
-    description="A high-throughput infrastructure for density functional theory calculations",
-)
 @dataclass
 class MITRelaxSet(VaspInputSet):
     """
@@ -1340,18 +1323,6 @@ class MPRelaxSet(VaspInputSet):
     CONFIG = _load_yaml_config("MPRelaxSet")
 
 
-@due.dcite(
-    Doi("10.1021/acs.jpclett.0c02405"),
-    description="Accurate and Numerically Efficient r2SCAN Meta-Generalized Gradient Approximation",
-)
-@due.dcite(
-    Doi("10.1103/PhysRevLett.115.036402"),
-    description="Strongly Constrained and Appropriately Normed Semilocal Density Functional",
-)
-@due.dcite(
-    Doi("10.1103/PhysRevB.93.155109"),
-    description="Efficient generation of generalized Monkhorst-Pack grids through the use of informatics",
-)
 @dataclass
 class MPScanRelaxSet(VaspInputSet):
     """Write a relaxation input set using the accurate and numerically
@@ -2274,8 +2245,8 @@ class MPNMRSet(VaspInputSet):
         elif self.mode.lower() == "efg" and self.structure is not None:
             isotopes = {isotope.split("-")[0]: isotope for isotope in self.isotopes}
             quad_efg = [
-                float(Species(sp.name).get_nmr_quadrupole_moment(isotopes.get(sp.name)))
-                for sp in self.structure.species
+                Element(symbol).get_nmr_quadrupole_moment(isotopes.get(symbol))
+                for symbol in self.structure.species
             ]
             updates.update(
                 ALGO="FAST",
@@ -2299,10 +2270,6 @@ class MPNMRSet(VaspInputSet):
         return {"reciprocal_density": self.reciprocal_density * factor}
 
 
-@due.dcite(
-    Doi("10.1149/2.0061602jes"),
-    description="Elastic Properties of Alkali Superionic Conductor Electrolytes from First Principles Calculations",
-)
 class MVLElasticSet(VaspInputSet):
     """
     MVL denotes VASP input sets that are implemented by the Materials Virtual
@@ -2849,7 +2816,7 @@ class NEBSet(VaspInputSet):
                 d.mkdir(parents=True)
             poscar.write_file(str(d / "POSCAR"))
             if write_cif:
-                poscar.structure.to(filename=str(d / f"{idx}.cif"))
+                raise NotImplementedError("Native NEB CIF export is not yet supported")
         if write_endpoint_inputs:
             end_point_param = self.parent(self.structures[0], user_incar_settings=self.user_incar_settings)
 
@@ -2860,12 +2827,17 @@ class NEBSet(VaspInputSet):
                 end_point_param.kpoints.write_file(str(output_dir / image / "KPOINTS"))
                 end_point_param.potcar.write_file(str(output_dir / image / "POTCAR"))
         if write_path_cif:
-            sites = {
-                PeriodicSite(site.species, site.frac_coords, self.structures[0].lattice)
-                for site in chain(*iter(self.structures))
-            }
-            neb_path = Structure.from_sites(sorted(sites))
-            neb_path.to(filename=f"{output_dir}/path.cif")
+            unique_sites = {}
+            for site in chain(*iter(self.structures)):
+                key = (site.specie, tuple(np.round(site.frac_position % 1.0, 10)))
+                unique_sites[key] = CrystalSite(site.frac_position, site.specie, self.structures[0].lattice)
+            sites = sorted(unique_sites.values(), key=lambda site: (site.specie, *site.frac_position.tolist()))
+            neb_path = Structure(
+                [site.specie for site in sites],
+                [site.frac_position for site in sites],
+                self.structures[0].lattice,
+            )
+            raise NotImplementedError("Native NEB path CIF export is not yet supported")
 
 
 class CINEBSet(NEBSet):
@@ -3188,7 +3160,7 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
 
 
 def standardize_structure(
-    structure: Structure | IStructure,
+    structure: Structure,
     sym_prec: float = 0.1,
     international_monoclinic: bool = True,
 ) -> Structure:
@@ -3203,8 +3175,11 @@ def standardize_structure(
     Returns:
         The symmetrized structure.
     """
-    sym_finder = SpacegroupAnalyzer(structure, symprec=sym_prec)
-    new_structure = sym_finder.get_primitive_standard_structure(international_monoclinic=international_monoclinic)
+    if not international_monoclinic:
+        raise NotImplementedError("Native structure standardization only supports the international setting")
+
+    sym_finder = SymmetryAnalyzer(structure, symprec=sym_prec)
+    new_structure = sym_finder.get_primitive_standard_structure()
 
     # The primitive structure finding has had several bugs in the past
     # defend through validation
@@ -3296,10 +3271,10 @@ _dummy_structure = Crystal(
 
 
 def get_valid_magmom_struct(
-    structure: Structure | IStructure,
+    structure: Structure,
     inplace: bool = True,
     spin_mode: str = "auto",
-) -> IStructure | Structure:
+) -> Structure:
     """
     Make sure that the structure has valid magmoms based on the kind of calculation.
 

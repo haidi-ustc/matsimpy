@@ -392,6 +392,31 @@ class Element:
         """
         return self._atomic_mass
 
+    def get_nmr_quadrupole_moment(self, isotope: Optional[str] = None) -> float:
+        """Return an isotope-specific NMR quadrupole moment from bundled data."""
+        moments = self._data.get("NMR Quadrupole Moment", {})
+        if not moments:
+            return 0.0
+
+        if isotope is not None:
+            try:
+                return float(moments[isotope])
+            except KeyError as exc:
+                available = ", ".join(sorted(moments))
+                raise ValueError(
+                    f"No NMR quadrupole moment for isotope {isotope!r} of {self.symbol}. "
+                    f"Available isotopes: {available}"
+                ) from exc
+
+        if len(moments) == 1:
+            return float(next(iter(moments.values())))
+
+        available = ", ".join(sorted(moments))
+        raise ValueError(
+            f"Multiple NMR quadrupole moments are available for {self.symbol}; "
+            f"specify one of: {available}"
+        )
+
     # ========================================================================
     # Radius Properties
     # ========================================================================

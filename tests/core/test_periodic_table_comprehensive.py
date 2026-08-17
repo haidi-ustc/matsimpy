@@ -88,6 +88,15 @@ class TestElementComprehensive(unittest.TestCase):
         
         # Test name
         self.assertIsInstance(h.name, str)
+
+    def test_nmr_quadrupole_moment_reads_json_data(self):
+        """Test NMR quadrupole moments are read from periodic_table.json."""
+        self.assertEqual(Element('Al').get_nmr_quadrupole_moment('Al-27'), 146.6)
+        self.assertEqual(Element('Al').get_nmr_quadrupole_moment(), 146.6)
+        self.assertEqual(Element('He').get_nmr_quadrupole_moment(), 0.0)
+
+        with self.assertRaises(ValueError):
+            Element('Al').get_nmr_quadrupole_moment('Al-26')
     
     def test_element_electronegativity(self):
         """Test electronegativity property."""
