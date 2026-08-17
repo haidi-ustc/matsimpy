@@ -32,8 +32,25 @@ from monty.re import regrep
 from tqdm import tqdm
 
 from matsimpy.core import Composition, Element, Lattice, Crystal
+from matsimpy.core.entries import ComputedEntry, ComputedStructureEntry
+from matsimpy.core.trajectory import Trajectory
+from matsimpy.core.units import unitized
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
+from matsimpy.electronic_structure import (
+    BandStructure,
+    BandStructureSymmLine,
+    CompleteDos,
+    Dos,
+    Magmom,
+    Orbital,
+    OrbitalType,
+    Spin,
+    get_reconstructed_band_structure,
+)
+from matsimpy.exceptions import FormatError
+from matsimpy.io.common import VolumetricData as BaseVolumetricData
+from matsimpy.io.wannier90 import Unk
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
@@ -54,37 +71,6 @@ def micro_pyawk(filename, search, results=None, debug=None, postdebug=None):
                 import pdb; pdb.set_trace()
     return results
 
-# Advanced pymatgen types — optional, guarded by _HAS_PYMATGEN_ES
-try:
-    from pymatgen.core.entries import ComputedEntry, ComputedStructureEntry
-    from pymatgen.core.trajectory import Trajectory
-    from pymatgen.core.units import unitized
-    from pymatgen.electronic_structure.bandstructure import (
-        BandStructure, BandStructureSymmLine, get_reconstructed_band_structure,
-    )
-    from pymatgen.electronic_structure.core import Magmom, Orbital, OrbitalType, Spin
-    from pymatgen.electronic_structure.dos import CompleteDos, Dos
-    from pymatgen.io.common import VolumetricData as BaseVolumetricData
-    from pymatgen.io.core import ParseError
-    from pymatgen.io.wannier90 import Unk
-    _HAS_PYMATGEN_ES = True
-except ImportError:
-    _HAS_PYMATGEN_ES = False
-    ComputedEntry = ComputedStructureEntry = Trajectory = None
-    # No-op unitized decorator (returns function unchanged)
-    def unitized(unit):
-        def decorator(func):
-            return func
-        return decorator
-    BandStructure = BandStructureSymmLine = None
-    get_reconstructed_band_structure = None
-    Magmom = Orbital = OrbitalType = Spin = None
-    CompleteDos = Dos = None
-    # Dummy base classes so subclasses don't fail on import
-    BaseVolumetricData = type("BaseVolumetricData", (), {})
-    ParseError = type("ParseError", (Exception,), {})
-    Unk = None
-
 try:
     import h5py
 except ImportError:
@@ -99,7 +85,8 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from pymatgen.util.typing import Kpoint, PathLike
+    Kpoint = tuple[int, int, int]
+    PathLike = str | os.PathLike[str]
 
 
 logger = logging.getLogger(__name__)
@@ -805,8 +792,7 @@ class Vasprun(MSONable):
     @property
     def complete_dos(self) -> CompleteDos:
         """A CompleteDos object which incorporates the total DOS and all projected DOS."""
-        final_struct = self.final_structure
-        pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
+        pdoss = {idx: pdos for idx, pdos in enumerate(self.pdos)}
         return CompleteDos(self.final_structure, self.tdos, pdoss)
 
     @property
@@ -815,8 +801,7 @@ class Vasprun(MSONable):
         Normalized by the volume of the unit cell with units of states/eV/unit cell
         volume.
         """
-        final_struct = self.final_structure
-        pdoss = {final_struct[i]: pdos for i, pdos in enumerate(self.pdos)}
+        pdoss = {idx: pdos for idx, pdos in enumerate(self.pdos)}
         return CompleteDos(self.final_structure, self.tdos, pdoss, normalize=True)
 
     @property
@@ -1176,7 +1161,7 @@ class Vasprun(MSONable):
                 e_fermi,
                 labels_dict,
                 structure=self.final_structure,
-                projections=p_eig_vals,  # type:ignore[arg-type]
+                projections=p_eig_vals or None,  # type:ignore[arg-type]
             )
 
         return BandStructure(
@@ -1185,7 +1170,7 @@ class Vasprun(MSONable):
             lattice_new,
             e_fermi,
             structure=self.final_structure,
-            projections=p_eig_vals,  # type:ignore[arg-type]
+            projections=p_eig_vals or None,  # type:ignore[arg-type]
         )
 
     @property
@@ -4627,7 +4612,7 @@ class Oszicar:
         }
 
 
-class VaspParseError(ParseError):
+class VaspParseError(FormatError):
     """Exception class for VASP parsing."""
 
 
@@ -6403,7 +6388,7 @@ class Vaspout(Vasprun):
         dos["pdos"] = []
 
         # for whatever reason, the naming of orbitals is different in vaspout.h5
-        vasp_to_pmg_orb = {
+        vasp_orbital_names = {
             "x2-y2": "dx2",
             "fy3x2": "f_3",
             "fxyz": "f_2",
@@ -6423,7 +6408,7 @@ class Vaspout(Vasprun):
                 for ispin in range(len(site_pdos)):
                     for ilm in range(len(site_pdos[ispin])):
                         orb_str = projectors[ilm]
-                        orb_idx = orbtyp.__members__[vasp_to_pmg_orb.get(orb_str, orb_str)]
+                        orb_idx = orbtyp.__members__[vasp_orbital_names.get(orb_str, orb_str)]
                         site_res_pdos[orb_idx][Spin((-1) ** ispin)] = np.array(site_pdos[ispin][ilm])
                 dos["pdos"] += [site_res_pdos]
 
