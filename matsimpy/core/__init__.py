@@ -17,6 +17,8 @@ from .site import Site, CrystalSite
 from .periodic_table import Element
 from .symmop import SymmOp
 from .units import unitized
+from .entries import ComputedEntry, ComputedStructureEntry
+from .trajectory import Trajectory
 
 __all__ = [
     "Lattice",
@@ -29,4 +31,7 @@ __all__ = [
     "Element",
     "SymmOp",
     "unitized",
+    "ComputedEntry",
+    "ComputedStructureEntry",
+    "Trajectory",
 ]
