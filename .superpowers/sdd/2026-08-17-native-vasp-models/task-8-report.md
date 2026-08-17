@@ -80,3 +80,35 @@
 ## Commit
 
 - Task 8 implementation commit SHA: 2e98fa6a3f699b166a12f96d58acd6335d90e400
+
+## Fix Round 1
+
+### Review Findings Addressed
+
+- Important 1: removed import-time `orjson` requirements from VASP `inputs.py` and `outputs.py`; stdlib `json` now handles JSON load/dump paths, with a small NumPy default encoder for HDF5 POTCAR specs. `tqdm` is now lazy/optional with a no-op iterator fallback when unavailable.
+- Important 2: replaced the checkout-based VASP runtime import smoke with an installed-target smoke. The test installs into `tmp_path` with `--no-deps`, launches from outside the repository, uses `PYTHONPATH` pointing only at that target, asserts `matsimpy.calculator.vasp.__file__` is under the target, blocks `ase`, `pymatgen`, `orjson`, and `tqdm`, and asserts required installed VASP JSON/YAML resources exist.
+- Minor: removed the package-data config-text assertion in favor of behavioral installed-resource checks.
+- Minor: expanded the VASP AST import-boundary test from `glob("*.py")` to `rglob("*.py")` and records relative paths for nested violations.
+
+### TDD Evidence
+
+- RED: `conda run -n pmg python -m pytest tests/test_packaging_runtime_contracts.py::test_vasp_runtime_imports_without_undeclared_dependencies tests/calculator/test_vasp_imports.py::test_vasp_package_never_imports_pymatgen -q`
+  - Result: failed as expected. Installed-target smoke imported from the temp target but failed with `ModuleNotFoundError: blocked optional dependency: orjson` from installed `matsimpy/calculator/vasp/inputs.py`.
+- GREEN: same command after production fix.
+  - Result: `2 passed in 37.00s`.
+
+### Verification
+
+- Source scan: `rg -n "^[[:space:]]*(from|import)[[:space:]]+(pymatgen|orjson|tqdm)\b" matsimpy/calculator/vasp`
+  - Result: only lazy optional `from tqdm import tqdm` inside `_progress_iter`; no `pymatgen` or `orjson` executable imports.
+- Focused package/import/VASP contracts: `conda run -n pmg python -m pytest tests/calculator/test_vasp_imports.py tests/test_packaging_runtime_contracts.py tests/calculator/test_vasp_sets.py -q`
+  - Result: `29 passed, 5 warnings`.
+- Focused VASP/native suite: `conda run -n pmg python -m pytest tests/calculator/test_vasp_imports.py tests/calculator/test_vasp_inputs.py tests/calculator/test_vasp_outputs.py tests/calculator/test_vasp_sets.py tests/calculator/test_vasp_native_outputs.py tests/electronic_structure tests/symmetry tests/core/test_entries.py tests/core/test_trajectory.py tests/core/test_units.py tests/io/test_volumetric_data.py tests/io/test_wannier90.py tests/test_packaging_runtime_contracts.py -q`
+  - Result: `160 passed, 25 warnings`.
+- Static checks:
+  - `conda run -n pmg python -m compileall -q matsimpy` passed.
+  - `git diff --check` passed.
+
+### Fix Round 1 Commit
+
+- Commit SHA: reported by the fix-round executor after commit creation.

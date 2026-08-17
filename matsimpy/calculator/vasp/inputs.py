@@ -14,6 +14,7 @@ All major VASP input files.
 import codecs
 import hashlib
 import itertools
+import json
 import math
 import os
 import re
@@ -29,7 +30,6 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 from zipfile import ZipFile
 
 import numpy as np
-import orjson
 import scipy.constants as const
 from monty.dev import deprecated
 from monty.io import zopen
@@ -877,7 +877,7 @@ class Incar(UserDict, MSONable):
 
     # INCAR tag/value recording
     with open(os.path.join(MODULE_DIR, "incar_parameters.json"), encoding="utf-8") as json_file:
-        INCAR_PARAMS: ClassVar[dict[Literal["type", "values"], Any]] = orjson.loads(json_file.read())
+        INCAR_PARAMS: ClassVar[dict[Literal["type", "values"], Any]] = json.load(json_file)
 
     def __init__(self, params: Mapping[str, Any] | None = None) -> None:
         """

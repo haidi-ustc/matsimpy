@@ -9,7 +9,7 @@ from matsimpy.calculator import vasp
 def imported_modules(source: Path) -> set[str]:
     tree = ast.parse(source.read_text(encoding="utf-8"))
     return {
-        node.module or ""
+        "." * node.level + (node.module or "")
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom)
     } | {
@@ -23,10 +23,10 @@ def imported_modules(source: Path) -> set[str]:
 def test_vasp_package_never_imports_pymatgen():
     vasp_root = Path(vasp.__file__).parent
     violations = []
-    for source in vasp_root.glob("*.py"):
+    for source in vasp_root.rglob("*.py"):
         for module in imported_modules(source):
             if module == "pymatgen" or module.startswith("pymatgen."):
-                violations.append(f"{source.name}: {module}")
+                violations.append(f"{source.relative_to(vasp_root)}: {module}")
     assert violations == []
 
 

@@ -8,6 +8,7 @@ Copyright (c) pymatgen Development Team. MIT License.
 
 import hashlib
 import itertools
+import json
 import logging
 import math
 import os
@@ -23,13 +24,11 @@ from typing import TYPE_CHECKING, Any, cast
 from xml.etree import ElementTree as ET
 
 import numpy as np
-import orjson
 from monty.dev import requires
 from monty.io import reverse_readfile, zopen
 from monty.json import MSONable, jsanitize
 from monty.os.path import zpath
 from monty.re import regrep
-from tqdm import tqdm
 
 from matsimpy.core import Composition, Element, Lattice, Crystal
 from matsimpy.core.entries import ComputedEntry, ComputedStructureEntry
@@ -90,6 +89,22 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _progress_iter(iterable, **kwargs):
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return iterable
+    return tqdm(iterable, **kwargs)
+
+
+def _json_default(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.generic):
+        return obj.item()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 def _parse_parameters(val_type: str, val: str) -> bool | str | float | int:
@@ -4156,7 +4171,7 @@ class Procar(MSONable):
         occupancies_list, kpoints_list, weights_list = [], [], []
         eigenvalues_list, data_list, xyz_data_list = [], [], []
         phase_factors_list = []
-        for filename in tqdm(filenames, desc="Reading PROCARs", unit="file", disable=len(filenames) == 1):
+        for filename in _progress_iter(filenames, desc="Reading PROCARs", unit="file", disable=len(filenames) == 1):
             (
                 kpoints,
                 weights,
@@ -6280,7 +6295,7 @@ class Vaspout(Vasprun):
         elif input_data["potcar"].get("spec"):
             # modified vaspout.h5 with only POTCAR spec
 
-            self.potcar_spec = orjson.loads(input_data["potcar"]["spec"])
+            self.potcar_spec = json.loads(input_data["potcar"]["spec"])
             self.potcar_symbols = [spec["titel"] for spec in self.potcar_spec]
 
         # TODO: do we want POSCAR stored?
@@ -6556,7 +6571,7 @@ class Vaspout(Vasprun):
             potcar_spec = self.potcar_spec
 
         # rather than define custom HDF5 hierarchy for POTCAR spec, just dump JSONable dict to str
-        hdf5_data["input"]["potcar"]["spec"] = orjson.dumps(potcar_spec, option=orjson.OPT_SERIALIZE_NUMPY).decode()
+        hdf5_data["input"]["potcar"]["spec"] = json.dumps(potcar_spec, default=_json_default)
 
         # if file is to be compressed, first write uncompressed file
         with h5py.File(filename, "w") as h5_file:

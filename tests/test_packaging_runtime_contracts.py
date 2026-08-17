@@ -80,13 +80,6 @@ def test_console_scripts_keep_ai_repl_optional():
     assert "cli" not in optional
 
 
-def test_vasp_data_files_are_included_in_package_metadata():
-    pyproject = _read_pyproject()
-    package_data = pyproject["tool"]["setuptools"]["package-data"]
-
-    assert package_data["matsimpy.calculator.vasp"] == ["*.json", "*.yaml", "*.yml"]
-
-
 def test_storage_import_without_maggma_is_quiet_and_actionable():
     script = textwrap.dedent("""
         import builtins
@@ -151,29 +144,74 @@ def test_core_runtime_imports_without_ase_or_pymatgen():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_vasp_runtime_imports_without_ase_or_pymatgen():
+def test_vasp_runtime_imports_without_undeclared_dependencies(tmp_path):
+    target = tmp_path / "site"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    install = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--quiet",
+            "--target",
+            str(target),
+            str(ROOT),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=run_dir,
+    )
+    assert install.returncode == 0, install.stdout + install.stderr
+
     script = textwrap.dedent("""
         import builtins
-        blocked = {"ase", "pymatgen"}
+        import importlib.resources
+        import pathlib
+        import sys
+
+        target = pathlib.Path(sys.argv[1]).resolve()
+        blocked = {"ase", "orjson", "pymatgen", "tqdm"}
         real_import = builtins.__import__
         def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
             if level == 0 and (name in blocked or any(name.startswith(pkg + ".") for pkg in blocked)):
                 raise ModuleNotFoundError(f"blocked optional dependency: {name}", name=name)
             return real_import(name, globals, locals, fromlist, level)
         builtins.__import__ = guarded_import
-        import matsimpy.calculator.vasp
+
+        import matsimpy.calculator.vasp as vasp
         import matsimpy.calculator.vasp.inputs
         import matsimpy.calculator.vasp.outputs
         import matsimpy.calculator.vasp.sets
-        assert matsimpy.calculator.vasp.Incar is not None
+        assert pathlib.Path(vasp.__file__).resolve().is_relative_to(target)
+        assert vasp.Incar is not None
         assert matsimpy.calculator.vasp.inputs.Poscar is not None
         assert matsimpy.calculator.vasp.outputs.Vasprun is not None
         assert matsimpy.calculator.vasp.sets.DictSet is not None
+
+        resources = importlib.resources.files("matsimpy.calculator.vasp")
+        required = {
+            "incar_parameters.json",
+            "vasp_potcar_file_hashes.json",
+            "vasp_potcar_pymatgen_hashes.json",
+            "vasp_potcar_stats.json",
+            "VASPIncarBase.yaml",
+            "MPRelaxSet.yaml",
+            "PBE54Base.yaml",
+            "PBE64Base.yaml",
+            "vdW_parameters.yaml",
+        }
+        missing = sorted(name for name in required if not (resources / name).is_file())
+        assert missing == []
     """)
     result = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, "-c", script, str(target)],
         capture_output=True, text=True,
         check=False,
-        cwd=ROOT,
+        cwd=run_dir,
+        env={"PYTHONPATH": str(target)},
     )
     assert result.returncode == 0, result.stdout + result.stderr
