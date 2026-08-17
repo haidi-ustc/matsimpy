@@ -95,6 +95,41 @@ class TestSymmetryAnalyzer(unittest.TestCase):
         self.assertEqual(self.analyzer._get_crystal_system(230), "Cubic")
         self.assertEqual(self.analyzer._get_crystal_system(999), "Unknown")
 
+    def test_bound_crystal_spglib_services(self):
+        """Test bound-crystal convenience methods backed by spglib."""
+        analyzer = SymmetryAnalyzer(self.test_crystal, symprec=1e-5)
+
+        mesh = analyzer.get_ir_reciprocal_mesh((2, 2, 2))
+        self.assertEqual(sum(weight for _, weight in mesh), 8)
+        self.assertTrue(all(len(kpoint) == 3 for kpoint, _ in mesh))
+
+        primitive = analyzer.get_primitive_standard_structure()
+        conventional = analyzer.get_conventional_standard_structure()
+        self.assertIsInstance(primitive, Crystal)
+        self.assertIsInstance(conventional, Crystal)
+        self.assertEqual(primitive.pbc, self.test_crystal.pbc)
+
+    def test_spglib_services_require_crystal_argument(self):
+        """Test unbound analyzer raises a precise error for service methods."""
+        with self.assertRaisesRegex(ValueError, "crystal must be supplied"):
+            self.analyzer.get_ir_reciprocal_mesh((2, 2, 2))
+
+    def test_spglib_services_raise_precise_optional_dependency_error(self):
+        """Test service methods use the MatSimPy analysis extra message."""
+        import matsimpy.symmetry.analyzer as analyzer_module
+
+        original_has_spglib = analyzer_module.HAS_SPGLIB
+        analyzer_module.HAS_SPGLIB = False
+        try:
+            analyzer = SymmetryAnalyzer(self.test_crystal)
+            with self.assertRaisesRegex(
+                ImportError,
+                r"spglib is required; install MatSimPy\[analysis\]",
+            ):
+                analyzer.get_ir_reciprocal_mesh((2, 2, 2))
+        finally:
+            analyzer_module.HAS_SPGLIB = original_has_spglib
+
 class TestCrystalSymmetryAnalysis(unittest.TestCase):
     """Tests for crystal symmetry analysis."""
     
@@ -307,4 +342,3 @@ class TestConvenienceFunction(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

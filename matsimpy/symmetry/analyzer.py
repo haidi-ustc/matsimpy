@@ -22,6 +22,9 @@ except ImportError:
 from ..core import Crystal, Molecule, Lattice, Element
 
 
+_SPGLIB_IMPORT_ERROR = "spglib is required; install MatSimPy[analysis]"
+
+
 class SymmetryAnalyzer:
     """
     Analyze symmetry of crystal structures and molecules.
@@ -30,14 +33,29 @@ class SymmetryAnalyzer:
     For molecules: Determines point group.
     """
 
-    def __init__(self, symprec: float = 1e-5, angle_tolerance: float = -1.0):
+    def __init__(
+        self,
+        crystal: Optional[Crystal] = None,
+        symprec: float = 1e-5,
+        angle_tolerance: float = -1.0,
+    ):
         """
         Initialize symmetry analyzer.
 
         Args:
+            crystal: Optional bound crystal for convenience symmetry services
             symprec: Symmetry search tolerance (default: 1e-5)
             angle_tolerance: Angle tolerance in degrees (default: -1.0 for automatic)
         """
+        if crystal is not None and not isinstance(crystal, Crystal):
+            if isinstance(crystal, (float, int, np.floating, np.integer)):
+                symprec = float(crystal)
+                crystal = None
+            else:
+                raise TypeError(
+                    "crystal must be a Crystal instance, a numeric symprec, or None"
+                )
+        self.crystal = crystal
         self.symprec = symprec
         self.angle_tolerance = angle_tolerance
         self._symmetry_data = None
@@ -84,19 +102,13 @@ class SymmetryAnalyzer:
             - symmetry_operations: List of symmetry operations
         """
         if not HAS_SPGLIB:
-            raise ImportError(
-                "spglib is required for crystal symmetry analysis. "
-                "Install it with: pip install spglib"
-            )
+            raise ImportError(_SPGLIB_IMPORT_ERROR)
 
-        # Convert crystal to spglib format
-        lattice = crystal.lattice.lattice_vectors
-        positions = crystal.frac_positions
-        numbers = [self._element_to_number(spec) for spec in crystal.species]
+        cell = self._spglib_cell(crystal)
 
         # Get space group information
         dataset = spglib.get_symmetry_dataset(
-            (lattice, positions, numbers),
+            cell,
             symprec=self.symprec,
             angle_tolerance=self.angle_tolerance,
         )
@@ -170,6 +182,116 @@ class SymmetryAnalyzer:
                 else list(equivalent_atoms)
             ),
         }
+
+    def get_ir_reciprocal_mesh(
+        self,
+        mesh: Tuple[int, int, int],
+        crystal: Optional[Crystal] = None,
+        is_shift: Optional[Tuple[int, int, int]] = None,
+        is_time_reversal: bool = True,
+    ) -> List[Tuple[Tuple[float, float, float], int]]:
+        """Return irreducible reciprocal mesh points and integer weights."""
+        self._require_spglib()
+        target = self._resolve_crystal(crystal)
+        mesh_array = np.asarray(mesh, dtype=int)
+        if mesh_array.shape != (3,) or np.any(mesh_array <= 0):
+            raise ValueError("mesh must contain three positive integers")
+
+        shift_array = (
+            np.zeros(3, dtype=int)
+            if is_shift is None
+            else np.asarray(is_shift, dtype=int)
+        )
+        result = spglib.get_ir_reciprocal_mesh(
+            mesh_array,
+            self._spglib_cell(target),
+            is_shift=shift_array,
+            is_time_reversal=is_time_reversal,
+            symprec=self.symprec,
+        )
+        if result is None:
+            raise ValueError("spglib.get_ir_reciprocal_mesh returned None")
+
+        mapping, grid_address = result
+        unique_indices, counts = np.unique(mapping, return_counts=True)
+        mesh_points = []
+        for grid_index, weight in sorted(
+            zip(unique_indices, counts), key=lambda item: int(item[0])
+        ):
+            address = np.asarray(grid_address[int(grid_index)], dtype=float)
+            frac = (address + 0.5 * shift_array) / mesh_array
+            mesh_points.append((tuple(float(x) for x in frac), int(weight)))
+        return mesh_points
+
+    def get_primitive_standard_structure(
+        self,
+        crystal: Optional[Crystal] = None,
+        no_idealize: bool = False,
+    ) -> Crystal:
+        """Return the spglib-standardized primitive structure."""
+        return self._standard_structure(
+            crystal=crystal,
+            to_primitive=True,
+            no_idealize=no_idealize,
+        )
+
+    def get_conventional_standard_structure(
+        self,
+        crystal: Optional[Crystal] = None,
+        no_idealize: bool = False,
+    ) -> Crystal:
+        """Return the spglib-standardized conventional structure."""
+        return self._standard_structure(
+            crystal=crystal,
+            to_primitive=False,
+            no_idealize=no_idealize,
+        )
+
+    def _standard_structure(
+        self,
+        crystal: Optional[Crystal],
+        to_primitive: bool,
+        no_idealize: bool,
+    ) -> Crystal:
+        self._require_spglib()
+        target = self._resolve_crystal(crystal)
+        std_cell = spglib.standardize_cell(
+            self._spglib_cell(target),
+            to_primitive=to_primitive,
+            no_idealize=no_idealize,
+            symprec=self.symprec,
+            angle_tolerance=self.angle_tolerance,
+        )
+        if std_cell is None:
+            raise ValueError("spglib.standardize_cell returned None")
+        lattice, positions, numbers = std_cell
+        species = [Element.from_Z(int(number)).symbol for number in numbers]
+        return Crystal(
+            species,
+            np.asarray(positions, dtype=float).tolist(),
+            Lattice(np.asarray(lattice, dtype=float)),
+            pbc=list(target.pbc),
+            coords_are_cartesian=False,
+        )
+
+    def _require_spglib(self) -> None:
+        if not HAS_SPGLIB:
+            raise ImportError(_SPGLIB_IMPORT_ERROR)
+
+    def _resolve_crystal(self, crystal: Optional[Crystal] = None) -> Crystal:
+        target = crystal if crystal is not None else self.crystal
+        if target is None:
+            raise ValueError("crystal must be supplied for this symmetry service")
+        if not isinstance(target, Crystal):
+            raise TypeError(f"Expected Crystal, got {type(target).__name__}")
+        return target
+
+    def _spglib_cell(self, crystal: Crystal) -> Tuple[np.ndarray, np.ndarray, List[int]]:
+        return (
+            np.asarray(crystal.lattice.lattice_vectors, dtype=float),
+            np.asarray(crystal.frac_positions, dtype=float),
+            [self._element_to_number(spec) for spec in crystal.species],
+        )
 
     def analyze_molecule(
         self, molecule: Molecule, tolerance: float = 0.1
@@ -859,10 +981,7 @@ def get_conventional_cell(
     try:
         import spglib
     except ImportError:
-        raise ImportError(
-            "spglib is required for conventional cell conversion. "
-            "Install it with: pip install spglib"
-        )
+        raise ImportError(_SPGLIB_IMPORT_ERROR)
 
     from ..core import Element, Lattice
 

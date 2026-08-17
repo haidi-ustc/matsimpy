@@ -16,5 +16,13 @@ in the symmetry directory, providing access to:
 """
 
 from .analyzer import SymmetryAnalyzer, analyze_symmetry, get_conventional_cell
+from .kpath import HighSymmetryKpath
+from .matcher import StructureMatcher
 
-__all__ = ["SymmetryAnalyzer", "analyze_symmetry", "get_conventional_cell"]
+__all__ = [
+    "SymmetryAnalyzer",
+    "analyze_symmetry",
+    "get_conventional_cell",
+    "HighSymmetryKpath",
+    "StructureMatcher",
+]
