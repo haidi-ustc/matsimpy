@@ -29,6 +29,12 @@ class TestSymmetryAnalyzer(unittest.TestCase):
         analyzer = SymmetryAnalyzer(symprec=1e-4, angle_tolerance=5.0)
         self.assertEqual(analyzer.symprec, 1e-4)
         self.assertEqual(analyzer.angle_tolerance, 5.0)
+
+    def test_legacy_positional_initialization(self):
+        """Test numeric positional args still mean symprec, angle_tolerance."""
+        analyzer = SymmetryAnalyzer(1e-4, 5.0)
+        self.assertEqual(analyzer.symprec, 1e-4)
+        self.assertEqual(analyzer.angle_tolerance, 5.0)
     
     def test_symmetry_data_loading(self):
         """Test that symmetry data is loaded."""

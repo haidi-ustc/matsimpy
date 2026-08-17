@@ -29,11 +29,19 @@ class HighSymmetryKpath:
         analyzer = SymmetryAnalyzer(crystal, symprec=symprec)
         symmetry = analyzer.analyze_crystal(crystal)
         self.crystal_system = symmetry.get("crystal_system")
+        self.space_group_symbol = symmetry.get("space_group_symbol")
 
         if self.crystal_system != "Cubic":
             raise NotImplementedError(
                 "HighSymmetryKpath only supports the native primitive-cubic "
                 f"path table; detected crystal system: {self.crystal_system}"
+            )
+        centering = self._space_group_centering(self.space_group_symbol)
+        if centering != "P":
+            raise NotImplementedError(
+                "HighSymmetryKpath only supports the native primitive-cubic "
+                "path table; detected cubic space group "
+                f"{self.space_group_symbol} with centering {centering}"
             )
 
         self.kpath = {
@@ -44,6 +52,12 @@ class HighSymmetryKpath:
             "path": [list(segment) for segment in _PRIMITIVE_CUBIC_KPATH["path"]],
             "provenance": _PRIMITIVE_CUBIC_KPATH["provenance"],
         }
+
+    @staticmethod
+    def _space_group_centering(space_group_symbol: str | None) -> str | None:
+        if not space_group_symbol:
+            return None
+        return space_group_symbol.strip()[0]
 
     def get_kpoints(
         self,
@@ -57,11 +71,13 @@ class HighSymmetryKpath:
         kpoints: list[list[float]] = []
         labels: list[str] = []
         for path in self.kpath["path"]:
-            for start_label, end_label in zip(path[:-1], path[1:]):
+            for segment_index, (start_label, end_label) in enumerate(
+                zip(path[:-1], path[1:])
+            ):
                 start = np.array(self.kpath["kpoints"][start_label], dtype=float)
                 end = np.array(self.kpath["kpoints"][end_label], dtype=float)
                 for index in range(line_density + 1):
-                    if kpoints and index == 0:
+                    if segment_index > 0 and index == 0:
                         continue
                     fraction = index / line_density
                     point = (1.0 - fraction) * start + fraction * end

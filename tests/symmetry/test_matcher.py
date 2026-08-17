@@ -29,3 +29,18 @@ def test_structure_matcher_rejects_different_lattices():
     second = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.50))
 
     assert not StructureMatcher(ltol=1e-3).fit(first, second)
+
+
+def test_structure_matcher_finds_non_greedy_site_assignment():
+    first = Crystal(
+        ["Si", "Si"],
+        [[0.09, 0, 0], [0.0, 0, 0]],
+        Lattice.cubic(10),
+    )
+    second = Crystal(
+        ["Si", "Si"],
+        [[0.05, 0, 0], [0.11, 0, 0]],
+        Lattice.cubic(10),
+    )
+
+    assert StructureMatcher(stol=0.06).fit(first, second)

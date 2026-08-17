@@ -29,21 +29,25 @@ class StructureMatcher:
         if not self._lattices_match(first, second):
             return False
 
-        unmatched = defaultdict(list)
-        for index, symbol in enumerate(second.species):
-            unmatched[symbol].append(index)
-
-        for symbol, frac_position in zip(first.species, first.frac_positions):
-            match_index = self._find_site_match(
-                frac_position,
+        first_by_species = self._indices_by_species(first)
+        second_by_species = self._indices_by_species(second)
+        for symbol, first_indices in sorted(first_by_species.items()):
+            if not self._species_sites_match(
+                first.frac_positions,
+                first_indices,
                 second.frac_positions,
-                unmatched[symbol],
-            )
-            if match_index is None:
+                second_by_species[symbol],
+            ):
                 return False
-            unmatched[symbol].remove(match_index)
 
         return True
+
+    @staticmethod
+    def _indices_by_species(crystal: Crystal) -> dict[str, list[int]]:
+        indices = defaultdict(list)
+        for index, symbol in enumerate(crystal.species):
+            indices[symbol].append(index)
+        return dict(indices)
 
     def _lattices_match(self, first: Crystal, second: Crystal) -> bool:
         lengths1 = np.array([first.lattice.a, first.lattice.b, first.lattice.c])
@@ -60,15 +64,58 @@ class StructureMatcher:
         )
         return bool(np.all(np.abs(angles1 - angles2) <= self.angle_tol))
 
-    def _find_site_match(
+    def _species_sites_match(
         self,
-        frac_position: np.ndarray,
+        first_frac_positions: np.ndarray,
+        first_indices: list[int],
         other_frac_positions: np.ndarray,
         candidate_indices: list[int],
-    ) -> int | None:
-        for index in candidate_indices:
-            delta = np.asarray(frac_position) - other_frac_positions[index]
-            delta -= np.round(delta)
-            if float(np.linalg.norm(delta)) <= self.stol:
-                return index
-        return None
+    ) -> bool:
+        candidate_rows = []
+        for first_index in first_indices:
+            candidates = []
+            for second_index in candidate_indices:
+                distance = self._periodic_fractional_distance(
+                    first_frac_positions[first_index],
+                    other_frac_positions[second_index],
+                )
+                if distance <= self.stol:
+                    candidates.append((second_index, distance))
+            if not candidates:
+                return False
+            candidate_rows.append(
+                (
+                    first_index,
+                    sorted(candidates, key=lambda item: (item[1], item[0])),
+                )
+            )
+
+        candidate_rows.sort(key=lambda item: (len(item[1]), item[0]))
+        return self._has_complete_assignment(candidate_rows, set())
+
+    def _has_complete_assignment(
+        self,
+        candidate_rows: list[tuple[int, list[tuple[int, float]]]],
+        used_indices: set[int],
+    ) -> bool:
+        if not candidate_rows:
+            return True
+
+        _, candidates = candidate_rows[0]
+        for second_index, _ in candidates:
+            if second_index in used_indices:
+                continue
+            used_indices.add(second_index)
+            if self._has_complete_assignment(candidate_rows[1:], used_indices):
+                return True
+            used_indices.remove(second_index)
+        return False
+
+    @staticmethod
+    def _periodic_fractional_distance(
+        first_frac_position: np.ndarray,
+        second_frac_position: np.ndarray,
+    ) -> float:
+        delta = np.asarray(first_frac_position) - np.asarray(second_frac_position)
+        delta -= np.round(delta)
+        return float(np.linalg.norm(delta))

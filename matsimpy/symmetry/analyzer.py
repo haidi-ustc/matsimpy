@@ -49,6 +49,8 @@ class SymmetryAnalyzer:
         """
         if crystal is not None and not isinstance(crystal, Crystal):
             if isinstance(crystal, (float, int, np.floating, np.integer)):
+                if symprec != 1e-5 and angle_tolerance == -1.0:
+                    angle_tolerance = float(symprec)
                 symprec = float(crystal)
                 crystal = None
             else:
