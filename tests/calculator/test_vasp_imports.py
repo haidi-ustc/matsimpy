@@ -1,8 +1,33 @@
 """Tests for VASP calculator — imports and basic functionality."""
 
-import pytest
-import numpy as np
-from matsimpy.core import Crystal, Lattice
+import ast
+from pathlib import Path
+
+from matsimpy.calculator import vasp
+
+
+def imported_modules(source: Path) -> set[str]:
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    return {
+        node.module or ""
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+    } | {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+
+
+def test_vasp_package_never_imports_pymatgen():
+    vasp_root = Path(vasp.__file__).parent
+    violations = []
+    for source in vasp_root.glob("*.py"):
+        for module in imported_modules(source):
+            if module == "pymatgen" or module.startswith("pymatgen."):
+                violations.append(f"{source.name}: {module}")
+    assert violations == []
 
 
 class TestVaspImports:

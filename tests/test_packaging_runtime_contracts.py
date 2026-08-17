@@ -1,10 +1,10 @@
 """Packaging and runtime contract tests that unit tests do not otherwise cover."""
 
-import builtins
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
@@ -80,6 +80,13 @@ def test_console_scripts_keep_ai_repl_optional():
     assert "cli" not in optional
 
 
+def test_vasp_data_files_are_included_in_package_metadata():
+    pyproject = _read_pyproject()
+    package_data = pyproject["tool"]["setuptools"]["package-data"]
+
+    assert package_data["matsimpy.calculator.vasp"] == ["*.json", "*.yaml", "*.yml"]
+
+
 def test_storage_import_without_maggma_is_quiet_and_actionable():
     script = textwrap.dedent("""
         import builtins
@@ -112,6 +119,7 @@ def test_storage_import_without_maggma_is_quiet_and_actionable():
     result = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
+        check=False,
         cwd=ROOT,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -137,6 +145,35 @@ def test_core_runtime_imports_without_ase_or_pymatgen():
     result = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_vasp_runtime_imports_without_ase_or_pymatgen():
+    script = textwrap.dedent("""
+        import builtins
+        blocked = {"ase", "pymatgen"}
+        real_import = builtins.__import__
+        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if level == 0 and (name in blocked or any(name.startswith(pkg + ".") for pkg in blocked)):
+                raise ModuleNotFoundError(f"blocked optional dependency: {name}", name=name)
+            return real_import(name, globals, locals, fromlist, level)
+        builtins.__import__ = guarded_import
+        import matsimpy.calculator.vasp
+        import matsimpy.calculator.vasp.inputs
+        import matsimpy.calculator.vasp.outputs
+        import matsimpy.calculator.vasp.sets
+        assert matsimpy.calculator.vasp.Incar is not None
+        assert matsimpy.calculator.vasp.inputs.Poscar is not None
+        assert matsimpy.calculator.vasp.outputs.Vasprun is not None
+        assert matsimpy.calculator.vasp.sets.DictSet is not None
+    """)
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True, text=True,
+        check=False,
         cwd=ROOT,
     )
     assert result.returncode == 0, result.stdout + result.stderr

@@ -326,7 +326,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             for key, val in self.user_potcar_settings.items():
                 self._config_dict["POTCAR"][key] = val
 
-        if not isinstance(self.structure, Structure):
+        if self.structure is None:
             self._structure: Structure | None = None
         else:
             # TODO is this needed? should it be self._structure = self.structure (needs explanation either way)

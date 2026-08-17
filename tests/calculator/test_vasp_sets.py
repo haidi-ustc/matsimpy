@@ -6,9 +6,9 @@ Uses matsimpy structures and imports.
 import ast
 from pathlib import Path
 
-from matsimpy.core import Crystal, Lattice
 from matsimpy.calculator.vasp import sets
 from matsimpy.calculator.vasp.inputs import Kpoints
+from matsimpy.core import Crystal, Lattice
 
 
 def test_sets_source_has_no_pymatgen_imports():
@@ -46,6 +46,47 @@ def test_automatic_ir_mesh_uses_native_symmetry():
     )
 
     assert isinstance(vset.kpoints, Kpoints)
+
+
+def test_dictset_rejects_non_native_structure():
+    from matsimpy.calculator.vasp.sets import DictSet
+
+    try:
+        DictSet("not a structure", config_dict={"INCAR": {"ENCUT": 400}})
+    except TypeError as exc:
+        assert "VASP input sets require a matsimpy Crystal" in str(exc)
+    else:
+        raise AssertionError("DictSet should reject non-native structures")
+
+
+def test_dictset_fails_clearly_when_reduce_structure_requested():
+    from matsimpy.calculator.vasp.sets import DictSet
+
+    crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+
+    try:
+        DictSet(
+            crystal,
+            config_dict={"INCAR": {"ENCUT": 400}},
+            reduce_structure="niggli",
+        )
+    except NotImplementedError as exc:
+        assert "Native VASP input sets do not yet support reduce_structure" in str(exc)
+    else:
+        raise AssertionError("DictSet should fail clearly for reduce_structure")
+
+
+def test_standardize_structure_rejects_curtarolo_monoclinic_setting():
+    from matsimpy.calculator.vasp.sets import standardize_structure
+
+    crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+
+    try:
+        standardize_structure(crystal, international_monoclinic=False)
+    except NotImplementedError as exc:
+        assert "only supports the international setting" in str(exc)
+    else:
+        raise AssertionError("standardize_structure should reject unsupported monoclinic setting")
 
 
 class TestDictSet:
