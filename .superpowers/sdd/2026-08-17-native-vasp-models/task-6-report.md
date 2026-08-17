@@ -53,3 +53,29 @@
 
 - Existing fixture runs emit POTCAR lookup warnings because matching POTCAR files are not present in the fixture directory; this is pre-existing parser behavior and did not fail tests.
 - The new complete DOS projected-data keys are site indexes, not site objects, because native `CrystalSite` is intentionally unhashable.
+
+## Fix Round 1: Review Findings
+
+### Files Changed
+
+- `matsimpy/calculator/vasp/outputs.py`
+  - Replaced the remaining pymatgen-style `lattice.reciprocal_lattice.matrix` call in `Vasprun.get_band_structure()` with native `Lattice.get_reciprocal_lattice()`.
+  - Changed `get_adjusted_fermi_level()` to update native `BandStructureSymmLine.efermi` instead of unused `_efermi`.
+
+- `tests/calculator/test_vasp_native_outputs.py`
+  - Added a fixture-backed regression proving `Vasprun(...).get_band_structure()` returns a native `BandStructure` without error.
+  - Added a focused regression proving an adjusted in-gap Fermi candidate is returned.
+
+### Test Commands and Results
+
+- Red check before fix:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py -q`
+  - Result: failed as expected with 2 failures. `get_band_structure()` raised `AttributeError: 'Lattice' object has no attribute 'reciprocal_lattice'`, and `get_adjusted_fermi_level()` returned `0.0` instead of `0.05`.
+
+- Focused native-output regressions:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py -q`
+  - Result: 4 passed, 4 warnings.
+
+- Relevant Task 6 parser/import suite:
+  - `conda run -n pmg python -m pytest tests/calculator/test_vasp_native_outputs.py tests/calculator/test_vasp_outputs.py tests/calculator/test_vasp_imports.py -q`
+  - Result: 26 passed, 17 warnings.

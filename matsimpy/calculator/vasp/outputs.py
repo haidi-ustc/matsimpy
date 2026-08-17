@@ -1062,7 +1062,7 @@ class Vasprun(MSONable):
         kpoint_file: Kpoints | None = None
         if kpoints_filename and os.path.isfile(kpoints_filename):
             kpoint_file = Kpoints.from_file(kpoints_filename)
-        lattice_new = Lattice(self.final_structure.lattice.reciprocal_lattice.matrix)
+        lattice_new = self.final_structure.lattice.get_reciprocal_lattice()
 
         if use_kpoints_opt:
             if self.kpoints_opt_props is None or self.kpoints_opt_props.actual_kpoints is None:
@@ -5041,7 +5041,7 @@ def get_adjusted_fermi_level(
         energy = efermi
         while energy < cbm:
             energy += energy_step
-            bs_working._efermi = energy
+            bs_working.efermi = energy
             if not bs_working.is_metal():
                 return energy
     return efermi
