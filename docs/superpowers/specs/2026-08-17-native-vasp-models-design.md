@@ -16,10 +16,9 @@ runtime calls. No file under `matsimpy/calculator/vasp` may import or lazily loa
 `pymatgen`, including inside `TYPE_CHECKING` blocks. Validation tests may import
 pymatgen when marked `requires_pymatgen` or guarded by `pytest.importorskip`.
 
-Historical attribution, compatibility metadata, existing environment-variable
-names, and hash-database filenames may retain the word `pymatgen` where changing
-them would remove attribution or break data compatibility. These references do
-not create a runtime dependency.
+Historical attribution remains where required. Pymatgen-shaped metadata names,
+environment-variable names, messages, and internal filenames may be renamed or
+removed. There is no backward-compatibility requirement for these surfaces.
 
 ## Architecture
 
@@ -70,10 +69,10 @@ branches are adapted to `Crystal`, `CrystalSite`, and `Element`. Citation-only
 decorators become a small internal no-op or are removed when they do not affect
 behavior.
 
-`calculator.py` and the VASP package exports continue to expose the existing
-public VASP API. Native replacement objects should preserve the attributes,
-serialization shape, and operations that current VASP code actually uses so
-that callers do not need a pymatgen installation.
+`calculator.py` and the VASP package exports expose a coherent native API.
+Replacement objects implement the operations current VASP workflows need, but
+do not preserve pymatgen-specific attributes, serialization shapes, aliases, or
+unused methods solely for compatibility.
 
 ## Graceful Capability Handling
 
@@ -82,11 +81,11 @@ optional native backend is absent, the method that needs it raises a clear
 `ImportError` naming the MatSimPy extra to install. Importing the VASP package,
 parsing ordinary VASP files, and using unrelated features must continue to work.
 
-If an advanced pymatgen API has no VASP consumer, it is out of scope. If a VASP
-consumer needs behavior that cannot be implemented faithfully in the first
-pass, the native method raises a specific `NotImplementedError` at that narrow
-operation. It must not return `None`, construct a dummy class, or silently emit
-incorrect scientific data.
+If an inherited advanced API has no VASP consumer, remove it rather than porting
+it. If a VASP workflow needs behavior that cannot be implemented faithfully in
+the first pass, the native method raises a specific `NotImplementedError` at
+that narrow operation. It must not return `None`, construct a dummy class, or
+silently emit incorrect scientific data.
 
 ## Validation Strategy
 
@@ -104,13 +103,17 @@ Development follows test-first migration, one native concept at a time:
 5. Run targeted tests, the VASP test suite, lint/static checks available in the
    repository, and then the full test suite with `conda run -n pmg`.
 
-## Compatibility and Scope
+## Scope and Migration Policy
 
-The migration preserves existing VASP parsing and input-generation behavior.
-It does not attempt to reproduce the entire pymatgen public API, remove the
+Backward compatibility is explicitly out of scope. Existing VASP method names,
+signatures, exports, serialized forms, messages, and configuration names may
+change when a clearer native design requires it. Scientific file semantics and
+the supported VASP workflows remain the correctness target.
+
+The migration does not reproduce the entire pymatgen public API, remove the
 optional pymatgen IO conversion feature elsewhere in MatSimPy, or rewrite
-non-VASP calculators. Public VASP methods retain their names; returned advanced
-objects become MatSimPy-native equivalents.
+non-VASP calculators. It ports only behavior required by supported VASP
+workflows and removes inherited dead surfaces.
 
 The work is complete when the VASP package contains no pymatgen imports, its
 covered APIs return native objects without pymatgen being importable, optional
