@@ -1627,6 +1627,18 @@ class Element:
         )
 
 
+def get_el_sp(value: Element | str | Integral) -> Element:
+    if isinstance(value, Element):
+        return value
+    if isinstance(value, bool):
+        raise TypeError("Element values cannot be booleans")
+    if isinstance(value, Integral):
+        return Element.from_Z(int(value))
+    if isinstance(value, str):
+        return Element.get_element(value)
+    raise TypeError("Element values must be Element, string, or atomic number")
+
+
 if __name__ == "__main__":
     h = Element("H")
     print(h)

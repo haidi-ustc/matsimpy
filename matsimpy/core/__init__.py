@@ -14,7 +14,7 @@ from .structure import Structure
 from .molecule import Molecule
 from .crystal import Crystal
 from .site import Site, CrystalSite
-from .periodic_table import Element
+from .periodic_table import Element, get_el_sp
 from .symmop import SymmOp
 from .units import unitized
 from .entries import ComputedEntry, ComputedStructureEntry
@@ -29,6 +29,7 @@ __all__ = [
     "Crystal",
     "Molecule",
     "Element",
+    "get_el_sp",
     "SymmOp",
     "unitized",
     "ComputedEntry",

@@ -42,6 +42,24 @@ class TestElementComprehensive(unittest.TestCase):
         og = Element.get_element('og')
         self.assertEqual(og.symbol, 'Og')
         self.assertEqual(og.atomic_no, 118)
+
+    def test_get_el_sp_normalizes_supported_inputs(self):
+        """Core resolver should normalize Elements, symbols, and atomic numbers."""
+        from matsimpy.core import get_el_sp
+
+        fe = Element.get_element("Fe")
+        self.assertIs(get_el_sp(fe), fe)
+        self.assertIs(get_el_sp("fe"), fe)
+        self.assertIs(get_el_sp(26), fe)
+
+    def test_get_el_sp_rejects_unsupported_inputs(self):
+        """Core resolver should reject unsupported element representations."""
+        from matsimpy.core import get_el_sp
+
+        for value in (True, None, object()):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    get_el_sp(value)
     
     def test_element_from_Z_invalid_low(self):
         """Test invalid atomic number (too low)."""
