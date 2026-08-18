@@ -38,6 +38,56 @@ class Orbital(IntEnum):
 
 
 class Magmom(MSONable):
+    __slots__ = ("_components",)
+
     def __init__(self, value):
         values = value if isinstance(value, (list, tuple, np.ndarray)) else [value]
-        self.components = tuple(float(component) for component in values)
+        components = tuple(float(component) for component in values)
+        if len(components) not in (1, 3):
+            raise ValueError("Magmom requires one or three components.")
+        object.__setattr__(self, "_components", components)
+
+    def __setattr__(self, name, value):
+        if name == "_components" and not hasattr(self, "_components"):
+            object.__setattr__(self, name, value)
+            return
+        raise AttributeError("Magmom is immutable.")
+
+    @property
+    def components(self):
+        return self._components
+
+    def __len__(self):
+        return len(self.components)
+
+    def __iter__(self):
+        return iter(self.components)
+
+    def __getitem__(self, index):
+        return self.components[index]
+
+    def __float__(self):
+        if len(self.components) != 1:
+            raise TypeError("Only scalar Magmom values can be converted to float.")
+        return self.components[0]
+
+    def __eq__(self, other):
+        if not isinstance(other, Magmom):
+            return NotImplemented
+        return self.components == other.components
+
+    def __repr__(self):
+        if len(self.components) == 1:
+            return f"Magmom({self.components[0]!r})"
+        return f"Magmom({list(self.components)!r})"
+
+    def as_dict(self):
+        return {
+            "@module": type(self).__module__,
+            "@class": type(self).__name__,
+            "value": list(self.components),
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(data["value"])
