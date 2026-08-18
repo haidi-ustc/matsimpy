@@ -34,7 +34,7 @@ from matsimpy.core import Composition, Element, Lattice, Crystal
 from matsimpy.core.entries import ComputedEntry, ComputedStructureEntry
 from matsimpy.core.trajectory import Trajectory
 from matsimpy.core.units import unitized
-from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
+from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri, micro_pyawk
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, KpointsSupportedModes, Poscar, Potcar
 from matsimpy.electronic_structure import (
     BandStructure,
@@ -53,22 +53,6 @@ from matsimpy.io.wannier90 import Unk
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
-
-# micro_pyawk: inline the tiny helper
-def micro_pyawk(filename, search, results=None, debug=None, postdebug=None):
-    """Simple file scanning helper. Adapted from pymatgen.util.io_utils.micro_pyawk."""
-    if results is None:
-        results = {}
-    with zopen(filename, "rt") as f:
-        for line in f:
-            for key, pattern in search.items():
-                if match := re.search(pattern, line):
-                    results[key] = match
-                    if debug:
-                        import pdb; pdb.set_trace()
-            if postdebug is not None:
-                import pdb; pdb.set_trace()
-    return results
 
 try:
     import h5py
