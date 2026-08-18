@@ -165,7 +165,7 @@ class TestKpoints:
         assert kpt.style == Kpoints.supported_modes.Monkhorst
 
     def test_automatic_density_propagates_symmetry_failures(self, monkeypatch):
-        import matsimpy.calculator.vasp.inputs as inputs
+        from matsimpy.calculator.vasp import inputs
         from matsimpy.calculator.vasp.inputs import Kpoints
 
         class FailingSymmetryAnalyzer:
@@ -308,6 +308,11 @@ direct
         lines = s.split("\n")
         assert len(lines) > 5
 
+    def test_get_string_migration_wrapper_is_absent(self):
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        assert not hasattr(Poscar, "get_string")
+
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(FIXTURES_DIR, "POSCAR")),
         reason="Fixture not available",
@@ -326,3 +331,50 @@ direct
         assert ms_poscar.site_symbols == pmg_poscar.site_symbols
         # Compare natoms
         assert ms_poscar.natoms == pmg_poscar.natoms
+
+
+class TestVaspInput:
+    @pytest.fixture
+    def si_input(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints, Poscar, VaspInput
+
+        crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+        return VaspInput(
+            incar={"ENCUT": 400},
+            kpoints=Kpoints.automatic([1, 1, 1]),
+            poscar=Poscar(crystal),
+            potcar="Si POTCAR",
+        )
+
+    def test_zip_write_failure_raises_contextual_oserror(self, si_input, tmp_path, monkeypatch):
+        import matsimpy.calculator.vasp.inputs as inputs
+
+        original_write = inputs.ZipFile.write
+
+        def fail_on_kpoints(zip_file, filename, arcname=None, *args, **kwargs):
+            if arcname == "KPOINTS":
+                raise FileNotFoundError("simulated archive source loss")
+            kwargs["arcname"] = arcname
+            return original_write(zip_file, filename, *args, **kwargs)
+
+        monkeypatch.setattr(inputs.ZipFile, "write", fail_on_kpoints)
+
+        with pytest.raises(OSError, match="Failed to archive VASP input KPOINTS") as exc_info:
+            si_input.write_input(tmp_path, zip_name="inputs.zip")
+
+        assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+    def test_zip_cleanup_failure_raises_contextual_oserror(self, si_input, tmp_path, monkeypatch):
+        from matsimpy.calculator.vasp import inputs
+
+        def fail_remove(filename):
+            if os.path.basename(filename) == "KPOINTS":
+                raise PermissionError("simulated cleanup denial")
+            os.unlink(filename)
+
+        monkeypatch.setattr(inputs.os, "remove", fail_remove)
+
+        with pytest.raises(OSError, match="Failed to remove archived VASP input KPOINTS") as exc_info:
+            si_input.write_input(tmp_path, zip_name="inputs.zip")
+
+        assert isinstance(exc_info.value.__cause__, PermissionError)

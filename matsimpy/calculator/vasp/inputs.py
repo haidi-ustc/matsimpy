@@ -30,7 +30,6 @@ from zipfile import ZipFile
 
 import numpy as np
 import scipy.constants as const
-from monty.dev import deprecated
 from monty.io import zopen
 from monty.json import MontyDecoder, MSONable
 from monty.os import cd
@@ -729,10 +728,6 @@ class Poscar(MSONable):
                 )
 
         return "\n".join(lines) + "\n"
-
-    @deprecated(get_str)
-    def get_string(self, *args, **kwargs):
-        return self.get_str(*args, **kwargs)
 
     def write_file(self, filename: PathLike, **kwargs) -> None:
         """Write POSCAR to a file. The supported kwargs are the same as those for
@@ -1496,7 +1491,7 @@ class Kpoints(MSONable):
             Kpoints
         """
         if comment is None:
-            comment = f"pymatgen with grid density = {kppa:.0f} / number of atoms"
+            comment = f"MatSimPy automatic grid density = {kppa:.0f} / number of atoms"
 
         if abs((math.floor(kppa ** (1 / 3) + 0.5)) ** 3 - kppa) < 1:
             kppa += kppa * 0.01
@@ -1545,7 +1540,7 @@ class Kpoints(MSONable):
             comment (str): Comment in Kpoints.
         """
         if comment is None:
-            comment = f"pymatgen with grid density = {kppa:.0f} / number of atoms"
+            comment = f"MatSimPy automatic grid density = {kppa:.0f} / number of atoms"
 
         lattice = structure.lattice
         a, b, c = np.linalg.norm(lattice.matrix, axis=1)
@@ -2042,7 +2037,7 @@ class PotcarSingle:
             data (str): Complete, single and raw POTCAR file as a string.
             symbol (str): POTCAR symbol corresponding to the filename suffix
                 e.g. "Tm_3" for POTCAR.TM_3".
-                If not given, pymatgen will attempt to extract the symbol
+                If not given, MatSimPy will attempt to extract the symbol
                 from the file itself, but is not always reliable!
         """
         self.data = data
@@ -2132,8 +2127,8 @@ class PotcarSingle:
         # and possibly SHA256 hashes contained in the file itself.
         if not self.is_valid:
             warnings.warn(
-                f"POTCAR data with symbol {self.symbol} is not known to pymatgen. Your "
-                "POTCAR may be corrupted or pymatgen's POTCAR database is incomplete.",
+                f"POTCAR data with symbol {self.symbol} is not known to MatSimPy. Your "
+                "POTCAR may be corrupted or MatSimPy's POTCAR database is incomplete.",
                 UnknownPotcarWarning,
                 stacklevel=2,
             )
@@ -3044,13 +3039,12 @@ class Potcar(list, MSONable):
     ) -> None:
         """
         Initialize the POTCAR from a set of symbols. Currently, the POTCARs can
-        be fetched from a location specified in .pmgrc.yaml. Use pmg config
-        to add this setting.
+        be fetched from the configured PMG_VASP_PSP_DIR.
 
         Args:
             symbols (list[str]): A list of element symbols
             functional (str): The functional to use. If None, the setting
-                PMG_DEFAULT_FUNCTIONAL in .pmgrc.yaml is used, or if this is
+                PMG_DEFAULT_FUNCTIONAL is used, or if this is
                 not set, it will default to PBE.
             sym_potcar_map (dict): A map of symbol to raw POTCAR string. If
                 sym_potcar_map is specified, POTCARs will be generated from
@@ -3130,7 +3124,7 @@ class VaspInput(dict, MSONable):
                 True --> POTCAR is a list of symbols, write POTCAR.spec
                 False --> POTCAR is a VASP POTCAR, write POTCAR
             optional_files (dict): Other input files supplied as a dict of {filename: object}.
-                The object should follow standard pymatgen conventions in implementing a
+                The object should follow MatSimPy serialization conventions in implementing an
                 as_dict() and from_dict method.
             **kwargs: Additional keyword arguments to be stored in the VaspInput object.
         """
@@ -3218,13 +3212,13 @@ class VaspInput(dict, MSONable):
                 for file in files_to_zip:
                     try:
                         zip_file.write(os.path.join(output_dir, file), arcname=file)  # type:ignore[arg-type]
-                    except FileNotFoundError:
-                        pass
+                    except OSError as exc:
+                        raise OSError(f"Failed to archive VASP input {file!s}") from exc
 
                     try:
                         os.remove(os.path.join(output_dir, file))
-                    except (FileNotFoundError, PermissionError, IsADirectoryError):
-                        pass
+                    except OSError as exc:
+                        raise OSError(f"Failed to remove archived VASP input {file!s}") from exc
 
         files_to_transfer = files_to_transfer or {}
         for key, val in files_to_transfer.items():

@@ -28,6 +28,12 @@ def test_sets_source_has_no_pymatgen_imports():
     assert not any(name == "pymatgen" or name.startswith("pymatgen.") for name in modules)
 
 
+def test_vasp_input_set_get_vasp_input_migration_wrapper_is_absent():
+    from matsimpy.calculator.vasp.sets import VaspInputSet
+
+    assert not hasattr(VaspInputSet, "get_vasp_input")
+
+
 def test_element_reads_existing_quadrupole_data():
     from matsimpy.core import Element
 
@@ -136,6 +142,20 @@ def test_vasp_sets_resolve_element_like_inputs_with_core_helper():
         vset = DictSet(crystal, config_dict=config, user_incar_settings={"MAGMOM": setting})
 
         assert vset.incar["MAGMOM"] == [1.5]
+
+
+def test_calculate_ng_uses_canonical_input_set(monkeypatch):
+    from matsimpy.calculator.vasp.sets import DictSet
+
+    class PotcarEntry:
+        enmax = 200
+
+    crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+    vset = DictSet(crystal, config_dict={"INCAR": {}, "POTCAR": {"Si": "Si"}})
+
+    monkeypatch.setattr(vset, "get_input_set", lambda: {"POTCAR": [PotcarEntry()]})
+
+    assert vset.calculate_ng()
 
 
 class TestDictSet:

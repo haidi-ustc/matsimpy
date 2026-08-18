@@ -11,6 +11,22 @@ import numpy as np
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
 
 
+def test_projected_magnetisation_migration_wrappers_are_absent():
+    from matsimpy.calculator.vasp.outputs import KpointOptProps, Vasprun
+
+    assert not hasattr(KpointOptProps, "projected_magnetisation")
+    assert not hasattr(Vasprun, "projected_magnetisation")
+
+
+def test_multiple_branch_band_structure_requires_branch_directories(tmp_path):
+    from matsimpy.calculator.vasp.outputs import get_band_structure_from_vasp_multiple_branches
+
+    (tmp_path / "vasprun.xml").write_text("<modeling></modeling>", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="branch_0"):
+        get_band_structure_from_vasp_multiple_branches(tmp_path)
+
+
 class TestOutcar:
     def test_from_file(self):
         """Parse OUTCAR from real VASP fixture."""

@@ -216,27 +216,6 @@ class KpointOptProps:
     actual_kpoints_weights: list | None = None
     dos_has_errors: bool | None = None
 
-    # TODO: remove after 2026-09-06
-    @property
-    def projected_magnetisation(self) -> NDArray | None:
-        warnings.warn(
-            "`projected_magnetisation` is deprecated and will be removed. "
-            "Use `projected_magnetization` (US spelling) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.projected_magnetization
-
-    @projected_magnetisation.setter
-    def projected_magnetisation(self, value: NDArray | None) -> None:
-        warnings.warn(
-            "`projected_magnetisation` is deprecated and will be removed. "
-            "Use `projected_magnetization` (US spelling) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.projected_magnetization = value
-
 
 @dataclass
 class BandgapProps(MSONable):
@@ -424,27 +403,6 @@ class Vasprun(MSONable):
                 UnconvergedVASPWarning,
                 stacklevel=2,
             )
-
-    # TODO: remove after 2026-09-06
-    @property
-    def projected_magnetisation(self) -> NDArray | None:
-        warnings.warn(
-            "`projected_magnetisation` is deprecated and will be removed. "
-            "Use `projected_magnetization` (US spelling) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.projected_magnetization
-
-    @projected_magnetisation.setter
-    def projected_magnetisation(self, value: NDArray | None) -> None:
-        warnings.warn(
-            "`projected_magnetisation` is deprecated and will be removed. "
-            "Use `projected_magnetization` (US spelling) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.projected_magnetization = value
 
     def _parse(
         self,
@@ -4616,9 +4574,8 @@ def get_band_structure_from_vasp_multiple_branches(
     """Get band structure info from a VASP directory.
 
     It takes into account that a run can be divided in several branches,
-    each inside a directory named "branch_x". If the run has not been
-    divided in branches the function will turn to parse vasprun.xml
-    directly from the selected directory.
+    each inside a directory named "branch_x". The directory must contain
+    branch_0 to use this multi-branch API.
 
     Args:
         dir_name (PathLike): Parent directory containing all bandstructure runs.
@@ -4628,7 +4585,7 @@ def get_band_structure_from_vasp_multiple_branches(
 
     Returns:
         A BandStructure/BandStructureSymmLine Object.
-        None if no vasprun.xml found in given directory and branch directory.
+        None if no vasprun.xml found in a branch directory.
     """
     if os.path.isdir(f"{dir_name}/branch_0"):
         # Get and sort all branch directories
@@ -4647,24 +4604,7 @@ def get_band_structure_from_vasp_multiple_branches(
 
         return get_reconstructed_band_structure(bs_branches, efermi)
 
-    # Read vasprun.xml directly if no branch head (branch_0) is found
-    # TODO: remove this branch and raise error directly after 2026-06-01
-    vasprun_file = f"{dir_name}/vasprun.xml"
-    if os.path.isfile(vasprun_file):
-        warnings.warn(
-            (
-                f"no branch dir found, reading directly from {dir_name=}\n"
-                "this fallback branch would be removed after 2026-06-01\n"
-                "please check your data dir or use Vasprun.get_band_structure directly"
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return Vasprun(vasprun_file, parse_projected_eigen=projections).get_band_structure(
-            kpoints_filename=None, efermi=efermi
-        )
-
-    raise FileNotFoundError(f"failed to find any vasprun.xml in selected {dir_name=}")
+    raise FileNotFoundError(f"failed to find branch_0 directory in selected {dir_name=}")
 
 
 class Xdatcar:
