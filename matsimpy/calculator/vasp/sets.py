@@ -47,10 +47,10 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 from monty.dev import deprecated
 from monty.json import MSONable
-from monty.serialization import loadfn
 
 from matsimpy.core import Crystal, CrystalSite, Lattice, get_el_sp
 from matsimpy.calculator.input_generator import InputGenerator
+from matsimpy.calculator.vasp._resources import load_vasp_resource
 from matsimpy.calculator.vasp.inputs import (
     Incar,
     Kpoints,
@@ -89,20 +89,11 @@ if TYPE_CHECKING:
 MODULE_DIR = os.path.dirname(__file__)
 
 
-
-def _safe_loadfn(path):
-    try:
-        from monty.serialization import loadfn
-        return loadfn(path)
-    except Exception:
-        return {}
-
-
 def _load_yaml_config(fname):
     fname = f"{MODULE_DIR}/{fname}"
     if not fname.endswith(".yaml"):
         fname += ".yaml"
-    config = _safe_loadfn(fname)
+    config = dict(load_vasp_resource(fname))
     if "PARENT" in config:
         parent_config = _load_yaml_config(config["PARENT"])
         for k, v in parent_config.items():
@@ -291,7 +282,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             )
 
         if self.vdw:
-            vdw_par = _safe_loadfn(f"{MODULE_DIR}/vdW_parameters.yaml")
+            vdw_par = load_vasp_resource(f"{MODULE_DIR}/vdW_parameters.yaml")
             if vdw_param := vdw_par.get(self.vdw):
                 self._config_dict["INCAR"].update(vdw_param)
             else:
@@ -1400,7 +1391,7 @@ class MPScanRelaxSet(VaspInputSet):
                 stacklevel=2,
             )
             # Delete any vdw parameters that may have been added to the INCAR
-            vdw_par = _safe_loadfn(f"{MODULE_DIR}/vdW_parameters.yaml")
+            vdw_par = load_vasp_resource(f"{MODULE_DIR}/vdW_parameters.yaml")
             for k in vdw_par[self.vdw]:
                 self._config_dict["INCAR"].pop(k, None)
 

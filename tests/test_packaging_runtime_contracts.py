@@ -185,11 +185,13 @@ def test_vasp_runtime_imports_without_undeclared_dependencies(tmp_path):
         import matsimpy.calculator.vasp as vasp
         import matsimpy.calculator.vasp.inputs
         import matsimpy.calculator.vasp.outputs
+        import matsimpy.calculator.vasp._resources
         import matsimpy.calculator.vasp.sets
         assert pathlib.Path(vasp.__file__).resolve().is_relative_to(target)
         assert vasp.Incar is not None
         assert matsimpy.calculator.vasp.inputs.Poscar is not None
         assert matsimpy.calculator.vasp.outputs.Vasprun is not None
+        assert matsimpy.calculator.vasp._resources.load_vasp_resource is not None
         assert matsimpy.calculator.vasp.sets.DictSet is not None
 
         resources = importlib.resources.files("matsimpy.calculator.vasp")
@@ -206,6 +208,8 @@ def test_vasp_runtime_imports_without_undeclared_dependencies(tmp_path):
         }
         missing = sorted(name for name in required if not (resources / name).is_file())
         assert missing == []
+        loaded_stats = matsimpy.calculator.vasp._resources.load_vasp_resource(resources / "vasp_potcar_stats.json")
+        assert isinstance(loaded_stats, dict)
     """)
     result = subprocess.run(
         [sys.executable, "-c", script, str(target)],
