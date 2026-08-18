@@ -4483,7 +4483,7 @@ class Procar(MSONable):
             elem_proj[spin] = [[defaultdict(float) for _ in range(self.nkpoints)] for _ in range(self.nbands)]
 
         for iat in range(self.nions):
-            name = structure.species[iat].symbol
+            name = get_el_sp(structure.species[iat]).symbol
             for spin, data in self.data.items():
                 for kpoint, band in itertools.product(range(self.nkpoints), range(self.nbands)):
                     elem_proj[spin][band][kpoint][name] += np.sum(data[kpoint, band, iat, :])
