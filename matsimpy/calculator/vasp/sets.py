@@ -51,7 +51,14 @@ from monty.serialization import loadfn
 
 from matsimpy.core import Element, Crystal, Lattice, CrystalSite
 from matsimpy.calculator.input_generator import InputGenerator
-from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
+from matsimpy.calculator.vasp.inputs import (
+    Incar,
+    Kpoints,
+    Poscar,
+    Potcar,
+    VaspInput,
+    VaspPspDirError,
+)
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
 from matsimpy.symmetry import HighSymmetryKpath, StructureMatcher, SymmetryAnalyzer
 
@@ -376,9 +383,9 @@ class VaspInputSet(InputGenerator, abc.ABC):
         vasp_input = None
         try:
             vasp_input = self.get_input_set(potcar_spec=potcar_spec)
-        except PmgVaspPspDirError:
+        except VaspPspDirError:
             if not potcar_spec:
-                raise PmgVaspPspDirError(
+                raise VaspPspDirError(
                     "PMG_VASP_PSP_DIR is not set. Please set PMG_VASP_PSP_DIR"
                     " in .pmgrc.yaml or use potcar_spec=True argument."
                 ) from None

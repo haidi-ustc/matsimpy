@@ -13,6 +13,34 @@ from matsimpy.core import Crystal, Lattice, Composition
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
 
 
+def test_vasp_inputs_use_canonical_magmom():
+    from matsimpy.calculator.vasp import inputs
+    from matsimpy.electronic_structure import Magmom
+
+    assert inputs.Magmom is Magmom
+
+
+def test_incar_formats_scalar_and_vector_magmoms_exactly():
+    from matsimpy.calculator.vasp.inputs import Incar, Magmom
+
+    scalar = Incar({"MAGMOM": [1.0, 1.0, -2.0]})
+    assert scalar.get_str() == "MAGMOM = 2*1.0 1*-2.0\n"
+
+    vector = Incar({"LSORBIT": True, "MAGMOM": [Magmom([1, 2, 3])]})
+    assert "MAGMOM = 1.0 2.0 3.0\n" in vector.get_str()
+
+
+def test_vasp_inputs_expose_potcar_specific_names_only():
+    from matsimpy.calculator.vasp import inputs
+
+    assert inputs.PotcarOrbital is not None
+    assert inputs.PotcarOrbitalDescription is not None
+    assert inputs.VaspPspDirError is not None
+    assert not hasattr(inputs, "Orbital")
+    assert not hasattr(inputs, "OrbitalDescription")
+    assert not hasattr(inputs, "PmgVaspPspDirError")
+
+
 class TestIncar:
     def test_from_file(self):
         """Parse INCAR from real VASP INCAR fixture."""

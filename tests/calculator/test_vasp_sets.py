@@ -6,6 +6,8 @@ Uses matsimpy structures and imports.
 import ast
 from pathlib import Path
 
+import pytest
+
 from matsimpy.calculator.vasp import sets
 from matsimpy.calculator.vasp.inputs import Kpoints
 from matsimpy.core import Crystal, Lattice
@@ -87,6 +89,22 @@ def test_standardize_structure_rejects_curtarolo_monoclinic_setting():
         assert "only supports the international setting" in str(exc)
     else:
         raise AssertionError("standardize_structure should reject unsupported monoclinic setting")
+
+
+def test_write_input_reraises_vasp_psp_dir_error(tmp_path, monkeypatch):
+    from matsimpy.calculator.vasp.inputs import VaspPspDirError
+    from matsimpy.calculator.vasp.sets import DictSet
+
+    crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+    vset = DictSet(crystal, config_dict={"INCAR": {"ENCUT": 400}})
+
+    def fail_without_psp_dir(*, potcar_spec=False):
+        raise VaspPspDirError("missing POTCAR root")
+
+    monkeypatch.setattr(vset, "get_input_set", fail_without_psp_dir)
+
+    with pytest.raises(VaspPspDirError, match="PMG_VASP_PSP_DIR is not set"):
+        vset.write_input(tmp_path, potcar_spec=False)
 
 
 class TestDictSet:

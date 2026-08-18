@@ -1,5 +1,4 @@
 from __future__ import annotations
-from __future__ import annotations
 """Adapted from pymatgen (https://pymatgen.org/).
 Original: pymatgen.io.vasp.inputs
 Copyright (c) pymatgen Development Team. MIT License.
@@ -39,51 +38,19 @@ from monty.os.path import zpath
 from monty.serialization import dumpfn, loadfn
 from tabulate import tabulate
 
-from matsimpy.core import Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, str_delimited
+from matsimpy.core import Crystal, Element, Lattice, get_el_sp
+from matsimpy.electronic_structure import Magmom
 from matsimpy.symmetry import HighSymmetryKpath, SymmetryAnalyzer
 
 # Structure is Crystal in matsimpy
 Structure = Crystal
 
 
-def _is_valid_symbol(symbol: str) -> bool:
-    """Check if a string is a valid element symbol."""
-    try:
-        Element(symbol)
-        return True
-    except ValueError:
-        return False
-
-# get_el_sp: simple Element lookup
-def get_el_sp(el):
-    """Get Element from string — matsimpy equivalent of pymatgen get_el_sp."""
-    if isinstance(el, Element):
-        return el
-    return Element(el)
-
-
 def _has_face_centered_lattice(structure: Structure) -> bool:
     """Return True when native symmetry identifies an F-centered space group."""
     symbol = SymmetryAnalyzer(structure).analyze_crystal(structure).get("space_group_symbol")
     return bool(symbol and symbol.strip().startswith("F"))
-
-# Magmom: simple local class (adapted from pymatgen)
-class Magmom:
-    """Simple magnetic moment wrapper. Adapted from pymatgen."""
-    def __init__(self, magmom):
-        if isinstance(magmom, (list, tuple, np.ndarray)):
-            self.moment = list(magmom)
-        else:
-            self.moment = [float(magmom)]
-    def __getitem__(self, i):
-        return self.moment[i]
-    def __repr__(self):
-        return f"Magmom({self.moment})"
-    def __eq__(self, other):
-        if isinstance(other, Magmom):
-            return self.moment == other.moment
-        return NotImplemented
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -378,7 +345,8 @@ class Poscar(MSONable):
 
                 potcar = Potcar.from_file(potcar_path)
                 names = [sym.split("_")[0] for sym in potcar.symbols]
-                map(get_el_sp, names)  # ensure valid names
+                for name in names:
+                    get_el_sp(name)
             except Exception:
                 names = None
 
@@ -552,9 +520,8 @@ class Poscar(MSONable):
             try:
                 # Check if names are appended at the end of the coordinates
                 atomic_symbols = [line.split()[ind] for line in lines[ipos + 1 : ipos + 1 + n_sites]]
-                # Ensure symbols are valid elements
-                if not all(_is_valid_symbol(sym) for sym in atomic_symbols):
-                    raise ValueError("Non-valid symbols detected.")
+                for sym in atomic_symbols:
+                    get_el_sp(sym)
                 vasp5or6_symbols = True
 
             except (ValueError, IndexError):
@@ -1976,7 +1943,7 @@ def _parse_list(string: str) -> list[float]:
     return [float(y) for y in re.split(r"\s+", string.strip()) if not y.isalpha()]
 
 
-class Orbital(NamedTuple):
+class PotcarOrbital(NamedTuple):
     n: int
     l: int  # noqa: E741
     j: float
@@ -1984,7 +1951,7 @@ class Orbital(NamedTuple):
     occ: float
 
 
-class OrbitalDescription(NamedTuple):
+class PotcarOrbitalDescription(NamedTuple):
     l: int  # noqa: E741
     E: float
     Type: int
@@ -2000,7 +1967,7 @@ VASP_POTCAR_HASHES: dict = _safe_loadfn(f"{MODULE_DIR}/vasp_potcar_file_hashes.j
 POTCAR_STATS_PATH: str = os.path.join(MODULE_DIR, "potcar-summary-stats.json.bz2")
 
 
-class PmgVaspPspDirError(ValueError):
+class VaspPspDirError(ValueError):
     """Error thrown when PMG_VASP_PSP_DIR is not configured, but POTCAR is requested."""
 
 
@@ -2112,7 +2079,7 @@ class PotcarSingle:
             PSCTR["nentries"] = num_entries
             PSCTR["Orbitals"] = tuple(
                 [
-                    Orbital(
+                    PotcarOrbital(
                         int(orbit[0]),
                         int(orbit[1]),
                         float(orbit[2]),
@@ -2128,8 +2095,8 @@ class PotcarSingle:
             r"(?s)Description\s*\n(.*?)Error from kinetic energy argument \(eV\)",
             search_lines,
         ):
-            descriptions: list[OrbitalDescription] = [
-                OrbitalDescription(
+            descriptions: list[PotcarOrbitalDescription] = [
+                PotcarOrbitalDescription(
                     int(description[0]),
                     float(description[1]),
                     int(description[2]),
@@ -2358,7 +2325,7 @@ class PotcarSingle:
                 for item in v:
                     if isinstance(item, float):
                         hash_str += f"{item:.3f}"
-                    elif isinstance(item, Orbital | OrbitalDescription):
+                    elif isinstance(item, PotcarOrbital | PotcarOrbitalDescription):
                         for item_v in item:
                             if isinstance(item_v, int | str):
                                 hash_str += f"{item_v}"
@@ -2598,7 +2565,7 @@ class PotcarSingle:
         functional_subdir = SETTINGS.get("PMG_VASP_PSP_SUB_DIRS", {}).get(functional, cls.functional_dir[functional])
         PMG_VASP_PSP_DIR = SETTINGS.get("PMG_VASP_PSP_DIR")
         if PMG_VASP_PSP_DIR is None:
-            raise PmgVaspPspDirError("Set PMG_VASP_PSP_DIR=<directory-path> in .pmgrc.yaml (needed to find POTCARs)")
+            raise VaspPspDirError("Set PMG_VASP_PSP_DIR=<directory-path> in .pmgrc.yaml (needed to find POTCARs)")
         if not os.path.isdir(PMG_VASP_PSP_DIR):
             raise FileNotFoundError(f"{PMG_VASP_PSP_DIR=} does not exist.")
 
