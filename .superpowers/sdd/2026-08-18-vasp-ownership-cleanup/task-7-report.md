@@ -33,3 +33,62 @@
 **Notes / residual risks:**
 - The base `/opt/miniconda3/bin/python` lacks `pymatgen`, `spglib`, and `pandas`; the full VASP glob fails there for unrelated optional dependency gaps. The required `pmg` interpreter has those packages and passes.
 - `ruff check` on the large VASP files still reports pre-existing style/static issues outside this task, including undefined `SETTINGS` reports, broad exception catches in permissive parsers, import formatting, and existing B023/C408 findings. Task-scoped compile, AST boundary tests, migration-string scan, and VASP tests pass.
+
+### Fix Round 1 Evidence
+
+**Supersession note:** The original direct-interpreter verification evidence above is retained as historical context only. Fix Round 1 verification used exactly `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python ...` for every Python command.
+
+**Additional implementation:**
+- Reworded the remaining `VaspInputSet.potcar` warning from “not known by pymatgen” to “not known to MatSimPy”.
+- Added `tests/calculator/test_vasp_sets.py::test_potcar_warning_uses_matsimpy_ownership_wording`.
+
+**Fresh RED:**
+- Command:
+  `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest -q tests/calculator/test_vasp_sets.py::test_potcar_warning_uses_matsimpy_ownership_wording`
+- Result: failed as expected, `1 failed in 4.33s`.
+- Failure cause: assertion found stale user-facing source text `not known by pymatgen` in `matsimpy/calculator/vasp/sets.py`.
+
+**Fresh GREEN regression:**
+- Command:
+  `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest -q tests/calculator/test_vasp_sets.py::test_potcar_warning_uses_matsimpy_ownership_wording`
+- Result: `1 passed in 3.71s`.
+- Warning categories/sources: none.
+
+**Focused Task 7 verification:**
+- Command:
+  `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest -q tests/calculator/test_vasp_inputs.py::TestPoscar::test_get_string_migration_wrapper_is_absent tests/calculator/test_vasp_inputs.py::TestVaspInput::test_zip_write_failure_raises_contextual_oserror tests/calculator/test_vasp_inputs.py::TestVaspInput::test_zip_cleanup_failure_raises_contextual_oserror tests/calculator/test_vasp_sets.py::test_vasp_input_set_get_vasp_input_migration_wrapper_is_absent tests/calculator/test_vasp_sets.py::test_calculate_ng_uses_canonical_input_set tests/calculator/test_vasp_sets.py::test_potcar_warning_uses_matsimpy_ownership_wording tests/calculator/test_vasp_outputs.py::test_projected_magnetisation_migration_wrappers_are_absent tests/calculator/test_vasp_outputs.py::test_multiple_branch_band_structure_requires_branch_directories`
+- Result: `8 passed, 3 warnings in 3.94s`.
+- Warning categories/sources:
+  - `DeprecationWarning` from `tests/calculator/test_vasp_inputs.py:344`: `Please use INCAR KSPACING tag.`
+  - `FutureWarning` from `<string>:31`: `DictSet is deprecated, and will be removed on 2025-12-31`.
+
+**All VASP calculator tests:**
+- Command:
+  `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest -q tests/calculator/test_vasp_*.py`
+- Result: `95 passed, 33 warnings in 53.52s`.
+- Warning categories/sources:
+  - `DeprecationWarning` from `matsimpy/calculator/vasp/calculator.py:75`: `Please use INCAR KSPACING tag.`
+  - `UserWarning` from `matsimpy/calculator/vasp/outputs.py:1309`: `No POTCAR file with matching TITEL fields was found in`.
+  - `UserWarning` from `matsimpy/calculator/vasp/outputs.py:1320`: `No POTCAR file with matching TITEL fields was found in`.
+  - `DeprecationWarning` from `tests/calculator/test_vasp_imports.py:50`: `Please use INCAR KSPACING tag.`
+  - `DeprecationWarning` from `tests/calculator/test_vasp_inputs.py:123`: `Please use INCAR KSPACING tag.`
+  - `DeprecationWarning` from `tests/calculator/test_vasp_inputs.py:141`: `Please use INCAR KSPACING tag.`
+  - `DeprecationWarning` from `tests/calculator/test_vasp_inputs.py:344`: `Please use INCAR KSPACING tag.`
+  - `FutureWarning` from `<string>:31`: `DictSet is deprecated, and will be removed on 2025-12-31`.
+
+**Recursive import-boundary tests:**
+- Command:
+  `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest -q tests/calculator/test_vasp_imports.py::test_vasp_package_never_imports_pymatgen tests/calculator/test_vasp_sets.py::test_sets_source_has_no_pymatgen_imports tests/calculator/test_vasp_native_outputs.py::test_outputs_source_has_no_pymatgen_imports`
+- Result: `3 passed in 8.56s`.
+- Warning categories/sources: none.
+
+**Compile/static scan:**
+- Command:
+  `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m compileall -q matsimpy/calculator/vasp/inputs.py matsimpy/calculator/vasp/outputs.py matsimpy/calculator/vasp/sets.py tests/calculator/test_vasp_inputs.py tests/calculator/test_vasp_outputs.py tests/calculator/test_vasp_sets.py`
+- Result: passed with no output.
+- Warning categories/sources: none.
+- Command:
+  `rg -n "not known by pymatgen|def get_string|get_vasp_input|projected_magnetisation|no branch dir found|reading directly|Generated by pymatgen|pymatgen with grid density|pymatgen will attempt|not known to pymatgen|pymatgen's POTCAR database|pymatgen CLI" matsimpy/calculator/vasp/inputs.py matsimpy/calculator/vasp/sets.py matsimpy/calculator/vasp/outputs.py tests/calculator/test_vasp_sets.py || true`
+- Result: only intentional regression-test assertions in `tests/calculator/test_vasp_sets.py` matched; production VASP files had no matches.
+- Command: `git diff --check`
+- Result: passed with no output.

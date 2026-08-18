@@ -28,6 +28,13 @@ def test_sets_source_has_no_pymatgen_imports():
     assert not any(name == "pymatgen" or name.startswith("pymatgen.") for name in modules)
 
 
+def test_potcar_warning_uses_matsimpy_ownership_wording():
+    source = Path(sets.__file__).read_text(encoding="utf-8")
+
+    assert "not known by pymatgen" not in source
+    assert "not known to MatSimPy" in source
+
+
 def test_vasp_input_set_get_vasp_input_migration_wrapper_is_absent():
     from matsimpy.calculator.vasp.sets import VaspInputSet
 
