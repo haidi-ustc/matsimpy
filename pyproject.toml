@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "MatSimPy"
 version = "0.8.0"
-description = "A package for materials simulation and analysis"
+description = "MatSimPy (Materials Simulation in Python) is a toolkit for building, transforming, analyzing, and storing crystal and molecular structures, combining pymatgen's object model and serialization with ASE's lightweight, calculator-driven workflow. It provides builders and transformation pipelines, symmetry and electronic-structure analysis, bonding/topology analysis, multi-format I/O (VASP, CIF, XYZ, PDB, XSF, MOL, JSON, ASE), in-memory and Maggma storage backends, classical/ML/DFT-workflow calculators (Lennard-Jones, MatterSim, VASP, Gaussian, LAMMPS), a plugin registry system, and an optional AI command-line interface."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
