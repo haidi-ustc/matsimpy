@@ -30,7 +30,7 @@ from monty.json import MSONable, jsanitize
 from monty.os.path import zpath
 from monty.re import regrep
 
-from matsimpy.core import Composition, Element, Lattice, Crystal
+from matsimpy.core import Composition, Crystal, Lattice, get_el_sp
 from matsimpy.core.entries import ComputedEntry, ComputedStructureEntry
 from matsimpy.core.trajectory import Trajectory
 from matsimpy.core.units import unitized
@@ -50,9 +50,6 @@ from matsimpy.electronic_structure import (
 from matsimpy.exceptions import FormatError
 from matsimpy.io.common import VolumetricData as BaseVolumetricData
 from matsimpy.io.wannier90 import Unk
-
-# Structure is Crystal in matsimpy
-Structure = Crystal
 
 try:
     import h5py
@@ -296,7 +293,7 @@ class Vasprun(MSONable):
             dict with the following format: [{'energy': {'e_0_energy': -525.07195568, 'e_fr_energy': -525.07195568,
             'e_wo_entrp': -525.07195568, 'kinetic': 3.17809233, 'lattice kinetic': 0.0, 'nosekinetic': 1.323e-5,
             'nosepot': 0.0, 'total': -521.89385012}, 'forces': [[0.17677989, 0.48309874, 1.85806696], ...],
-            'structure': Structure object}].
+            'structure': Crystal object}].
         incar (Incar): Incar object for parameters specified in INCAR file.
         parameters (Incar): Incar object with parameters that VASP actually used, including all defaults.
         kpoints (Kpoints): Kpoints object for KPOINTS specified in run.
@@ -642,7 +639,7 @@ class Vasprun(MSONable):
         self.vasp_version = self.generator["version"]
 
     @property
-    def structures(self) -> list[Structure]:
+    def structures(self) -> list[Crystal]:
         """List of Structures for each ionic step."""
         return [step["structure"] for step in self.ionic_steps]
 
@@ -1331,7 +1328,7 @@ class Vasprun(MSONable):
         Returns:
             Trajectory
         """
-        structs: list[Structure] = []
+        structs: list[Crystal] = []
         steps = self.md_data or self.ionic_steps
         for step in steps:
             struct = step["structure"].copy()
@@ -1543,16 +1540,12 @@ class Vasprun(MSONable):
 
         def parse_atomic_symbol(symbol: str) -> str:
             """Parse and ensure atomic symbols are valid elements."""
-            try:
-                return str(Element(symbol))
+            if symbol == "X":
+                return "Xe"
+            if symbol == "r":
+                return "Zr"
 
-            # vasprun.xml uses "X" instead of "Xe" for Xenon
-            except ValueError:
-                if symbol == "X":
-                    return "Xe"
-                if symbol == "r":
-                    return "Zr"
-                raise
+            return get_el_sp(symbol).symbol
 
         atomic_symbols = []
         potcar_symbols = []
@@ -1612,8 +1605,8 @@ class Vasprun(MSONable):
             )
         return kpoint, actual_kpoints, weights  # type:ignore[return-value]
 
-    def _parse_structure(self, elem: XML_Element) -> Structure:
-        """Parse Structure with lattice, positions and selective dynamics info."""
+    def _parse_structure(self, elem: XML_Element) -> Crystal:
+        """Parse Crystal with lattice, positions and selective dynamics info."""
         lattice = _parse_vasp_array(elem.find("crystal").find("varray"))  # type: ignore[union-attr]
         pos = _parse_vasp_array(elem.find("varray"))
         struct = Crystal(self.atomic_symbols, pos, Lattice(lattice))
@@ -2920,7 +2913,7 @@ class Outcar:
 
         Renders accessible from self.data:
             onsite_density_matrices (list[dict[Spin, list[list[float]]]]):
-                Onsite density matrices with index corresponding to atom index in Structure.
+                Onsite density matrices with index corresponding to atom index in Crystal.
         """
         # Matrix size will vary depending on if d or f orbitals are present.
         # Therefore regex assumes f, but filter out None values if d.
@@ -3962,17 +3955,17 @@ class VolumetricData(BaseVolumetricData):
 class Locpot(VolumetricData):
     """LOCPOT file reader."""
 
-    def __init__(self, poscar: Poscar | Structure, data: dict[str, NDArray], **kwargs) -> None:
+    def __init__(self, poscar: Poscar | Crystal, data: dict[str, NDArray], **kwargs) -> None:
         """
         Args:
-            poscar (Poscar | Structure): Poscat or Structure object containing structure.
+            poscar (Poscar | Crystal): Poscat or Crystal object containing structure.
             data (NDArray): Actual data.
         """
         if isinstance(poscar, Poscar):
             struct = poscar.structure
             self.poscar = poscar
             self.name = poscar.comment
-        elif isinstance(poscar, Structure):
+        elif isinstance(poscar, Crystal):
             struct = poscar
             self.poscar = Poscar(poscar)
         else:
@@ -3999,23 +3992,23 @@ class Chgcar(VolumetricData):
 
     def __init__(
         self,
-        poscar: Poscar | Structure,
+        poscar: Poscar | Crystal,
         data: dict[str, NDArray],
         data_aug: dict[str, NDArray] | None = None,
         **kwargs,
     ) -> None:
         """
         Args:
-            poscar (Poscar | Structure): Object containing structure.
+            poscar (Poscar | Crystal): Object containing structure.
             data: Actual data.
             data_aug: Augmentation charge data.
         """
-        # Allow Poscar or Structure to be passed
+        # Allow Poscar or Crystal to be passed
         if isinstance(poscar, Poscar):
             struct = poscar.structure
             self.poscar = poscar
             self.name: str | None = poscar.comment  # type: ignore[assignment]
-        elif isinstance(poscar, Structure):
+        elif isinstance(poscar, Crystal):
             struct = poscar
             self.poscar = Poscar(poscar)
             self.name = None
@@ -4054,20 +4047,20 @@ class Elfcar(VolumetricData):
 
     def __init__(
         self,
-        poscar: Poscar | Structure,
+        poscar: Poscar | Crystal,
         data: dict[str, NDArray],
         **kwargs,
     ) -> None:
         """
         Args:
-            poscar (Poscar or Structure): Object containing structure.
+            poscar (Poscar or Crystal): Object containing structure.
             data: Actual data.
         """
-        # Allow Poscar or Structure to be passed
+        # Allow Poscar or Crystal to be passed
         if isinstance(poscar, Poscar):
             tmp_struct = poscar.structure
             self.poscar = poscar
-        elif isinstance(poscar, Structure):
+        elif isinstance(poscar, Crystal):
             tmp_struct = poscar
             self.poscar = Poscar(poscar)
         else:
@@ -4467,11 +4460,11 @@ class Procar(MSONable):
                 xyz_data,
             )
 
-    def get_projection_on_elements(self, structure: Structure) -> dict[Spin, list[list[dict[str, float]]]]:
+    def get_projection_on_elements(self, structure: Crystal) -> dict[Spin, list[list[dict[str, float]]]]:
         """Get a dict of projections on elements.
 
         Args:
-            structure (Structure): Input structure.
+            structure (Crystal): Input structure.
 
         Returns:
             A dict as {Spin: [band index][kpoint index][{Element: values}]].
@@ -4678,7 +4671,7 @@ class Xdatcar:
     """XDATCAR parser. Only tested with VASP 5.x files.
 
     Attributes:
-        structures (list[Structure]): Structures parsed from XDATCAR.
+        structures (list[Crystal]): Structures parsed from XDATCAR.
         comment (str): Optional comment.
 
     Authors: Ram Balachandran
@@ -4772,19 +4765,19 @@ class Xdatcar:
     def __len__(self) -> int:
         return len(self.structures)
 
-    def __iter__(self) -> Iterator[Structure]:
-        """Iterator of Xdatcar, yielding a pymatgen Structure."""
+    def __iter__(self) -> Iterator[Crystal]:
+        """Iterator of Xdatcar, yielding a Crystal."""
         for idx in range(len(self)):
             yield self.structures[idx]
 
-    def __getitem__(self, frames: int | slice | list[int] | np.ndarray) -> Structure | list[Structure]:
+    def __getitem__(self, frames: int | slice | list[int] | np.ndarray) -> Crystal | list[Crystal]:
         """Get a subset of the Xdatcar.
 
         Args:
             frames (int, slice, list of int, or numpy Array): Indices of the Xdatcar to return.
 
         Returns:
-            Structure, if frames is an int; otherwise, a list of Structure
+            Crystal, if frames is an int; otherwise, a list of Crystal
         """
         if isinstance(frames, int | slice):
             return self.structures[frames]
@@ -4795,7 +4788,7 @@ class Xdatcar:
         """Sequence of symbols associated with the Xdatcar.
         Similar to 6th line in VASP 5+ Xdatcar.
         """
-        syms = [site.specie.symbol for site in self.structures[0]]
+        syms = [get_el_sp(site.specie).symbol for site in self.structures[0]]
         return [a[0] for a in itertools.groupby(syms)]
 
     @property
@@ -4803,7 +4796,7 @@ class Xdatcar:
         """Sequence of number of sites of each type associated with the Poscar.
         Similar to 7th line in VASP 5+ Xdatcar.
         """
-        syms = [site.specie.symbol for site in self.structures[0]]
+        syms = [get_el_sp(site.specie).symbol for site in self.structures[0]]
         return [len(tuple(a[1])) for a in itertools.groupby(syms)]
 
     def concatenate(
@@ -6153,14 +6146,14 @@ class Vaspout(Vasprun):
         self.generator = {"version": self.vasp_version}  # type:ignore[assignment]
 
     @staticmethod
-    def _parse_structure(positions: dict) -> Structure:  # type: ignore[override]
+    def _parse_structure(positions: dict) -> Crystal:  # type: ignore[override]
         """
         Parse the structure from vaspout format.
 
         Args:
             positions (dict), dict representation of POSCAR
         Returns:
-            pymatgen Structure
+            Crystal
         """
         species = []
         for ispecie, specie in enumerate(positions["ion_types"]):

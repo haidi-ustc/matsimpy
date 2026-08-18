@@ -43,11 +43,7 @@ from matsimpy.core import Crystal, Element, Lattice, get_el_sp
 from matsimpy.electronic_structure import Magmom
 from matsimpy.symmetry import HighSymmetryKpath, SymmetryAnalyzer
 
-# Structure is Crystal in matsimpy
-Structure = Crystal
-
-
-def _has_face_centered_lattice(structure: Structure) -> bool:
+def _has_face_centered_lattice(structure: Crystal) -> bool:
     """Return True when native symmetry identifies an F-centered space group."""
     symbol = SymmetryAnalyzer(structure).analyze_crystal(structure).get("space_group_symbol")
     return bool(symbol and symbol.strip().startswith("F"))
@@ -96,7 +92,7 @@ class Poscar(MSONable):
     """Represent the data in a POSCAR or CONTCAR file.
 
     Attributes:
-        structure: Associated Structure.
+        structure: Associated Crystal.
         comment: Optional comment string.
         true_names: Boolean indication whether Poscar contains actual real names parsed
             from either a POTCAR or the POSCAR itself.
@@ -116,7 +112,7 @@ class Poscar(MSONable):
 
     def __init__(
         self,
-        structure: Structure,
+        structure: Crystal,
         comment: str | None = None,
         selective_dynamics: ArrayLike | None = None,
         true_names: bool = True,
@@ -128,7 +124,7 @@ class Poscar(MSONable):
     ) -> None:
         """
         Args:
-            structure (Structure): Structure object.
+            structure (Crystal): Crystal object.
             comment (str | None, optional): Optional comment line for POSCAR. Defaults to unit
                 cell formula of structure. Defaults to None.
             selective_dynamics (ArrayLike | None, optional): Bool values for selective dynamics,
@@ -528,7 +524,7 @@ class Poscar(MSONable):
                 # Defaulting to false names
                 atomic_symbols = []
                 for idx, n_atom in enumerate(n_atoms, start=1):
-                    symbol = Element.from_Z(idx).symbol
+                    symbol = get_el_sp(idx).symbol
                     atomic_symbols.extend([symbol] * n_atom)
                 warnings.warn(
                     f"Elements in POSCAR cannot be determined. Defaulting to false names {atomic_symbols}.",
@@ -767,7 +763,7 @@ class Poscar(MSONable):
             Poscar
         """
         return cls(
-            Structure.from_dict(dct["structure"]),
+            Crystal.from_dict(dct["structure"]),
             comment=dct["comment"],
             selective_dynamics=dct["selective_dynamics"],
             true_names=dct["true_names"],
@@ -794,7 +790,7 @@ class Poscar(MSONable):
         velocities = np.random.default_rng().standard_normal((len(self.structure), 3))
 
         # In AMU, (N, 1) array
-        atomic_masses = np.array([Element(str(site.specie)).atomic_mass for site in self.structure])
+        atomic_masses = np.array([get_el_sp(site.specie).atomic_mass for site in self.structure])
         dof = 3 * len(self.structure) - 3
 
         # Remove linear drift (net momentum)
@@ -1486,7 +1482,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_density(
         cls,
-        structure: Structure,
+        structure: Crystal,
         kppa: float,
         force_gamma: bool = False,
         comment: str | None = None,
@@ -1500,7 +1496,7 @@ class Kpoints(MSONable):
             reciprocal lattice vector proportional to its length.
 
         Args:
-            structure (Structure): Input structure.
+            structure (Crystal): Input crystal.
             kppa (float): Grid density.
             force_gamma (bool): Force a gamma centered mesh (default is to
                 use gamma only for hexagonal cells or odd meshes).
@@ -1542,7 +1538,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_gamma_density(
         cls,
-        structure: Structure,
+        structure: Crystal,
         kppa: float,
         comment: str | None = None,
     ) -> Self:
@@ -1554,7 +1550,7 @@ class Kpoints(MSONable):
             reciprocal lattice vector proportional to its length.
 
         Args:
-            structure (Structure): Input structure
+            structure (Crystal): Input crystal.
             kppa (float): Grid density
             comment (str): Comment in Kpoints.
         """
@@ -1588,7 +1584,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_density_by_vol(
         cls,
-        structure: Structure,
+        structure: Crystal,
         kppvol: int,
         force_gamma: bool = False,
         comment: str | None = None,
@@ -1600,7 +1596,7 @@ class Kpoints(MSONable):
             Same as automatic_density()
 
         Args:
-            structure (Structure): Input structure.
+            structure (Crystal): Input crystal.
             kppvol (int): Grid density per Angstrom^(-3) of reciprocal cell.
             force_gamma (bool): Force a gamma centered mesh.
             comment (str): Comment in Kpoints.
@@ -1615,7 +1611,7 @@ class Kpoints(MSONable):
     @classmethod
     def automatic_density_by_lengths(
         cls,
-        structure: Structure,
+        structure: Crystal,
         length_densities: Sequence[float],
         force_gamma: bool = False,
         comment: str | None = None,
@@ -1629,7 +1625,7 @@ class Kpoints(MSONable):
             have k-points of 50/a x 50/b x 1/c.
 
         Args:
-            structure (Structure): Input structure.
+            structure (Crystal): Input crystal.
             length_densities (list[float]): Defines the density of k-points in each.
             dimension, e.g. [50.0, 50.0, 1.0].
             force_gamma (bool): Force a gamma centered mesh.
@@ -1971,6 +1967,14 @@ class VaspPspDirError(ValueError):
     """Error thrown when PMG_VASP_PSP_DIR is not configured, but POTCAR is requested."""
 
 
+def _normalize_potcar_symbol(symbol: Element | str | int) -> str:
+    """Normalize the element part of a POTCAR symbol while preserving VASP suffixes."""
+    if isinstance(symbol, str) and "_" in symbol:
+        element, suffix = symbol.split("_", 1)
+        return f"{get_el_sp(element).symbol}_{suffix}"
+    return get_el_sp(symbol).symbol
+
+
 class PotcarSingle:
     """
     Object for a **single** POTCAR. The builder assumes the POTCAR contains
@@ -2237,20 +2241,20 @@ class PotcarSingle:
     def element(self) -> str:
         """Attempt to return the atomic symbol based on the VRHFIN keyword."""
         element = self.keywords["VRHFIN"].split(":")[0].strip()
+        if element == "X":
+            return "Xe"
+
         try:
-            return Element(element).symbol
+            return get_el_sp(element).symbol
 
         except ValueError:
-            # VASP incorrectly gives the element symbol for Xe as "X"
             # Some potentials, e.g. Zr_sv, gives the symbol as r.
-            if element == "X":
-                return "Xe"
-            return Element(self.symbol.split("_")[0]).symbol
+            return get_el_sp(self.symbol.split("_")[0]).symbol
 
     @property
     def atomic_no(self) -> int:
         """Attempt to return the atomic number based on the VRHFIN keyword."""
-        return Element(self.element).Z
+        return get_el_sp(self.element).Z
 
     @property
     def nelectrons(self) -> float:
@@ -3052,6 +3056,7 @@ class Potcar(list, MSONable):
                 the given map data rather than the config file location.
         """
         del self[:]
+        symbols = [_normalize_potcar_symbol(symbol) for symbol in symbols]
 
         if sym_potcar_map is None:
             self.extend(PotcarSingle.from_symbol_and_functional(el, functional) for el in symbols)

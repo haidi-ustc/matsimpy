@@ -10,7 +10,7 @@ import pytest
 
 from matsimpy.calculator.vasp import sets
 from matsimpy.calculator.vasp.inputs import Kpoints
-from matsimpy.core import Crystal, Lattice
+from matsimpy.core import Crystal, Element, Lattice
 
 
 def test_sets_source_has_no_pymatgen_imports():
@@ -105,6 +105,37 @@ def test_write_input_reraises_vasp_psp_dir_error(tmp_path, monkeypatch):
 
     with pytest.raises(VaspPspDirError, match="PMG_VASP_PSP_DIR is not set"):
         vset.write_input(tmp_path, potcar_spec=False)
+
+
+def test_mpmdset_uses_short_hydrogen_timestep_for_native_species():
+    from matsimpy.calculator.vasp.sets import MPMDSet
+
+    h_crystal = Crystal(["H"], [[0, 0, 0]], Lattice.cubic(3.0))
+    si_crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
+
+    h_updates = MPMDSet(h_crystal, nsteps=25).incar_updates
+    si_updates = MPMDSet(si_crystal, nsteps=25).incar_updates
+
+    assert h_updates["POTIM"] == 0.5
+    assert h_updates["NSW"] == 100
+    assert si_updates["POTIM"] == 2.0
+
+
+def test_vasp_sets_resolve_element_like_inputs_with_core_helper():
+    from matsimpy.calculator.vasp.sets import DictSet
+
+    crystal = Crystal(["Al"], [[0, 0, 0]], Lattice.cubic(4.05))
+    config = {
+        "INCAR": {"ENCUT": 400, "LMAXMIX": None},
+        "KPOINTS": {"reciprocal_density": 100},
+        "POTCAR": {"Al": "Al"},
+    }
+
+    for symbol in (Element("Al"), "al", 13):
+        setting = {symbol: 1.5}
+        vset = DictSet(crystal, config_dict=config, user_incar_settings={"MAGMOM": setting})
+
+        assert vset.incar["MAGMOM"] == [1.5]
 
 
 class TestDictSet:

@@ -49,7 +49,7 @@ from monty.dev import deprecated
 from monty.json import MSONable
 from monty.serialization import loadfn
 
-from matsimpy.core import Element, Crystal, Lattice, CrystalSite
+from matsimpy.core import Crystal, CrystalSite, Lattice, get_el_sp
 from matsimpy.calculator.input_generator import InputGenerator
 from matsimpy.calculator.vasp.inputs import (
     Incar,
@@ -61,9 +61,6 @@ from matsimpy.calculator.vasp.inputs import (
 )
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
 from matsimpy.symmetry import HighSymmetryKpath, StructureMatcher, SymmetryAnalyzer
-
-# Structure → Crystal alias
-Structure = Crystal
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -144,8 +141,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
        there are no settings, a default value of 0.6 is used.
 
     Args:
-        structure (Structure): The Structure to create inputs for. If None, the input
-            set is initialized without a Structure but one must be set separately before
+        structure (Crystal): The Crystal to create inputs for. If None, the input
+            set is initialized without a Crystal but one must be set separately before
             the inputs are generated.
         config_dict (dict): The config dictionary to use.
         files_to_transfer (dict): A dictionary of {filename: filepath}. This allows the
@@ -235,7 +232,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             from_prev_calc.
     """
 
-    structure: Structure | None = None
+    structure: Crystal | None = None
     config_dict: dict = field(default_factory=dict)
     files_to_transfer: dict = field(default_factory=dict)
     user_incar_settings: dict = field(default_factory=dict)
@@ -331,10 +328,10 @@ class VaspInputSet(InputGenerator, abc.ABC):
                 stacklevel=2,
             )
             for key, val in self.user_potcar_settings.items():
-                self._config_dict["POTCAR"][key] = val
+                self._config_dict["POTCAR"][get_el_sp(key).symbol] = val
 
         if self.structure is None:
-            self._structure: Structure | None = None
+            self._structure: Crystal | None = None
         else:
             # TODO is this needed? should it be self._structure = self.structure (needs explanation either way)
             self.structure = self.structure
@@ -421,12 +418,12 @@ class VaspInputSet(InputGenerator, abc.ABC):
         return dct
 
     @property  # type: ignore[no-redef]
-    def structure(self) -> Structure | None:  # noqa: F811
-        """Structure."""
+    def structure(self) -> Crystal | None:  # noqa: F811
+        """Crystal."""
         return self._structure
 
     @structure.setter
-    def structure(self, structure: Structure | None) -> None:
+    def structure(self, structure: Crystal | None) -> None:
         if not hasattr(self, "_config_dict"):
             self._structure = structure
             return
@@ -481,7 +478,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
 
     def get_input_set(
         self,
-        structure: Structure | None = None,
+        structure: Crystal | None = None,
         prev_dir: PathLike | None = None,
         potcar_spec: bool = False,
     ) -> VaspInput:
@@ -491,7 +488,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
         specified will be preferred over the final structure from the last VASP run.
 
         Args:
-            structure (Structure): A structure.
+            structure (Crystal): A structure.
             prev_dir (PathLike): A previous directory to generate the input set from.
             potcar_spec (bool): Instead of generating a Potcar object, use a list of
                 potcar symbols. This will be written as a "POTCAR.spec" file. This is
@@ -599,7 +596,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
         structure = self.structure
         comp = structure.composition
         elements = sorted(
-            (Element(sym) for sym, amt in comp.composition.items() if amt > 0),
+            (get_el_sp(sym) for sym, amt in comp.composition.items() if amt > 0),
             key=lambda e: e.X,
         )
         most_electro_neg = elements[-1].symbol
@@ -610,37 +607,44 @@ class VaspInputSet(InputGenerator, abc.ABC):
         for key, setting in settings.items():
             if key == "MAGMOM":
                 mag = []
+                user_magmom_settings = self.user_incar_settings.get("MAGMOM", {})
+                if isinstance(user_magmom_settings, dict):
+                    user_magmom_settings = {
+                        get_el_sp(symbol).symbol: value
+                        for symbol, value in user_magmom_settings.items()
+                    }
                 for site in structure:
-                    if uic_magmom := self.user_incar_settings.get("MAGMOM", {}).get(site.species_string):
-                        mag.append(uic_magmom)
+                    site_symbol = get_el_sp(site.specie).symbol
+                    if isinstance(user_magmom_settings, dict) and site_symbol in user_magmom_settings:
+                        mag.append(user_magmom_settings[site_symbol])
                     elif hasattr(site, "magmom"):
                         mag.append(site.magmom)
                     elif getattr(site.specie, "spin", None) is not None:
                         mag.append(site.specie.spin)
-                    elif str(site.specie) in setting:
-                        if site.specie.symbol == "Co" and setting[str(site.specie)] <= 1.0:
+                    elif site_symbol in setting:
+                        if site_symbol == "Co" and setting[site_symbol] <= 1.0:
                             warnings.warn(
                                 "Co without an oxidation state is initialized as low spin by default in Pymatgen. "
                                 "If this default behavior is not desired, please set the spin on the magmom on the "
                                 "site directly to ensure correct initialization.",
                                 stacklevel=2,
                             )
-                        mag.append(setting.get(str(site.specie)))
+                        mag.append(setting.get(site_symbol))
                     else:
-                        if site.specie.symbol == "Co":
+                        if site_symbol == "Co":
                             warnings.warn(
                                 "Co without an oxidation state is initialized as low spin by default in Pymatgen. "
                                 "If this default behavior is not desired, please set the spin on the magmom on the "
                                 "site directly to ensure correct initialization.",
                                 stacklevel=2,
                             )
-                        mag.append(setting.get(site.specie.symbol, 0.6))
+                        mag.append(setting.get(site_symbol, 0.6))
                 incar[key] = mag
 
             elif key in {"LDAUU", "LDAUJ", "LDAUL"}:
                 if hubbard_u:
                     if hasattr(structure[0], key.lower()):
-                        m = {site.specie.symbol: getattr(site, key.lower()) for site in structure}
+                        m = {get_el_sp(site.specie).symbol: getattr(site, key.lower()) for site in structure}
                         incar[key] = [m[sym] for sym in poscar.site_symbols]
                         # Lookup specific LDAU if specified for most_electroneg atom
                     elif most_electro_neg in setting and isinstance(setting[most_electro_neg], dict):
@@ -684,10 +688,10 @@ class VaspInputSet(InputGenerator, abc.ABC):
         # Thanks to Andrew Rosen for investigating and reporting.
         if "LMAXMIX" not in settings:
             # contains f-electrons
-            if any(Element(sym).atomic_no > 56 for sym in structure.composition.composition):
+            if any(get_el_sp(sym).atomic_no > 56 for sym in structure.composition.composition):
                 incar["LMAXMIX"] = 6
             # contains d-electrons
-            elif any(Element(sym).atomic_no > 20 for sym in structure.composition.composition):
+            elif any(get_el_sp(sym).atomic_no > 20 for sym in structure.composition.composition):
                 incar["LMAXMIX"] = 4
 
         # Warn user about LASPH for +U, meta-GGAs, hybrids, and vdW-DF
@@ -795,7 +799,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
         ismear = incar.get("ISMEAR", 1)
         sigma = incar.get("SIGMA", 0.2)
         if (
-            all(Element(sym).is_metal for sym in structure.composition.composition)
+            all(get_el_sp(sym).is_metal for sym in structure.composition.composition)
             and incar.get("NSW", 0) > 0
             and (ismear < 0 or (ismear == 0 and sigma > 0.05))
         ):
@@ -1081,7 +1085,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             prev_calc_dir (PathLike): The path to the previous calculation directory.
 
         Returns:
-            VaspInputSet: A new input set with settings (Structure, k-points, incar, etc)
+            VaspInputSet: A new input set with settings (Crystal, k-points, incar, etc)
                 updated using the previous VASP run.
         """
         self._set_previous(prev_calc_dir)
@@ -1296,8 +1300,8 @@ class MITRelaxSet(VaspInputSet):
     which means in general pseudopotentials with fewer electrons were chosen.
 
     Args:
-        structure (Structure): The Structure to create inputs for. If None, the input
-            set is initialized without a Structure but one must be set separately before
+        structure (Crystal): The Crystal to create inputs for. If None, the input
+            set is initialized without a Crystal but one must be set separately before
             the inputs are generated.
         **kwargs: Keywords supported by VaspInputSet.
 
@@ -1321,8 +1325,8 @@ class MPRelaxSet(VaspInputSet):
     which result in different fitted values.
 
     Args:
-        structure (Structure): The Structure to create inputs for. If None, the input
-            set is initialized without a Structure but one must be set separately before
+        structure (Crystal): The Crystal to create inputs for. If None, the input
+            set is initialized without a Crystal but one must be set separately before
             the inputs are generated.
         **kwargs: Keywords supported by VaspInputSet.
     """
@@ -1597,7 +1601,7 @@ class MPStaticSet(VaspInputSet):
     """Create input files for a static calculation.
 
     Args:
-        structure (Structure): Structure from previous run.
+        structure (Crystal): Crystal from previous run.
         lepsilon (bool): Whether to add static dielectric calculation
         lcalcpol (bool): Whether to turn on evaluation of the Berry phase approximations
             for electronic polarization
@@ -1685,8 +1689,8 @@ class MatPESStaticSet(VaspInputSet):
     functional still applies.
 
     Args:
-        structure (Structure): The Structure to create inputs for. If None, the input
-            set is initialized without a Structure but one must be set separately before
+        structure (Crystal): The Crystal to create inputs for. If None, the input
+            set is initialized without a Crystal but one must be set separately before
             the inputs are generated.
         xc_functional ('R2SCAN'|'PBE'): Exchange-correlation functional to use. Defaults to 'PBE'.
         **kwargs: Keywords supported by VaspInputSet.
@@ -1753,7 +1757,7 @@ class MPScanStaticSet(MPScanRelaxSet):
     (SCAN) metaGGA functional.
 
     Args:
-        structure (Structure): Structure from previous run.
+        structure (Crystal): Crystal from previous run.
         bandgap (float): Bandgap of the structure in eV. The bandgap is used to
             compute the appropriate k-point density and determine the smearing settings.
         lepsilon (bool): Whether to add static dielectric calculation
@@ -1805,7 +1809,7 @@ class MP24StaticSet(MP24RelaxSet):
     If you use this set, please consider citing the appropriate papers in `MP24RelaxSet`.
 
     Args:
-        structure (Structure): Structure from previous run.
+        structure (Crystal): Crystal from previous run.
         bandgap (float): Bandgap of the structure in eV. The bandgap is used to
             compute the appropriate k-point density and determine the smearing settings.
         lepsilon (bool): Whether to add static dielectric calculation
@@ -1864,7 +1868,7 @@ class MPHSEBSSet(VaspInputSet):
     or BoltzTraP/AMSET electronic transport using hybrid DFT.
 
     Args:
-        structure (Structure): Structure to compute
+        structure (Crystal): Crystal to compute
         added_kpoints (list): a list of kpoints (list of 3 number list) added to the
             run. The k-points are in fractional coordinates
         mode (str): "Line" - generate k-points along symmetry lines for bandstructure.
@@ -1970,7 +1974,7 @@ class MPNonSCFSet(VaspInputSet):
     from_prev_calc to initialize from a previous SCF run.
 
     Args:
-        structure (Structure): Structure to compute
+        structure (Crystal): Crystal to compute
         mode (str): Line, Uniform or Boltztrap mode supported.
         nedos (int): nedos parameter. Default to 2001.
         dedos (float): setting nedos=0 and uniform mode in from_prev_calc,
@@ -2098,7 +2102,7 @@ class MPSOCSet(VaspInputSet):
     """An input set for running spin-orbit coupling (SOC) calculations.
 
     Args:
-        structure (Structure): the structure must have the 'magmom' site
+        structure (Crystal): the structure must have the 'magmom' site
             property and each magnetic moment value must have 3
             components. eg: ``magmom = [[0,0,2], ...]``
         saxis (tuple): magnetic moment orientation
@@ -2178,7 +2182,7 @@ class MPSOCSet(VaspInputSet):
         return {"reciprocal_density": self.reciprocal_density * factor}
 
     @VaspInputSet.structure.setter  # type: ignore[misc, union-attr]
-    def structure(self, structure: Structure | None) -> None:
+    def structure(self, structure: Crystal | None) -> None:
         if structure is not None:
             if self.magmom:
                 structure = structure.copy(site_properties={"magmom": self.magmom})
@@ -2201,7 +2205,7 @@ class MPNMRSet(VaspInputSet):
     """Init a MPNMRSet.
 
     Args:
-        structure (Structure): Structure from previous run.
+        structure (Crystal): Crystal from previous run.
         mode (str): The NMR calculation to run
             "cs": for Chemical Shift
             "efg" for Electric Field Gradient
@@ -2252,7 +2256,7 @@ class MPNMRSet(VaspInputSet):
         elif self.mode.lower() == "efg" and self.structure is not None:
             isotopes = {isotope.split("-")[0]: isotope for isotope in self.isotopes}
             quad_efg = [
-                Element(symbol).get_nmr_quadrupole_moment(isotopes.get(symbol))
+                get_el_sp(symbol).get_nmr_quadrupole_moment(isotopes.get(symbol))
                 for symbol in self.structure.species
             ]
             updates.update(
@@ -2294,7 +2298,7 @@ class MVLElasticSet(VaspInputSet):
     elastic constants.
 
     Args:
-        structure (pymatgen.Structure): Input structure.
+        structure (Crystal): Input structure.
         potim (float): POTIM parameter. The default of 0.015 is usually fine,
             but some structures may require a smaller step.
         **kwargs: Parameters supported by MPRelaxSet.
@@ -2326,7 +2330,7 @@ class MVLGWSet(VaspInputSet):
     the series.
 
     Args:
-        structure (Structure): Input structure.
+        structure (Crystal): Input structure.
         mode (str): Supported modes are "STATIC" (default), "DIAG", "GW",
             and "BSE".
         nbands (int): For subsequent calculations, it is generally
@@ -2436,7 +2440,7 @@ class MVLSlabSet(VaspInputSet):
     and orient unit cells (bulk), to ensure the same KPOINTS, POTCAR and INCAR criterion.
 
     Args:
-        structure: Structure
+        structure: Crystal
         k_product: default to 50, kpoint number * length for a & b
             directions, also for c direction in bulk calculations
         bulk:
@@ -2497,7 +2501,7 @@ class MVLSlabSet(VaspInputSet):
             if self.set_mix:
                 updates |= {"AMIN": 0.01, "AMIX": 0.2, "BMIX": 0.001}
             if self.auto_dipole and self.structure is not None:
-                weights = [struct.species.weight for struct in self.structure]
+                weights = [get_el_sp(site.specie).atomic_mass for site in self.structure]
                 center_of_mass = np.average(self.structure.frac_coords, weights=weights, axis=0).tolist()
                 updates |= {"IDIPOL": 3, "LDIPOL": True, "DIPOL": center_of_mass}
         return updates
@@ -2511,7 +2515,7 @@ class MVLSlabSet(VaspInputSet):
         Automatic mesh & Gamma is the default setting.
         """
         # To get input sets, the input structure has to has the same number
-        # of required parameters as a Structure object (ie. 4). Slab
+        # of required parameters as a Crystal object (ie. 4). Slab
         # attributes aren't going to affect the VASP inputs anyways so
         # converting the slab into a structure should not matter
         # use k_product to calculate kpoints, k_product = kpts[0][0] * a
@@ -2537,7 +2541,7 @@ class MVLSlabSet(VaspInputSet):
     def as_dict(self, verbosity: int = 2) -> dict[str, Any]:
         """
         Args:
-            verbosity (int): Verbosity of dict. e.g. whether to include Structure.
+            verbosity (int): Verbosity of dict. e.g. whether to include Crystal.
 
         Returns:
             dict: MSONable MVLGBSet representation.
@@ -2553,7 +2557,7 @@ class MVLGBSet(VaspInputSet):
     """Write a VASP input files for grain boundary calculations, slab or bulk.
 
     Args:
-        structure (Structure): provide the structure
+        structure (Crystal): provide the structure
         k_product: Kpoint number * length for a & b directions, also for c direction in
             bulk calculations. Default to 40.
         slab_mode (bool): Defaults to False. Use default (False) for a bulk supercell.
@@ -2638,7 +2642,7 @@ class MVLRelax52Set(VaspInputSet):
             Manual 1.2, 1.3 & 10.2.1 for more details.
 
     Args:
-        structure (Structure): input structure.
+        structure (Crystal): input structure.
         user_potcar_functional (str): choose from "PBE_52", "PBE_54" and "PBE_64".
         **kwargs: Other kwargs supported by VaspInputSet.
     """
@@ -2653,7 +2657,7 @@ class MITMDSet(VaspInputSet):
     """Write a VASP MD run. This DOES NOT do multiple stage runs.
 
     Args:
-        structure (Structure): Input structure.
+        structure (Crystal): Input structure.
         start_temp (float): Starting temperature.
         end_temp (float): Final temperature.
         nsteps (int): Number of time steps for simulations. NSW parameter.
@@ -2664,7 +2668,7 @@ class MITMDSet(VaspInputSet):
         **kwargs: Other kwargs supported by VaspInputSet.
     """
 
-    structure: Structure | None = None
+    structure: Crystal | None = None
     start_temp: float = 0.0
     end_temp: float = 300.0
     nsteps: int = 1000
@@ -2719,11 +2723,11 @@ class NEBSet(VaspInputSet):
     """
 
     def __init__(
-        self, structures: list[Structure], unset_encut: bool = False, parent_set="MPRelaxSet", **kwargs
+        self, structures: list[Crystal], unset_encut: bool = False, parent_set="MPRelaxSet", **kwargs
     ) -> None:
         """
         Args:
-            structures: List of Structure objects.
+            structures: List of Crystal objects.
             unset_encut (bool): Whether to unset ENCUT.
             parent_set (str): The parent input set to inherit from. Defaults to MPRelaxSet. This should be a string
                 name to support MSONable.
@@ -2773,7 +2777,7 @@ class NEBSet(VaspInputSet):
         return [Poscar(struct) for struct in self.structures]
 
     @staticmethod
-    def _process_structures(structures: list[Structure]) -> list[Structure]:
+    def _process_structures(structures: list[Crystal]) -> list[Crystal]:
         """Remove any atoms jumping across the cell."""
         input_structures = structures
         structures = [input_structures[0]]
@@ -2839,7 +2843,7 @@ class NEBSet(VaspInputSet):
                 key = (site.specie, tuple(np.round(site.frac_position % 1.0, 10)))
                 unique_sites[key] = CrystalSite(site.frac_position, site.specie, self.structures[0].lattice)
             sites = sorted(unique_sites.values(), key=lambda site: (site.specie, *site.frac_position.tolist()))
-            neb_path = Structure(
+            neb_path = Crystal(
                 [site.specie for site in sites],
                 [site.frac_position for site in sites],
                 self.structures[0].lattice,
@@ -2854,7 +2858,7 @@ class CINEBSet(NEBSet):
     http://theory.cm.utexas.edu/vtsttools/.
     """
 
-    def __init__(self, structures: list[Structure], **kwargs) -> None:
+    def __init__(self, structures: list[Crystal], **kwargs) -> None:
         r"""
         Args:
             structures: Input structures.
@@ -2881,10 +2885,10 @@ class MITNEBSet(NEBSet):
     NEBSet using MITRelaxSet as parent. Retained for compatibility.
     """
 
-    def __init__(self, structures: list[Structure], **kwargs) -> None:
+    def __init__(self, structures: list[Crystal], **kwargs) -> None:
         """
         Args:
-            structures: List of Structure objects.
+            structures: List of Crystal objects.
             **kwargs: Other kwargs supported by VaspInputSet.
         """
         super().__init__(structures, parent_set="MITRelaxSet", **kwargs)
@@ -2905,7 +2909,7 @@ class MPMDSet(VaspInputSet):
     Precision remains normal, to increase accuracy of stress tensor.
 
     Args:
-        structure (Structure): Input structure.
+        structure (Crystal): Input structure.
         start_temp (int): Starting temperature.
         end_temp (int): Final temperature.
         nsteps (int): Number of time steps for simulations. NSW parameter.
@@ -2960,7 +2964,7 @@ class MPMDSet(VaspInputSet):
             updates["MAGMOM"] = None
 
         if self.time_step is None and self.structure is not None:
-            if Element("H") in self.structure.species:
+            if "H" in self.structure.species:
                 updates |= {"POTIM": 0.5, "NSW": self.nsteps * 4}
             else:
                 updates["POTIM"] = 2.0
@@ -3060,7 +3064,7 @@ class MVLScanRelaxSet(VaspInputSet):
             kinetic energy density (partial)
 
     Args:
-        structure (Structure): input structure.
+        structure (Crystal): input structure.
         vdw (str): set "rVV10" to enable SCAN+rVV10, which is a versatile
             van der Waals density functional by combing the SCAN functional
             with the rVV10 non-local correlation functional.
@@ -3125,7 +3129,7 @@ def get_vasprun_outcar(
     )
 
 
-def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) -> Structure:
+def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) -> Crystal:
     """Process structure from previous run.
 
     Args:
@@ -3133,7 +3137,7 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
         outcar (Outcar): Outcar that contains the magnetization info from previous run.
 
     Returns:
-        Structure: The magmom-decorated structure that can be passed to get VASP input files, e.g.
+        Crystal: The magmom-decorated structure that can be passed to get VASP input files, e.g.
             get_kpoints().
     """
     structure = vasprun.final_structure
@@ -3154,10 +3158,11 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
             l_val = []
             s = 0
             for site in structure:
-                if site.specie.symbol not in m:
-                    m[site.specie.symbol] = vals[s]
+                site_symbol = get_el_sp(site.specie).symbol
+                if site_symbol not in m:
+                    m[site_symbol] = vals[s]
                     s += 1
-                l_val.append(m[site.specie.symbol])
+                l_val.append(m[site_symbol])
             if len(l_val) == len(structure):
                 site_properties |= {key.lower(): l_val}
             else:
@@ -3167,14 +3172,14 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
 
 
 def standardize_structure(
-    structure: Structure,
+    structure: Crystal,
     sym_prec: float = 0.1,
     international_monoclinic: bool = True,
-) -> Structure:
+) -> Crystal:
     """Get the symmetrically standardized structure.
 
     Args:
-        structure (Structure): The structure.
+        structure (Crystal): The structure.
         sym_prec (float): Tolerance for symmetry finding for standardization.
         international_monoclinic (bool): Whether to use international
             convention (vs Curtarolo) for monoclinic. Defaults True.
@@ -3208,7 +3213,7 @@ class BadInputSetWarning(UserWarning):
 
 
 def batch_write_input(
-    structures: Sequence[Structure],
+    structures: Sequence[Crystal],
     vasp_input_set=MPRelaxSet,
     output_dir: PathLike = ".",
     make_dir_if_not_present: bool = True,
@@ -3224,7 +3229,7 @@ def batch_write_input(
     output_dir, following the format output_dir/{group}/{formula}_{number}.
 
     Args:
-        structures ([Structure]): Sequence of Structures.
+        structures ([Crystal]): Sequence of Structures.
         vasp_input_set (VaspInputSet): VaspInputSet class that creates
             VASP input files from structures. Note that a class should be
             supplied. Defaults to MPRelaxSet.
@@ -3278,10 +3283,10 @@ _dummy_structure = Crystal(
 
 
 def get_valid_magmom_struct(
-    structure: Structure,
+    structure: Crystal,
     inplace: bool = True,
     spin_mode: str = "auto",
-) -> Structure:
+) -> Crystal:
     """
     Make sure that the structure has valid magmoms based on the kind of calculation.
 
@@ -3345,7 +3350,7 @@ class MPAbsorptionSet(VaspInputSet):
     the series. It is important to ensure Gamma centred kpoints for the RPA step.
 
     Args:
-        structure (Structure): Input structure.
+        structure (Crystal): Input structure.
         mode (str): Supported modes are "IPA", "RPA"
         copy_wavecar (bool): Whether to copy the WAVECAR from a previous run.
             Defaults to True.
@@ -3460,7 +3465,7 @@ def _get_ispin(vasprun: Vasprun | None, outcar: Outcar | None) -> Literal[1, 2]:
     return 2
 
 
-def _get_recommended_lreal(structure: Structure) -> Literal["Auto", False]:
+def _get_recommended_lreal(structure: Crystal) -> Literal["Auto", False]:
     """Get recommended LREAL flag based on the structure."""
     return "Auto" if structure.num_sites > 16 else False
 
