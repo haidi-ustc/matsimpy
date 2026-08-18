@@ -1951,6 +1951,7 @@ PYMATGEN_POTCAR_HASHES: dict = dict(load_vasp_resource(f"{MODULE_DIR}/vasp_potca
 # Written to some newer POTCARs by VASP
 VASP_POTCAR_HASHES: dict = dict(load_vasp_resource(f"{MODULE_DIR}/vasp_potcar_file_hashes.json"))
 POTCAR_STATS_PATH: str = os.path.join(MODULE_DIR, "vasp_potcar_stats.json")
+_DEFAULT_POTCAR_STATS_PATH = object()
 
 
 class VaspPspDirError(ValueError):
@@ -2824,7 +2825,7 @@ class PotcarSingle:
 def _gen_potcar_summary_stats(
     append: bool = False,
     vasp_psp_dir: str | None = None,
-    summary_stats_filename: str | None = POTCAR_STATS_PATH,
+    summary_stats_filename: str | None | object = _DEFAULT_POTCAR_STATS_PATH,
 ) -> dict:
     """
     Regenerate the reference data in vasp_potcar_stats.json used to validate POTCARs
@@ -2838,9 +2839,15 @@ def _gen_potcar_summary_stats(
             or if a completely new file is generated. Defaults to False.
         PMG_VASP_PSP_DIR (str): Change where this function searches for POTCARs
             defaults to the PMG_VASP_PSP_DIR environment variable if not set. Defaults to None.
-        summary_stats_filename (str): Name of the output summary stats file. Defaults to
-            'matsimpy/calculator/vasp/vasp_potcar_stats.json'.
+        summary_stats_filename (str): Name of the output summary stats file. If omitted, defaults to the packaged
+            'matsimpy/calculator/vasp/vasp_potcar_stats.json' resource, which must exist.
     """
+    if summary_stats_filename is _DEFAULT_POTCAR_STATS_PATH:
+        resolved_summary_stats_filename = POTCAR_STATS_PATH
+    else:
+        resolved_summary_stats_filename = cast("str | None", summary_stats_filename)
+    required_summary_stats = resolved_summary_stats_filename == POTCAR_STATS_PATH
+
     func_dir_exist: dict[str, str] = {}
     vasp_psp_dir = vasp_psp_dir or SETTINGS.get("PMG_VASP_PSP_DIR")
     for func, func_dir in PotcarSingle.functional_dir.items():
@@ -2857,8 +2864,8 @@ def _gen_potcar_summary_stats(
     # without completely regenerating the dict of summary stats
     # Use append = False to completely regenerate the summary stats dict
     new_summary_stats = (
-        dict(load_vasp_resource(summary_stats_filename, required=False))
-        if append and summary_stats_filename is not None
+        dict(load_vasp_resource(resolved_summary_stats_filename, required=required_summary_stats))
+        if append and resolved_summary_stats_filename is not None
         else {}
     )
 
@@ -2885,8 +2892,8 @@ def _gen_potcar_summary_stats(
                 }
             )
 
-    if summary_stats_filename is not None:
-        dumpfn(new_summary_stats, summary_stats_filename)
+    if resolved_summary_stats_filename is not None:
+        dumpfn(new_summary_stats, resolved_summary_stats_filename)
 
     return new_summary_stats
 

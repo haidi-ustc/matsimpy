@@ -32,3 +32,28 @@
 ### Concerns
 - No task-related failures observed.
 - The full suite still has the known unrelated missing Gaussian fixture failures.
+
+## Fix Round 1
+
+### Finding Addressed
+- `_gen_potcar_summary_stats(append=True)` treated the default packaged `POTCAR_STATS_PATH` as optional. The fix distinguishes omitted/default packaged stats from explicit user append targets using a sentinel, and requires the packaged stats path whether it is omitted or explicitly passed.
+
+### RED Evidence
+- `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest tests/calculator/test_vasp_resources.py -q`
+  - Result after adding the default-path regression: 1 failed, 8 passed.
+  - Failure: `test_append_summary_stats_requires_default_packaged_resource` observed `required=False` for `POTCAR_STATS_PATH`.
+- `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest tests/calculator/test_vasp_resources.py -q`
+  - Result after adding the explicit-packaged-path regression: 1 failed, 9 passed.
+  - Failure: `test_append_summary_stats_requires_explicit_packaged_resource` observed `required=False` for `POTCAR_STATS_PATH`.
+
+### GREEN Evidence
+- `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m pytest tests/calculator/test_vasp_resources.py tests/calculator/test_vasp_inputs.py -q`
+  - Result: 40 passed, 2 warnings.
+- `conda run -n pmg /opt/miniconda3/envs/pmg/bin/python -m compileall -q matsimpy/calculator/vasp/inputs.py tests/calculator/test_vasp_resources.py`
+  - Result: passed.
+- `git diff --check`
+  - Result: passed.
+
+### Notes
+- The two warnings are pre-existing `Kpoints.automatic` deprecation warnings in `tests/calculator/test_vasp_inputs.py`.
+- The append regressions monkeypatch `dumpfn` and `PotcarSingle.functional_dir` to avoid touching packaged resource files or requiring a PSP tree.

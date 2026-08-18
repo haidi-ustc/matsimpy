@@ -82,3 +82,66 @@ def test_vasp_inputs_and_sets_do_not_expose_masking_loaders():
     assert inputs.POTCAR_STATS_PATH.endswith("vasp_potcar_stats.json")
     assert isinstance(inputs.PotcarSingle._potcar_summary_stats, dict)
     assert isinstance(sets.MITRelaxSet.CONFIG, dict)
+
+
+def test_append_summary_stats_requires_default_packaged_resource(tmp_path, monkeypatch):
+    from matsimpy.calculator.vasp import inputs
+
+    calls = []
+
+    def record_load(path, *, required=True):
+        calls.append((path, required))
+        return {}
+
+    monkeypatch.setattr(inputs, "load_vasp_resource", record_load)
+    monkeypatch.setattr(inputs, "dumpfn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(inputs.PotcarSingle, "functional_dir", {})
+
+    inputs._gen_potcar_summary_stats(append=True, vasp_psp_dir=str(tmp_path))
+
+    assert calls == [(inputs.POTCAR_STATS_PATH, True)]
+
+
+def test_append_summary_stats_requires_explicit_packaged_resource(tmp_path, monkeypatch):
+    from matsimpy.calculator.vasp import inputs
+
+    calls = []
+
+    def record_load(path, *, required=True):
+        calls.append((path, required))
+        return {}
+
+    monkeypatch.setattr(inputs, "load_vasp_resource", record_load)
+    monkeypatch.setattr(inputs, "dumpfn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(inputs.PotcarSingle, "functional_dir", {})
+
+    inputs._gen_potcar_summary_stats(
+        append=True,
+        vasp_psp_dir=str(tmp_path),
+        summary_stats_filename=inputs.POTCAR_STATS_PATH,
+    )
+
+    assert calls == [(inputs.POTCAR_STATS_PATH, True)]
+
+
+def test_append_summary_stats_allows_missing_explicit_target(tmp_path, monkeypatch):
+    from matsimpy.calculator.vasp import inputs
+
+    append_target = tmp_path / "generated_stats.json"
+    calls = []
+
+    def record_load(path, *, required=True):
+        calls.append((path, required))
+        return {}
+
+    monkeypatch.setattr(inputs, "load_vasp_resource", record_load)
+    monkeypatch.setattr(inputs, "dumpfn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(inputs.PotcarSingle, "functional_dir", {})
+
+    inputs._gen_potcar_summary_stats(
+        append=True,
+        vasp_psp_dir=str(tmp_path),
+        summary_stats_filename=str(append_target),
+    )
+
+    assert calls == [(str(append_target), False)]
