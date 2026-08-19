@@ -26,6 +26,13 @@ def test_magmom_is_an_immutable_sequence_and_scalar():
         float(vector)
 
 
+def test_magmom_rejects_direct_component_assignment():
+    magmom = Magmom([1, 2, 3])
+
+    with pytest.raises(AttributeError, match="Magmom is immutable"):
+        magmom.components = (4.0, 5.0, 6.0)
+
+
 def test_magmom_mson_roundtrip():
     original = Magmom([1, 2, 3])
     restored = Magmom.from_dict(original.as_dict())

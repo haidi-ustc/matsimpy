@@ -127,7 +127,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
     3. If the species of the site has a spin setting, that is used. This can be set
         with structure.add_spin_by_element().
     4. If the species itself has a particular setting in the config file, that
-       is used, e.g. Mn3+ may have a different magmom than Mn4+.
+       is used. MAGMOM settings support element symbols, atomic numbers, and
+       native Element objects.
     5. Lastly, the element symbol itself is checked in the config file. If
        there are no settings, a default value of 0.6 is used.
 
