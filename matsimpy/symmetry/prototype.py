@@ -255,3 +255,42 @@ class CrystalPrototype:
         if data is None:
             return None
         return data if return_all else data[0]
+
+    def build_prototype_database(
+        self,
+        structure_files: List[str],
+        symprec: float = 1e-5,
+        to_primitive: bool = True,
+    ) -> Dict[str, List[str]]:
+        """Build a prototype database from structure files.
+
+        Reads each file via matsimpy.io.read, computes its prototype string,
+        and maps the string to the file basenames that produced it. Files that
+        fail to read or analyze are skipped with an error message, matching
+        the reference implementation.
+
+        Args:
+            structure_files: Paths to structure files (any format supported by
+                matsimpy.io.read).
+            symprec: Symmetry tolerance passed to spglib (default 1e-5).
+            to_primitive: Standardize to the primitive cell before
+                fingerprinting (default True).
+
+        Returns:
+            Dict mapping prototype strings to lists of file basenames.
+        """
+        from ..io import read
+
+        results: Dict[str, List[str]] = {}
+        for file_path in structure_files:
+            structure_id = os.path.basename(str(file_path))
+            try:
+                structure = read(str(file_path))
+                key = self.get_prototype_string(
+                    structure, symprec=symprec, to_primitive=to_primitive
+                )
+                results.setdefault(key, []).append(structure_id)
+            except Exception as exc:
+                print(f"Error processing file {file_path}: {exc}")
+        self.prototype_data.update(results)
+        return results

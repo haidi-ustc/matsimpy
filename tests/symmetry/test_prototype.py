@@ -1,10 +1,12 @@
 """Tests for crystal prototype identification."""
+import json
 from pathlib import Path
 
 import pytest
 
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Crystal, Molecule
+from matsimpy.io import read
 from matsimpy.symmetry import CrystalPrototype, get_prototype, get_prototype_info
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -71,3 +73,20 @@ def test_get_structure_from_prototype():
 def test_get_prototype_string_matches_function():
     crystal = _rocksalt()
     assert CrystalPrototype().get_prototype_string(crystal) == get_prototype(crystal)
+
+
+def test_reference_database_parity():
+    files = sorted(str(path) for path in DBS_DIR.glob("*.vasp"))
+    assert len(files) == 7
+    reference = json.loads(REFERENCE_FILE.read_text())
+    analyzer = CrystalPrototype()
+    results = analyzer.build_prototype_database(files)
+    assert set(results) == set(reference)
+    for key, structure_ids in reference.items():
+        assert set(results[key]) == set(structure_ids)
+
+
+def test_matching_pair_maps_to_same_prototype():
+    base = DBS_DIR / "mp-1234353.vasp"
+    variant = DBS_DIR / "mp-1234353-1.vasp"
+    assert get_prototype(read(str(base))) == get_prototype(read(str(variant)))
