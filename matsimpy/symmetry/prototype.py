@@ -213,4 +213,45 @@ def get_prototype_info(
 
 
 class CrystalPrototype:
-    """Crystal prototype analyzer (implemented in a later task)."""
+    """Crystal prototype analysis and identification.
+
+    Computes prototype identifier strings for crystals and maintains a
+    prototype database mapping prototype strings to structure file names.
+
+    Args:
+        prototype_file: Optional path to a JSON file (a dict mapping prototype
+            strings to lists of structure file names) to pre-load.
+    """
+
+    def __init__(self, prototype_file: Optional[str] = None):
+        self.prototype_data: Dict[str, List[str]] = {}
+        if prototype_file:
+            try:
+                with open(prototype_file) as file_handle:
+                    self.prototype_data = json.load(file_handle)
+            except FileNotFoundError:
+                pass
+
+    def get_prototype_string(
+        self, crystal: Crystal, symprec: float = 1e-5, to_primitive: bool = True
+    ) -> str:
+        """Return the prototype identifier string for a crystal (see get_prototype)."""
+        return get_prototype(crystal, symprec=symprec, to_primitive=to_primitive)
+
+    def save_prototype_data(self, output_file: str, indent: int = 4) -> None:
+        """Save the current prototype data to a JSON file."""
+        with open(output_file, "w") as file_handle:
+            json.dump(self.prototype_data, file_handle, indent=indent)
+
+    def get_structure_from_prototype(
+        self, prototype: str, return_all: bool = False
+    ) -> Optional[Union[str, List[str]]]:
+        """Return structure file name(s) associated with a prototype.
+
+        Returns None if the prototype is not in the database. With
+        return_all=True, returns the full list.
+        """
+        data = self.prototype_data.get(prototype, None)
+        if data is None:
+            return None
+        return data if return_all else data[0]
