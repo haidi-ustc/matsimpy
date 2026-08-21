@@ -139,7 +139,8 @@ def _symmetry_signature(
         crystal_class = "h"
     else:
         crystal_class = "c"
-    lattice_type = spglib.get_spacegroup_type(hall_number)["international"][0]
+    spacegroup_type = spglib.get_spacegroup_type(hall_number)
+    lattice_type = _dataset_value(spacegroup_type, "international")[0]
     if lattice_type in ("A", "B"):
         lattice_type = "C"
     pearson = crystal_class + lattice_type + str(len(std_cell[2]))
