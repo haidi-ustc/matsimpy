@@ -294,3 +294,123 @@ class CrystalPrototype:
                 print(f"Error processing file {file_path}: {exc}")
         self.prototype_data.update(results)
         return results
+
+    def suggest_element_substitutions(
+        self, elements: List[str]
+    ) -> Dict[str, List[str]]:
+        """Suggest same-family element substitutions for each element.
+
+        Non-transition metals get elements from the same periodic-table group
+        (up to period 6). Transition metals (Sc-Zn, Y-Cd, Lu-Hg) get all other
+        transition metals. Results are sorted for determinism; unknown
+        elements fall back to themselves.
+        """
+        transition_metal_symbols = set()
+        for atomic_number in list(range(21, 31)) + list(range(39, 49)) + list(
+            range(71, 81)
+        ):
+            try:
+                transition_metal_symbols.add(Element.from_Z(atomic_number).symbol)
+            except (ValueError, AttributeError):
+                pass
+
+        result = {}
+        for element_symbol in elements:
+            try:
+                element = Element.get_element(element_symbol)
+                if element_symbol in transition_metal_symbols:
+                    result[element_symbol] = sorted(
+                        symbol
+                        for symbol in transition_metal_symbols
+                        if Element.get_element(symbol).period <= 6
+                    )
+                else:
+                    same_group = []
+                    for symbol in ELEMENTS:
+                        try:
+                            candidate = Element.get_element(symbol)
+                        except (ValueError, AttributeError):
+                            continue
+                        if (
+                            candidate.period is not None
+                            and candidate.period <= 6
+                            and candidate.group == element.group
+                        ):
+                            same_group.append(symbol)
+                    result[element_symbol] = (
+                        same_group if same_group else [element_symbol]
+                    )
+            except Exception:
+                result[element_symbol] = [element_symbol]
+        return result
+
+    def generate_structures_from_prototype(
+        self,
+        prototype: str,
+        structures_dir: str = "./",
+        element_substitutions: Optional[Dict[str, List[str]]] = None,
+        max_structures: Optional[int] = None,
+    ) -> List[Crystal]:
+        """Generate structures from a prototype by element substitution.
+
+        Reads the first template structure file mapped to the prototype in
+        structures_dir and produces the Cartesian product of the substitution
+        options. If element_substitutions is None, same-family suggestions
+        from suggest_element_substitutions are used.
+
+        Args:
+            prototype: Prototype identifier string.
+            structures_dir: Directory containing the template structure files.
+            element_substitutions: Optional mapping of original element symbol
+                to a list of replacement symbols.
+            max_structures: Optional cap on the number of generated structures.
+
+        Returns:
+            List of new Crystal structures with substituted elements.
+        """
+        from itertools import product
+
+        from ..io import read
+        from ..transformation.chemical import substitute_all
+
+        template_files = self.prototype_data.get(prototype, None)
+        if not template_files or not template_files[0]:
+            raise ValueError(f"No template structure found for prototype: {prototype}")
+        template_file_path = os.path.join(structures_dir, template_files[0])
+        try:
+            template_structure = read(template_file_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"Template structure file not found: {template_file_path}"
+            )
+
+        unique_elements = sorted(set(template_structure.species))
+        if element_substitutions is None:
+            element_substitutions = self.suggest_element_substitutions(unique_elements)
+
+        print("Original elements in the structure:", unique_elements)
+        print("Suggested element substitutions:")
+        for original_element, substitutes in element_substitutions.items():
+            print(f"  {original_element} -> {substitutes}")
+
+        element_keys = list(element_substitutions.keys())
+        substitution_lists = [element_substitutions[key] for key in element_keys]
+        all_combinations = list(product(*substitution_lists))
+        if max_structures and len(all_combinations) > max_structures:
+            all_combinations = all_combinations[:max_structures]
+            print(
+                f"Limited to {max_structures} combinations out of "
+                f"{len(all_combinations)} possible."
+            )
+
+        result_structures = []
+        for combination in all_combinations:
+            substitution_map = dict(zip(element_keys, combination))
+            new_structure = template_structure
+            for original_element, substitute_element in substitution_map.items():
+                if original_element != substitute_element:
+                    new_structure = substitute_all(
+                        new_structure, original_element, substitute_element
+                    )
+            result_structures.append(new_structure)
+        return result_structures

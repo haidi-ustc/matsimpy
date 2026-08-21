@@ -6,7 +6,7 @@ import pytest
 
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Crystal, Molecule
-from matsimpy.io import read
+from matsimpy.io import read, write
 from matsimpy.symmetry import CrystalPrototype, get_prototype, get_prototype_info
 from matsimpy.transformation.structural import make_supercell
 
@@ -113,3 +113,45 @@ def test_prototype_invariant_under_supercell_rocksalt():
     crystal = _rocksalt()
     supercell = make_supercell(crystal, [2, 2, 1])
     assert get_prototype(supercell) == get_prototype(crystal)
+
+
+def test_suggest_element_substitutions_same_group():
+    analyzer = CrystalPrototype()
+    substitutions = analyzer.suggest_element_substitutions(["Li", "O"])
+    assert "Li" in substitutions["Li"]
+    assert "Na" in substitutions["Li"]
+    assert "O" in substitutions["O"]
+    assert "S" in substitutions["O"]
+
+
+def test_suggest_element_substitutions_transition_metals():
+    analyzer = CrystalPrototype()
+    substitutions = analyzer.suggest_element_substitutions(["Fe"])
+    assert "Co" in substitutions["Fe"]
+    assert "Ni" in substitutions["Fe"]
+    assert "Au" in substitutions["Fe"]
+    assert substitutions["Fe"] == sorted(substitutions["Fe"])
+
+
+def test_suggest_element_substitutions_unknown_element():
+    analyzer = CrystalPrototype()
+    assert analyzer.suggest_element_substitutions(["Xx"]) == {"Xx": ["Xx"]}
+
+
+def test_generate_structures_from_prototype(tmp_path):
+    crystal = _rocksalt()
+    template = tmp_path / "template.vasp"
+    write(crystal, str(template))
+    analyzer = CrystalPrototype()
+    analyzer.prototype_data = {"AB_cF2_Fm-3m_a_b": ["template.vasp"]}
+    structures = analyzer.generate_structures_from_prototype(
+        "AB_cF2_Fm-3m_a_b",
+        structures_dir=str(tmp_path),
+        element_substitutions={"Na": ["Na", "Li"], "Cl": ["Cl", "F"]},
+        max_structures=3,
+    )
+    assert len(structures) == 3
+    assert all(isinstance(s, Crystal) and len(s) == 2 for s in structures)
+    assert set(structures[0].species) == {"Na", "Cl"}
+    assert set(structures[1].species) == {"Na", "F"}
+    assert set(structures[2].species) == {"Li", "Cl"}
