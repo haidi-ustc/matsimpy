@@ -18,6 +18,7 @@ in the symmetry directory, providing access to:
 from .analyzer import SymmetryAnalyzer, analyze_symmetry, get_conventional_cell
 from .kpath import HighSymmetryKpath
 from .matcher import StructureMatcher
+from .prototype import CrystalPrototype, get_prototype, get_prototype_info
 
 __all__ = [
     "SymmetryAnalyzer",
@@ -25,4 +26,7 @@ __all__ = [
     "get_conventional_cell",
     "HighSymmetryKpath",
     "StructureMatcher",
+    "CrystalPrototype",
+    "get_prototype",
+    "get_prototype_info",
 ]
