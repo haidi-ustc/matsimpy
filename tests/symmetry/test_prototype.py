@@ -8,6 +8,7 @@ from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Crystal, Molecule
 from matsimpy.io import read
 from matsimpy.symmetry import CrystalPrototype, get_prototype, get_prototype_info
+from matsimpy.transformation.structural import make_supercell
 
 DATA_DIR = Path(__file__).parent / "data"
 DBS_DIR = DATA_DIR / "prototype_dbs"
@@ -90,3 +91,25 @@ def test_matching_pair_maps_to_same_prototype():
     base = DBS_DIR / "mp-1234353.vasp"
     variant = DBS_DIR / "mp-1234353-1.vasp"
     assert get_prototype(read(str(base))) == get_prototype(read(str(variant)))
+
+
+def test_prototype_invariant_under_atom_order():
+    crystal = _rocksalt()
+    shuffled = Crystal(
+        list(reversed(crystal.species)),
+        list(reversed(crystal.frac_positions)),
+        crystal.lattice,
+    )
+    assert get_prototype(shuffled) == get_prototype(crystal)
+
+
+def test_prototype_invariant_under_supercell():
+    crystal = _diamond()
+    supercell = make_supercell(crystal, [2, 1, 1])
+    assert get_prototype(supercell) == get_prototype(crystal)
+
+
+def test_prototype_invariant_under_supercell_rocksalt():
+    crystal = _rocksalt()
+    supercell = make_supercell(crystal, [2, 2, 1])
+    assert get_prototype(supercell) == get_prototype(crystal)
