@@ -174,7 +174,7 @@ def test_vasp_runtime_imports_without_undeclared_dependencies(tmp_path):
         import sys
 
         target = pathlib.Path(sys.argv[1]).resolve()
-        blocked = {"ase", "orjson", "pymatgen", "tqdm"}
+        blocked = {"ase", "orjson", "pymatgen", "spglib", "tqdm"}
         real_import = builtins.__import__
         def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
             if level == 0 and (name in blocked or any(name.startswith(pkg + ".") for pkg in blocked)):

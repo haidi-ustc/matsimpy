@@ -2,11 +2,15 @@
 Symmetry analysis implementation for crystals and molecules.
 """
 
-import numpy as np
-import warnings
-from typing import Dict, List, Optional, Tuple, Union, Any
-import os
 import json
+import os
+import warnings
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+
+from ..core import Crystal, Element, Lattice, Molecule, get_el_sp
+from ._spglib import to_spglib_cell
 
 # Suppress spglib deprecation warning for old error handling API
 os.environ.setdefault("SPGLIB_OLD_ERROR_HANDLING", "0")
@@ -18,9 +22,6 @@ try:
 except ImportError:
     HAS_SPGLIB = False
     spglib = None
-
-from ..core import Crystal, Molecule, Lattice, Element
-
 
 _SPGLIB_IMPORT_ERROR = "spglib is required; install MatSimPy[analysis]"
 
@@ -289,11 +290,7 @@ class SymmetryAnalyzer:
         return target
 
     def _spglib_cell(self, crystal: Crystal) -> Tuple[np.ndarray, np.ndarray, List[int]]:
-        return (
-            np.asarray(crystal.lattice.lattice_vectors, dtype=float),
-            np.asarray(crystal.frac_positions, dtype=float),
-            [self._element_to_number(spec) for spec in crystal.species],
-        )
+        return to_spglib_cell(crystal)
 
     def analyze_molecule(
         self, molecule: Molecule, tolerance: float = 0.1
@@ -349,30 +346,8 @@ class SymmetryAnalyzer:
         }
 
     def _element_to_number(self, element: Union[str, int]) -> int:
-        """
-        Convert element symbol to atomic number.
-
-        Uses the Element class from core.periodic_table for proper
-        element-to-atomic-number conversion.
-        """
-        if isinstance(element, int):
-            return element
-
-        try:
-            elem = Element.get_element(str(element))
-            return elem.atomic_no
-        except (ValueError, AttributeError):
-            # Fallback: try to get from ELEMENTS list directly
-            from ..core.periodic_table import ELEMENTS
-
-            try:
-                symbol = str(element).capitalize()
-                if symbol in ELEMENTS:
-                    return ELEMENTS.index(symbol) + 1
-            except (ValueError, AttributeError):
-                pass
-            # Last resort: return 1 (H) if element not found
-            return 1
+        """Convert an element-like value to its atomic number."""
+        return get_el_sp(element).atomic_no
 
     def _get_crystal_system(self, space_group_number: int) -> str:
         """Get crystal system from space group number."""
@@ -987,14 +962,8 @@ def get_conventional_cell(
 
     from ..core import Element, Lattice
 
-    # Convert crystal to spglib format
-    lattice = crystal.lattice.lattice_vectors
-    positions = crystal.frac_positions
-    # Get atomic numbers for spglib
-    numbers = [elem.atomic_no for elem in crystal.elements]
-
     # Get standardized conventional cell
-    cell = (lattice, positions, numbers)
+    cell = to_spglib_cell(crystal)
     std_cell = spglib.standardize_cell(
         cell, symprec=symprec, angle_tolerance=angle_tolerance
     )

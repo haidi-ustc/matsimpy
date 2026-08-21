@@ -89,6 +89,11 @@ class TestSymmetryAnalyzer(unittest.TestCase):
         self.assertEqual(self.analyzer._element_to_number('O'), 8)
         self.assertEqual(self.analyzer._element_to_number('H'), 1)
         self.assertEqual(self.analyzer._element_to_number(14), 14)  # Already a number
+
+    def test_element_to_number_rejects_unknown_element(self):
+        """Unknown elements must not silently become hydrogen."""
+        with self.assertRaises(ValueError):
+            self.analyzer._element_to_number("not-an-element")
     
     def test_get_crystal_system(self):
         """Test crystal system determination."""
