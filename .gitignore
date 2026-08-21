@@ -68,6 +68,7 @@ cython_debug/
 .DS_Store
 .cache/
 *.log
+!tests/**/fixtures/**/*.log
 tmp/
 mytest/
 tests/install
