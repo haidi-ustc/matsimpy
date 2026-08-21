@@ -396,11 +396,12 @@ class CrystalPrototype:
         element_keys = list(element_substitutions.keys())
         substitution_lists = [element_substitutions[key] for key in element_keys]
         all_combinations = list(product(*substitution_lists))
-        if max_structures and len(all_combinations) > max_structures:
+        total_combinations = len(all_combinations)
+        if max_structures and total_combinations > max_structures:
             all_combinations = all_combinations[:max_structures]
             print(
                 f"Limited to {max_structures} combinations out of "
-                f"{len(all_combinations)} possible."
+                f"{total_combinations} possible."
             )
 
         result_structures = []
