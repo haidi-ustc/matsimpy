@@ -53,8 +53,8 @@ print("-" * 70)
 
 prototypes = [
     'fcc', 'bcc', 'diamond', 'hcp', 
-    'sc', 'rocksalt', 'zincblende', 
-    'fluorite', 'perovskite'
+    'sc', 'rocksalt', 'zincblende',
+    'wurtzite', 'perovskite'
 ]
 
 print("Available prototypes:")
@@ -62,14 +62,14 @@ for proto in prototypes:
     try:
         # Try to create a simple example
         if proto == 'hcp':
-            struct = from_prototype(proto, 'Mg', a=3.0, c=5.0)
-        elif proto in ['rocksalt', 'zincblende', 'fluorite', 'perovskite']:
+            struct = from_prototype(proto, 'Mg', [3.21, 3.21, 5.21])
+        elif proto in ['rocksalt', 'zincblende', 'wurtzite', 'perovskite']:
             if proto == 'rocksalt':
                 struct = from_prototype(proto, 'NaCl', 5.0)
             elif proto == 'zincblende':
                 struct = from_prototype(proto, 'ZnS', 5.4)
-            elif proto == 'fluorite':
-                struct = from_prototype(proto, 'CaF2', 5.5)
+            elif proto == 'wurtzite':
+                struct = from_prototype(proto, ['Ga', 'N'], [3.19, 3.19, 5.19])
             else:  # perovskite
                 struct = from_prototype(proto, ['Ca', 'Ti', 'O'], 4.0)
         else:
@@ -105,8 +105,8 @@ print("-" * 70)
 
 try:
     # Build structure from space group number
-    # Space group 225 (Fm-3m) for FCC
-    fcc_from_sg = from_space_group(225, ['Cu'], [4], a=3.61)
+    # Space group 225 (Fm-3m): one Cu at the origin generates the 4-atom FCC cell
+    fcc_from_sg = from_space_group(225, ['Cu'], [[0, 0, 0]], lattice_params=3.61)
     print(f"FCC Cu from space group 225: {fcc_from_sg.formula}")
     print(f"  Number of atoms: {len(fcc_from_sg)}")
     print(f"  Lattice: a={fcc_from_sg.lattice.a:.2f} Å")
