@@ -51,6 +51,7 @@ from monty.serialization import loadfn
 from matsimpy.core import Crystal, Element, Lattice, Molecule
 from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
+from matsimpy.calculator.vasp._resources import load_resource
 from matsimpy.symmetry import HighSymmKpath, SpacegroupAnalyzer, StructureMatcher
 
 # Structure → Crystal alias
@@ -162,19 +163,11 @@ MODULE_DIR = os.path.dirname(__file__)
 
 
 
-def _safe_loadfn(path):
-    try:
-        from monty.serialization import loadfn
-        return loadfn(path)
-    except Exception:
-        return {}
-
-
 def _load_yaml_config(fname):
     fname = f"{MODULE_DIR}/{fname}"
     if not fname.endswith(".yaml"):
         fname += ".yaml"
-    config = _safe_loadfn(fname)
+    config = load_resource(fname)
     if "PARENT" in config:
         parent_config = _load_yaml_config(config["PARENT"])
         for k, v in parent_config.items():
@@ -363,7 +356,7 @@ class VaspInputSet(InputGenerator, abc.ABC):
             )
 
         if self.vdw:
-            vdw_par = _safe_loadfn(f"{MODULE_DIR}/vdW_parameters.yaml")
+            vdw_par = load_resource(f"{MODULE_DIR}/vdW_parameters.yaml")
             if vdw_param := vdw_par.get(self.vdw):
                 self._config_dict["INCAR"].update(vdw_param)
             else:
@@ -1466,7 +1459,7 @@ class MPScanRelaxSet(VaspInputSet):
                 stacklevel=2,
             )
             # Delete any vdw parameters that may have been added to the INCAR
-            vdw_par = _safe_loadfn(f"{MODULE_DIR}/vdW_parameters.yaml")
+            vdw_par = load_resource(f"{MODULE_DIR}/vdW_parameters.yaml")
             for k in vdw_par[self.vdw]:
                 self._config_dict["INCAR"].pop(k, None)
 

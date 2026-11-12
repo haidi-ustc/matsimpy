@@ -41,6 +41,7 @@ from tabulate import tabulate
 
 from matsimpy.core import Element, Lattice, Crystal
 from matsimpy.calculator.utils import clean_lines, site_property_column, str_delimited
+from matsimpy.calculator.vasp._resources import load_resource
 from matsimpy.electronic_structure import Magmom
 from matsimpy.symmetry import SpacegroupAnalyzer
 
@@ -849,15 +850,6 @@ class Poscar(MSONable):
 class BadPoscarWarning(UserWarning):
     """Warning class for bad POSCAR entries."""
 
-
-
-def _safe_loadfn(path):
-    """Load JSON/YAML, return {} if file missing."""
-    try:
-        from monty.serialization import loadfn
-        return loadfn(path)
-    except Exception:
-        return {}
 
 
 class Incar(UserDict, MSONable):
@@ -1998,10 +1990,10 @@ class OrbitalDescription(NamedTuple):
 
 
 # Hashes computed from the full POTCAR file contents by pymatgen (not 1st-party VASP hashes)
-PYMATGEN_POTCAR_HASHES: dict = _safe_loadfn(f"{MODULE_DIR}/vasp_potcar_pymatgen_hashes.json")
+PYMATGEN_POTCAR_HASHES: dict = load_resource(f"{MODULE_DIR}/vasp_potcar_pymatgen_hashes.json")
 # Written to some newer POTCARs by VASP
-VASP_POTCAR_HASHES: dict = _safe_loadfn(f"{MODULE_DIR}/vasp_potcar_file_hashes.json")
-POTCAR_STATS_PATH: str = os.path.join(MODULE_DIR, "potcar-summary-stats.json.bz2")
+VASP_POTCAR_HASHES: dict = load_resource(f"{MODULE_DIR}/vasp_potcar_file_hashes.json")
+POTCAR_STATS_PATH: str = os.path.join(MODULE_DIR, "vasp_potcar_stats.json")
 
 
 class PmgVaspPspDirError(ValueError):
@@ -2076,7 +2068,7 @@ class PotcarSingle:
     }
 
     # Used for POTCAR validation
-    _potcar_summary_stats = _safe_loadfn(POTCAR_STATS_PATH)
+    _potcar_summary_stats = load_resource(POTCAR_STATS_PATH)
 
     def __init__(self, data: str, symbol: str | None = None) -> None:
         """
@@ -2870,19 +2862,20 @@ def _gen_potcar_summary_stats(
     summary_stats_filename: str | None = POTCAR_STATS_PATH,
 ) -> dict:
     """
-    Regenerate the reference data in potcar-summary-stats.json.bz2 used to validate POTCARs
-    by comparing header values and several statistics of copyrighted POTCAR data without
-    having to record the POTCAR data itself.
+    Regenerate the POTCAR reference statistics (``POTCAR_STATS_PATH``) used to validate
+    POTCARs by comparing header values and several statistics of copyrighted POTCAR data
+    without having to record the POTCAR data itself.
 
-    THIS FUNCTION IS DESTRUCTIVE. It will completely overwrite potcar-summary-stats.json.bz2.
+    THIS FUNCTION IS DESTRUCTIVE. It will completely overwrite ``summary_stats_filename``.
 
     Args:
-        append (bool): Change whether data is appended to the existing potcar-summary-stats.json.bz2,
-            or if a completely new file is generated. Defaults to False.
-        PMG_VASP_PSP_DIR (str): Change where this function searches for POTCARs
-            defaults to the PMG_VASP_PSP_DIR environment variable if not set. Defaults to None.
-        summary_stats_filename (str): Name of the output summary stats file. Defaults to
-            '<pymatgen_install_dir>/io/vasp/potcar-summary-stats.json.bz2'.
+        append (bool): Add to the existing ``summary_stats_filename`` instead of
+            generating a new file. The existing file must exist and be readable;
+            it is never silently treated as empty. Defaults to False.
+        vasp_psp_dir (str): Where to search for POTCARs. Defaults to the
+            PMG_VASP_PSP_DIR setting.
+        summary_stats_filename (str): The summary stats file to write. Defaults to
+            ``POTCAR_STATS_PATH`` (``vasp_potcar_stats.json`` in this package).
     """
     func_dir_exist: dict[str, str] = {}
     vasp_psp_dir = vasp_psp_dir or SETTINGS.get("PMG_VASP_PSP_DIR")
@@ -2899,7 +2892,7 @@ def _gen_potcar_summary_stats(
     # Use append = True if a new POTCAR library is released to add new summary stats
     # without completely regenerating the dict of summary stats
     # Use append = False to completely regenerate the summary stats dict
-    new_summary_stats = _safe_loadfn(summary_stats_filename) if append else {}  # type:ignore[arg-type]
+    new_summary_stats = load_resource(summary_stats_filename) if append else {}  # type:ignore[arg-type]
 
     for func, func_dir in func_dir_exist.items():
         new_summary_stats.setdefault(func, {})  # initialize dict if key missing
