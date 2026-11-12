@@ -29,7 +29,12 @@ from monty.io import reverse_readfile, zopen
 from monty.json import MSONable, jsanitize
 from monty.os.path import zpath
 from monty.re import regrep
-from tqdm import tqdm
+
+try:  # progress bar only; not a hard dependency
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - exercised in the minimal-install smoke test
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
 
 from matsimpy.core import Composition, Element, Lattice, Crystal, Trajectory
 from matsimpy.calculator.utils import clean_lines, make_symmetric_matrix_from_upper_tri
@@ -1339,12 +1344,7 @@ class Vasprun(MSONable):
         structs: list[Structure] = []
         steps = self.md_data or self.ionic_steps
         for step in steps:
-            struct = step["structure"].copy()
-            # Crystal does not support add_site_property; store in extra dict
-            if not hasattr(struct, "_extra_properties"):
-                struct._extra_properties = {}
-            struct._extra_properties["forces"] = step["forces"]
-            structs.append(struct)
+            structs.append(step["structure"].with_metadata(forces=step["forces"]))
         return Trajectory.from_structures(structs, constant_lattice=False)
 
     def update_potcar_spec(self, path: PathLike | bool) -> None:
@@ -1626,11 +1626,7 @@ class Vasprun(MSONable):
         selective_dyn = elem.find("varray/[@name='selective']")
 
         if selective_dyn is not None:
-            # Crystal does not support add_site_property; store in extra dict
-            sd_data = _parse_vasp_array(selective_dyn)
-            if not hasattr(struct, "_extra_properties"):
-                struct._extra_properties = {}
-            struct._extra_properties["selective_dynamics"] = sd_data
+            struct = struct.with_metadata(selective_dynamics=_parse_vasp_array(selective_dyn))
         return struct
 
     @staticmethod
@@ -5301,7 +5297,8 @@ class Wavecar:
                             self.coeffs[i_nk][inb] = np.array(list(data) + extra_coeffs, dtype=np.complex128)
 
                         if self.vasp_type is not None and self.vasp_type.lower()[0] == "n":
-                            self.coeffs[i_nk][inb].shape = (2, nplane // 2)  # type: ignore[union-attr]
+                            # reshape() instead of `.shape =` (deprecated since NumPy 2.5)
+                            self.coeffs[i_nk][inb] = self.coeffs[i_nk][inb].reshape(2, nplane // 2)  # type: ignore[union-attr]
 
     def _generate_nbmax(self) -> None:
         """Helper function to determine maximum number of b vectors for
@@ -6293,8 +6290,6 @@ class Vaspout(Vasprun):
         self.poscar = Poscar(
             structure=self.initial_structure,
             comment=input_data["poscar"].get("system"),
-            selective_dynamics=self.initial_structure.site_properties.get("selective_dynamics"),
-            velocities=self.initial_structure.site_properties.get("velocities"),
         )
 
     def _get_ionic_steps(self, ion_dynamics) -> None:
@@ -6367,9 +6362,7 @@ class Vaspout(Vasprun):
                         ]
                         for iion in range(len(self.poscar.structure)):
                             site_prop[iion]["tot"] = sum(site_prop[iion].values())
-                        if not hasattr(step["structure"], "_extra_properties"):
-                            step["structure"]._extra_properties = {}
-                        step["structure"]._extra_properties[_to_outcar_tag.get(k)] = site_prop
+                        step["structure"] = step["structure"].with_metadata(**{_to_outcar_tag.get(k): site_prop})
 
             self.ionic_steps += [step]
 

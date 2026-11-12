@@ -5,29 +5,30 @@ from matsimpy.core import Crystal, Lattice
 
 
 class TestVaspCalculator:
-    def test_run_false_writes_input_only(self, tmp_path):
+    def test_write_input_writes_input_only(self, tmp_path):
         from matsimpy.calculator.vasp import VaspCalculator
         crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
         calc = VaspCalculator(
-            directory=str(tmp_path),
+            directory=str(tmp_path / "unused"),
             incar={"ENCUT": 400},
             kpoints=[1, 1, 1],
-            run=False,
+            copy_potcar=False,
         )
-        calc.calculate(crystal)
+        assert calc.write_input(crystal, tmp_path) == tmp_path
         incar_path = tmp_path / "INCAR"
         poscar_path = tmp_path / "POSCAR"
         kpoints_path = tmp_path / "KPOINTS"
         assert incar_path.exists()
         assert poscar_path.exists()
         assert kpoints_path.exists()
-        # No energy since we didn't run
-        assert "energy" not in calc.results
+        assert not (tmp_path / "POTCAR").exists()
+        assert not (tmp_path / "unused").exists()  # explicit directory wins
 
-    def test_run_default_is_true(self):
+    def test_compute_runs_the_executable(self, tmp_path):
         from matsimpy.calculator.vasp import VaspCalculator
-        calc = VaspCalculator()
-        assert calc.run is True
+        calc = VaspCalculator(directory=tmp_path, vasp_cmd="nonexistent_vasp", copy_potcar=False)
+        with pytest.raises((FileNotFoundError, RuntimeError)):
+            calc.compute(Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43)))
 
     def test_read_results_with_real_vasprun(self):
         """read_results should parse an existing vasprun.xml (uses real fixture)."""
@@ -35,16 +36,20 @@ class TestVaspCalculator:
         from matsimpy.calculator.vasp import VaspCalculator
 
         fixtures = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
+        if not os.path.isfile(os.path.join(fixtures, "vasprun.xml")):
+            import pytest
+            pytest.skip("repository asset not available: tests/calculator/fixtures/vasp")
         calc = VaspCalculator(directory=fixtures)
-        calc.read_results()
-        assert calc.results.get("energy") is not None
+        r = calc.read_results()
+        assert r.energy is not None and r.forces is not None
 
     def test_init_with_defaults(self):
         from matsimpy.calculator.vasp import VaspCalculator
         calc = VaspCalculator()
-        assert calc.incar_params["ENCUT"] == 400
-        assert calc.kpoints_grid == [1, 1, 1]
-        assert calc.vasp_cmd == "vasp"
+        assert calc.parameters["incar"]["ENCUT"] == 400
+        assert calc.parameters["kpoints"] == [1, 1, 1]
+        assert calc.parameters["vasp_cmd"] == "vasp"
+        assert VaspCalculator.from_dict(calc.as_dict()).parameters == calc.parameters
 
     def test_init_with_custom_params(self):
         from matsimpy.calculator.vasp import VaspCalculator
@@ -54,8 +59,8 @@ class TestVaspCalculator:
             kpoints=[2, 2, 2],
             vasp_cmd="/usr/local/bin/vasp_std",
         )
-        assert calc.incar_params["EDIFF"] == 1e-6
-        assert calc.kpoints_grid == [2, 2, 2]
+        assert calc.parameters["incar"]["EDIFF"] == 1e-6
+        assert calc.parameters["kpoints"] == [2, 2, 2]
 
     def test_potcar_symbols_preserve_poscar_order(self, tmp_path, monkeypatch):
         from matsimpy.calculator.vasp import VaspCalculator
@@ -74,10 +79,9 @@ class TestVaspCalculator:
         monkeypatch.setenv("VASP_PP_PATH", str(tmp_path / "potcars"))
         monkeypatch.setattr(inputs, "Potcar", DummyPotcar)
 
-        calc = VaspCalculator(directory=str(tmp_path), run=True)
         poscar = type("DummyPoscar", (), {"site_symbols": ["Na", "Cl", "O"]})()
 
-        calc._write_potcar(poscar)
+        VaspCalculator._write_potcar(poscar, tmp_path)
 
         assert captured["symbols"] == ["Na", "Cl", "O"]
         assert captured["functional"] == "PBE"

@@ -876,7 +876,7 @@ def structure_to_graph_data(
     """
     if isinstance(structure, Crystal):
         positions = np.array(structure.cart_positions, dtype=np.float64)
-        cell = np.array(structure.lattice.lattice_vectors, dtype=np.float64)
+        cell = np.array(structure.lattice.matrix, dtype=np.float64)
         pbc = np.array(structure.pbc, dtype=bool)
         is_crystal = True
     else:

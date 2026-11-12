@@ -1,4 +1,3 @@
-import json
 
 import numpy as np
 import pytest
@@ -28,33 +27,13 @@ def test_trajectory_constant_lattice_rejects_changes(si_crystal):
 
 
 def test_trajectory_copies_frames_and_roundtrips(si_crystal):
-    si_crystal._extra_properties = {"forces": [[1, 2, 3], [4, 5, 6]]}
+    si_crystal = si_crystal.with_metadata(forces=[[1, 2, 3], [4, 5, 6]])
     trajectory = Trajectory.from_structures([si_crystal])
     frame = trajectory[0]
     assert frame is not si_crystal
     decoded = MontyDecoder().process_decoded(trajectory.as_dict())
     assert decoded[0] == si_crystal
-    assert decoded[0]._extra_properties == si_crystal._extra_properties
-
-
-def test_trajectory_recursively_serializes_extra_metadata(si_crystal):
-    extras = {
-        "nested": [{"lattice": Lattice.cubic(3), "label": "Si"}],
-        "values": np.array([1.0, 2.0]),
-    }
-    si_crystal._extra_properties = extras
-    trajectory = Trajectory.from_structures([si_crystal])
-
-    serialized = trajectory.as_dict()
-    json.dumps(serialized)
-    restored = MontyDecoder().process_decoded(serialized)
-
-    restored_extras = restored[0]._extra_properties
-    assert restored_extras["nested"][0]["lattice"] == Lattice.cubic(3)
-    assert restored_extras["nested"][0]["label"] == "Si"
-    assert restored_extras["values"] == [1.0, 2.0]
-    assert isinstance(extras["nested"][0]["lattice"], Lattice)
-    assert isinstance(extras["values"], np.ndarray)
+    assert decoded[0].metadata == si_crystal.metadata
 
 
 def _metadata_trajectory(si_crystal):
@@ -64,13 +43,12 @@ def _metadata_trajectory(si_crystal):
             si_crystal.species,
             si_crystal.frac_positions + index * 0.01,
             si_crystal.lattice,
+            metadata={"index": index, "nested": {"values": [index]}, "energy": -index},
         )
-        frame._extra_properties = {"index": index, "nested": {"values": [index]}}
         frames.append(frame)
     return Trajectory(
         frames,
         constant_lattice=True,
-        frame_properties=[{"energy": -index} for index in range(4)],
         charge=1.5,
         spin=2.0,
         spin_multiplicity=3,
@@ -96,8 +74,8 @@ def test_trajectory_selection_subsets_frames_and_preserves_metadata(
 
     selected = trajectory[selection]
 
-    assert [frame._extra_properties["index"] for frame in selected] == expected
-    assert selected.frame_properties == tuple({"energy": -index} for index in expected)
+    assert [frame.metadata["index"] for frame in selected] == expected
+    assert [frame.metadata["energy"] for frame in selected] == [-index for index in expected]
     assert selected.constant_lattice is True
     assert selected.charge == 1.5
     assert selected.spin == 2.0
@@ -107,31 +85,17 @@ def test_trajectory_selection_subsets_frames_and_preserves_metadata(
     assert np.array_equal(selected.base_positions, trajectory.base_positions)
 
 
-def test_trajectory_empty_slice_preserves_metadata(si_crystal):
-    trajectory = _metadata_trajectory(si_crystal)
-
-    selected = trajectory[1:1]
-
-    assert len(selected) == 0
-    assert selected.frame_properties == ()
-    assert selected.constant_lattice is True
-    assert selected.coords_are_displacement is True
-    assert np.array_equal(selected.base_positions, trajectory.base_positions)
-
-
 def test_trajectory_slice_roundtrips_metadata_and_is_independent(si_crystal):
     trajectory = _metadata_trajectory(si_crystal)
     selected = trajectory[1:3]
 
     restored = MontyDecoder().process_decoded(selected.as_dict())
-    selected.frame_properties[0]["energy"] = 99
-    selected[0]._extra_properties["nested"]["values"].append(99)
-    selected.base_positions[0, 0] = 99
-
-    assert restored.frame_properties == ({"energy": -1}, {"energy": -2})
-    assert restored[0]._extra_properties["index"] == 1
-    assert trajectory.frame_properties[1] == {"energy": -1}
-    assert trajectory[1]._extra_properties["nested"]["values"] == [1]
+    selected[0].metadata["nested"]["values"].append(99)  # deep-copied view: no effect
+    with pytest.raises(ValueError):
+        selected.base_positions[0, 0] = 99  # read-only since 0.8.1
+    assert [f.metadata["energy"] for f in restored] == [-1, -2]
+    assert restored[0].metadata["index"] == 1
+    assert trajectory[1].metadata["nested"]["values"] == [1]
     assert trajectory.base_positions[0, 0] != 99
 
 
@@ -139,7 +103,26 @@ def test_trajectory_integer_selection_remains_independent_crystal(si_crystal):
     trajectory = _metadata_trajectory(si_crystal)
 
     selected = trajectory[1]
-    selected._extra_properties["nested"]["values"].append(99)
+    selected.metadata["nested"]["values"].append(99)
+    with pytest.raises(TypeError):
+        selected.metadata["index"] = 7  # read-only mapping
 
     assert isinstance(selected, Crystal)
-    assert trajectory[1]._extra_properties["nested"]["values"] == [1]
+    assert trajectory[1].metadata["nested"]["values"] == [1]
+
+
+def test_trajectory_reads_pre_087_extra_properties_block(si_crystal):
+    """Files written by <=0.8.6 stored frame data next to the structure."""
+    d = Trajectory.from_structures([si_crystal]).as_dict()
+    d["frames"][0]["extra_properties"] = {"forces": [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]}
+    restored = Trajectory.from_dict(d)
+    assert restored[0].metadata["forces"] == [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]
+
+
+def test_trajectory_reads_pre_090_frame_properties(si_crystal):
+    """<=0.8.7 files stored per-frame dicts in a parallel "frame_properties" list."""
+    d = Trajectory.from_structures([si_crystal, si_crystal]).as_dict()
+    d["frame_properties"] = [{"energy": -1.0}, {"energy": -2.0}]
+    restored = Trajectory.from_dict(d)
+    assert [f.metadata["energy"] for f in restored] == [-1.0, -2.0]
+    assert "frame_properties" not in Trajectory.from_structures([si_crystal]).as_dict()

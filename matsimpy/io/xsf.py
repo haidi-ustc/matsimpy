@@ -133,7 +133,7 @@ def write_XSF(crystal: Crystal, filename: str, title: Optional[str] = None) -> N
 
         # Write lattice vectors (PRIMVEC)
         f.write("PRIMVEC\n")
-        for vec in crystal.lattice.lattice_vectors:
+        for vec in crystal.lattice.matrix:
             f.write(f"{vec[0]:20.12f} {vec[1]:20.12f} {vec[2]:20.12f}\n")
 
         # Write atomic coordinates (PRIMCOORD); the second number is the image-cell count

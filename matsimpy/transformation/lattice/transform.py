@@ -39,7 +39,7 @@ def rotate_lattice(
     rotation_matrix = np.array(rotation_matrix, dtype=np.float64)
 
     # Rotate lattice vectors
-    new_lattice_vectors = np.dot(rotation_matrix, crystal.lattice.lattice_vectors)
+    new_lattice_vectors = np.dot(rotation_matrix, crystal.lattice.matrix)
     new_lattice = Lattice(new_lattice_vectors)
 
     if rotate_atoms:
@@ -125,7 +125,7 @@ def get_niggli_reduced(crystal: Crystal, eps: float = 1e-5) -> Crystal:
         raise ValueError("eps must be positive")
 
     reduced_lattice_vectors = spglib.niggli_reduce(
-        crystal.lattice.lattice_vectors,
+        crystal.lattice.matrix,
         eps=eps,
     )
     if reduced_lattice_vectors is None:
@@ -178,8 +178,8 @@ def _map_site_properties(
         return None
 
     old_cart = crystal.cart_positions
-    new_cart = np.asarray(frac_positions, dtype=np.float64) @ lattice.lattice_vectors
-    inv_lattice = np.linalg.inv(lattice.lattice_vectors)
+    new_cart = np.asarray(frac_positions, dtype=np.float64) @ lattice.matrix
+    inv_lattice = np.linalg.inv(lattice.matrix)
     pbc = np.asarray(crystal.pbc, dtype=bool)
     used = set()
     mapping = []
@@ -187,7 +187,7 @@ def _map_site_properties(
     def periodic_distance(position1: np.ndarray, position2: np.ndarray) -> float:
         delta_frac = (position1 - position2) @ inv_lattice
         delta_frac[pbc] -= np.rint(delta_frac[pbc])
-        return float(np.linalg.norm(delta_frac @ lattice.lattice_vectors))
+        return float(np.linalg.norm(delta_frac @ lattice.matrix))
 
     for new_symbol, new_position in zip(species, new_cart):
         candidates = [
@@ -209,7 +209,8 @@ def _map_site_properties(
         used.add(old_index)
         mapping.append(old_index)
 
-    return [copy.deepcopy(crystal.site_properties[index]) for index in mapping]
+    site_props = crystal.site_properties  # deep copy once, not once per site
+    return [copy.deepcopy(site_props[index]) for index in mapping]
 
 
 def standardize_cell(
@@ -239,7 +240,7 @@ def standardize_cell(
             list(crystal.species)
         )
         cell = (
-            crystal.lattice.lattice_vectors,
+            crystal.lattice.matrix,
             crystal.frac_positions,
             [species_to_number[s] for s in crystal.species],
         )

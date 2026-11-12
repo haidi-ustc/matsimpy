@@ -54,7 +54,7 @@ def generate_slab(
     if layers is not None and layers <= 0:
         raise ValueError("layers must be positive")
 
-    lattice_matrix = bulk.lattice.lattice_vectors
+    lattice_matrix = bulk.lattice.matrix
     hkl = np.array([h, k, l], dtype=int)
     normal = np.linalg.solve(lattice_matrix, hkl.astype(np.float64))
     normal = normal / np.linalg.norm(normal)
@@ -116,7 +116,7 @@ def generate_slab(
 
     slab_crystal = Crystal(new_species, new_positions, new_lattice, pbc=[True, True, False])
 
-    c_vec = new_lattice.lattice_vectors[2]
+    c_vec = new_lattice.matrix[2]
     c_norm = np.linalg.norm(c_vec)
     normal = c_vec / c_norm
     cart_positions = slab_crystal.cart_positions

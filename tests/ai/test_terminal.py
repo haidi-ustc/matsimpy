@@ -123,48 +123,36 @@ def test_cli_interactive_mode_uses_terminal_frontend(monkeypatch):
 
     calls = []
 
-    class SkillManager:
-        def load(self, _name):
-            pass
+    class Workspace:
+        def enter(self):
+            calls.append("enter")
 
-    class Engine:
-        def __init__(self, **kwargs):
-            self.skill_manager = SkillManager()
-            self.repl_controller = FakeController()
-            self.verbose = False
+    class Agent:
+        workspace = Workspace()
 
     class Terminal:
         def run(self):
             calls.append("run")
 
-    monkeypatch.setattr(cli, "AIEngine", Engine)
-    monkeypatch.setattr(cli, "_register_all_skills", lambda _manager: None)
-    monkeypatch.setattr(cli, "create_terminal", lambda controller: Terminal(), raising=False)
+    monkeypatch.setattr(cli, "build_agent", lambda *args: Agent())
+    monkeypatch.setattr(cli.ReplController, "for_agent", classmethod(lambda cls, agent: FakeController()))
+    monkeypatch.setattr(cli, "create_terminal", lambda controller: Terminal())
 
     result = CliRunner().invoke(cli.app, [])
 
     assert result.exit_code == 0
-    assert calls == ["run"]
+    assert calls == ["enter", "run"]
 
 
 def test_cli_command_mode_does_not_construct_interactive_terminal(monkeypatch):
     from typer.testing import CliRunner
     from matsimpy.ai import cli
 
-    class SkillManager:
-        def load(self, _name):
-            pass
+    class Agent:
+        def run(self, text):
+            return type("Result", (), {"response": f"answer: {text}"})()
 
-    class Engine:
-        def __init__(self, **kwargs):
-            self.skill_manager = SkillManager()
-            self.verbose = False
-
-        def chat(self, text):
-            return f"answer: {text}"
-
-    monkeypatch.setattr(cli, "AIEngine", Engine)
-    monkeypatch.setattr(cli, "_register_all_skills", lambda _manager: None)
+    monkeypatch.setattr(cli, "build_agent", lambda *args: Agent())
     monkeypatch.setattr(
         cli,
         "create_terminal",

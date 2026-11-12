@@ -1,4 +1,4 @@
-"""Public Agent facade and legacy AIEngine compatibility."""
+"""Public Agent facade."""
 
 from __future__ import annotations
 
@@ -264,10 +264,10 @@ def test_agent_replays_complete_tool_evidence_on_follow_up(tmp_path):
     assert result.artifacts == (str(tmp_path / "copper.cif"),)
 
 
-def test_import_and_agent_construction_do_not_warn_but_engine_does(tmp_path):
+def test_import_and_agent_construction_do_not_warn(tmp_path):
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        from matsimpy.ai import Agent, AIEngine
+        from matsimpy.ai import Agent
 
         Agent(
             workspace=tmp_path / "agent",
@@ -275,67 +275,31 @@ def test_import_and_agent_construction_do_not_warn_but_engine_does(tmp_path):
         )
     assert not [item for item in caught if issubclass(item.category, DeprecationWarning)]
 
-    with pytest.warns(DeprecationWarning, match="Agent"):
-        AIEngine(api_key="unused", workspace_path=tmp_path / "engine")
+
+def test_aiengine_was_removed():
+    import matsimpy.ai as ai
+
+    assert not hasattr(ai, "AIEngine")
+    with pytest.raises(ImportError):
+        import matsimpy.ai.engine  # noqa: F401
 
 
-def test_engine_chat_delegates_to_public_agent(tmp_path, monkeypatch):
-    from matsimpy.ai import AIEngine, AgentResult
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        engine = AIEngine(api_key="unused", workspace_path=tmp_path)
-    expected = AgentResult(
-        response="delegated",
-        status="success",
-        tools=(),
-        artifacts=(),
-        trace_id=7,
-        usage={},
-        evolution_candidates=(),
-    )
-    calls = []
-
-    def run(text):
-        calls.append(text)
-        return expected
-
-    monkeypatch.setattr(engine.agent, "run", run)
-
-    assert engine.chat("hello") == "delegated"
-    assert calls == ["hello"]
-
-
-def test_engine_has_no_retired_duplicate_execution_methods():
-    from matsimpy.ai.engine import AIEngine
-
-    assert not hasattr(AIEngine, "_chat_loop")
-    assert not hasattr(AIEngine, "_learn")
-    assert not hasattr(AIEngine, "_auto_save_skill")
-
-
-def test_engine_construction_does_not_leave_active_executor(tmp_path):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_construction_does_not_leave_active_executor(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider
     from matsimpy.ai.executor import _active_executor
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        AIEngine(api_key="unused", workspace_path=tmp_path)
+    Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"))
 
     assert _active_executor.get() is None
 
 
-def test_repl_workspace_switch_keeps_relative_commands_in_new_workspace(
-    tmp_path, monkeypatch
-):
-    from matsimpy.ai.engine import AIEngine
+def test_repl_workspace_switch_keeps_relative_commands_in_new_workspace(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider, PlainTerminal, ReplController
 
     original_cwd = Path.cwd()
     old = tmp_path / "old"
     new = tmp_path / "new"
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        engine = AIEngine(api_key="unused", workspace_path=old)
+    agent = Agent(workspace=old, provider=DeepSeekProvider("unused"))
     commands = iter([f"/workspace {new}", "/save conversation.json"])
 
     def fake_input(_prompt):
@@ -344,9 +308,11 @@ def test_repl_workspace_switch_keeps_relative_commands_in_new_workspace(
         except StopIteration:
             raise EOFError
 
-    monkeypatch.setattr("builtins.input", fake_input)
+    controller = ReplController.for_agent(agent)
     try:
-        engine.repl()
+        agent.workspace.enter()
+        PlainTerminal(controller, input_reader=fake_input, output_writer=lambda _: None).run()
         assert (new / "conversation.json").exists()
+        assert controller.session is agent.session  # rebound to the new workspace's store
     finally:
         os.chdir(original_cwd)

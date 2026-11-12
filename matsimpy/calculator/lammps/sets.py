@@ -17,6 +17,16 @@ For additional flexibility and automation, use the atomate2-lammps implementatio
 import os
 from typing import TYPE_CHECKING
 
+try:
+    # Template-based input sets build on pymatgen's generic InputSet; in 0.8.1
+    # the import was missing and the module raised NameError on import.
+    from pymatgen.io.core import InputSet
+except ImportError as exc:  # pragma: no cover - depends on optional pymatgen
+    raise ImportError(
+        "matsimpy.calculator.lammps.sets/generators require pymatgen "
+        "(pip install 'MatSimPy[io]'); use LammpsCalculator or LammpsData instead."
+    ) from exc
+
 from matsimpy.calculator.lammps.data import CombinedData, LammpsData
 from matsimpy.calculator.lammps.inputs import LammpsInputFile
 

@@ -12,7 +12,10 @@ import numpy as np
 from ..utils.dict_utils import copy_properties
 
 from .lattice import Lattice
-from .periodic_table import Element, DUMMY_ELEMENTS
+from .periodic_table import Element, ELEMENTS, DUMMY_ELEMENTS
+
+
+_CANONICAL_SYMBOLS = frozenset(ELEMENTS) | frozenset(DUMMY_ELEMENTS)
 
 
 def normalize_species(
@@ -22,6 +25,12 @@ def normalize_species(
     none_as_dummy: bool = False,
 ) -> str:
     """Normalize one atomic species through the shared element validator."""
+    if type(specie) is str and specie in _CANONICAL_SYMBOLS:
+        # Fast path: already a canonical symbol (every structure re-validates
+        # its species on construction, so this is hot).
+        if not allow_dummy and specie in DUMMY_ELEMENTS:
+            raise ValueError(f"Dummy species '{specie}' is not allowed here.")
+        return specie
     if specie is None:
         if none_as_dummy:
             return "X"
@@ -91,3 +100,60 @@ def validate_site_properties(
             f"Number of site_properties ({len(props)}) must match number of atoms ({n_atoms})"
         )
     return tuple(copy_properties(p) for p in props)
+
+
+# Sentinel for "no default given" in Structure.site_property().
+_MISSING = object()
+
+
+def _validate_metadata(metadata: Optional[Mapping[str, Any]]) -> dict:
+    """Validate and deep-copy structure-level metadata (string keys only)."""
+    if metadata is None:
+        return {}
+    if not isinstance(metadata, Mapping):
+        raise TypeError(f"metadata must be a mapping, got {type(metadata).__name__}")
+    if not all(isinstance(k, str) for k in metadata):
+        raise TypeError("metadata keys must be strings")
+    return copy.deepcopy(dict(metadata))
+
+
+def resolve_indices(structure: Any, indices: Any) -> Any:
+    """Unwrap a selection object into plain indices.
+
+    Accepts anything exposing ``.structure`` and ``.indices`` (such as
+    ``matsimpy.analysis.AtomSelection``) by duck typing, so core never imports
+    the analysis layer.  Other inputs are returned unchanged.
+    """
+    if hasattr(indices, "indices") and hasattr(indices, "structure"):
+        if indices.structure is not structure:
+            raise ValueError("AtomSelection must be created from this structure")
+        return list(indices.indices)
+    return indices
+
+
+def validate_cutoff(cutoff, *, allow_zero=True):
+    """Validate a neighbor-list cutoff radius.
+
+    Args:
+        cutoff: The cutoff value to validate.
+        allow_zero: Whether zero-radius queries are permitted.
+
+    Returns:
+        float: The validated cutoff.
+
+    Raises:
+        ValueError: If cutoff is negative, NaN, or infinite.
+        TypeError: If cutoff is not numeric.
+    """
+    if not isinstance(cutoff, (int, float, np.integer, np.floating)):
+        raise TypeError(f"cutoff must be a number, got {type(cutoff).__name__}")
+    value = float(cutoff)
+    if np.isnan(value):
+        raise ValueError("cutoff must not be NaN")
+    if np.isinf(value):
+        raise ValueError("cutoff must be finite")
+    if value < 0:
+        raise ValueError(f"cutoff must be non-negative, got {value}")
+    if value == 0 and not allow_zero:
+        raise ValueError("cutoff must be positive, got 0")
+    return value

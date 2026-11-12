@@ -37,7 +37,7 @@ def apply_strain(
 
     # Apply strain: new_lattice = (I + strain) * old_lattice
     deformation = np.eye(3) + strain_matrix
-    new_lattice_vectors = np.dot(deformation, crystal.lattice.lattice_vectors)
+    new_lattice_vectors = np.dot(deformation, crystal.lattice.matrix)
     new_lattice = Lattice(new_lattice_vectors)
 
     return Crystal(
@@ -77,7 +77,7 @@ def apply_deformation(
     deformation_matrix = np.array(deformation_matrix, dtype=np.float64)
 
     # Apply deformation to lattice
-    new_lattice_vectors = np.dot(deformation_matrix, crystal.lattice.lattice_vectors)
+    new_lattice_vectors = np.dot(deformation_matrix, crystal.lattice.matrix)
     new_lattice = Lattice(new_lattice_vectors)
 
     if deform_positions:
@@ -133,7 +133,7 @@ def perturb_lattice(
     perturbations = rng.normal(size=(3, 3)) * amplitude
 
     # Add perturbations to lattice vectors
-    new_lattice_vectors = crystal.lattice.lattice_vectors + perturbations
+    new_lattice_vectors = crystal.lattice.matrix + perturbations
     new_lattice = Lattice(new_lattice_vectors)
 
     return Crystal(

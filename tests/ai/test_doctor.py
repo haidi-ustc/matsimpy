@@ -156,6 +156,7 @@ def test_doctor_is_offline_unless_network_requested(tmp_path):
     doctor = Doctor(
         workspace=tmp_path / "workspace",
         state_dir=tmp_path / "state",
+        environ={"DEEPSEEK_API_KEY": "test-key"},
         network_probe=probe,
     )
     assert "provider-network" not in _by_code(doctor.run())
@@ -182,7 +183,7 @@ def test_network_probe_failure_cannot_leak_secret(tmp_path):
     assert "Bearer" not in rendered
 
 
-def test_cli_doctor_does_not_construct_engine_and_preserves_root_command(monkeypatch):
+def test_cli_doctor_does_not_construct_agent_and_preserves_root_command(monkeypatch):
     from matsimpy.ai import cli
 
     monkeypatch.setattr(
@@ -195,7 +196,7 @@ def test_cli_doctor_does_not_construct_engine_and_preserves_root_command(monkeyp
         )(),
     )
     monkeypatch.setattr(
-        cli, "AIEngine", lambda **kwargs: (_ for _ in ()).throw(AssertionError("engine"))
+        cli, "build_agent", lambda *args: (_ for _ in ()).throw(AssertionError("agent"))
     )
     result = CliRunner().invoke(cli.app, ["doctor"])
     assert result.exit_code == 0

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, fields, is_dataclass
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .evolution import EvolutionManager
 from .session import AgentSession
+from .skill_loader import list_generated_skills
 
 
 @dataclass(frozen=True)
@@ -18,6 +21,16 @@ class CommandResult:
     data: Mapping[str, Any] = field(default_factory=dict)
     display_hint: str = ""
     exit_requested: bool = False
+
+_AGENT_COMMAND_HELP = {
+    "/workspace": "Show or switch the workspace: /workspace [path].",
+    "/model": "Show or switch the provider model: /model [name].",
+    "/load": "Activate builtin tool skills: /load <name> [...].",
+    "/unload": "Deactivate builtin tool skills: /unload <name> [...].",
+    "/memory": "List agent memory files.",
+    "/save": "Export the active conversation as JSON: /save [path].",
+}
+
 
 class ReplController:
     """Dispatch slash commands without performing terminal I/O."""
@@ -42,6 +55,7 @@ class ReplController:
         self.usage_getter = usage_getter or (lambda: {})
         self.trace_getter = trace_getter or self._runtime_trace
         self.skill_loader = skill_loader
+        self.agent: Any | None = None  # set by for_agent()
         self._handlers = {
             "/help": self._help,
             "/new": self._new,
@@ -66,6 +80,23 @@ class ReplController:
             "/approve-skill": "/approve",
             "/reject-skill": "/reject",
         }
+
+    @classmethod
+    def for_agent(cls, agent: Any, **kwargs: Any) -> "ReplController":
+        """Controller bound to an :class:`~matsimpy.ai.Agent` (its session, evolution and skills)."""
+        kwargs.setdefault("skill_library", AgentSkillSummaries(agent))
+        kwargs.setdefault("skill_loader", agent.load_skill)
+        controller = cls(agent.session, evolution=agent, **kwargs)
+        controller.agent = agent
+        controller._handlers.update({
+            "/workspace": controller._workspace,
+            "/model": controller._model,
+            "/load": controller._load_tools,
+            "/unload": controller._unload_tools,
+            "/memory": controller._memory,
+            "/save": controller._save,
+        })
+        return controller
 
     def execute(self, command: str) -> CommandResult:
         """Parse and execute one slash command."""
@@ -112,6 +143,7 @@ class ReplController:
             "/rollback": "Create an audited rollback: /rollback <version-id>.",
             "/quit": "Exit the REPL.",
         }
+        descriptions.update(_AGENT_COMMAND_HELP)
         commands = [
             {"command": name, "description": descriptions[name]}
             for name in self._handlers
@@ -367,6 +399,77 @@ class ReplController:
             display_hint=f"Loaded skill context: {arg}",
         )
 
+    # -- commands available when bound to an Agent (ReplController.for_agent) --
+
+    def _workspace(self, arg: str) -> CommandResult:
+        agent = self.agent
+        if arg:
+            old = agent.workspace
+            entered = Path.cwd() == old.path
+            if entered:
+                old.leave()
+            agent.switch_workspace(arg)
+            self.session = agent.session  # the agent opened a new session store
+            if entered:
+                agent.workspace.enter()
+        path = agent.workspace.path
+        return CommandResult(
+            "workspace",
+            data={"workspace": str(path), "files": list(agent.workspace.list_files())},
+            display_hint=f"Workspace: {path}",
+        )
+
+    def _model(self, arg: str) -> CommandResult:
+        from .provider import MODELS
+
+        provider = self.agent.runtime.provider
+        if arg:
+            if arg not in MODELS:
+                return self._error(f"Unknown model {arg!r}; choose one of: {', '.join(MODELS)}", kind="model")
+            provider.model = arg
+        return CommandResult(
+            "model",
+            data={"model": provider.model, "models": dict(MODELS)},
+            display_hint=f"Model: {provider.model}",
+        )
+
+    def _load_tools(self, arg: str) -> CommandResult:
+        if not arg:
+            return self._usage_result("/load <tool-skill> [...]")
+        for name in arg.split():
+            self.agent.skill_manager.load(name)
+        return CommandResult("load", data={"loaded": arg.split()}, display_hint=f"Loaded tools: {arg}")
+
+    def _unload_tools(self, arg: str) -> CommandResult:
+        if not arg:
+            return self._usage_result("/unload <tool-skill> [...]")
+        for name in arg.split():
+            self.agent.skill_manager.unload(name)
+        return CommandResult("unload", data={"unloaded": arg.split()}, display_hint=f"Unloaded tools: {arg}")
+
+    def _memory(self, arg: str) -> CommandResult:
+        if arg:
+            return self._usage_result("/memory")
+        memory = self.agent.memory
+        return CommandResult(
+            "memory",
+            data={"directory": str(memory.dir), "files": dict(memory.summary)},
+            display_hint="\n".join(
+                [f"Memory files ({memory.dir}):"]
+                + [f"  {name}.md — {lines} lines" for name, lines in memory.summary.items()]
+            ),
+        )
+
+    def _save(self, arg: str) -> CommandResult:
+        """Export the active conversation (system prompt + messages) as JSON."""
+        path = Path(arg or "conversation.json")
+        messages = self.agent.conversation_messages()
+        path.write_text(json.dumps(
+            {"system_prompt": self.agent.system_prompt, "messages": [m.to_dict() for m in messages]},
+            indent=2, default=str,
+        ))
+        return CommandResult("save", data={"path": str(path)}, display_hint=f"Saved to {path}")
+
     def _runtime_trace(self) -> Mapping[str, Any]:
         result = self.session.runtime.last_result
         if result is None:
@@ -397,4 +500,106 @@ def _record(value: Any) -> Any:
     return value
 
 
-__all__ = ["CommandResult", "ReplController"]
+class AgentSkillSummaries:
+    """Combine standard Agent Skills with builtin and legacy summaries."""
+
+    def __init__(self, agent: Any) -> None:
+        self.agent = agent
+
+    @property
+    def skill_manager(self) -> Any:
+        return self.agent.skill_manager
+
+    def _standard(self):
+        return self.agent.refresh_skill_library()
+
+    def discover(self) -> list[dict]:
+        standard = self._standard().discover(strict=False)
+        standard_names = {summary.name for summary in standard}
+        summaries = [
+            {
+                "name": skill.name,
+                "description": skill.description,
+                "source": "builtin",
+            }
+            for skill in self.skill_manager._skills.values()
+            if skill.name not in standard_names
+        ]
+        summaries.extend(
+            {
+                "name": skill["name"],
+                "description": skill.get("description", ""),
+                "source": "generated",
+            }
+            for skill in list_generated_skills()
+            if skill["name"] not in standard_names
+        )
+        summaries.extend(
+            {
+                "name": summary.name,
+                "description": summary.description,
+                "source": summary.source,
+                "compatibility": summary.compatibility,
+                "allowed_tools": list(summary.allowed_tools),
+            }
+            for summary in standard
+        )
+        return sorted(summaries, key=lambda item: item["name"])
+
+    def search(self, query: str) -> list[dict]:
+        folded = query.casefold()
+        return [
+            summary
+            for summary in self.discover()
+            if folded in f"{summary['name']} {summary['description']}".casefold()
+        ]
+
+    def detail(self, name: str) -> dict | None:
+        standard = self._standard()
+        by_name = {
+            summary.name: summary for summary in standard.discover(strict=False)
+        }
+        if name in by_name:
+            summary = by_name[name]
+            return {
+                "name": summary.name,
+                "description": summary.description,
+                "source": summary.source,
+                "compatibility": summary.compatibility,
+                "allowed_tools": list(summary.allowed_tools),
+                "loaded": name in standard.activated,
+                "functions": [],
+            }
+        skill = self.skill_manager._skills.get(name)
+        if skill is not None:
+            return {
+                "name": skill.name,
+                "description": skill.description,
+                "source": "builtin",
+                "loaded": name in self.skill_manager._active,
+                "keywords": list(skill.keywords),
+                "functions": [
+                    {
+                        "name": function.name,
+                        "description": function.description,
+                        "schema": function.parameters,
+                        "help": function.get_help(),
+                    }
+                    for function in skill.functions
+                ],
+            }
+        for generated in list_generated_skills():
+            if generated["name"] == name:
+                return {
+                    "name": generated["name"],
+                    "description": generated.get("description", ""),
+                    "source": "generated",
+                    "loaded": False,
+                    "mode": generated.get("load_mode", "auto_choice"),
+                    "body_preview": generated.get("body", "")[:1000],
+                    "functions": [],
+                }
+        return None
+
+
+__all__ = ["AgentSkillSummaries", "CommandResult", "ReplController"]

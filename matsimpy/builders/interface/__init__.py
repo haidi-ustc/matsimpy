@@ -61,7 +61,7 @@ def create_simple_interface(
     z_span = float(np.max(combined_cart[:, 2]) - np.min(combined_cart[:, 2]))
     c_length = max(z_span + vacuum, 1e-8)
 
-    lattice_vectors = substrate.lattice.lattice_vectors.copy()
+    lattice_vectors = substrate.lattice.matrix.copy()
     lattice_vectors[2] = np.array([0.0, 0.0, c_length])
     lattice = Lattice(lattice_vectors)
 

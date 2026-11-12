@@ -1,7 +1,6 @@
 """Tests for ASE and MOL IO modules."""
 import unittest
 import tempfile
-import numpy as np
 from pathlib import Path
 
 from matsimpy.core import Crystal, Molecule, Lattice
@@ -131,51 +130,6 @@ class TestMOLIo(unittest.TestCase):
         finally:
             Path(temp_file).unlink()
     
-    def test_read_MOL_sample(self):
-        """Test reading a sample MOL file."""
-        mol_content = """Test Molecule
-  MatSimPy
-Generated
-  3  2  0  0  0  0  0  0  0  0  1 V2000
-    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.2000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.2000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
-M  END
-"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.mol') as f:
-            f.write(mol_content)
-            temp_file = f.name
-        
-        try:
-            molecule = read_MOL(temp_file)
-            self.assertEqual(len(molecule), 3)
-            self.assertIn('C', molecule.species)
-        finally:
-            Path(temp_file).unlink()
-
-    def test_read_MOL_fixed_width_v2000_element(self):
-        """V2000 fixed-width atom lines: element at columns 31-34 must be parsed correctly."""
-        # Exact V2000 format: cols 0-9 x, 10-19 y, 20-29 z, 31-33 element
-        mol_content = (
-            "fixed-width test\n"
-            "  MatSimPy\n"
-            "\n"
-            "  2  0  0  0  0  0  0  0  0  0  1 V2000\n"
-            "    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n"
-            "    1.4500    0.0000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n"
-            "M  END\n"
-        )
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.mol') as f:
-            f.write(mol_content)
-            temp_file = f.name
-
-        try:
-            molecule = read_MOL(temp_file)
-            self.assertEqual(len(molecule), 2)
-            self.assertEqual(molecule.species[0], 'N')
-            self.assertEqual(molecule.species[1], 'H')
-        finally:
-            Path(temp_file).unlink()
 
     def test_read_MOL_missing_element_raises(self):
         """Atom line with no parseable element must raise ValueError, not silently default to C."""

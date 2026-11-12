@@ -523,7 +523,9 @@ class VaspInputSet(InputGenerator, abc.ABC):
                     raise TypeError("VASP structure sorting requires a Crystal")
                 structure = _get_sorted_structure(structure)
             if self.validate_magmom:
-                get_valid_magmom_struct(structure, spin_mode="auto")
+                # Never edit the caller's structure in place (0.8.0 mutated the
+                # user's Crystal whenever sort_structure=False).
+                structure = get_valid_magmom_struct(structure, spin_mode="auto")
 
             struct_has_Yb = "Yb" in structure.symbol_set
             potcar_settings = self._config_dict.get("POTCAR", {}).copy()
@@ -885,8 +887,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
         if self.structure is None:
             raise RuntimeError("No structure is associated with the input set!")
 
-        # matsimpy Crystal uses tuple for site_properties, store extra properties on Poscar
-        extra = getattr(self.structure, "_extra_properties", {}) or {}
+        # Poscar-only data (velocities, predictor-corrector, ...) may travel as structure metadata
+        extra = dict(self.structure.metadata)
         return Poscar(
             self.structure,
             velocities=extra.get("velocities"),
@@ -2555,7 +2557,7 @@ class MVLSlabSet(VaspInputSet):
         # Check if self.structure is not None
         if self.structure is not None:
             # Determine non-adsorbate elements
-            extra = getattr(self.structure, "_extra_properties", {}) or {}
+            extra = dict(self.structure.metadata)
             if extra and extra.get("surface_properties"):
                 non_adsorbate_elts = {
                     str(s.specie) for i, s in enumerate(self.structure) if extra.get("surface_properties", [])[i] != "adsorbate"
@@ -3257,17 +3259,13 @@ def get_structure_from_prev_run(vasprun: Vasprun, outcar: Outcar | None = None) 
             else:
                 raise ValueError(f"length of list {l_val} not the same as structure")
 
-    result = structure.copy()
     merged = [dict(site.properties) for site in structure]
     for name, values in site_properties.items():
         if len(values) != len(merged):
             raise ValueError(f"{name} must contain one value per site")
         for props, value in zip(merged, values):
             props[name] = value
-    result.site_properties = merged
-    if isinstance(result, Crystal):
-        result._sites = None
-    return result
+    return structure.with_site_properties(merged)
 
 
 def standardize_structure(
@@ -3391,7 +3389,6 @@ _dummy_structure = Crystal(
 
 def get_valid_magmom_struct(
     structure: Structure | IStructure,
-    inplace: bool = True,
     spin_mode: str = "auto",
 ) -> IStructure | Structure:
     """
@@ -3401,7 +3398,6 @@ def get_valid_magmom_struct(
 
     Args:
         structure: The input structure
-        inplace: True: edit magmoms of the input structure; False: return new structure
         spin_mode: "scalar"/"vector"/"none"/"auto" only first letter (s/v/n) is needed.
             dictates how the spin configuration will be determined.
 
@@ -3411,21 +3407,26 @@ def get_valid_magmom_struct(
             - none: Remove all the magmom information
 
     Returns:
-        New structure if inplace is False
+        A new structure (the input is never modified; the pymatgen-style
+        ``inplace`` option was removed in 0.8.6 because structures are immutable).
     """
     default_values = {"s": 1.0, "v": [1.0, 1.0, 1.0], "n": None}
+    # Work on one detached copy of the per-site dicts.  ``site.properties``
+    # returns a fresh deep copy each time, so the 0.8.0 int->float coercion
+    # written into it was silently discarded.
+    properties = [dict(site.properties) for site in structure]
     if spin_mode[0].lower() == "a":
         mode = "n"
-        for site in structure:
-            if "magmom" not in site.properties or site.properties["magmom"] is None:
+        for props in properties:
+            if "magmom" not in props or props["magmom"] is None:
                 pass
-            elif isinstance(site.properties["magmom"], float | int):
+            elif isinstance(props["magmom"], float | int):
                 if mode == "v":
                     raise TypeError("Magmom type conflict")
                 mode = "s"
-                if isinstance(site.properties["magmom"], int):
-                    site.properties["magmom"] = float(site.properties["magmom"])
-            elif len(site.properties["magmom"]) == 3:
+                if isinstance(props["magmom"], int):
+                    props["magmom"] = float(props["magmom"])
+            elif len(props["magmom"]) == 3:
                 if mode == "s":
                     raise TypeError("Magmom type conflict")
                 mode = "v"
@@ -3434,19 +3435,13 @@ def get_valid_magmom_struct(
     else:
         mode = spin_mode[0].lower()
 
-    properties = [dict(site.properties) for site in structure]
     for props in properties:
         if mode == "n":
             props.pop("magmom", None)
         elif props.get("magmom") is None:
             props["magmom"] = default_values[mode]
 
-    ret_struct = structure if inplace else structure.copy()
-    ret_struct.site_properties = properties
-    if isinstance(ret_struct, Crystal):
-        ret_struct._sites = None
-
-    return ret_struct
+    return structure.with_site_properties(properties)
 
 
 @dataclass
@@ -3578,7 +3573,7 @@ def _get_ispin(vasprun: Vasprun | None, outcar: Outcar | None) -> Literal[1, 2]:
 
 def _get_recommended_lreal(structure: Structure) -> Literal["Auto", False]:
     """Get recommended LREAL flag based on the structure."""
-    return "Auto" if structure.num_sites > 16 else False
+    return "Auto" if len(structure) > 16 else False
 
 
 def _combine_kpoints(*kpoints_objects: Kpoints | None) -> Kpoints:

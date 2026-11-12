@@ -66,24 +66,21 @@ class TestLennardJones(unittest.TestCase):
     
     def test_calculate_molecule(self):
         """Test calculation on molecule."""
-        self.calc.calculate(self.molecule)
-        self.assertIn('energy', self.calc.results)
-        self.assertIn('forces', self.calc.results)
-        self.assertEqual(self.calc.results['forces'].shape, (2, 3))
+        self.assertIn('energy', self.calc.compute(self.molecule).as_dict())
+        self.assertIn('forces', self.calc.compute(self.molecule).as_dict())
+        self.assertEqual(self.calc.compute(self.molecule).as_dict()['forces'].shape, (2, 3))
     
     def test_calculate_crystal(self):
         """Test calculation on crystal."""
-        self.calc.calculate(self.crystal)
-        self.assertIn('energy', self.calc.results)
-        self.assertIn('forces', self.calc.results)
-        self.assertIn('stress', self.calc.results)
+        self.assertIn('energy', self.calc.compute(self.crystal).as_dict())
+        self.assertIn('forces', self.calc.compute(self.crystal).as_dict())
+        self.assertIn('stress', self.calc.compute(self.crystal).as_dict())
     
     def test_energy_at_equilibrium(self):
         """Test energy at equilibrium distance (sigma)."""
         # ASE uses a finite-cutoff shifted LJ potential when smooth=False.
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [self.sigma, 0, 0]])
-        self.calc.calculate(mol)
-        energy = self.calc.get_potential_energy()
+        energy = self.calc.get_potential_energy(mol)
         expected = self._ase_shifted_energy(self.sigma, self.calc.parameters["cutoff"])
         self.assertAlmostEqual(energy, expected, places=8)
     
@@ -91,16 +88,14 @@ class TestLennardJones(unittest.TestCase):
         """Test energy at minimum (r = 2^(1/6) * sigma)."""
         r_min = self.sigma * (2 ** (1.0/6.0))
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [r_min, 0, 0]])
-        self.calc.calculate(mol)
-        energy = self.calc.get_potential_energy()
+        energy = self.calc.get_potential_energy(mol)
         expected = self._ase_shifted_energy(r_min, self.calc.parameters["cutoff"])
         self.assertAlmostEqual(energy, expected, places=8)
     
     def test_forces_at_equilibrium(self):
         """Test forces at equilibrium distance."""
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [self.sigma, 0, 0]])
-        self.calc.calculate(mol)
-        forces = self.calc.get_forces()
+        forces = self.calc.get_forces(mol)
         # At r=sigma, V=0 but force is not zero (it's at minimum at r=2^(1/6)*sigma)
         # So we just check that forces are computed
         self.assertEqual(forces.shape, (2, 3))
@@ -109,8 +104,7 @@ class TestLennardJones(unittest.TestCase):
         """Test repulsive forces at short distance."""
         # Very close atoms (r < sigma)
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [0.5 * self.sigma, 0, 0]])
-        self.calc.calculate(mol)
-        forces = self.calc.get_forces()
+        forces = self.calc.get_forces(mol)
         # Force on atom 0 should be repulsive (negative x, pushing away from atom 1)
         # Since atom 1 is at positive x, force on 0 should be negative (repulsive)
         self.assertLess(forces[0, 0], 0)
@@ -122,8 +116,7 @@ class TestLennardJones(unittest.TestCase):
         # Atoms beyond equilibrium (r > 2^(1/6)*sigma)
         r = 2.0 * self.sigma
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [r, 0, 0]])
-        self.calc.calculate(mol)
-        forces = self.calc.get_forces()
+        forces = self.calc.get_forces(mol)
         # Force on atom 0 should be attractive (positive x, pulling closer)
         self.assertGreater(forces[0, 0], 0)
         # Force on atom 1 should be equal and opposite
@@ -138,11 +131,9 @@ class TestLennardJones(unittest.TestCase):
         r = 2.0 * self.sigma
         mol = Molecule(['Ar', 'Ar'], [[0, 0, 0], [r, 0, 0]])
         
-        calc1.calculate(mol)
-        energy1 = calc1.get_potential_energy()
+        energy1 = calc1.get_potential_energy(mol)
         
-        calc2.calculate(mol)
-        energy2 = calc2.get_potential_energy()
+        energy2 = calc2.get_potential_energy(mol)
         
         # Energy should scale with epsilon
         if abs(energy1) > 1e-10:  # Avoid division by zero
@@ -160,27 +151,23 @@ class TestLennardJones(unittest.TestCase):
         positions = [[i * 5.0, 0, 0] for i in range(5)]
         mol = Molecule(['Ar'] * 5, positions)
         
-        calc_short.calculate(mol)
-        energy_short = calc_short.get_potential_energy()
+        energy_short = calc_short.get_potential_energy(mol)
         
-        calc_long.calculate(mol)
-        energy_long = calc_long.get_potential_energy()
+        energy_long = calc_long.get_potential_energy(mol)
         
         self.assertNotAlmostEqual(energy_long, energy_short)
     
     def test_crystal_stress(self):
         """Test stress calculation for crystal."""
-        self.calc.calculate(self.crystal)
-        stress = self.calc.get_stress()
+        stress = self.calc.get_stress(self.crystal)
         self.assertEqual(stress.shape, (3, 3))
         # Stress should be symmetric
         np.testing.assert_array_almost_equal(stress, stress.T, decimal=5)
 
     def test_stress_voigt(self):
         """Stress supports full tensor and ASE-order Voigt forms."""
-        self.calc.calculate(self.crystal)
-        full = self.calc.get_stress(voigt=False)
-        voigt = self.calc.get_stress(voigt=True)
+        full = self.calc.get_stress(self.crystal, voigt=False)
+        voigt = self.calc.get_stress(self.crystal, voigt=True)
         self.assertEqual(full.shape, (3, 3))
         self.assertEqual(voigt.shape, (6,))
         np.testing.assert_allclose(
@@ -192,10 +179,9 @@ class TestLennardJones(unittest.TestCase):
         """Test calculation with multiple atoms."""
         positions = [[0, 0, 0], [3.4, 0, 0], [0, 3.4, 0], [3.4, 3.4, 0]]
         mol = Molecule(['Ar'] * 4, positions)
-        self.calc.calculate(mol)
         
-        energy = self.calc.get_potential_energy()
-        forces = self.calc.get_forces()
+        energy = self.calc.get_potential_energy(mol)
+        forces = self.calc.get_forces(mol)
         
         self.assertEqual(forces.shape, (4, 3))
         # Energy should be sum of all pair interactions
@@ -204,24 +190,22 @@ class TestLennardJones(unittest.TestCase):
     def test_integration_with_crystal(self):
         """Test integration with Crystal class."""
         crystal = Crystal(['Ar'], [[0, 0, 0]], Lattice.cubic(5.0))
-        crystal.calc = self.calc
-        
-        energy = crystal.get_potential_energy()
-        forces = crystal.get_forces()
-        stress = crystal.get_stress()
+
+        energy = self.calc.get_potential_energy(crystal)
+        forces = self.calc.get_forces(crystal)
+        stress = self.calc.get_stress(crystal)
         
         self.assertIsInstance(energy, float)
         self.assertEqual(forces.shape, (1, 3))
         self.assertEqual(stress.shape, (3, 3))
-        self.assertEqual(crystal.get_stress(voigt=True).shape, (6,))
+        self.assertEqual(self.calc.get_stress(crystal, voigt=True).shape, (6,))
     
     def test_integration_with_molecule(self):
         """Test integration with Molecule class."""
         molecule = Molecule(['Ar', 'Ar'], [[0, 0, 0], [3.4, 0, 0]])
-        molecule.calc = self.calc
-        
-        energy = molecule.get_potential_energy()
-        forces = molecule.get_forces()
+
+        energy = self.calc.get_potential_energy(molecule)
+        forces = self.calc.get_forces(molecule)
         
         self.assertIsInstance(energy, float)
         self.assertEqual(forces.shape, (2, 3))
@@ -232,13 +216,12 @@ class TestLennardJones(unittest.TestCase):
         positions = np.array([[0, 0, 0], [4.0, 0, 0]], dtype=float)
         mol = Molecule(['Ar', 'Ar'], positions)
         calc = LennardJones(sigma=self.sigma, epsilon=self.epsilon, cutoff=cutoff)
-        calc.calculate(mol)
 
         ase_energy, ase_forces, _ = self._ase_lj_results(
             ['Ar', 'Ar'], positions, cutoff
         )
-        self.assertAlmostEqual(calc.get_potential_energy(), ase_energy, places=10)
-        np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
+        self.assertAlmostEqual(calc.get_potential_energy(mol), ase_energy, places=10)
+        np.testing.assert_allclose(calc.get_forces(mol), ase_forces, atol=1e-12)
 
     def test_periodic_crystal_matches_ase_reference(self):
         """Periodic crystal uses Cartesian coordinates and matches ASE."""
@@ -253,20 +236,18 @@ class TestLennardJones(unittest.TestCase):
             pbc=(True, True, True),
         )
         calc = LennardJones(sigma=self.sigma, epsilon=self.epsilon, cutoff=cutoff)
-        calc.calculate(crystal)
 
         ase_energy, ase_forces, ase_stress = self._ase_lj_results(
             ['Ar', 'Ar'], positions, cutoff, cell=cell, pbc=True
         )
-        self.assertAlmostEqual(calc.get_potential_energy(), ase_energy, places=10)
-        np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
-        np.testing.assert_allclose(calc.get_stress(), ase_stress, atol=1e-12)
+        self.assertAlmostEqual(calc.get_potential_energy(crystal), ase_energy, places=10)
+        np.testing.assert_allclose(calc.get_forces(crystal), ase_forces, atol=1e-12)
+        np.testing.assert_allclose(calc.get_stress(crystal), ase_stress, atol=1e-12)
 
     def test_periodic_self_images_match_ase_reference(self):
         """Single-atom periodic image interactions match ASE."""
         crystal = Crystal(['Ar'], [[0, 0, 0]], Lattice.cubic(5.0))
         calc = LennardJones(sigma=self.sigma, epsilon=self.epsilon)
-        calc.calculate(crystal)
 
         ase_energy, ase_forces, ase_stress = self._ase_lj_results(
             ['Ar'],
@@ -275,9 +256,9 @@ class TestLennardJones(unittest.TestCase):
             cell=np.eye(3) * 5.0,
             pbc=True,
         )
-        self.assertAlmostEqual(calc.get_potential_energy(), ase_energy, places=10)
-        np.testing.assert_allclose(calc.get_forces(), ase_forces, atol=1e-12)
-        np.testing.assert_allclose(calc.get_stress(), ase_stress, atol=1e-12)
+        self.assertAlmostEqual(calc.get_potential_energy(crystal), ase_energy, places=10)
+        np.testing.assert_allclose(calc.get_forces(crystal), ase_forces, atol=1e-12)
+        np.testing.assert_allclose(calc.get_stress(crystal), ase_stress, atol=1e-12)
 
 
 class TestLJMultispecies(unittest.TestCase):
@@ -296,8 +277,7 @@ class TestLJMultispecies(unittest.TestCase):
             sigma=3.4, epsilon=0.0104,
             species_sigma={"Kr": 3.6}, species_epsilon={"Kr": 0.014},
         )
-        calc.calculate(crystal)
-        energy_mixed = calc.get_potential_energy()
+        energy_mixed = calc.get_potential_energy(crystal)
 
         crystal_ar = Crystal(
             ["Ar", "Ar", "Ar", "Ar"],
@@ -305,8 +285,7 @@ class TestLJMultispecies(unittest.TestCase):
             Lattice.cubic(5.0),
         )
         calc_ar = LennardJones(sigma=3.4, epsilon=0.0104)
-        calc_ar.calculate(crystal_ar)
-        energy_pure = calc_ar.get_potential_energy()
+        energy_pure = calc_ar.get_potential_energy(crystal_ar)
 
         self.assertNotEqual(energy_mixed, energy_pure)
 
@@ -328,8 +307,7 @@ class TestLJMultispecies(unittest.TestCase):
 
         crystal = Crystal(["Ar"], [[0, 0, 0]], Lattice.cubic(5.26))
         calc = LennardJones(sigma=3.4, epsilon=0.0104)
-        calc.calculate(crystal)
-        energy = calc.get_potential_energy()
+        energy = calc.get_potential_energy(crystal)
         self.assertIsInstance(energy, float)
         self.assertTrue(np.isfinite(energy))
 

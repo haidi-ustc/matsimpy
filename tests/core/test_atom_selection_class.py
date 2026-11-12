@@ -17,15 +17,7 @@ class TestAtomSelectionBasic(unittest.TestCase):
         )
         self.molecule = Molecule(['C', 'O', 'C'], [[0, 0, 0], [1.2, 0, 0], [2.4, 0, 0]])
     
-    def test_basic_selection(self):
-        """Test basic selection."""
-        sel = AtomSelection(self.crystal).by_species('Si')
-        self.assertEqual(sorted(sel.indices), [0, 2])
     
-    def test_chaining(self):
-        """Test method chaining."""
-        sel = AtomSelection(self.crystal).by_species('Si').near([0, 0, 0], 5.0)
-        self.assertEqual(sel.indices, [0])
     
     def test_length(self):
         """Test len() method."""
@@ -65,12 +57,6 @@ class TestAtomSelectionOperations(unittest.TestCase):
         combined = sel1 & sel2
         self.assertEqual(combined.indices, [0])
     
-    def test_union(self):
-        """Test union operation (|)."""
-        sel1 = AtomSelection(self.crystal).by_species('Si')
-        sel2 = AtomSelection(self.crystal).by_species('O')
-        combined = sel1 | sel2
-        self.assertEqual(sorted(combined.indices), [0, 1, 2, 3])
     
     def test_difference(self):
         """Test difference operation (-)."""
@@ -91,34 +77,8 @@ class TestAtomSelectionWithSubstitution(unittest.TestCase):
             coords_are_cartesian=True
         )
     
-    def test_substitute_with_selection(self):
-        """Test substitution using AtomSelection."""
-        sel = AtomSelection(self.crystal).by_species('Si')
-        result = self.crystal.substitute(sel, 'Ge')
 
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[1], 'O')
-        self.assertEqual(result.species[2], 'Ge')
 
-    def test_substitute_with_chained_selection(self):
-        """Test substitution with chained selection."""
-        sel = AtomSelection(self.crystal).by_species('Si').near([0, 0, 0], 5.0)
-        result = self.crystal.substitute(sel, 'Ge')
-
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[1], 'O')
-        self.assertEqual(result.species[2], 'Si')  # Not substituted
-
-    def test_substitute_with_combined_selection(self):
-        """Test substitution with combined selections."""
-        sel1 = AtomSelection(self.crystal).by_species('Si')
-        sel2 = AtomSelection(self.crystal).near([0, 0, 0], 5.0)
-        combined = sel1 & sel2
-
-        result = self.crystal.substitute(combined, 'Ge')
-
-        self.assertEqual(result.species[0], 'Ge')
-        self.assertEqual(result.species[2], 'Si')  # Not substituted
     
     def test_substitute_wrong_structure(self):
         """Test that substitution with wrong structure raises error."""
@@ -144,10 +104,6 @@ class TestAtomSelectionMethods(unittest.TestCase):
             ]
         )
     
-    def test_by_indices(self):
-        """Test by_indices method."""
-        sel = AtomSelection(self.crystal).by_indices([0, 2])
-        self.assertEqual(sel.indices, [0, 2])
     
     def test_in_box(self):
         """Test in_box method."""

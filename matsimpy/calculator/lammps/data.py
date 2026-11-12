@@ -34,7 +34,8 @@ from monty.serialization import loadfn
 from ruamel.yaml import YAML
 
 from matsimpy.core import Element, Lattice, Crystal, Molecule, SymmOp
-from matsimpy.calculator.utils import clean_lines
+from matsimpy.core.periodic_table import ELEMENTS
+from matsimpy.calculator.utils import clean_lines, site_property_column
 
 # Matsimpy alias
 Structure = Crystal
@@ -223,7 +224,9 @@ def lattice_2_lmpbox(lattice: Lattice, origin: Sequence = (0, 0, 0)) -> tuple[La
     xz = np.dot(matrix[2], matrix[0] / a)
     yz = (np.dot(matrix[1], matrix[2]) - xy * xz) / (yhi - ylo)
     zhi = np.sqrt(c**2 - xz**2 - yz**2) + zlo
-    tilt = None if lattice.is_orthogonal else [xy, xz, yz]
+    # MatSimPy's Lattice.is_orthogonal is a method; the pymatgen property form was
+    # always truthy, so every triclinic cell was written without tilt factors.
+    tilt = None if lattice.is_orthogonal() else [xy, xz, yz]
     rot_matrix = np.linalg.solve([[xhi - xlo, 0, 0], [xy, yhi - ylo, 0], [xz, yz, zhi - zlo]], matrix)
     bounds = [[xlo, xhi], [ylo, yhi], [zlo, zhi]]
     symm_op = SymmOp.from_rotation_and_translation(rot_matrix, origin)
@@ -305,20 +308,22 @@ class LammpsData(MSONable):
         ld_copy = type(self)(self.box, masses, atoms)
         topologies = ld_copy.disassemble()[-1]
         molecule = topologies[0].sites
-        coords = molecule.cart_coords - np.array(self.box.bounds)[:, 0]
-        species = molecule.species
+        coords = molecule.positions - np.array(self.box.bounds)[:, 0]
+        species = list(molecule.species)
         lattice = self.box.to_lattice()
-        site_properties = {}
+        site_properties = [{} for _ in species]
         if "q" in atoms:
-            site_properties["charge"] = atoms["q"].to_numpy()
+            for props, q in zip(site_properties, atoms["q"].to_numpy()):
+                props["charge"] = float(q)
         if self.velocities is not None:
-            site_properties["velocities"] = self.velocities.to_numpy()
-        return Structure(
-            lattice,
+            for props, v in zip(site_properties, self.velocities.to_numpy()):
+                props["velocities"] = v.tolist()
+        return Crystal(
             species,
             coords,
+            lattice,
             coords_are_cartesian=True,
-            site_properties=site_properties,
+            site_properties=site_properties if any(site_properties) else None,
         )
 
     def get_str(self, distance: int = 6, velocity: int = 8, charge: int = 4, hybrid: bool = True) -> str:
@@ -540,10 +545,11 @@ class LammpsData(MSONable):
         masses["label"] = atom_labels
         unique_masses = np.unique(masses["mass"])
         if guess_element:
-            ref_masses = {el.name: el.atomic_mass.real for el in Element}
+            # MatSimPy's Element is not an Enum (pymatgen's is iterable).
+            ref_masses = {sym: float(Element(sym).atomic_mass) for sym in ELEMENTS}
             symbols = list(ref_masses)
             diff = np.abs(np.array(list(ref_masses.values())) - unique_masses[:, None])
-            symbols = [Element(symbols[idx]).symbol for idx in np.argmin(diff, axis=1)]
+            symbols = [symbols[idx] for idx in np.argmin(diff, axis=1)]
         else:
             symbols = [f"Q{a}" for a in map(chr, range(97, 97 + len(unique_masses)))]
         for um, s in zip(unique_masses, symbols, strict=True):
@@ -623,9 +629,9 @@ class LammpsData(MSONable):
             labels = masses.loc[type_ids, "label"]
             coords = atoms[["x", "y", "z"]]
             mol = Molecule(
-                species.values,
+                list(species.values),
                 coords.values,
-                site_properties={ff_label: labels.to_numpy()},
+                site_properties=[{ff_label: label} for label in labels.to_numpy()],
             )
             charges = atoms.get("q")
             velocities = atoms[["vx", "vy", "vz"]] if "vx" in atoms.columns else None
@@ -822,7 +828,7 @@ class LammpsData(MSONable):
                 v_collector.append(topo.velocities)
             mol_ids.extend([idx + 1] * len(topo.sites))
             labels.extend(topo.type_by_sites)
-            coords.append(topo.sites.cart_coords)
+            coords.append(topo.sites.positions)
             charges.extend(topo.charges or [0.0] * len(topo.sites))
 
         atoms = pd.DataFrame(np.concatenate(coords), columns=["x", "y", "z"])
@@ -875,21 +881,24 @@ class LammpsData(MSONable):
                 "charge" (charged). Default to "charge".
             is_sort (bool): whether to sort sites
         """
-        struct = structure.get_sorted_structure() if is_sort else structure.copy()
+        # MatSimPy sort_atoms() orders by atomic number (pymatgen sorted by
+        # electronegativity).  Structures are immutable, so no copy is needed.
+        struct = structure.sort_atoms() if is_sort else structure
         box, symm_op = lattice_2_lmpbox(struct.lattice)
-        coords = symm_op.operate_multi(struct.cart_coords)
-        site_properties = struct.site_properties
-        if "velocities" in site_properties:
-            velos = np.array(struct.site_properties["velocities"])
+        coords = symm_op.operate_multi(struct.cart_positions)
+        site_properties = [dict(p) for p in struct.site_properties] or None
+        velos = site_property_column(struct, "velocities")
+        if velos is not None:
             rot = SymmOp.from_rotation_and_translation(symm_op.rotation_matrix)
-            rot_velos = rot.operate_multi(velos)
-            site_properties["velocities"] = rot_velos
-        boxed_s = Structure(
-            box.to_lattice(),
-            struct.species,
+            for props, v in zip(site_properties, rot.operate_multi(np.asarray(velos, dtype=float))):
+                props["velocities"] = v.tolist()
+        boxed_s = Crystal(
+            list(struct.species),
             coords,
-            site_properties=site_properties,
+            box.to_lattice(),
+            pbc=struct.pbc,
             coords_are_cartesian=True,
+            site_properties=site_properties,
         )
 
         symbols = list(struct.symbol_set)
@@ -968,15 +977,21 @@ class Topology(MSONable):
                     "Impropers": [[i, j, k, l], ...]
                 }.
         """
-        if not isinstance(sites, Molecule | Structure):
-            sites = Molecule.from_sites(sites)
+        if not isinstance(sites, (Molecule, Crystal)):
+            sites = Molecule(
+                [site.specie for site in sites],
+                [getattr(site, "cart_position", site.position) for site in sites],
+                site_properties=[site.properties for site in sites],
+            )
 
-        type_by_sites = sites.site_properties[ff_label] if ff_label else [site.specie.symbol for site in sites]
+        type_by_sites = site_property_column(sites, ff_label) if ff_label else list(sites.species)
+        if type_by_sites is None:
+            raise KeyError(f"site property {ff_label!r} is missing on some sites")
         # search for site property if not override
         if charges is None:
-            charges = sites.site_properties.get("charge")
+            charges = site_property_column(sites, "charge")
         if velocities is None:
-            velocities = sites.site_properties.get("velocities")
+            velocities = site_property_column(sites, "velocities")
         # validate shape
         if charges is not None:
             charge_arr = np.array(charges)
@@ -999,74 +1014,6 @@ class Topology(MSONable):
         self.topologies = topologies
         self.type_by_sites = type_by_sites
         self.species = set(type_by_sites)
-
-    @classmethod
-    def from_bonding(
-        cls,
-        molecule: Molecule,
-        bond: bool = True,
-        angle: bool = True,
-        dihedral: bool = True,
-        tol: float = 0.1,
-        **kwargs,
-    ) -> Self:
-        """
-        Another constructor that creates an instance from a molecule.
-        Covalent bonds and other bond-based topologies (angles and
-        dihedrals) can be automatically determined. Cannot be used for
-        non bond-based topologies, e.g. improper dihedrals.
-
-        Args:
-            molecule (Molecule): Input molecule.
-            bond (bool): Whether find bonds. If set to False, angle and
-                dihedral searching will be skipped. Default to True.
-            angle (bool): Whether find angles. Default to True.
-            dihedral (bool): Whether find dihedrals. Default to True.
-            tol (float): Bond distance tolerance. Default to 0.1.
-                Not recommended to alter.
-            **kwargs: Other kwargs supported by Topology.
-        """
-        real_bonds = molecule.get_covalent_bonds(tol=tol)
-        bond_list = [list(map(molecule.index, [b.site1, b.site2])) for b in real_bonds]
-        if not all((bond, bond_list)):
-            # do not search for others if not searching for bonds or no bonds
-            return cls(sites=molecule, **kwargs)
-
-        angle_list, dihedral_list = [], []
-        dests, freq = np.unique(bond_list, return_counts=True)
-        hubs = dests[np.where(freq > 1)].tolist()
-        bond_arr = np.array(bond_list)
-        hub_spokes = {}
-        if len(hubs) > 0:
-            for hub in hubs:
-                ix = np.any(np.isin(bond_arr, hub), axis=1)
-                bonds = np.unique(bond_arr[ix]).tolist()
-                bonds.remove(hub)
-                hub_spokes[hub] = bonds
-        # skip angle or dihedral searching if too few bonds or hubs
-        dihedral = False if len(bond_list) < 3 or len(hubs) < 2 else dihedral
-        angle = False if len(bond_list) < 2 or len(hubs) < 1 else angle
-
-        if angle:
-            for k, v in hub_spokes.items():
-                angle_list.extend([[i, k, j] for i, j in itertools.combinations(v, 2)])
-        if dihedral:
-            hub_cons = bond_arr[np.all(np.isin(bond_arr, hubs), axis=1)]
-            for ii, jj in hub_cons.tolist():
-                ks = [ki for ki in hub_spokes[ii] if ki != jj]
-                ls = [li for li in hub_spokes[jj] if li != ii]
-                dihedral_list.extend([[ki, ii, jj, li] for ki, li in itertools.product(ks, ls) if ki != li])
-
-        topologies = {
-            k: v
-            for k, v in zip(
-                SECTION_KEYWORDS["topology"][:3],
-                [bond_list, angle_list, dihedral_list],
-                strict=True,
-            )
-            if len(v) > 0
-        } or None
-        return cls(sites=molecule, topologies=topologies, **kwargs)
 
 
 class ForceField(MSONable):

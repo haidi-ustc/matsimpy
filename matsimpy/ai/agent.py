@@ -114,6 +114,22 @@ class Agent:
         """Add explicit context to subsequent conversation turns."""
         self.session.add_context(message)
 
+    def load_skill(self, name: str) -> dict:
+        """Add a standard or generated skill's instructions to the conversation context."""
+        library = self.refresh_skill_library()
+        library.discover(strict=False)
+        try:
+            body = library.activate(name).body
+        except KeyError:
+            from .skill_loader import list_generated_skills
+
+            found = [s for s in list_generated_skills() if s["name"] == name]
+            if not found:
+                raise KeyError(f"Skill '{name}' not found.") from None
+            body = found[0].get("body", "")
+        self.add_context(ChatMessage.system(f"[Loaded skill: {name}]\n{body}"))
+        return {"name": name, "loaded": True}
+
     def conversation_messages(self) -> list[ChatMessage]:
         """Rebuild the public conversation view from the active session branch."""
         return [*self.runtime._initial_messages(), *self.session.active_messages()]

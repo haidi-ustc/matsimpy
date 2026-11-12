@@ -483,16 +483,16 @@ def test_runtime_reuses_executor_object_refs_across_runs(tmp_path):
     assert "consumed" in second.tool_calls[0]["result"]
 
 
-def test_engine_chat_uses_runtime_with_fake_provider(tmp_path):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_run_uses_runtime_with_fake_provider(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider, ReplController
 
     tool_call = ToolCall(
         id="call-make-result",
         name="make_result",
         arguments={"value": "reusable"},
     )
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
-    engine.runtime.provider = FakeProvider(
+    agent = Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"))
+    agent.runtime.provider = FakeProvider(
         [
             ChatResponse(
                 message=_assistant_tool_message(tool_call),
@@ -519,21 +519,21 @@ def test_engine_chat_uses_runtime_with_fake_provider(tmp_path):
         skill="test",
     )
     skill = Skill("test", "Test skill", [fn])
-    engine.skill_manager.register(skill)
-    engine.skill_manager.load("test")
+    agent.skill_manager.register(skill)
+    agent.skill_manager.load("test")
 
-    response = engine.chat("make a reusable result")
+    response = agent.run("make a reusable result").response
 
     assert response == "Task complete."
-    assert engine.runtime.last_result.validation_status == "success"
+    assert agent.runtime.last_result.validation_status == "success"
 
 
-def test_engine_chat_keeps_repl_workspace_cwd_for_relative_commands(tmp_path):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_run_keeps_repl_workspace_cwd_for_relative_commands(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider, ReplController
 
     original_cwd = Path.cwd()
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
-    engine.runtime.provider = FakeProvider(
+    agent = Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"))
+    agent.runtime.provider = FakeProvider(
         [
             ChatResponse(
                 message=ChatMessage.assistant("Ready to save."),
@@ -544,24 +544,24 @@ def test_engine_chat_keeps_repl_workspace_cwd_for_relative_commands(tmp_path):
     )
 
     try:
-        engine.workspace.enter()
-        response = engine.chat("prepare a saveable conversation")
+        agent.workspace.enter()
+        response = agent.run("prepare a saveable conversation").response
 
         assert response == "Ready to save."
-        assert Path.cwd() == engine.workspace.path
+        assert Path.cwd() == agent.workspace.path
 
-        engine._handle_command("/save rel-conversation.json")
+        ReplController.for_agent(agent).execute("/save rel-conversation.json")
 
-        assert (engine.workspace.path / "rel-conversation.json").exists()
+        assert (agent.workspace.path / "rel-conversation.json").exists()
     finally:
         os.chdir(original_cwd)
 
 
-def test_engine_chat_passes_preloaded_context_to_runtime_provider(tmp_path):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_run_passes_preloaded_context_to_runtime_provider(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider, ReplController
 
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
-    engine.runtime.provider = FakeProvider(
+    agent = Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"))
+    agent.runtime.provider = FakeProvider(
         [
             ChatResponse(
                 message=ChatMessage.assistant("Used loaded context."),
@@ -570,24 +570,24 @@ def test_engine_chat_passes_preloaded_context_to_runtime_provider(tmp_path):
             ),
         ]
     )
-    engine.conversation.append(ChatMessage.system("[Loaded skill: x]\nimportant workflow"))
+    agent.add_context(ChatMessage.system("[Loaded skill: x]\nimportant workflow"))
 
-    response = engine.chat("use the loaded workflow")
+    response = agent.run("use the loaded workflow").response
 
     assert response == "Used loaded context."
-    messages = engine.runtime.provider.calls[0]["messages"]
+    messages = agent.runtime.provider.calls[0]["messages"]
     assert [message.role for message in messages] == ["system", "system", "user"]
     assert messages[1].content == "[Loaded skill: x]\nimportant workflow"
     assert messages[2].content == "use the loaded workflow"
 
 
 def test_workspace_command_moves_runtime_session_store_and_chat_state(tmp_path):
-    from matsimpy.ai.engine import AIEngine
+    from matsimpy.ai import Agent, DeepSeekProvider, ReplController
 
     original_workspace = tmp_path / "original"
     new_workspace = tmp_path / "new"
-    engine = AIEngine(api_key="unused", workspace_path=original_workspace)
-    engine.runtime.provider = FakeProvider(
+    agent = Agent(workspace=original_workspace, provider=DeepSeekProvider("unused"))
+    agent.runtime.provider = FakeProvider(
         [
             ChatResponse(
                 message=ChatMessage.assistant("Stored in new workspace."),
@@ -597,18 +597,18 @@ def test_workspace_command_moves_runtime_session_store_and_chat_state(tmp_path):
         ]
     )
 
-    engine._handle_command(f"/workspace {new_workspace}")
+    ReplController.for_agent(agent).execute(f"/workspace {new_workspace}")
 
     expected_db = new_workspace / "ai-state.db"
-    assert engine.workspace.path == new_workspace.resolve()
-    assert engine.runtime.workspace.path == new_workspace.resolve()
-    assert engine.runtime.session_store.path == expected_db.resolve()
+    assert agent.workspace.path == new_workspace.resolve()
+    assert agent.runtime.workspace.path == new_workspace.resolve()
+    assert agent.runtime.session_store.path == expected_db.resolve()
 
-    response = engine.chat("write state after workspace switch")
+    response = agent.run("write state after workspace switch").response
 
     assert response == "Stored in new workspace."
     assert expected_db.exists()
-    traces = engine.runtime.session_store.search_traces("workspace")
+    traces = agent.runtime.session_store.search_traces("workspace")
     assert [trace["final_response"] for trace in traces] == ["Stored in new workspace."]
     original_store = SessionStore(original_workspace / "ai-state.db")
     try:
@@ -618,8 +618,8 @@ def test_workspace_command_moves_runtime_session_store_and_chat_state(tmp_path):
     assert rows == []
 
 
-def test_engine_chat_auto_loads_user_message_once(tmp_path):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_run_auto_loads_user_message_once(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider, ReplController
 
     class CountingSkillManager(SkillManager):
         def __init__(self):
@@ -631,10 +631,10 @@ def test_engine_chat_auto_loads_user_message_once(tmp_path):
             return []
 
     skill_manager = CountingSkillManager()
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
-    engine.skill_manager = skill_manager
-    engine.runtime.skill_manager = skill_manager
-    engine.runtime.provider = FakeProvider(
+    agent = Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"))
+    agent.skill_manager = skill_manager
+    agent.runtime.skill_manager = skill_manager
+    agent.runtime.provider = FakeProvider(
         [
             ChatResponse(
                 message=ChatMessage.assistant("Loaded once."),
@@ -644,7 +644,7 @@ def test_engine_chat_auto_loads_user_message_once(tmp_path):
         ]
     )
 
-    response = engine.chat("trigger one auto load")
+    response = agent.run("trigger one auto load").response
 
     assert response == "Loaded once."
     assert skill_manager.auto_load_messages == ["trigger one auto load"]

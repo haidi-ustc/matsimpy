@@ -90,7 +90,7 @@ class SymmetryAnalyzer:
             )
 
         # Convert crystal to spglib format
-        lattice = crystal.lattice.lattice_vectors
+        lattice = crystal.lattice.matrix
         positions = crystal.frac_positions
         numbers = [self._element_to_number(spec) for spec in crystal.species]
 
@@ -827,6 +827,20 @@ def analyze_symmetry(
         raise TypeError(f"Unsupported structure type: {type(structure)}")
 
 
+def get_symmetry_info(
+    crystal: Crystal, symprec: float = 1e-5, angle_tolerance: float = -1.0
+) -> Dict[str, Any]:
+    """Basic space-group information of a crystal (0.9.0: was ``Crystal.get_symmetry_info``).
+
+    Returns:
+        dict with ``space_group_number``, ``space_group_symbol``, ``point_group``,
+        ``crystal_system`` and ``hall_symbol``.
+    """
+    info = SymmetryAnalyzer(symprec=symprec, angle_tolerance=angle_tolerance).analyze_crystal(crystal)
+    keys = ("space_group_number", "space_group_symbol", "point_group", "crystal_system", "hall_symbol")
+    return {k: info.get(k) for k in keys}
+
+
 def get_conventional_cell(
     crystal: Crystal, symprec: float = 1e-5, angle_tolerance: float = -1.0
 ) -> Crystal:
@@ -867,7 +881,7 @@ def get_conventional_cell(
     from ..core import Element, Lattice
 
     # Convert crystal to spglib format
-    lattice = crystal.lattice.lattice_vectors
+    lattice = crystal.lattice.matrix
     positions = crystal.frac_positions
     # Get atomic numbers for spglib
     numbers = [elem.atomic_no for elem in crystal.elements]
@@ -907,6 +921,8 @@ def get_conventional_cell(
         crystal.species
     ):
         # Map site properties (this is approximate - may need refinement)
-        conventional.site_properties = [{}] * len(conventional.species)
+        conventional = conventional.with_site_properties(
+            [{} for _ in conventional.species]
+        )
 
     return conventional

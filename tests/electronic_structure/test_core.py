@@ -47,6 +47,10 @@ def test_magmom_rejects_non_vector_values():
 @pytest.mark.requires_pymatgen
 def test_enum_values_match_pymatgen_2025_6_14():
     pytest.importorskip("pymatgen")
+    from importlib.metadata import version
+
+    if version("pymatgen") != "2025.6.14":
+        pytest.skip("enum parity is pinned to pymatgen==2025.6.14 (extra 'parity')")
     from pymatgen.electronic_structure.core import Orbital as POrbital
     from pymatgen.electronic_structure.core import OrbitalType as POrbitalType
     from pymatgen.electronic_structure.core import Spin as PSpin

@@ -1,0 +1,9 @@
+include README.md LICENSE CHANGELOG.md MIGRATION_0.9.md
+recursive-include matsimpy *.json *.json.bz2 *.yaml *.yml
+recursive-include matsimpy/calculator/lammps/templates *
+# Test assets and docs used by the test-suite (absent from <=0.8.1 sdists)
+recursive-include tests *.py *.vasp *.xml *.gjf *.log *.json *.yaml *.cif *.gz
+recursive-include tests/calculator/fixtures *
+recursive-include docs *.rst *.py *.md
+recursive-include examples *.py *.md *.json
+global-exclude __pycache__ *.py[cod] .DS_Store

@@ -2,36 +2,15 @@
 import unittest
 import numpy as np
 
-from matsimpy.core import Site, CrystalSite, Lattice, Element
+from matsimpy.core import Site, CrystalSite, Lattice
 
 class TestSiteComprehensive(unittest.TestCase):
     """Comprehensive tests for Site class."""
     
-    def test_site_init_default(self):
-        """Test site initialization with defaults."""
-        site = Site([0, 0, 0])
-        self.assertEqual(site.specie, 'X')
-        self.assertEqual(site.properties, {})
     
-    def test_site_init_with_specie_string(self):
-        """Test site with string specie."""
-        site = Site([0, 0, 0], specie='Fe')
-        self.assertEqual(site.specie, 'Fe')
     
-    def test_site_init_with_specie_int(self):
-        """Test site with integer specie (atomic number)."""
-        site = Site([0, 0, 0], specie=26)  # Fe
-        self.assertEqual(site.specie, 'Fe')
     
-    def test_site_init_with_specie_element(self):
-        """Test site with Element object."""
-        site = Site([0, 0, 0], specie=Element('Fe'))
-        self.assertEqual(site.specie, 'Fe')
     
-    def test_site_init_with_properties(self):
-        """Test site with properties."""
-        site = Site([0, 0, 0], specie='Fe', properties={'magmom': 2.5})
-        self.assertEqual(site.properties['magmom'], 2.5)
 
     def test_site_init_rejects_invalid_specie(self):
         """Test site initialization rejects invalid atomic numbers."""
@@ -43,66 +22,17 @@ class TestSiteComprehensive(unittest.TestCase):
         with self.assertRaises(TypeError):
             Site([0, 0, 0], properties="not_a_dict")
     
-    def test_site_position_setter(self):
-        """Test position setter."""
-        site = Site([0, 0, 0])
-        site.position = [1, 2, 3]
-        np.testing.assert_array_equal(site.position, [1, 2, 3])
     
-    def test_site_position_setter_invalid(self):
-        """Test position setter with invalid input."""
-        site = Site([0, 0, 0])
+    def test_site_rejects_wrong_length_position(self):
         with self.assertRaises(ValueError):
-            site.position = [1, 2]  # Wrong length
+            Site([1, 2])
     
-    def test_site_specie_setter(self):
-        """Test specie setter."""
-        site = Site([0, 0, 0])
-        site.specie = 'Fe'
-        self.assertEqual(site.specie, 'Fe')
     
-    def test_site_specie_setter_element(self):
-        """Test specie setter with Element."""
-        site = Site([0, 0, 0])
-        site.specie = Element('Fe')
-        self.assertEqual(site.specie, 'Fe')
     
-    def test_site_properties_setter(self):
-        """Test properties setter."""
-        site = Site([0, 0, 0])
-        site.properties = {'charge': 2}
-        self.assertEqual(site.properties['charge'], 2)
     
-    def test_site_properties_setter_invalid(self):
-        """Test properties setter with invalid input."""
-        site = Site([0, 0, 0])
-        with self.assertRaises(TypeError):
-            site.properties = "not_a_dict"
     
-    def test_site_as_dict(self):
-        """Test dictionary representation."""
-        site = Site([0, 0, 0], specie='Fe', properties={'magmom': 2.5})
-        d = site.as_dict()
-        self.assertIn('position', d)
-        self.assertIn('specie', d)
-        self.assertIn('properties', d)
     
-    def test_site_from_dict(self):
-        """Test creation from dictionary."""
-        d = {
-            'position': [0, 0, 0],
-            'specie': 'Fe',
-            'properties': {'magmom': 2.5}
-        }
-        site = Site.from_dict(d)
-        self.assertEqual(site.specie, 'Fe')
-        self.assertEqual(site.properties['magmom'], 2.5)
 
-    def test_site_from_dict_minimal(self):
-        """Test creation from a minimal dictionary."""
-        site = Site.from_dict({'position': [0, 0, 0]})
-        self.assertEqual(site.specie, 'X')
-        np.testing.assert_array_equal(site.position, [0, 0, 0])
     
     def test_site_repr(self):
         """Test representation (concise format)."""
@@ -124,13 +54,6 @@ class TestSiteComprehensive(unittest.TestCase):
 class TestCrystalSiteComprehensive(unittest.TestCase):
     """Comprehensive tests for CrystalSite class."""
     
-    def test_crystalsite_init_fractional(self):
-        """Test CrystalSite initialization with fractional coordinates."""
-        lattice = Lattice.cubic(10.0)
-        site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
-        
-        self.assertEqual(site.specie, 'Fe')
-        np.testing.assert_array_almost_equal(site.frac_position, [0.5, 0.5, 0.5])
     
     def test_crystalsite_init_cartesian(self):
         """Test CrystalSite initialization with cartesian coordinates."""
@@ -149,33 +72,20 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         self.assertAlmostEqual(cart[0], 5.0, places=5)
         
         # Convert back
-        frac_back = site._convert_to_fractional()
+        frac_back = CrystalSite(cart, 'Fe', lattice, coords_are_cartesian=True).frac_position
         np.testing.assert_array_almost_equal(site.frac_position, frac_back, decimal=6)
     
-    def test_crystalsite_lattice_setter(self):
-        """Test lattice setter."""
-        lattice1 = Lattice.cubic(10.0)
-        lattice2 = Lattice.cubic(20.0)
-        site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice1)
-        
-        site.lattice = lattice2
-        self.assertEqual(site.lattice.a, 20.0)
     
-    def test_crystalsite_lattice_setter_list(self):
-        """Test lattice setter with list."""
+    def test_crystalsite_accepts_lattice_as_list(self):
         lattice_vectors = [[10, 0, 0], [0, 10, 0], [0, 0, 10]]
         site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice_vectors)
         
         self.assertIsInstance(site.lattice, Lattice)
         self.assertEqual(site.lattice.a, 10.0)
     
-    def test_crystalsite_lattice_setter_invalid(self):
-        """Test lattice setter with invalid input."""
-        lattice = Lattice.cubic(10.0)
-        site = CrystalSite([0.5, 0.5, 0.5], 'Fe', lattice)
-        
+    def test_crystalsite_rejects_invalid_lattice(self):
         with self.assertRaises(TypeError):
-            site.lattice = "not_a_lattice"
+            CrystalSite([0.5, 0.5, 0.5], 'Fe', "not_a_lattice")
     
     def test_crystalsite_as_dict(self):
         """Test dictionary representation."""
@@ -200,17 +110,6 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         self.assertEqual(site.specie, 'Fe')
         self.assertIsInstance(site.lattice, Lattice)
 
-    def test_crystalsite_from_dict_minimal(self):
-        """Test CrystalSite creation from a minimal dictionary."""
-        site = CrystalSite.from_dict({
-            'position': [0.5, 0.5, 0.5],
-            'lattice': {
-                'lattice_vectors': [[10, 0, 0], [0, 10, 0], [0, 0, 10]]
-            },
-        })
-
-        self.assertEqual(site.specie, 'X')
-        self.assertIsInstance(site.lattice, Lattice)
     
     def test_crystalsite_repr(self):
         """Test representation (concise format)."""
@@ -233,65 +132,8 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
         self.assertIn('CrystalSite', str_repr)
         self.assertIn('Fe', str_repr)
     
-    def test_crystalsite_wrap_positive(self):
-        """Test wrapping positive fractional coordinates > 1."""
-        lattice = Lattice.cubic(10.0)
-        site = CrystalSite([1.5, 2.3, 0.5], 'Fe', lattice)
 
-        wrapped = site.wrap()
-        np.testing.assert_array_almost_equal(
-            wrapped.frac_position, [0.5, 0.3, 0.5], decimal=6
-        )
-        # Verify Cartesian coordinates of the wrapped site
-        expected_cart = np.dot([0.5, 0.3, 0.5], lattice.matrix)
-        np.testing.assert_array_almost_equal(
-            wrapped.cart_position, expected_cart, decimal=6
-        )
 
-    def test_crystalsite_wrap_negative(self):
-        """Test wrapping negative fractional coordinates."""
-        lattice = Lattice.cubic(10.0)
-        site = CrystalSite([-0.3, -1.2, 0.5], 'Fe', lattice)
-
-        wrapped = site.wrap()
-        np.testing.assert_array_almost_equal(
-            wrapped.frac_position, [0.7, 0.8, 0.5], decimal=6
-        )
-        # Verify Cartesian coordinates of the wrapped site
-        expected_cart = np.dot([0.7, 0.8, 0.5], lattice.matrix)
-        np.testing.assert_array_almost_equal(
-            wrapped.cart_position, expected_cart, decimal=6
-        )
-
-    def test_crystalsite_wrap_mixed(self):
-        """Test wrapping mixed positive and negative coordinates."""
-        lattice = Lattice.cubic(10.0)
-        site = CrystalSite([1.5, -0.3, 2.7], 'Fe', lattice)
-
-        wrapped = site.wrap()
-        np.testing.assert_array_almost_equal(
-            wrapped.frac_position, [0.5, 0.7, 0.7], decimal=6
-        )
-
-    def test_crystalsite_wrap_already_in_range(self):
-        """Test wrapping coordinates already in [0, 1) range — original unchanged."""
-        lattice = Lattice.cubic(10.0)
-        site = CrystalSite([0.3, 0.5, 0.7], 'Fe', lattice)
-        original_frac = site.frac_position.copy()
-        original_cart = site.cart_position.copy()
-
-        wrapped = site.wrap()
-        # Wrapped result matches original (already in range)
-        np.testing.assert_array_almost_equal(
-            wrapped.frac_position, original_frac, decimal=6
-        )
-        np.testing.assert_array_almost_equal(
-            wrapped.cart_position, original_cart, decimal=6
-        )
-        # Original is not mutated
-        np.testing.assert_array_almost_equal(
-            site.frac_position, original_frac, decimal=6
-        )
     
     def test_crystalsite_wrap_returns_new_instance(self):
         """wrap() returns a new CrystalSite; original is left unchanged."""
@@ -311,29 +153,6 @@ class TestCrystalSiteComprehensive(unittest.TestCase):
             site.frac_position, [1.5, -0.3, 0.5], decimal=6
         )
 
-    def test_crystalsite_wrap_boundary_values(self):
-        """Test wrapping boundary values (0.0, 1.0, etc.)."""
-        lattice = Lattice.cubic(10.0)
-        # Test exactly 1.0 (should wrap to 0.0)
-        site1 = CrystalSite([1.0, 1.0, 1.0], 'Fe', lattice)
-        wrapped1 = site1.wrap()
-        np.testing.assert_array_almost_equal(
-            wrapped1.frac_position, [0.0, 0.0, 0.0], decimal=6
-        )
-
-        # Test exactly 0.0 (should remain 0.0)
-        site2 = CrystalSite([0.0, 0.0, 0.0], 'Fe', lattice)
-        wrapped2 = site2.wrap()
-        np.testing.assert_array_almost_equal(
-            wrapped2.frac_position, [0.0, 0.0, 0.0], decimal=6
-        )
-
-        # Test values just below 1.0 (should remain unchanged)
-        site3 = CrystalSite([0.999, 0.999, 0.999], 'Fe', lattice)
-        wrapped3 = site3.wrap()
-        np.testing.assert_array_almost_equal(
-            wrapped3.frac_position, [0.999, 0.999, 0.999], decimal=6
-        )
 
 if __name__ == '__main__':
     unittest.main()

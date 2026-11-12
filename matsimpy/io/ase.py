@@ -160,7 +160,7 @@ def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:
             lattice = structure.lattice
             # Format: Lattice="a1 b1 c1 a2 b2 c2 a3 b3 c3"
             lattice_str = " ".join(
-                [f"{v:.10f}" for row in lattice.lattice_vectors for v in row]
+                [f"{v:.10f}" for row in lattice.matrix for v in row]
             )
             f.write(f'Lattice="{lattice_str}" Properties=species:S:1:pos:R:3 {title}\n')
             # Use cartesian positions

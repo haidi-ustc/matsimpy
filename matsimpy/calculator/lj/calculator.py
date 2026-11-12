@@ -9,7 +9,7 @@ import numpy as np
 from typing import Optional, Tuple
 from scipy.spatial import cKDTree
 from ..base import Calculator
-from ...core import Crystal, Molecule
+from ...core import Crystal
 
 
 class LennardJones(Calculator):
@@ -37,9 +37,7 @@ class LennardJones(Calculator):
         >>> # Create Ar crystal
         >>> crystal = Crystal(['Ar'], [[0,0,0]], Lattice.cubic(5.0))
         >>> calc = LennardJones(sigma=3.4, epsilon=0.0104)
-        >>> crystal.calc = calc
-        >>> calc.calculate(crystal)
-        >>> energy = calc.get_potential_energy()
+        >>> energy = calc.compute(crystal).energy
     """
 
     def __init__(
@@ -103,30 +101,20 @@ class LennardJones(Calculator):
         ej = self._species_epsilon.get(species_j, self._default_epsilon)
         return (si + sj) / 2.0, np.sqrt(ei * ej)
 
-    def _compute(self) -> None:
-        """
-        Compute LJ energy and forces.
-
-        Stores results in self.results:
-            - 'energy': Total potential energy in eV
-            - 'forces': Forces array of shape (N, 3) in eV/Å
-            - 'stress': Stress tensor (for crystals) in eV/Å³
-        """
-        if self.structure is None:
-            raise ValueError("Structure not set. Call calculate(structure) first.")
-
+    def _calculate(self, structure) -> dict:
+        """LJ energy (eV), forces (eV/Å) and, for crystals, stress (eV/Å³)."""
         cutoff = self.parameters["cutoff"]
         rc_smooth = self.parameters["rc_smooth"]
-        species = list(self.structure.species)
+        species = list(structure.species)
 
         # Get positions (always use Cartesian)
-        if isinstance(self.structure, Crystal):
-            positions = self.structure.cart_positions
-            lattice = self.structure.lattice
-            pbc = self.structure.pbc
+        if isinstance(structure, Crystal):
+            positions = structure.cart_positions
+            lattice = structure.lattice
+            pbc = structure.pbc
         else:
             # Molecule uses positions directly (Cartesian)
-            positions = np.array(self.structure.positions)
+            positions = np.array(structure.positions)
             lattice = None
             pbc = [False, False, False]
 
@@ -147,11 +135,10 @@ class LennardJones(Calculator):
                 positions, species, cutoff, rc_smooth
             )
 
-        # Store results
-        self.results["energy"] = energy
-        self.results["forces"] = forces
+        results = {"energy": energy, "forces": forces}
         if lattice is not None:
-            self.results["stress"] = stress
+            results["stress"] = stress
+        return results
 
     def _compute_non_periodic(
         self,

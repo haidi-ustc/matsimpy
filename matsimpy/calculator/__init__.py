@@ -10,6 +10,7 @@ Provides calculators for computing energies, forces, and other properties.
 """
 
 from .base import Calculator
+from .results import Results
 from .lj import LennardJones
 
 _LAZY_EXPORTS = {
@@ -33,6 +34,7 @@ def __getattr__(name):
 
 __all__ = [
     "Calculator",
+    "Results",
     "LennardJones",
     "Mattersim",
     "VaspCalculator",

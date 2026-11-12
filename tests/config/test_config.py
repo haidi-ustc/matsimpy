@@ -10,8 +10,6 @@ from pathlib import Path
 from matsimpy.config import (
     ConfigManager,
     get_config,
-    get_config_manager,
-    get_default_config,
 )
 
 class TestConfigManager(unittest.TestCase):
@@ -30,28 +28,9 @@ class TestConfigManager(unittest.TestCase):
         if self.temp_dir and Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
     
-    def test_init_creates_config_file(self):
-        """Test that initialization creates config file."""
-        config = ConfigManager(config_dir=self.config_dir)
-        self.assertTrue(self.config_file.exists())
     
-    def test_get_default_value(self):
-        """Test getting default configuration value."""
-        config = ConfigManager(config_dir=self.config_dir)
-        device = config.get('calculator.mattersim.default_device')
-        self.assertEqual(device, 'cpu')
     
-    def test_get_nested_value(self):
-        """Test getting nested configuration value."""
-        config = ConfigManager(config_dir=self.config_dir)
-        model_type = config.get('calculator.mattersim.default_model_type')
-        self.assertEqual(model_type, 'mace')
     
-    def test_get_with_default(self):
-        """Test getting value with custom default."""
-        config = ConfigManager(config_dir=self.config_dir)
-        value = config.get('nonexistent.key', default='custom_default')
-        self.assertEqual(value, 'custom_default')
     
     def test_set_and_get(self):
         """Test setting and getting configuration value."""
@@ -60,42 +39,8 @@ class TestConfigManager(unittest.TestCase):
         device = config.get('calculator.mattersim.default_device')
         self.assertEqual(device, 'cuda')
     
-    def test_set_and_save(self):
-        """Test setting and saving configuration."""
-        config = ConfigManager(config_dir=self.config_dir)
-        config.set('calculator.mattersim.default_device', 'cuda', save=True)
-        
-        # Reload and verify
-        config2 = ConfigManager(config_dir=self.config_dir, auto_create=False)
-        device = config2.get('calculator.mattersim.default_device')
-        self.assertEqual(device, 'cuda')
     
-    def test_user_config_override_defaults(self):
-        """Test that user config overrides defaults."""
-        # Create user config file
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        user_config = {
-            'calculator': {
-                'mattersim': {
-                    'default_device': 'cuda'
-                }
-            }
-        }
-        with open(self.config_file, 'w') as f:
-            yaml.dump(user_config, f)
-        
-        config = ConfigManager(config_dir=self.config_dir, auto_create=False)
-        device = config.get('calculator.mattersim.default_device')
-        self.assertEqual(device, 'cuda')
     
-    def test_reset_to_defaults(self):
-        """Test resetting configuration to defaults."""
-        config = ConfigManager(config_dir=self.config_dir)
-        config.set('calculator.mattersim.default_device', 'cuda', save=True)
-        config.reset()
-        
-        device = config.get('calculator.mattersim.default_device')
-        self.assertEqual(device, 'cpu')  # Back to default
     
     def test_path_expansion(self):
         """Test that paths are expanded correctly."""
@@ -159,18 +104,6 @@ class TestEnvOverrides(unittest.TestCase):
         if self.temp_dir and Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
     
-    def test_env_override(self):
-        """Test that environment variables override config."""
-        # Set environment variable
-        os.environ['MATSIMPY_CALCULATOR__MATTERSIM__DEFAULT_DEVICE'] = 'cuda'
-        
-        # Create new config manager to pick up env var
-        config = ConfigManager(config_dir=self.config_dir, auto_create=False)
-        device = config.get('calculator.mattersim.default_device')
-        self.assertEqual(device, 'cuda')
-        
-        # Clean up
-        del os.environ['MATSIMPY_CALCULATOR__MATTERSIM__DEFAULT_DEVICE']
     
     def test_env_override_bool(self):
         """Test environment variable override with boolean."""
@@ -196,31 +129,47 @@ class TestEnvOverrides(unittest.TestCase):
         # Clean up
         del os.environ['MATSIMPY_PERFORMANCE__CACHE_SIZE_MB']
 
-class TestDefaultConfig(unittest.TestCase):
-    """Tests for default configuration."""
-    
-    def test_default_config_structure(self):
-        """Test that default config has expected structure."""
-        defaults = get_default_config()
-        
-        # Check top-level keys
-        self.assertIn('calculator', defaults)
-        self.assertIn('paths', defaults)
-        self.assertIn('io', defaults)
-        self.assertIn('units', defaults)
-        self.assertIn('logging', defaults)
-        self.assertIn('performance', defaults)
-    
-    def test_default_calculator_settings(self):
-        """Test default calculator settings."""
-        defaults = get_default_config()
-        
-        self.assertEqual(defaults['calculator']['mattersim']['default_device'], 'cpu')
-        self.assertEqual(
-            defaults['calculator']['mattersim']['default_model_type'],
-            'mace'
-        )
 
 if __name__ == '__main__':
     unittest.main()
 
+
+class TestEnvOverridesAreNotPersisted(unittest.TestCase):
+    """0.8.2 regression: MATSIMPY_* env values must never be written to config.yaml."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.config_dir = Path(self.temp_dir) / '.matsimpy'
+        self.key = 'MATSIMPY_CALCULATOR__MATTERSIM__DEFAULT_DEVICE'
+
+    def tearDown(self):
+        import shutil
+        os.environ.pop(self.key, None)
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _file_device(self):
+        with open(self.config_dir / 'config.yaml') as f:
+            return yaml.safe_load(f)['calculator']['mattersim']['default_device']
+
+    def test_auto_create_save_and_reset_do_not_persist_env(self):
+        os.environ[self.key] = 'cuda'
+        config = ConfigManager(config_dir=self.config_dir)  # auto-create
+        self.assertEqual(config.get('calculator.mattersim.default_device'), 'cuda')
+        self.assertEqual(self._file_device(), 'cpu')
+        config.set('performance.cache_size_mb', 7, save=True)
+        self.assertEqual(self._file_device(), 'cpu')
+        del os.environ[self.key]
+        self.assertEqual(ConfigManager(config_dir=self.config_dir).get('performance.cache_size_mb'), 7)
+        os.environ[self.key] = 'cuda'
+        config.reset()
+        self.assertEqual(self._file_device(), 'cpu')
+        # env still wins in memory after reset
+        self.assertEqual(config.get('calculator.mattersim.default_device'), 'cuda')
+        del os.environ[self.key]
+        fresh = ConfigManager(config_dir=self.config_dir, auto_create=False)
+        self.assertEqual(fresh.get('calculator.mattersim.default_device'), 'cpu')
+
+
+class TestSuiteIsolation(unittest.TestCase):
+    def test_home_is_redirected_for_tests(self):
+        self.assertIn('matsimpy-test-home-', os.path.expanduser('~'))

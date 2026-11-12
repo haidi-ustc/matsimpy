@@ -295,7 +295,7 @@ def test_evolve_review_exposes_all_approval_evidence(controller):
 def test_skills_exact_name_returns_detail_but_non_exact_uses_search(
     controller, capsys
 ):
-    from matsimpy.ai.engine import AIEngine
+    from matsimpy.ai.terminal import format_command_result
 
     repl, _, _ = controller
 
@@ -312,8 +312,7 @@ def test_skills_exact_name_returns_detail_but_non_exact_uses_search(
     assert "skills" not in exact.data
     assert [item["name"] for item in search.data["skills"]] == ["crystals"]
 
-    AIEngine._render_command_result(exact)
-    rendered = capsys.readouterr().out
+    rendered = format_command_result(exact)
     assert "make_crystal: Make one" in rendered
     assert 'Schema: {"type": "object"}' in rendered
     assert "Help: Detailed help" in rendered
@@ -339,46 +338,45 @@ def test_real_evolution_manager_rollback_rejects_non_numeric_id(controller):
     assert "numeric version ID" in result.display_hint
 
 
-def test_engine_commands_use_authoritative_agent_session(tmp_path, capsys):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_controller_uses_authoritative_agent_session(tmp_path):
+    from matsimpy.ai import Agent, DeepSeekProvider
+    from matsimpy.ai.terminal import format_command_result
 
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    agent = Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"), source="cli")
+    repl = ReplController.for_agent(agent)
 
-    engine._handle_command("/new")
-    conversation_id = engine.agent.session.conversation_id
-    engine._handle_command("/sessions")
-    output = capsys.readouterr().out
+    repl.execute("/new")
+    conversation_id = agent.session.conversation_id
+    output = format_command_result(repl.execute("/sessions"))
 
     assert conversation_id is not None
-    assert engine.repl_controller.session is engine.agent.session
-    assert f"Started session {conversation_id}." in output
-    assert f"{conversation_id}: engine" in output
+    assert repl.session is agent.session
+    assert f"{conversation_id}: cli" in output
 
 
-def test_engine_repl_uses_agent_backed_evolution_lifecycle(tmp_path, monkeypatch):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_controller_uses_agent_backed_evolution_lifecycle(tmp_path, monkeypatch):
+    from matsimpy.ai import Agent, DeepSeekProvider
 
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
+    agent = Agent(workspace=tmp_path, provider=DeepSeekProvider("unused"))
+    repl = ReplController.for_agent(agent)
     calls = []
 
     def approve(version_id):
         calls.append(version_id)
         return {"version_id": version_id, "status": "approved"}
 
-    monkeypatch.setattr(engine.agent, "approve", approve)
+    monkeypatch.setattr(agent, "approve", approve)
 
-    result = engine.repl_controller.execute("/approve 7")
+    result = repl.execute("/approve 7")
 
     assert result.ok is True
     assert result.data["version"]["status"] == "approved"
     assert calls == [7]
-    assert engine.repl_controller.evolution is engine.agent
+    assert repl.evolution is agent
 
 
-def test_engine_resume_rebuilds_compatibility_conversation_from_session_branch(
-    tmp_path, capsys
-):
-    from matsimpy.ai.engine import AIEngine
+def test_agent_resume_rebuilds_conversation_from_session_branch(tmp_path):
+    from matsimpy.ai import Agent
 
     class Provider:
         model = "fake"
@@ -391,18 +389,38 @@ def test_engine_resume_rebuilds_compatibility_conversation_from_session_branch(
                 ChatMessage.assistant(self.responses.pop(0)), [], "stop"
             )
 
-    engine = AIEngine(api_key="unused", workspace_path=tmp_path)
-    engine.agent.provider = engine.runtime.provider = Provider()
-    engine.chat("first question")
-    conversation_id = engine.agent.session.conversation_id
-    engine._handle_command("/new")
-    engine.chat("second question")
+    agent = Agent(workspace=tmp_path, provider=Provider())
+    repl = ReplController.for_agent(agent)
+    agent.run("first question")
+    conversation_id = agent.session.conversation_id
+    repl.execute("/new")
+    agent.run("second question")
 
-    engine._handle_command(f"/resume {conversation_id}")
+    repl.execute(f"/resume {conversation_id}")
 
-    assert [(item.role, item.content) for item in engine.conversation] == [
-        ("system", engine.runtime._initial_messages()[0].content),
+    assert [(item.role, item.content) for item in agent.conversation_messages()] == [
+        ("system", agent.runtime._initial_messages()[0].content),
         ("user", "first question"),
         ("assistant", "first answer"),
     ]
-    capsys.readouterr()
+
+
+def test_agent_only_commands(tmp_path, monkeypatch):
+    from matsimpy.ai import Agent, DeepSeekProvider
+    from matsimpy.ai.skill import FunctionDef, Skill
+
+    monkeypatch.chdir(tmp_path)
+    agent = Agent(workspace=tmp_path / "ws", provider=DeepSeekProvider("unused"))
+    agent.skill_manager.register(Skill("tools-x", "x", [FunctionDef("f", "f", {"type": "object"}, lambda: 1)]))
+    repl = ReplController.for_agent(agent)
+
+    assert "/workspace" in repl.command_names()
+    assert "/workspace" not in ReplController(agent.session).command_names()
+    assert repl.execute("/load tools-x").ok and "tools-x" in agent.skill_manager._active
+    assert repl.execute("/unload tools-x").ok and "tools-x" not in agent.skill_manager._active
+    assert repl.execute("/model no-such-model").ok is False
+    assert repl.execute("/memory").data["files"]
+    saved = repl.execute("/save out.json")
+    assert (tmp_path / "out.json").exists() and saved.data["path"] == "out.json"
+    help_text = repl.execute("/help").display_hint
+    assert "/workspace" in help_text and "/save" in help_text

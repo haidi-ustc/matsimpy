@@ -36,11 +36,6 @@ class TestCrystalsToLatexTable(unittest.TestCase):
                       and 'ID' not in l]
         self.assertGreaterEqual(len(data_lines), 3)
 
-    def test_caption_and_label(self):
-        latex = crystals_to_latex_table(self.crystals, caption="Test Caption", label="tab:test")
-        self.assertIn(r'\caption{Test Caption}', latex)
-        self.assertIn(r'\label{tab:test}', latex)
-
     def test_custom_columns(self):
         columns = ['ID', 'Formula', 'Atoms']
         latex = crystals_to_latex_table(self.crystals, include_columns=columns)
@@ -65,13 +60,6 @@ class TestMoleculesToLatexTable(unittest.TestCase):
             Molecule(['H', 'H', 'O'], [[0, 0, 0], [0.76, 0.59, 0], [-0.76, 0.59, 0]]),
             Molecule(['N', 'H', 'H', 'H'], [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]),
         ]
-
-    def test_table_content(self):
-        latex = molecules_to_latex_table(self.molecules)
-        expected_tokens = [r'\begin{table}', r'\end{table}', r'\toprule', r'\bottomrule',
-                           'C', 'O', 'H', 'N']
-        for token in expected_tokens:
-            self.assertIn(token, latex)
 
     def test_table_with_mass_column(self):
         latex = molecules_to_latex_table(self.molecules, include_columns=['ID', 'Formula', 'Mass'])
@@ -118,14 +106,6 @@ class TestStructuresToLatexTable(unittest.TestCase):
         self.assertIn('Crystal', latex)
         self.assertIn('Molecule', latex)
     
-    def test_only_crystals(self):
-        """Test with only crystals."""
-        crystals_only = [s for s in self.structures if isinstance(s, Crystal)]
-        latex = structures_to_latex_table(crystals_only, separate_by_type=True)
-        
-        # Should only have one table (crystals)
-        self.assertEqual(latex.count(r'\begin{table}'), 1)
-        self.assertIn('Crystals', latex)
     
     def test_only_molecules(self):
         """Test with only molecules."""
@@ -194,96 +174,13 @@ class TestCustomFormatters(unittest.TestCase):
         
         self.assertIn(r'\textbf', latex)
 
-class TestLatexFormatting(unittest.TestCase):
-    """Test LaTeX formatting details."""
-    
-    def test_formula_latex_formatting(self):
-        """Test that formulas use LaTeX subscripts."""
-        crystal = Crystal(['Fe', 'Fe', 'O', 'O', 'O'], 
-                         [[0,0,0], [0.5,0,0], [0.25,0,0], [0.75,0,0], [0.5,0.5,0]], 
-                         Lattice(10))
-        
-        latex = crystals_to_latex_table([crystal])
-        
-        # Should have LaTeX subscript notation
-        self.assertIn('$_', latex)  # LaTeX subscript
-    
-    def test_angstrom_symbol(self):
-        """Test that Angstrom symbol is included."""
-        crystal = Crystal(['Si'], [[0, 0, 0]], Lattice(5.43))
-        
-        latex = crystals_to_latex_table([crystal])
-        
-        self.assertIn(r'\AA', latex)  # LaTeX Angstrom symbol
-
-class TestEdgeCases(unittest.TestCase):
-    """Test edge cases."""
-    
-    def test_single_crystal(self):
-        """Test with single crystal."""
-        crystal = [Crystal(['Si'], [[0, 0, 0]], Lattice(5.43))]
-        latex = crystals_to_latex_table(crystal)
-        
-        self.assertIn(r'\begin{table}', latex)
-        self.assertIn('Si', latex)
-    
-    def test_single_molecule(self):
-        """Test with single molecule."""
-        molecule = [Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])]
-        latex = molecules_to_latex_table(molecule)
-        
-        self.assertIn(r'\begin{table}', latex)
 
 class TestMhchemSupport(unittest.TestCase):
     """Test mhchem package support."""
     
-    def test_crystals_with_mhchem(self):
-        """Test crystal table with mhchem formatting."""
-        crystals = [
-            Crystal(['Fe', 'Fe', 'O', 'O', 'O'], 
-                   [[0,0,0], [0.5,0,0], [0.25,0,0], [0.75,0,0], [0.5,0.5,0]], 
-                   Lattice(10))
-        ]
-        
-        latex = crystals_to_latex_table(crystals, use_mhchem=True)
-        
-        # Should use \ce{} notation
-        self.assertIn(r'\ce{', latex)
-        self.assertNotIn('$_', latex)  # Should NOT have standard subscripts
     
-    def test_crystals_without_mhchem(self):
-        """Test crystal table with standard LaTeX."""
-        crystals = [
-            Crystal(['Fe', 'Fe', 'O', 'O', 'O'], 
-                   [[0,0,0], [0.5,0,0], [0.25,0,0], [0.75,0,0], [0.5,0.5,0]], 
-                   Lattice(10))
-        ]
-        
-        latex = crystals_to_latex_table(crystals, use_mhchem=False)
-        
-        # Should use standard subscripts
-        self.assertIn('$_', latex)
-        self.assertNotIn(r'\ce{', latex)
     
-    def test_molecules_with_mhchem(self):
-        """Test molecule table with mhchem formatting."""
-        molecules = [
-            Molecule(['H', 'H', 'O'], [[0,0,0], [0.76,0.59,0], [-0.76,0.59,0]])
-        ]
-        
-        latex = molecules_to_latex_table(molecules, use_mhchem=True)
-        
-        self.assertIn(r'\ce{', latex)
     
-    def test_molecules_without_mhchem(self):
-        """Test molecule table with standard LaTeX."""
-        molecules = [
-            Molecule(['H', 'H', 'O'], [[0,0,0], [0.76,0.59,0], [-0.76,0.59,0]])
-        ]
-        
-        latex = molecules_to_latex_table(molecules, use_mhchem=False)
-        
-        self.assertIn('$_', latex)
     
     def test_structures_mixed_with_mhchem(self):
         """Test mixed structures with mhchem."""

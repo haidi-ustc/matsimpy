@@ -4,6 +4,8 @@ MatSimPy Configuration System - Basic Examples
 Demonstrates usage of the global configuration system.
 """
 
+import tempfile
+
 from matsimpy.config import get_config, ConfigManager
 from matsimpy import Crystal, Lattice
 from matsimpy.calculator.mattersim import Mattersim
@@ -53,7 +55,9 @@ except Exception as e:
 print("\n3. Modifying Configuration")
 print("-" * 70)
 
-config = ConfigManager()
+# Use a throw-away config directory: set(save=True) and reset() below write
+# the file, and must never overwrite the user's real ~/.matsimpy/config.yaml.
+config = ConfigManager(config_dir=tempfile.mkdtemp(prefix="matsimpy-example-"))
 
 # Get current value
 current_device = config.get('calculator.mattersim.default_device')

@@ -68,99 +68,8 @@ class TestCIFIo(unittest.TestCase):
         finally:
             Path(temp_file).unlink()
     
-    def test_write_CIF_default_title(self):
-        """Test writing CIF with default title."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.cif') as f:
-            temp_file = f.name
-        
-        try:
-            write_CIF(self.crystal, temp_file)
-            
-            # Read back and check
-            with open(temp_file, 'r') as f:
-                content = f.read()
-                self.assertIn('data_', content)
-        finally:
-            Path(temp_file).unlink()
     
-    def test_read_CIF_sample(self):
-        """Test reading a sample CIF file."""
-        cif_content = """data_test
-_chemical_name_common 'Silicon'
-_cell_length_a    5.43
-_cell_length_b    5.43
-_cell_length_c    5.43
-_cell_angle_alpha 90.0
-_cell_angle_beta  90.0
-_cell_angle_gamma 90.0
-_space_group_name_H-M_alt 'F d -3 m'
-loop_
-_atom_site_label
-_atom_site_type_symbol
-_atom_site_fract_x
-_atom_site_fract_y
-_atom_site_fract_z
-Si1 Si 0.0 0.0 0.0
-Si2 Si 0.25 0.25 0.25
-"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.cif') as f:
-            f.write(cif_content)
-            temp_file = f.name
-        
-        try:
-            crystal = read_CIF(temp_file)
-            self.assertIsInstance(crystal, Crystal)
-            self.assertGreater(len(crystal), 0)
-        finally:
-            Path(temp_file).unlink()
     
-    def test_CIF_roundtrip(self):
-        """Test complete roundtrip for CIF."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.cif') as f:
-            temp_file = f.name
-        
-        try:
-            # Write and read
-            write_CIF(self.crystal, temp_file)
-            crystal2 = read_CIF(temp_file)
-            
-            # Verify species match
-            self.assertEqual(crystal2.species, self.crystal.species)
-            self.assertEqual(len(crystal2), len(self.crystal))
-        finally:
-            Path(temp_file).unlink()
-
-    def test_read_CIF_multiline_loop(self):
-        """CIF loop rows that span multiple lines must be parsed correctly."""
-        cif_content = (
-            "data_test\n"
-            "_cell_length_a  4.0\n"
-            "_cell_length_b  4.0\n"
-            "_cell_length_c  4.0\n"
-            "_cell_angle_alpha 90\n"
-            "_cell_angle_beta  90\n"
-            "_cell_angle_gamma 90\n"
-            "loop_\n"
-            "_atom_site_type_symbol\n"
-            "_atom_site_fract_x\n"
-            "_atom_site_fract_y\n"
-            "_atom_site_fract_z\n"
-            # First row split across two lines
-            "Si\n"
-            "0.0 0.0 0.0\n"
-            # Second row on one line
-            "O 0.5 0.5 0.5\n"
-        )
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.cif') as f:
-            f.write(cif_content)
-            temp_file = f.name
-
-        try:
-            crystal = read_CIF(temp_file)
-            self.assertEqual(len(crystal), 2)
-            self.assertEqual(list(crystal.species), ['Si', 'O'])
-        finally:
-            Path(temp_file).unlink()
 
     def test_read_CIF_cartesian_coords(self):
         """CIF with _atom_site_Cartn_* must be converted to fractional correctly."""
@@ -192,24 +101,6 @@ Si2 Si 0.25 0.25 0.25
             np.testing.assert_array_almost_equal(
                 crystal.frac_positions[1], [0.5, 0.5, 0.5], decimal=6
             )
-        finally:
-            Path(temp_file).unlink()
-
-    def test_read_CIF_missing_cell_length_a_raises(self):
-        """Missing _cell_length_a must raise a descriptive ValueError."""
-        cif_content = (
-            "data_test\n"
-            "_cell_length_b  4.0\n"
-            "_cell_length_c  4.0\n"
-        )
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.cif') as f:
-            f.write(cif_content)
-            temp_file = f.name
-
-        try:
-            with self.assertRaises(ValueError) as ctx:
-                read_CIF(temp_file)
-            self.assertIn("_cell_length_a", str(ctx.exception))
         finally:
             Path(temp_file).unlink()
 

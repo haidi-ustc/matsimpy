@@ -8,6 +8,7 @@ This example demonstrates:
 """
 
 from matsimpy.builders.bulk import from_prototype
+from matsimpy.symmetry import get_conventional_cell, get_symmetry_info
 
 print("=" * 70)
 print("MatSimPy Symmetry Analysis - Basic Examples")
@@ -24,7 +25,7 @@ diamond = from_prototype('diamond', 'Si', 5.43)
 print(f"Structure: {diamond.formula}, {len(diamond)} atoms (primitive cell)")
 
 # Get symmetry information
-sym_info = diamond.get_symmetry_info()
+sym_info = get_symmetry_info(diamond)
 print(f"\nSymmetry information:")
 print(f"  Space group number: {sym_info['space_group_number']}")
 print(f"  Space group symbol: {sym_info['space_group_symbol']}")
@@ -47,7 +48,7 @@ print(f"  Lattice: a={primitive.lattice.a:.4f} Å, "
       f"γ={primitive.lattice.gamma:.1f}°")
 
 # Get conventional cell
-conventional = primitive.get_conventional_cell()
+conventional = get_conventional_cell(primitive)
 print(f"\nConventional cell: {conventional.formula}, {len(conventional)} atoms")
 print(f"  Lattice: a={conventional.lattice.a:.4f} Å, "
       f"α={conventional.lattice.alpha:.1f}°, "
@@ -71,7 +72,7 @@ structures = {
 print(f"{'Structure':<20} {'SG':<8} {'Point Group':<12} {'Crystal System':<15}")
 print("-" * 70)
 for name, struct in structures.items():
-    sym_info = struct.get_symmetry_info()
+    sym_info = get_symmetry_info(struct)
     print(f"{name:<20} {sym_info['space_group_number']:<8} "
           f"{sym_info['point_group']:<12} {sym_info['crystal_system']:<15}")
 
@@ -92,7 +93,7 @@ print(f"  Lattice angles: α={primitive.lattice.alpha:.1f}°, "
       f"β={primitive.lattice.beta:.1f}°, γ={primitive.lattice.gamma:.1f}°")
 
 # Get conventional cell
-conventional = primitive.get_conventional_cell()
+conventional = get_conventional_cell(primitive)
 print(f"\nConventional cell:")
 print(f"  Formula: {conventional.formula}")
 print(f"  Atoms: {len(conventional)}")
@@ -116,7 +117,7 @@ crystal = from_prototype('diamond', 'Si', 5.43)
 
 # Get symmetry with different tolerances
 for symprec in [1e-3, 1e-5, 1e-7]:
-    sym_info = crystal.get_symmetry_info(symprec=symprec)
+    sym_info = get_symmetry_info(crystal, symprec=symprec)
     print(f"symprec={symprec:.0e}: SG={sym_info['space_group_number']} "
           f"({sym_info['space_group_symbol']})")
 

@@ -126,7 +126,7 @@ def test_make_supercell_general_unimodular_preserves_cartesian_positions():
     transformed = make_supercell(crystal, [[1, 1, 0], [0, 1, 0], [0, 0, 1]])
 
     delta = transformed.cart_positions[0] - crystal.cart_positions[0]
-    delta_frac = delta @ np.linalg.inv(transformed.lattice.lattice_vectors)
+    delta_frac = delta @ np.linalg.inv(transformed.lattice.matrix)
     np.testing.assert_allclose(delta_frac, np.rint(delta_frac), atol=1e-12)
 
 

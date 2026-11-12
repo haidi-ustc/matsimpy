@@ -56,7 +56,7 @@ def move_atoms(
         if cartesian:
             # Convert displacement to fractional
             frac_displacement = np.dot(
-                displacement, np.linalg.inv(structure.lattice.lattice_vectors)
+                displacement, np.linalg.inv(structure.lattice.matrix)
             )
         else:
             frac_displacement = displacement

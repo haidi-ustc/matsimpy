@@ -25,11 +25,10 @@ print(f"Structure: {crystal.formula} in {crystal.lattice.a:.2f} Å cubic cell")
 
 # Create and attach LJ calculator
 calc = LennardJones(sigma=3.4, epsilon=0.0104)  # Ar parameters
-crystal.calc = calc
 
 # Calculate energy and forces
-energy = crystal.get_potential_energy()
-forces = crystal.get_forces()
+energy = calc.get_potential_energy(crystal)
+forces = calc.get_forces(crystal)
 
 print(f"Potential energy: {energy:.6f} eV")
 print(f"Forces on atom: {forces[0]}")
@@ -44,10 +43,9 @@ print("-" * 70)
 # Create Ar dimer
 molecule = Molecule(['Ar', 'Ar'], [[0, 0, 0], [3.4, 0, 0]])
 calc_mol = LennardJones(sigma=3.4, epsilon=0.0104)
-molecule.calc = calc_mol
 
-energy_mol = molecule.get_potential_energy()
-forces_mol = molecule.get_forces()
+energy_mol = calc_mol.get_potential_energy(molecule)
+forces_mol = calc_mol.get_forces(molecule)
 
 print(f"Molecule: Ar dimer at r = 3.4 Å (sigma)")
 print(f"Potential energy: {energy_mol:.6f} eV")
@@ -61,8 +59,7 @@ print("-" * 70)
 
 # Test with different cutoff
 calc_custom = LennardJones(sigma=3.4, epsilon=0.01, cutoff=15.0)
-crystal.calc = calc_custom
-energy_custom = crystal.get_potential_energy()
+energy_custom = calc_custom.get_potential_energy(crystal)
 
 print(f"Cutoff: 15.0 Å")
 print(f"Potential energy: {energy_custom:.6f} eV")
@@ -87,10 +84,9 @@ try:
         # Test with Si crystal (proper diamond structure with 2 atoms)
         from matsimpy.builders.bulk import from_prototype
         si_crystal = from_prototype('diamond', 'Si', 5.43)
-        si_crystal.calc = ml_calc
         
-        energy = si_crystal.get_potential_energy()
-        forces = si_crystal.get_forces()
+        energy = ml_calc.get_potential_energy(si_crystal)
+        forces = ml_calc.get_forces(si_crystal)
         
         print(f"✓ MatterSim calculator loaded successfully")
         print(f"Model type: {ml_calc.model_type}")
@@ -128,8 +124,7 @@ crystals = [
 
 print("Energy as function of lattice parameter:")
 for crystal in crystals:
-    crystal.calc = calc_shared
-    energy = crystal.get_potential_energy()
+    energy = calc_shared.get_potential_energy(crystal)
     print(f"  a = {crystal.lattice.a:.2f} Å: E = {energy:.6f} eV")
 
 print("\n" + "=" * 70)

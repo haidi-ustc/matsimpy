@@ -47,12 +47,12 @@ def add_adsorbate(
         raise ValueError(f"height must be non-negative, got {height}")
 
     slab_cart = slab.cart_positions.copy()
-    normal = slab.lattice.lattice_vectors[2].copy().astype(np.float64)
+    normal = slab.lattice.matrix[2].copy().astype(np.float64)
     normal = normal / np.linalg.norm(normal)
     projections = np.dot(slab_cart, normal)
     surface_proj = float(np.max(projections))
-    a_vec = slab.lattice.lattice_vectors[0]
-    b_vec = slab.lattice.lattice_vectors[1]
+    a_vec = slab.lattice.matrix[0]
+    b_vec = slab.lattice.matrix[1]
     in_plane = float(position[0]) * a_vec + float(position[1]) * b_vec
     in_plane_proj = np.dot(in_plane, normal)
     anchor = in_plane + normal * (surface_proj + float(height) - in_plane_proj)

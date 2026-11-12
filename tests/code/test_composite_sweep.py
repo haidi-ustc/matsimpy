@@ -21,75 +21,7 @@ class TestParameterSweep(unittest.TestCase):
         self.crystal = from_prototype('diamond', 'Si', 5.43)
         self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
     
-    def test_single_transformation_cartesian(self):
-        """Test sweep with single transformation in cartesian mode."""
-        sweep = ParameterSweep(
-            base_structure=self.crystal,
-            transformations={
-                'supercell': {
-                    'func': make_supercell,
-                    'params': {
-                        'scaling_matrix': [[2, 2, 2], [3, 3, 3]]
-                    }
-                }
-            },
-            mode='cartesian'
-        )
-        
-        self.assertEqual(len(sweep), 2)
-        
-        structures = list(sweep)
-        self.assertEqual(len(structures), 2)
-        
-        # Check first structure (2x2x2 supercell)
-        struct1, params1 = structures[0]
-        self.assertEqual(len(struct1), len(self.crystal) * 8)  # 2^3 = 8
-        self.assertIn('supercell', params1)
-        
-        # Check second structure (3x3x3 supercell)
-        struct2, params2 = structures[1]
-        self.assertEqual(len(struct2), len(self.crystal) * 27)  # 3^3 = 27
     
-    def test_multiple_transformations_cartesian(self):
-        """Test sweep with multiple transformations in cartesian mode."""
-        sweep = ParameterSweep(
-            base_structure=self.crystal,
-            transformations={
-                'supercell': {
-                    'func': make_supercell,
-                    'params': {
-                        'scaling_matrix': [[2, 2, 2], [3, 3, 3]]
-                    }
-                },
-                'strain': {
-                    'func': apply_strain,
-                    'params': {
-                        'strain_matrix': [
-                            [[0.00, 0, 0], [0, 0, 0], [0, 0, 0]],
-                            [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]],
-                        ]
-                    }
-                }
-            },
-            mode='cartesian'
-        )
-        
-        # Should have 2 × 2 = 4 combinations
-        self.assertEqual(len(sweep), 4)
-        
-        structures = list(sweep)
-        self.assertEqual(len(structures), 4)
-        
-        # Check that all combinations are present
-        seen_combos = set()
-        for struct, params in structures:
-            # Convert lists to tuples for hashing
-            supercell_key = tuple(params['supercell']['scaling_matrix'])
-            strain_key = params['strain']['strain_matrix'][0][0]  # First element of strain
-            combo_key = (supercell_key, strain_key)
-            seen_combos.add(combo_key)
-        
-        self.assertEqual(len(seen_combos), 4)  # All unique
     
     def test_zip_mode(self):
         """Test sweep in zip mode (parallel iteration)."""

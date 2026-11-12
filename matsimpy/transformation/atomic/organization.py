@@ -6,6 +6,8 @@ Works for both Crystal and Molecule structures.
 
 from typing import List, Optional, Union, Callable
 import numpy as np
+
+from ...core._validation import resolve_indices
 from ...core import Crystal, Molecule
 from .._helpers import (
     copy_site_properties,
@@ -185,6 +187,7 @@ def perturb_positions(
     """
     amplitude = validate_positive_scalar("amplitude", amplitude)
 
+    indices = resolve_indices(structure, indices)  # AtomSelection accepted
     if indices is None:
         indices = list(range(len(structure.species)))
 

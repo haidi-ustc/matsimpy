@@ -50,7 +50,10 @@ def test_license_metadata_and_readme_use_mit():
     readme = (ROOT / "README.md").read_text()
     license_text = (ROOT / "LICENSE").read_text()
 
-    assert "License :: OSI Approved :: MIT License" in pyproject["project"]["classifiers"]
+    # PEP 639 SPDX expression (license classifiers are deprecated by setuptools>=77)
+    assert pyproject["project"]["license"] == "MIT"
+    assert "LICENSE" in pyproject["project"]["license-files"]
+    assert not any(c.startswith("License ::") for c in pyproject["project"]["classifiers"])
     assert "MIT License" in license_text
     assert "Permission is hereby granted, free of charge" in license_text
     assert "Redistribution and use in source and binary forms" not in license_text

@@ -36,29 +36,40 @@ def test_discover_builtin_skills_core_is_first():
 
 # ── edge cases — temp skill files ───────────────────────────────────
 
-_EDGE_SKILLS = []
+_EDGE_DIR = {"path": None}
+
+
+@pytest.fixture
+def isolated_skill_dir(tmp_path, monkeypatch):
+    """Discover temp skills from a private directory, never the installed package.
+
+    0.8.1 wrote zztmp_*.py into matsimpy/ai/skills/ itself: under pytest-xdist the
+    contract tests in other workers enumerated those half-written files and
+    failed intermittently, and an interrupted run left them in the source tree.
+    """
+    import matsimpy.ai.skill_loader as skill_loader
+    import matsimpy.ai.skills as skills_pkg
+
+    monkeypatch.setattr(skill_loader, "SKILLS_PKG", tmp_path)
+    monkeypatch.setattr(skills_pkg, "__path__", [str(tmp_path), *skills_pkg.__path__])
+    _EDGE_DIR["path"] = tmp_path
+    yield tmp_path
+    _EDGE_DIR["path"] = None
+    for name in [m for m in sys.modules if m.startswith("matsimpy.ai.skills.zztmp_")]:
+        sys.modules.pop(name, None)
 
 
 def _write_temp_skill(name, content):
-    """Write a temporary skill file and track it for cleanup."""
-    path = SKILLS_PKG / f"{name}.py"
+    """Write a temporary skill file into the isolated skill directory."""
+    assert _EDGE_DIR["path"] is not None, "use the isolated_skill_dir fixture"
+    path = _EDGE_DIR["path"] / f"{name}.py"
     path.write_text(content)
-    _EDGE_SKILLS.append(path)
     # Clear any cached module so re-import works
-    mod_name = f"matsimpy.ai.skills.{name}"
-    sys.modules.pop(mod_name, None)
+    sys.modules.pop(f"matsimpy.ai.skills.{name}", None)
     return path
 
 
-def teardown_module():
-    """Clean up all temp skill files."""
-    for path in _EDGE_SKILLS:
-        if path.exists():
-            path.unlink()
-        mod_name = f"matsimpy.ai.skills.{path.stem}"
-        sys.modules.pop(mod_name, None)
-
-
+@pytest.mark.usefixtures("isolated_skill_dir")
 def test_skill_without_skill_name_is_skipped():
     """Files without SKILL_NAME are silently skipped (utility modules)."""
     _write_temp_skill("zztmp_test_util", """
@@ -69,6 +80,7 @@ UTILITY_CONSTANT = 42
     assert "zztmp_test_util" not in names
 
 
+@pytest.mark.usefixtures("isolated_skill_dir")
 def test_skill_missing_description_is_skipped():
     """Skill with SKILL_NAME but no SKILL_DESCRIPTION → warned and skipped."""
     with pytest.warns(UserWarning, match="missing SKILL_DESCRIPTION"):
@@ -84,6 +96,7 @@ def get_functions():
         assert "zztmp_test_no_desc" not in names
 
 
+@pytest.mark.usefixtures("isolated_skill_dir")
 def test_skill_missing_get_functions_is_skipped():
     """Skill with SKILL_NAME but no get_functions → warned and skipped."""
     with pytest.warns(UserWarning, match="missing callable get_functions"):
@@ -97,6 +110,7 @@ SKILL_KEYWORDS = []
         assert "zztmp_test_no_fn" not in names
 
 
+@pytest.mark.usefixtures("isolated_skill_dir")
 def test_duplicate_skill_name_is_skipped():
     """Second skill with same SKILL_NAME → warned and skipped (first wins)."""
     # First skill
@@ -127,6 +141,7 @@ def get_functions():
         pytest.fail("First skill should have been discovered")
 
 
+@pytest.mark.usefixtures("isolated_skill_dir")
 def test_skill_without_keywords_defaults_to_empty():
     """Skill without SKILL_KEYWORDS → defaults to empty list."""
     _write_temp_skill("zztmp_test_nokw", """
@@ -144,6 +159,7 @@ def get_functions():
     pytest.fail("Skill without keywords should be discovered")
 
 
+@pytest.mark.usefixtures("isolated_skill_dir")
 def test_discover_returns_valid_skill():
     """A completely valid temp skill should be discovered with all fields."""
     _write_temp_skill("zztmp_test_valid", """

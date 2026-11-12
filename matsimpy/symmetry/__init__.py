@@ -15,7 +15,7 @@ in the symmetry directory, providing access to:
 - Translations and maximal subgroups
 """
 
-from .analyzer import SymmetryAnalyzer, analyze_symmetry, get_conventional_cell
+from .analyzer import SymmetryAnalyzer, analyze_symmetry, get_conventional_cell, get_symmetry_info
 from .kpath import HighSymmKpath
 from .matcher import StructureMatcher
 from .spacegroup import SpacegroupAnalyzer
@@ -27,4 +27,5 @@ __all__ = [
     "SymmetryAnalyzer",
     "analyze_symmetry",
     "get_conventional_cell",
+    "get_symmetry_info",
 ]

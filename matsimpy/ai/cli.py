@@ -3,9 +3,12 @@
 import os
 import typer
 from .doctor import Doctor, render_diagnostics
-from .engine import AIEngine
+from .agent import Agent
+from .memory import AgentMemory
+from .repl import ReplController
+from .runtime import RUNTIME_SYSTEM_PROMPT
 from .skill import SkillManager, Skill
-from .provider import DEFAULT_MODEL
+from .provider import DEFAULT_MODEL, DeepSeekProvider
 from .terminal import create_terminal
 
 app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
@@ -52,26 +55,35 @@ def main(
     _run_agent(workspace, model, api_key, base_url, command, verbose)
 
 
-def _run_agent(workspace, model, api_key, base_url, command, verbose) -> None:
-    engine = AIEngine(
-        api_key=api_key,
-        model=model or os.getenv("MATSIMPY_AI_MODEL", DEFAULT_MODEL),
-        base_url=base_url,
-        workspace_path=workspace,
+def build_agent(workspace=None, model=None, api_key=None, base_url=None) -> Agent:
+    """The CLI's agent: DeepSeek provider, all builtin skills (``core`` loaded), soul.md prompt."""
+    memory = AgentMemory()
+    soul = memory.get_soul_prompt()
+    skills = SkillManager()
+    _register_all_skills(skills)
+    if "core" in skills._skills:
+        skills.load("core")
+    return Agent(
+        workspace=workspace,
+        provider=DeepSeekProvider(api_key, model or os.getenv("MATSIMPY_AI_MODEL", DEFAULT_MODEL), base_url),
+        skill_manager=skills,
+        memory=memory,
+        system_prompt=f"{RUNTIME_SYSTEM_PROMPT}\n\n{soul}" if soul.strip() else RUNTIME_SYSTEM_PROMPT,
+        verbose_hook=print,  # tool-progress lines, as in 0.8.x
+        source="cli",
     )
-    engine.verbose = verbose
-    _register_all_skills(engine.skill_manager)
-    engine.skill_manager.load("core")
 
+
+def _run_agent(workspace, model, api_key, base_url, command, verbose) -> None:
+    agent = build_agent(workspace, model, api_key, base_url)
     if command:
         if verbose:
-            print(f"[model: {engine.provider.model}]")
-            if workspace:
-                print(f"[workspace: {engine.workspace.path}]")
-        response = engine.chat(command)
-        print(response)
+            print(f"[model: {agent.provider.model}]")
+            print(f"[workspace: {agent.workspace.path}]")
+        print(agent.run(command).response)
     else:
-        create_terminal(engine.repl_controller).run()
+        agent.workspace.enter()
+        create_terminal(ReplController.for_agent(agent)).run()
 
 
 @app.command("doctor")

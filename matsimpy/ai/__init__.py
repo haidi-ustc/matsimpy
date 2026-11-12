@@ -3,7 +3,6 @@ AI module for MatSimPy — LLM function calling + interactive REPL.
 
 Provides:
 - Agent: simple, structured Python interface
-- AIEngine: deprecated REPL compatibility interface
 - DeepSeekProvider: OpenAI-compatible client for DeepSeek API
 - SkillManager: progressive skill loading (like Claude skills)
 - FunctionDef/Skill: metadata for LLM-callable functions
@@ -34,14 +33,13 @@ from .runtime import AgentRuntime, TaskResult
 from .session_store import SessionStore, SkillVersion
 from .session import AgentSession, SessionTurn
 from .agent import Agent, AgentResult
-from .repl import CommandResult, ReplController
+from .repl import AgentSkillSummaries, CommandResult, ReplController
 from .terminal import (
     PlainTerminal,
     PromptToolkitTerminal,
     TerminalFrontend,
     create_terminal,
 )
-from .engine import AIEngine
 from .doctor import Diagnostic, Doctor
 from .evolution import (
     EvolutionCandidate,
@@ -53,9 +51,9 @@ from .evolution import (
 from .memory import AgentMemory, MemoryEntry, MemoryValidationError
 
 __all__ = [
-    "AIEngine",
     "Agent",
     "AgentResult",
+    "AgentSkillSummaries",
     "CommandResult",
     "ReplController",
     "TerminalFrontend",

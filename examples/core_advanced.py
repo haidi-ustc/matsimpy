@@ -297,12 +297,11 @@ crystal = Crystal(['Ar'], [[0, 0, 0]], Lattice.cubic(5.0))
 calc = LennardJones(sigma=3.4, epsilon=0.0104)
 
 # Attach calculator
-crystal.calc = calc
 
 # Use convenience methods
-energy = crystal.get_potential_energy()
-forces = crystal.get_forces()
-stress = crystal.get_stress()
+energy = calc.get_potential_energy(crystal)
+forces = calc.get_forces(crystal)
+stress = calc.get_stress(crystal)
 
 print(f"Calculator attached to crystal:")
 print(f"  Energy: {energy:.6f} eV")
@@ -312,9 +311,8 @@ print(f"  Stress tensor:\n{stress}")
 
 # Calculator with molecule
 molecule = Molecule(['Ar', 'Ar'], [[0, 0, 0], [3.4, 0, 0]])
-molecule.calc = calc
-energy_mol = molecule.get_potential_energy()
-forces_mol = molecule.get_forces()
+energy_mol = calc.get_potential_energy(molecule)
+forces_mol = calc.get_forces(molecule)
 
 print(f"\nCalculator attached to molecule:")
 print(f"  Energy: {energy_mol:.6f} eV")
@@ -432,6 +430,7 @@ print("\n\n13. Copy Method")
 print("-" * 70)
 
 from matsimpy.builders.bulk import from_prototype
+from matsimpy.symmetry import get_conventional_cell, get_symmetry_info
 
 # Create crystal with site properties
 original = from_prototype('diamond', 'Si', 5.43)
@@ -468,14 +467,14 @@ crystal = from_prototype('diamond', 'Si', 5.43)
 print(f"Structure: {crystal.formula}, {len(crystal)} atoms (primitive)")
 
 # Get symmetry information
-sym_info = crystal.get_symmetry_info()
+sym_info = get_symmetry_info(crystal)
 print(f"\nSymmetry information:")
 print(f"  Space group: {sym_info['space_group_number']} ({sym_info['space_group_symbol']})")
 print(f"  Point group: {sym_info['point_group']}")
 print(f"  Crystal system: {sym_info['crystal_system']}")
 
 # Get conventional cell
-conventional = crystal.get_conventional_cell()
+conventional = get_conventional_cell(crystal)
 print(f"\nConventional cell:")
 print(f"  Formula: {conventional.formula}")
 print(f"  Atoms: {len(conventional)} (vs {len(crystal)} in primitive)")

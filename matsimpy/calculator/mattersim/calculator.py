@@ -36,9 +36,8 @@ class Mattersim(Calculator):
         >>> # Use proper diamond structure (2 atoms in primitive cell)
         >>> si_crystal = from_prototype('diamond', 'Si', 5.43)
         >>> calc = Mattersim(model_path='~/.matsimpy/models/mattersim-v1.0.0-5M.pth.tar')
-        >>> si_crystal.calc = calc
-        >>> energy = si_crystal.get_potential_energy()
-        >>> forces = si_crystal.get_forces()
+        >>> energy = calc.get_potential_energy(si_crystal)
+        >>> forces = calc.get_forces(si_crystal)
     """
 
     def __init__(
@@ -344,13 +343,10 @@ class Mattersim(Calculator):
         """Set or update the ML model."""
         self.model = model
         self.potential = model
-        self.results.clear()
-        self._calculation_performed = False
+        self._invalidate()  # results of the previous model must not be served from cache
 
-    def _compute(self) -> None:
+    def _calculate(self, structure) -> dict:
         """ML potential: prepare input → run model → extract results."""
-        if self.structure is None:
-            raise ValueError("Structure not set.")
 
         if self.potential is None and self.model is not None:
             self.potential = self.model
@@ -360,27 +356,25 @@ class Mattersim(Calculator):
             raise ValueError("No model loaded. Provide model_path or model.")
 
         # Extract structure data
-        if isinstance(self.structure, Crystal):
-            positions = self.structure.cart_positions
-            lattice = self.structure.lattice
-            species_list = list(self.structure.species)
-            pbc = self.structure.pbc
+        if isinstance(structure, Crystal):
+            positions = structure.cart_positions
+            lattice = structure.lattice
+            species_list = list(structure.species)
+            pbc = structure.pbc
         else:
-            positions = np.array(self.structure.positions)
+            positions = np.array(structure.positions)
             lattice = None
-            species_list = list(self.structure.species)
+            species_list = list(structure.species)
             pbc = [False, False, False]
 
-        n_atoms = len(positions)
         model_input = self._prepare_model_input(positions, species_list, lattice, pbc)
         predictions = self._run_model(model_input)
 
-        self.results["energy"] = predictions.get("energy", 0.0)
-        self.results["forces"] = predictions.get(
-            "forces", np.zeros((n_atoms, 3))
-        )
+        # missing quantities stay None (0.8.x silently reported energy 0.0 / zero forces)
+        results = {"energy": predictions.get("energy"), "forces": predictions.get("forces")}
         if lattice is not None and "stress" in predictions:
-            self.results["stress"] = predictions["stress"]
+            results["stress"] = predictions["stress"]
+        return results
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -451,17 +445,6 @@ class Mattersim(Calculator):
             args_dict=args_dict,
             **parameters,
         )
-
-        # Restore results if present
-        if "results" in d:
-            results = {}
-            for key, value in d["results"].items():
-                if isinstance(value, list):
-                    results[key] = np.array(value)
-                else:
-                    results[key] = value
-            calc.results = results
-            calc._calculation_performed = True
 
         return calc
 

@@ -27,18 +27,7 @@ class TestMattersimBasic(unittest.TestCase):
             from matsimpy.calculator.mattersim import Mattersim
             calc = Mattersim()
             self.assertEqual(calc.device, "cpu")
-            self.assertTrue(calc.run)
-        except ImportError:
-            self.skipTest("mattersim not importable")
-
-    def test_run_parameter(self):
-        """Mattersim should accept run parameter."""
-        try:
-            from matsimpy.calculator.mattersim import Mattersim
-            calc = Mattersim(run=True)
-            self.assertTrue(calc.run)
-            calc2 = Mattersim(run=False)
-            self.assertFalse(calc2.run)
+            self.assertFalse(hasattr(calc, "run"))  # run= removed in 0.9.0
         except ImportError:
             self.skipTest("mattersim not importable")
 
@@ -53,8 +42,8 @@ class TestMattersimBasic(unittest.TestCase):
         except ImportError:
             self.skipTest("mattersim not importable")
 
-    def test_calculate_requires_model(self):
-        """calculate() without model should raise ValueError."""
+    def test_compute_requires_model(self):
+        """compute() without model should raise ValueError."""
         try:
             from matsimpy.calculator.mattersim import Mattersim
             from matsimpy.core import Crystal, Lattice
@@ -62,7 +51,7 @@ class TestMattersimBasic(unittest.TestCase):
             crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
             calc = Mattersim()
             with self.assertRaises(ValueError):
-                calc.calculate(crystal)
+                calc.compute(crystal)
         except ImportError:
             self.skipTest("mattersim not importable")
 

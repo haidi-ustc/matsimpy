@@ -54,7 +54,7 @@ def build_twisted_bilayer(
         # Estimate from lattice if possible
         if layer.lattice is not None:
             # Use the c-vector length if available, otherwise default
-            c_vec = layer.lattice.lattice_vectors[2]
+            c_vec = layer.lattice.matrix[2]
             layer_spacing = (
                 np.linalg.norm(c_vec) if np.linalg.norm(c_vec) > 1.0 else 3.35
             )
@@ -115,7 +115,7 @@ def build_twisted_bilayer(
     # Create new lattice that accommodates both layers
     if layer1.lattice is not None:
         old_lattice = layer1.lattice
-        lattice_vectors = old_lattice.lattice_vectors.copy()
+        lattice_vectors = old_lattice.matrix.copy()
 
         # Calculate required height
         max_z = np.max(combined_positions[:, 2])
@@ -136,7 +136,7 @@ def build_twisted_bilayer(
         # Convert cartesian positions to fractional if needed
         if use_cartesian:
             # Convert cartesian to fractional
-            inv_lattice = np.linalg.inv(new_lattice.lattice_vectors)
+            inv_lattice = np.linalg.inv(new_lattice.matrix)
             combined_positions = np.dot(combined_positions, inv_lattice)
     else:
         # Create a simple lattice
@@ -154,7 +154,7 @@ def build_twisted_bilayer(
 
         # If we used cartesian, convert to fractional
         if use_cartesian:
-            inv_lattice = np.linalg.inv(new_lattice.lattice_vectors)
+            inv_lattice = np.linalg.inv(new_lattice.matrix)
             combined_positions = np.dot(combined_positions, inv_lattice)
 
     # Center the structure if requested
@@ -304,7 +304,7 @@ def build_twisted_multilayer(
         # Translate vertically
         if layer_spacing is None:
             if layer.lattice is not None:
-                c_vec = layer.lattice.lattice_vectors[2]
+                c_vec = layer.lattice.matrix[2]
                 spacing = np.linalg.norm(c_vec) if np.linalg.norm(c_vec) > 1.0 else 3.35
             else:
                 spacing = 3.35
@@ -320,7 +320,7 @@ def build_twisted_multilayer(
 
         # Update lattice
         if result.lattice is not None:
-            lattice_vectors = result.lattice.lattice_vectors.copy()
+            lattice_vectors = result.lattice.matrix.copy()
             max_z = np.max(combined_positions[:, 2])
             lattice_vectors[2] = np.array([0, 0, max_z + 10.0])
             new_lattice = Lattice(lattice_vectors)

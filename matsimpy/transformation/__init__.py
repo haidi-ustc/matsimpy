@@ -36,7 +36,7 @@ Usage:
     >>> strained = apply_strain(crystal, [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]])
 
     # For in-place modification, use structure methods directly
-    >>> molecule.translate([1, 1, 1], inplace=True)  # Molecule class method
+    >>> moved = molecule.translate([1, 1, 1])  # returns a new Molecule
 
     # Lattice operations
     >>> from matsimpy.transformation.lattice import scale_lattice

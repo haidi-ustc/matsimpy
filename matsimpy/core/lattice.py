@@ -47,8 +47,7 @@ class Lattice(MSONable):
     coordinate transformations, parameter calculations, and lattice operations.
 
     Attributes:
-        lattice_vectors (np.ndarray): 3x3 array of lattice vectors.
-        matrix (np.ndarray): Lattice vectors as a 3x3 matrix (property).
+        matrix (np.ndarray): Read-only 3x3 array; rows are the lattice vectors a, b, c.
         inv_matrix (np.ndarray): Cached inverse of lattice matrix (property).
         a (float): Length of a lattice vector (property).
         b (float): Length of b lattice vector (property).
@@ -126,7 +125,7 @@ class Lattice(MSONable):
             a = float(lattice_vectors)
             if a <= 0:
                 raise ValueError(f"Lattice parameter must be positive, got {a}")
-            self.lattice_vectors = np.array(
+            self._matrix = np.array(
                 [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]], dtype=float
             )
         elif isinstance(lattice_vectors, (list, np.ndarray)):
@@ -139,12 +138,12 @@ class Lattice(MSONable):
                     raise ValueError(
                         f"Lattice parameters must be positive, got [{a}, {b}, {c}]"
                     )
-                self.lattice_vectors = np.array(
+                self._matrix = np.array(
                     [[a, 0.0, 0.0], [0.0, b, 0.0], [0.0, 0.0, c]], dtype=float
                 )
             elif arr.ndim == 2 and arr.shape == (3, 3):
                 # Full 3x3 lattice vectors
-                self.lattice_vectors = arr
+                self._matrix = arr
             else:
                 raise ValueError(
                     f"Invalid lattice_vectors shape: {arr.shape}. "
@@ -157,13 +156,30 @@ class Lattice(MSONable):
             )
 
         self._validate_lattice_vectors()
-        # Make lattice_vectors read-only so that in-place mutation cannot
-        # silently invalidate the cached _inv_matrix or other derived quantities.
-        self.lattice_vectors.flags.writeable = False
+        # Freeze the private owner array.  Public accessors only hand out views,
+        # and NumPy refuses to re-enable WRITEABLE on a view whose base is
+        # read-only, so the matrix and the cached inverse cannot drift apart.
+        self._matrix.flags.writeable = False
         # Cache inverse matrix eagerly to avoid thread-unsafe lazy init.
-        inv = np.linalg.inv(self.matrix)
+        inv = np.linalg.inv(self._matrix)
         inv.flags.writeable = False
         self._inv_matrix: np.ndarray = inv
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Restore from pickle/deepcopy and re-freeze arrays.
+
+        ``pickle`` and ``copy.deepcopy`` recreate ndarrays as writeable owner
+        arrays, which would re-open the in-place mutation path.
+        """
+        self.__dict__.update(state)
+        for key in ("_matrix", "_inv_matrix"):
+            arr = self.__dict__.get(key)
+            if isinstance(arr, np.ndarray):
+                arr.flags.writeable = False
+        if "_inv_matrix" not in self.__dict__:
+            inv = np.linalg.inv(self._matrix)
+            inv.flags.writeable = False
+            self._inv_matrix = inv
 
     def _validate_lattice_vectors(self) -> None:
         """
@@ -182,11 +198,11 @@ class Lattice(MSONable):
         Note:
             This is an internal method called automatically during initialization.
         """
-        if len(self.lattice_vectors) != 3:
+        if len(self.matrix) != 3:
             raise ValueError("Lattice vectors must be 3-dimensional.")
 
         # Check for NaN or Inf values
-        if not np.all(np.isfinite(self.lattice_vectors)):
+        if not np.all(np.isfinite(self.matrix)):
             raise ValueError("Lattice vectors must contain finite values.")
 
         # Check determinant
@@ -211,7 +227,9 @@ class Lattice(MSONable):
             Dict[str, Any]: Dictionary containing:
                 - @module: Module path of the class
                 - @class: Class name
-                - lattice_vectors: Lattice vectors as list (rounded to 8 decimals)
+                - lattice_vectors: Lattice vectors as nested lists, full float64
+                  precision (0.8.3 and earlier rounded to 8 decimals, so a JSON round
+                  trip moved every lattice vector by up to 5e-9 Å).
 
         Example:
             >>> lat = Lattice.cubic(5.0)
@@ -222,7 +240,7 @@ class Lattice(MSONable):
         d = {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
-            "lattice_vectors": np.round(self.lattice_vectors, decimals=8).tolist(),
+            "lattice_vectors": self.matrix.tolist(),
         }
         return d
 
@@ -274,7 +292,9 @@ class Lattice(MSONable):
             >>> mat[0]  # First lattice vector
             array([5., 0., 0.])
         """
-        return self.lattice_vectors.reshape((3, 3))
+        view = self._matrix.view()
+        view.flags.writeable = False
+        return view
 
     @property
     def inv_matrix(self) -> np.ndarray:
@@ -295,7 +315,9 @@ class Lattice(MSONable):
                    [0., 1., 0.],
                    [0., 0., 1.]])
         """
-        return self._inv_matrix
+        view = self._inv_matrix.view()
+        view.flags.writeable = False
+        return view
 
     @property
     def a(self) -> float:
@@ -310,7 +332,7 @@ class Lattice(MSONable):
             >>> lat.a
             5.0
         """
-        return np.linalg.norm(self.lattice_vectors[0])
+        return np.linalg.norm(self.matrix[0])
 
     @property
     def b(self) -> float:
@@ -325,7 +347,7 @@ class Lattice(MSONable):
             >>> lat.b
             4.0
         """
-        return np.linalg.norm(self.lattice_vectors[1])
+        return np.linalg.norm(self.matrix[1])
 
     @property
     def c(self) -> float:
@@ -340,7 +362,7 @@ class Lattice(MSONable):
             >>> lat.c
             5.0
         """
-        return np.linalg.norm(self.lattice_vectors[2])
+        return np.linalg.norm(self.matrix[2])
 
     @property
     def alpha(self) -> float:
@@ -357,7 +379,7 @@ class Lattice(MSONable):
         """
         return np.degrees(
             np.arccos(
-                np.dot(self.lattice_vectors[1], self.lattice_vectors[2])
+                np.dot(self.matrix[1], self.matrix[2])
                 / (self.b * self.c)
             )
         )
@@ -377,7 +399,7 @@ class Lattice(MSONable):
         """
         return np.degrees(
             np.arccos(
-                np.dot(self.lattice_vectors[0], self.lattice_vectors[2])
+                np.dot(self.matrix[0], self.matrix[2])
                 / (self.a * self.c)
             )
         )
@@ -400,7 +422,7 @@ class Lattice(MSONable):
         """
         return np.degrees(
             np.arccos(
-                np.dot(self.lattice_vectors[0], self.lattice_vectors[1])
+                np.dot(self.matrix[0], self.matrix[1])
                 / (self.a * self.b)
             )
         )
@@ -471,7 +493,7 @@ class Lattice(MSONable):
         # Format lattice vectors
         vectors = [
             f"  [{vector[0]:8.4f} {vector[1]:8.4f} {vector[2]:8.4f}]"
-            for vector in self.lattice_vectors
+            for vector in self.matrix
         ]
 
         return (
@@ -489,8 +511,8 @@ class Lattice(MSONable):
             String representation that can be evaluated to recreate the lattice.
         """
         # Round to 8 decimal places for consistency with as_dict
-        rounded_vectors = np.round(self.lattice_vectors, decimals=8).tolist()
-        return f"Lattice(lattice_vectors={rounded_vectors})"
+        rounded_vectors = np.round(self.matrix, decimals=8).tolist()
+        return f"Lattice({rounded_vectors})"
 
     @classmethod
     def from_parameters(
@@ -806,11 +828,10 @@ class Lattice(MSONable):
             return False
 
         # Use absolute tolerance only so the equality window is independent of
-        # the magnitude of the lattice parameters.  LATTICE_TOL = 1e-6 Å is well
-        # within any physically meaningful lattice precision and guarantees that
-        # the hash contract (a == b → hash(a) == hash(b)) is satisfied when
-        # __hash__ rounds to 5 decimal places (bucket = 5e-6 > LATTICE_TOL).
-        return np.allclose(self.lattice_vectors, other.lattice_vectors, atol=LATTICE_TOL, rtol=0)
+        # the magnitude of the lattice parameters.  Lattice is intentionally
+        # unhashable (``__hash__ = None``): tolerance-based equality is not
+        # transitive, so no hash can be consistent with it.
+        return np.allclose(self.matrix, other.matrix, atol=LATTICE_TOL, rtol=0)
 
     def get_reciprocal_lattice(self) -> "Lattice":
         """

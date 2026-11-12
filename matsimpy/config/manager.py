@@ -4,6 +4,7 @@ Configuration manager for MatSimPy.
 Handles loading, saving, and accessing global configuration.
 """
 
+import copy
 import yaml
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -79,28 +80,30 @@ class ConfigManager:
                     "Using defaults."
                 )
 
-        # Merge user config with defaults
-        merged_config = merge_configs(user_config, default_config)
-
-        # Load environment variable overrides
-        env_overrides = load_env_overrides()
-
-        # Merge environment overrides (highest priority)
-        self._config = merge_configs(env_overrides, merged_config)
+        # Merge user config with defaults.  This is the *persistable* layer;
+        # environment overrides are applied on top only in memory, so that
+        # save()/reset()/auto-create never write a transient MATSIMPY_* value
+        # into the user's config file (0.8.1 and earlier did).
+        self._file_config = copy.deepcopy(merge_configs(user_config, default_config))
+        self._apply_env_overrides()
 
         # Save merged config if file doesn't exist and auto_create is True
         if auto_create and not self.config_file.exists():
             self._save_config()
 
+    def _apply_env_overrides(self) -> None:
+        """Recompute the effective config = env overrides over the file layer."""
+        self._config = merge_configs(load_env_overrides(), copy.deepcopy(self._file_config))
+
     def _save_config(self) -> None:
-        """Save current configuration to file."""
+        """Save the persistable configuration (without env overrides) to file."""
         # Create config directory if it doesn't exist
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         # Save to file
         try:
             with open(self.config_file, "w") as f:
-                yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
+                yaml.dump(self._file_config, f, default_flow_style=False, sort_keys=False)
         except Exception as e:
             import warnings
 
@@ -151,8 +154,10 @@ class ConfigManager:
             >>> config.set('paths.models', '~/my_models', save=True)
         """
         if self._config is None:
-            self._config = get_default_config()
+            self._file_config = get_default_config()
+            self._apply_env_overrides()
 
+        set_nested_value(self._file_config, key_path, copy.deepcopy(value))
         set_nested_value(self._config, key_path, value)
 
         if save:
@@ -164,7 +169,8 @@ class ConfigManager:
 
     def reset(self) -> None:
         """Reset configuration to defaults."""
-        self._config = get_default_config()
+        self._file_config = get_default_config()
+        self._apply_env_overrides()
         self._save_config()
 
     def reload(self) -> None:

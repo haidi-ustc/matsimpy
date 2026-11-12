@@ -29,22 +29,28 @@ Example:
     >>> molecule.remove_atom(0)
 """
 
+import copy
+import json
+import sys
+import warnings
+from types import MappingProxyType
+
 import numpy as np
-from typing import List, Union, Optional, Dict, Tuple, Any, TYPE_CHECKING
+from typing import List, Mapping, Sequence, Union, Optional, Dict, Tuple, Any, TYPE_CHECKING
 import hashlib
 from collections import Counter
 from abc import ABC, abstractmethod
-from monty.json import MSONable
+from monty.json import MSONable, MontyDecoder, MontyEncoder
 
 from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
-from ._validation import normalize_species
+from ..utils.dict_utils import copy_properties
+from ._validation import _MISSING, _validate_metadata, normalize_species, resolve_indices, validate_site_properties
 from matsimpy.constants import POSITION_TOL, LATTICE_TOL
 
 if TYPE_CHECKING:
     from ..analysis.selection import AtomSelection
-    from ..calculator.base import Calculator
 
 
 class Structure(ABC, MSONable):
@@ -124,36 +130,66 @@ class Structure(ABC, MSONable):
     # Construction & core data model
     # ======================================================================
 
-    @classmethod
-    def _construct(
-        cls,
-        species: Tuple[str, ...],
-        positions: np.ndarray,
+    def _set_state(
+        self,
+        species: Sequence[Any],
+        positions: Any,
         lattice: Optional[Lattice] = None,
-    ) -> "Structure":
-        """
-        Internal lightweight constructor.
+        site_properties: Optional[Sequence[Mapping[str, Any]]] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        """Single place where a structure's state is assigned (0.8.7).
 
-        This bypasses ``__init__`` but still validates species and array shape.
-        It is intended for internal mutation pipelines that already operate on
-        mostly validated data.
+        Both ``__init__`` (after input validation/conversion) and ``_construct``
+        (internal fast path) end here, so the two construction paths can no
+        longer drift apart (the cause of several 0.8.x bugs).
         """
-        obj = cls.__new__(cls)
-        obj._species = tuple(normalize_species(s) for s in species)
-        obj._positions = np.array(positions, dtype=np.float64, copy=True)
-        if obj._positions.ndim != 2 or obj._positions.shape[1] != 3:
+        self._species = tuple(normalize_species(s) for s in species)
+        pos = np.array(positions, dtype=np.float64, copy=True)
+        if pos.size == 0:
+            pos = pos.reshape(0, 3)
+        if pos.ndim != 2 or pos.shape[1] != 3:
             raise ValueError("positions must have shape (n_atoms, 3)")
-        obj._positions.flags.writeable = False
-        obj.lattice = lattice
-
+        if len(pos) != len(self._species):
+            raise ValueError(
+                f"Number of positions ({len(pos)}) must match "
+                f"number of species ({len(self._species)})"
+            )
+        pos.flags.writeable = False
+        self._coords = pos  # native: fractional (Crystal) / Cartesian (Molecule)
+        self._lattice = lattice
+        self._site_properties = validate_site_properties(site_properties, len(self._species))
+        self._metadata = _validate_metadata(metadata)
         # Compute-once caches (never invalidated — structure is immutable)
-        obj._composition = None
-        obj._formula = None
+        self._composition = None
+        self._formula = None
+
+    @classmethod
+    def _construct(cls, species: Sequence[Any], positions: Any, lattice: Optional[Lattice] = None, **kwargs: Any) -> "Structure":
+        """Internal fast constructor: skips input-type conversion, not validation."""
+        obj = cls.__new__(cls)
+        obj._set_state(species, positions, lattice, **kwargs)
         return obj
 
+    @staticmethod
+    def _normalize_species_input(species: Sequence[Any]) -> List[str]:
+        """Validate the user-facing species argument (homogeneous str / int / Element)."""
+        if all(isinstance(s, str) for s in species):
+            pass
+        elif all(isinstance(s, (int, np.integer)) and not isinstance(s, (bool, np.bool_)) for s in species):
+            pass
+        elif all(isinstance(s, Element) for s in species):
+            pass
+        else:
+            raise TypeError(
+                "Invalid type for species. Must be a list of atomic symbols, "
+                "a list of atomic numbers, or a list of Element objects."
+            )
+        return [normalize_species(s) for s in species]
+
     def _construct_kwargs(self) -> Dict[str, Any]:
-        """Extra kwargs forwarded to ``_construct`` in base mutation helpers."""
-        return {}
+        """State carried over by atom-changing operations (metadata is not)."""
+        return {"site_properties": self._site_properties or None}
 
     def __init__(
         self,
@@ -183,68 +219,118 @@ class Structure(ABC, MSONable):
             This is an abstract base class constructor. Use Crystal or Molecule
             subclasses instead of instantiating Structure directly.
         """
-        # Convert to list first, then tuple for immutability.  Keep the
-        # historical homogeneous-input requirement, but route every accepted
-        # species through the shared normalizer so invalid symbols fail early.
-        if all(isinstance(s, str) for s in species):
-            species_list = [normalize_species(s) for s in species]
-        elif all(
-            isinstance(s, (int, np.integer)) and not isinstance(s, (bool, np.bool_))
-            for s in species
-        ):
-            species_list = [normalize_species(s) for s in species]
-        elif all(isinstance(s, Element) for s in species):
-            species_list = [normalize_species(s) for s in species]
-        else:
-            raise TypeError(
-                "Invalid type for species. \
-                    Must be a list of atomic symbols, \
-                    a list of atomic numbers, or a list of Element objects."
-            )
-
-        # Validate input lengths match
+        species_list = self._normalize_species_input(species)
         if len(species_list) != len(positions):
             raise ValueError(
                 f"Number of species ({len(species_list)}) must match "
                 f"number of positions ({len(positions)})"
             )
-
-        # Backing field for species (use property later for external mutation)
-        self._species = tuple(species_list)  # Make immutable backing field
-
-        self._positions = self._validate_positions(positions)
-
-        # Validate positions match species count
-        if len(self._positions) != len(self._species):
-            raise ValueError(
-                f"Number of positions ({len(self._positions)}) must match "
-                f"number of species ({len(self._species)})"
-            )
-        self._positions.flags.writeable = False
-
-        self.lattice = lattice
-
-        # Compute-once caches (never invalidated — structure is immutable)
-        self._composition: Optional[Composition] = None
-        self._formula: Optional[str] = None
-
-    @classmethod
-    def from_file(cls, filename: str, format: Optional[str] = None, **kwargs):
-        """Read a structure from a file using the public IO registry."""
-        from matsimpy.io import read_file
-
-        return read_file(filename, format=format, **kwargs)
-
-    def to_file(self, filename: str, format: Optional[str] = None, **kwargs) -> None:
-        """Write this structure to a file using the public IO registry."""
-        from matsimpy.io import write_file
-
-        write_file(self, filename, format=format, **kwargs)
+        self._set_state(species_list, self._validate_positions(positions), lattice)
 
     @property
     def species(self) -> Tuple[str, ...]:
         """Get the species as a tuple of strings."""
         return self._species
+
+    # ------------------------------------------------------------------
+    # Per-site properties (row view + column API) and structure metadata
+    # ------------------------------------------------------------------
+
+    @property
+    def site_properties(self) -> Tuple[Dict[str, Any], ...]:
+        """Per-site properties as deep-copied dicts (one per atom; ``()`` if none)."""
+        return tuple(copy.deepcopy(p) for p in self._site_properties)
+
+    def site_property(self, name: str, default: Any = _MISSING) -> List[Any]:
+        """Return one per-site property as a list (one value per atom).
+
+        Raises ``KeyError`` if some site lacks *name* and no *default* is given.
+
+        Example:
+            >>> magmoms = crystal.site_property("magmom")
+        """
+        if not self._site_properties and default is _MISSING:
+            raise KeyError(name)
+        rows = self._site_properties or [{}] * len(self._species)
+        out = []
+        for idx, props in enumerate(rows):
+            if name in props:
+                out.append(copy.deepcopy(props[name]))
+            elif default is _MISSING:
+                raise KeyError(f"site {idx} has no property {name!r}")
+            else:
+                out.append(copy.deepcopy(default))
+        return out
+
+    def with_site_property(self, name: str, values: Sequence[Any]) -> "Structure":
+        """Return a new structure with per-site property *name* set to *values*.
+
+        *values* has one entry per atom (an ndarray is converted with
+        ``tolist()``, so an (N, 3) array becomes N lists).  Other properties
+        and the metadata are kept.
+
+        Example:
+            >>> afm = crystal.with_site_property("magmom", [2.0, -2.0])
+        """
+        if not isinstance(name, str):
+            raise TypeError("site property name must be a string")
+        if isinstance(values, np.ndarray):
+            values = values.tolist()
+        values = list(values)
+        if len(values) != len(self._species):
+            raise ValueError(
+                f"{name!r} needs one value per atom ({len(self._species)}), got {len(values)}"
+            )
+        rows = self._site_properties or [{}] * len(self._species)
+        return self.with_site_properties([{**p, name: v} for p, v in zip(rows, values)])
+
+    def without_site_property(self, *names: str) -> "Structure":
+        """Return a new structure with the given per-site properties removed."""
+        rows = [{k: v for k, v in p.items() if k not in names} for p in self._site_properties]
+        return self.with_site_properties(rows if any(rows) else None)
+
+    @property
+    def metadata(self) -> Mapping[str, Any]:
+        """Structure-level metadata (read-only, deep-copied view).
+
+        Use it for data attached to the structure as a whole, e.g. parsed
+        forces of an MD frame.  It is preserved by ``copy()``, ``with_*()``,
+        ``set_pbc()`` and serialization, and dropped by operations that change
+        atoms or positions (add/remove/substitute/sort/wrap/transformations),
+        because such data would no longer describe the new structure.
+        """
+        return MappingProxyType(copy.deepcopy(self._metadata))
+
+    def with_metadata(self, **updates: Any) -> "Structure":
+        """Return a new structure whose metadata is updated with *updates*."""
+        return self._replace(metadata={**self._metadata, **updates})
+
+    def without_metadata(self, *keys: str) -> "Structure":
+        """Return a new structure without the given metadata keys (all if none given)."""
+        kept = {k: v for k, v in self._metadata.items() if keys and k not in keys}
+        return self._replace(metadata=kept)
+
+    @property
+    def lattice(self) -> Optional[Lattice]:
+        """The (immutable) lattice, or ``None`` for non-periodic structures.
+
+        Read-only: Cartesian positions, sites and neighbour caches are derived
+        from it at construction time.  Build a new structure to change it.
+        """
+        return self._lattice
+
+    # Attribute names renamed to private backing fields in 0.8.1.
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Restore from pickle/deepcopy and re-freeze arrays.
+
+        ``pickle``/``copy.deepcopy`` recreate ndarrays as writeable owner arrays,
+        which would let ``obj.positions.flags.writeable = True`` mutate the
+        private state behind every derived cache.
+        """
+        self.__dict__.update(state)
+        for value in self.__dict__.values():
+            if isinstance(value, np.ndarray):
+                value.flags.writeable = False
 
     def _validate_positions(self, positions: Union[List, np.ndarray]) -> np.ndarray:
         """
@@ -347,7 +433,7 @@ class Structure(ABC, MSONable):
         Use the immutable modification methods (add_atom, remove_atom, etc.) to
         produce a new structure with updated positions.
         """
-        view = self._positions.view()
+        view = self._coords.view()
         view.flags.writeable = False
         return view
 
@@ -389,7 +475,21 @@ class Structure(ABC, MSONable):
         }
         if self.lattice is not None:
             d["lattice"] = self.lattice.as_dict()
+        if self._site_properties:
+            d["site_properties"] = list(self.site_properties)
+        d.update(self._metadata_dict())
         return d
+
+    def _metadata_dict(self) -> Dict[str, Any]:
+        """``{"metadata": ...}`` encoded with MontyEncoder (ndarrays keep dtype and values)."""
+        if not self._metadata:
+            return {}
+        return {"metadata": json.loads(json.dumps(self._metadata, cls=MontyEncoder))}
+
+    @staticmethod
+    def _metadata_from_dict(d: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        raw = d.get("metadata")
+        return None if raw is None else MontyDecoder().process_decoded(raw)
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Structure":
@@ -512,12 +612,9 @@ class Structure(ABC, MSONable):
                      Type matches the original (Crystal or Molecule).
 
         Note:
-            The attached calculator (``calc``) is **not** copied.  The returned
-            structure always has ``calc = None``.  Copy and re-attach the
-            calculator explicitly if needed::
-
-                new = crystal.copy()
-                new.calc = crystal.calc  # share, or pass a new instance
+            Calculators are independent of structures:
+            ``calc.get_potential_energy(new)`` works for the copy and reuses the
+            cached result, since the copy has the same exact fingerprint.
 
         Example:
             >>> from matsimpy.core import Crystal, Lattice
@@ -528,23 +625,80 @@ class Structure(ABC, MSONable):
             >>> crystal_copy.species == crystal.species  # Same data
             True
         """
-        return self.from_dict(self.as_dict())
+        # Bit-exact clone from internal state.  The <=0.8.0 implementation
+        # round-tripped through as_dict(), which rounds the lattice to 1e-8 and
+        # recomputes Cartesian coordinates, so ``copy()`` silently changed data.
+        return self._replace()
+
+    def _replace(self, **changes: Any) -> "Structure":
+        """Exact clone (incl. metadata) with selected state fields replaced."""
+        kwargs = {**self._clone_kwargs(), "metadata": self._metadata, **changes}
+        return self.__class__._construct(
+            species=self._species, positions=self._coords, lattice=self._lattice, **kwargs
+        )
+
+    def _clone_kwargs(self) -> Dict[str, Any]:
+        """Kwargs for an exact ``_construct`` clone (subclasses may add caches)."""
+        return self._construct_kwargs()
+
+    def with_site_properties(self, site_properties: Optional[List[dict]]) -> "Structure":
+        """Return a new structure with *site_properties* replaced (structures are immutable).
+
+        Args:
+            site_properties: One dict per atom, or ``None``/``[]`` to clear.
+        """
+        return self._replace(site_properties=site_properties)
 
     __hash__ = None
 
-    def _structural_hash(self) -> int:
-        hash_dict = {
-            "@module": self.__class__.__module__,
-            "@class": self.__class__.__name__,
-            "species": list(self.species),
-            "positions": np.round(self.positions, decimals=7).tolist(),
-        }
-        if self.lattice is not None:
-            hash_dict["lattice"] = self.lattice.as_dict()
+    # ------------------------------------------------------------------
+    # Text representation (one implementation; subclasses supply two hooks)
+    # ------------------------------------------------------------------
 
-        hash_str = str(hash_dict).encode("utf-8")
-        hash_bytes = hashlib.sha256(hash_str).digest()
-        return int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
+    def _summary_lines(self) -> List[str]:
+        """Extra indented header lines for ``__str__``."""
+        return []
+
+    def _coordinate_columns(self) -> Dict[str, np.ndarray]:
+        """``{header: (n, 3) array}`` coordinate columns for ``__str__``."""
+        return {"Cartesian Coordinates": self.positions}
+
+    def __str__(self) -> str:
+        """Human-readable summary followed by a per-atom table (insertion order)."""
+        from tabulate import tabulate
+
+        columns = self._coordinate_columns()
+        headers = ["Element", *columns]
+        rows = [
+            [sp, *("({:.4f}, {:.4f}, {:.4f})".format(*arr[i]) for arr in columns.values())]
+            for i, sp in enumerate(self._species)
+        ]
+        if any(self._site_properties):
+            headers.append("Properties")
+            for row, props in zip(rows, self._site_properties):
+                row.append(", ".join(f"{k}={v}" for k, v in props.items()))
+        head = [f"{type(self).__name__}: {self.formula}", f"  Sites: {len(self)} atoms", *self._summary_lines()]
+        return "\n".join(head) + "\n" + tabulate(rows, headers=headers, tablefmt="plain", stralign="left")
+
+    def _structural_hash(self) -> int:
+        """Exact fingerprint of every input a calculator may depend on.
+
+        Used only for calculator-result staleness detection.  It is bit-exact
+        (no rounding: a 1e-8 Å displacement must trigger a recalculation) and
+        covers lattice, PBC and per-site properties (e.g. MAGMOM), which the
+        <=0.8.0 implementation ignored.
+        """
+        h = hashlib.sha256()
+        h.update(f"{self.__class__.__module__}.{self.__class__.__name__}".encode())
+        h.update("\x1f".join(self.species).encode())
+        h.update(np.ascontiguousarray(self._coords, dtype=np.float64).tobytes())
+        if self.lattice is not None:
+            h.update(np.ascontiguousarray(self.lattice.matrix, dtype=np.float64).tobytes())
+        h.update(repr(getattr(self, "pbc", None)).encode())
+        # Full-precision, unsummarised repr so ndarray-valued properties hash exactly.
+        with np.printoptions(threshold=sys.maxsize, floatmode="unique"):
+            h.update(repr(getattr(self, "_site_properties", ())).encode())
+        return int.from_bytes(h.digest()[:8], byteorder="big", signed=True)
 
     def __eq__(self, other: Any) -> bool:
         """
@@ -582,9 +736,8 @@ class Structure(ABC, MSONable):
         if self.species != other.species:
             return False
 
-        # Check positions with tolerance.  POSITION_TOL = 1e-8 is strictly less
-        # than the hash rounding bucket (5e-8 for 7 d.p.), ensuring
-        # a == b ⟹ hash(a) == hash(b).
+        # Check positions with absolute tolerance POSITION_TOL.  Structures are
+        # unhashable (``__hash__ = None``), so no hash contract is involved.
         if not np.allclose(self.positions, other.positions, atol=POSITION_TOL, rtol=0):
             return False
 
@@ -630,253 +783,172 @@ class Structure(ABC, MSONable):
         return [Element.get_element(specie) for specie in self.species]
 
     # ------------------------------------------------------------------
-    # Calculator attachment
+    # Calculators (structures never carry one)
     # ------------------------------------------------------------------
+
+    _CALC_REMOVED = (
+        "Structures no longer carry a calculator (removed in 0.8.6). Use "
+        "calc.get_potential_energy(structure), calc.get_forces(structure), "
+        "calc.get_stress(structure) or calc.compute(structure)."
+    )
 
     @property
-    def calc(self) -> Optional["Calculator"]:
-        """
-        Get the attached calculator.
-
-        Returns:
-            :obj:`~matsimpy.calculator.base.Calculator` or None
-
-        Example:
-            >>> from matsimpy.calculator import LennardJones
-            >>> structure.calc = LennardJones()
-            >>> structure.calc = None  # detach
-        """
-        return getattr(self, "_calculator", None)
+    def calc(self):
+        # Without this, `structure.calc = calc` would silently create a plain
+        # attribute (Structure has a __dict__) and old code would misbehave quietly.
+        raise AttributeError(self._CALC_REMOVED)
 
     @calc.setter
-    def calc(self, calculator: Optional["Calculator"]) -> None:
-        """
-        Attach or detach a calculator.
-
-        Args:
-            calculator: A Calculator instance, or None to detach.
-
-        Raises:
-            TypeError: If *calculator* is not a Calculator instance or None.
-        """
-        from ..calculator.base import Calculator
-
-        if calculator is not None and not isinstance(calculator, Calculator):
-            raise TypeError(
-                f"Calculator must be a Calculator instance, got {type(calculator)}"
-            )
-        self._calculator = calculator
-
-    def _needs_calculation(self) -> bool:
-        """Return True if a (re-)calculation is required."""
-        calc = self.calc
-        if calc is None:
-            return False
-        return (
-            not calc._calculation_performed
-            or getattr(calc, "_last_structure_hash", None) != self._structural_hash()
-        )
-
-    def get_potential_energy(self) -> float:
-        """
-        Get potential energy from the attached calculator.
-
-        Triggers ``calculator.calculate(self)`` automatically if the results
-        are not yet available or if the structure has changed since the last run.
-
-        Returns:
-            float: Potential energy in eV.
-
-        Raises:
-            ValueError: If no calculator is attached.
-        """
-        if self.calc is None:
-            raise ValueError(
-                f"No calculator attached. Set {self.__class__.__name__.lower()}"
-                f".calc = calculator first."
-            )
-        if self._needs_calculation():
-            self.calc.calculate(self)
-        return self.calc.get_potential_energy()
-
-    def get_forces(self) -> np.ndarray:
-        """
-        Get atomic forces from the attached calculator.
-
-        Triggers ``calculator.calculate(self)`` automatically if needed.
-
-        Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/Å.
-
-        Raises:
-            ValueError: If no calculator is attached.
-        """
-        if self.calc is None:
-            raise ValueError(
-                f"No calculator attached. Set {self.__class__.__name__.lower()}"
-                f".calc = calculator first."
-            )
-        if self._needs_calculation():
-            self.calc.calculate(self)
-        return self.calc.get_forces()
-
-    def get_stress(self) -> np.ndarray:
-        """
-        Get the stress tensor from the attached calculator.
-
-        The base implementation raises ``NotImplementedError`` — only subclasses
-        that support stress (e.g. ``Crystal``) override this method.
-
-        Raises:
-            NotImplementedError: Always (in the base class).
-            ValueError: If no calculator is attached (in subclasses).
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support stress calculations."
-        )
+    def calc(self, _value) -> None:
+        raise AttributeError(self._CALC_REMOVED)
 
     # ------------------------------------------------------------------
 
     # ======================================================================
-    # Subclass extension hooks
+    # Per-atom data adjustment (used by remove_atom / sort_atoms)
     # ======================================================================
 
-    def _extra_dict_fields(self) -> Dict[str, Any]:
-        """
-        Return extra fields required to reconstruct this structure via ``from_dict``.
-
-        **Subclass contract** — override this method when your subclass stores
-        state beyond ``species`` and ``positions``:
-
-        1. Every key returned here must be accepted by ``from_dict`` (or by
-           the subclass ``__init__`` which ``from_dict`` calls).
-        2. Values must be JSON-serialisable (use ``.tolist()`` for ndarrays,
-           ``as_dict()`` for nested ``MSONable`` objects).
-        3. ``add_atom`` / ``remove_atom`` / ``sort_atoms`` in the **base class**
-           forward these fields unchanged.  If any field contains a **per-atom**
-           list (e.g. ``site_properties``), also override
-           ``_filter_per_atom_data`` and ``_reorder_per_atom_data`` so that
-           those lists are correctly adjusted when atoms are removed or reordered.
-        4. Do **not** include ``species`` or ``positions`` — those are always
-           managed by the base class.
-
-        Returns:
-            dict: Extra serialisation fields (empty dict for the base class).
-        """
-        return {}
-
-    # ======================================================================
-    # Per-atom metadata adjustment hooks (used by base mutation helpers)
-    # ======================================================================
-
-    def _filter_per_atom_data(self, kept_indices: List[int]) -> Dict[str, Any]:
-        """
-        Return per-atom serialisation fields filtered to *kept_indices*.
-
-        Called by :meth:`remove_atom` (base) to correct any per-atom lists
-        (e.g. ``site_properties``) that would otherwise be passed stale via
-        :meth:`_extra_dict_fields`.  The returned dict is merged **after**
-        ``_extra_dict_fields()``, so it overrides matching keys.
-
-        Override in subclasses that store per-atom lists::
-
-            def _filter_per_atom_data(self, kept_indices):
-                if not self.site_properties:
-                    return {}
-                return {"site_properties":
-                        [self.site_properties[i] for i in kept_indices]}
-
-        Returns:
-            dict: Filtered per-atom fields (empty dict in the base class).
-        """
-        return {}
-
-    def _reorder_per_atom_data(self, new_order: List[int]) -> Dict[str, Any]:
-        """
-        Return per-atom serialisation fields reordered to *new_order*.
-
-        Called by :meth:`sort_atoms` (base) to correct any per-atom lists
-        that would otherwise be passed in original order via
-        :meth:`_extra_dict_fields`.  The returned dict is merged **after**
-        ``_extra_dict_fields()``, overriding matching keys.
-
-        Override in subclasses that store per-atom lists::
-
-            def _reorder_per_atom_data(self, new_order):
-                if not self.site_properties:
-                    return {}
-                return {"site_properties":
-                        [self.site_properties[i] for i in new_order]}
-
-        Returns:
-            dict: Reordered per-atom fields (empty dict in the base class).
-        """
-        return {}
+    def _take_per_atom(self, indices: List[int]) -> Dict[str, Any]:
+        """Construct kwargs for the atoms *indices* (subset and/or reorder)."""
+        if not self._site_properties:
+            return {}
+        # index the private tuple: the public property deep-copies every site
+        return {"site_properties": [self._site_properties[i] for i in indices]}
 
     # ======================================================================
     # Structure editing (immutable: returns new instances)
     # ======================================================================
 
+    # Minimum allowed interatomic distance for add_atom (Angstrom).
+    _MIN_ADD_DISTANCE = 0.5
+    _DUPLICATE_DISTANCE = 1e-6
+
     def add_atom(
         self,
         species: Union[str, List[str]],
-        position: Union[List[float], List[List[float]]],
+        position: Union[List[float], List[List[float]], np.ndarray],
+        site_properties: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
     ) -> "Structure":
-        """
-        Add one or more atoms and return a new structure.
+        """Return a new structure with one or more atoms appended.
 
         Args:
             species: Element symbol or list of symbols.
-            position: 3D position or list of 3D positions (coordinate system
-                      depends on the concrete subclass — Cartesian for Molecule,
-                      fractional by default for Crystal).
+            position: One 3D coordinate or a list of them, in the structure's
+                native coordinates (Cartesian for Molecule, fractional for
+                Crystal unless ``coords_are_cartesian=True``).
+            site_properties: One dict (copied to every new atom) or one dict per atom.
 
-        Returns:
-            Structure: New structure with the added atom(s).
-
-        Warning:
-            The base class cannot generically persist subclass-specific per-atom
-            metadata such as ``site_properties``. Subclasses that expose such
-            metadata should override this method, as Crystal and Molecule do.
+        Raises:
+            ValueError: count mismatch, malformed coordinates, or a new atom
+                closer than 0.5 Angstrom to another atom (minimum image under PBC).
         """
+        return self._add_atoms(species, position, site_properties, cartesian=self.lattice is None)
 
-        # Handle single atom case
-        if isinstance(species, str):
-            species = [species]
-            position = [position]
-
-        if len(species) != len(position):
+    def _add_atoms(self, species, position, site_properties, cartesian: bool) -> "Structure":
+        species_list = [species] if isinstance(species, str) else list(species)
+        try:
+            new = np.array(position, dtype=np.float64)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Each position must be a 3D coordinate [x, y, z]: {exc}") from None
+        if new.size == 0:
+            new = new.reshape(0, 3)
+        elif new.ndim == 1:
+            new = new.reshape(1, -1)
+        if new.ndim != 2 or new.shape[1] != 3:
+            raise ValueError("Each position must be a 3D coordinate [x, y, z].")
+        if len(species_list) != len(new):
             raise ValueError(
-                f"Number of species ({len(species)}) must match "
-                f"number of positions ({len(position)})"
+                f"Number of species ({len(species_list)}) must match "
+                f"number of positions ({len(new)})"
             )
-
-        if not species:
+        if site_properties is not None:
+            if isinstance(site_properties, Mapping):
+                # independent copy per atom (a list-multiply would share one dict)
+                site_properties = [copy_properties(site_properties) for _ in species_list]
+            site_properties = list(site_properties)
+            if len(site_properties) != len(species_list):
+                raise ValueError(
+                    f"Number of site_properties ({len(site_properties)}) "
+                    f"must match number of atoms added ({len(species_list)})"
+                )
+        if not species_list:
             return self.copy()
 
-        positions_array = np.array(position, dtype=np.float64)
-        if positions_array.ndim == 1:
-            if len(positions_array) != 3:
-                raise ValueError("Position must be a 3D coordinate")
-            positions_array = positions_array.reshape(1, 3)
-        elif positions_array.ndim == 2:
-            if positions_array.shape[1] != 3:
-                raise ValueError("Positions must be 3D coordinates")
-        else:
-            raise ValueError(
-                "Position must be a 3D coordinate or list of 3D coordinates"
-            )
+        native, cart = self._native_and_cart(new, cartesian)
+        self._check_new_atom_distances(native, cart)
 
-        new_species = list(self.species)
-        new_species.extend(species)
-        new_positions = np.vstack([self._positions, positions_array])
+        props = None
+        if self._site_properties or site_properties:
+            if not self._site_properties:
+                warnings.warn(
+                    f"Adding atoms with site_properties to a {type(self).__name__} that has none. "
+                    "All existing atoms will receive an empty ({}) property dict. "
+                    "Initialise site_properties on the original structure first to "
+                    "suppress this warning.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            old = list(self._site_properties) or [{} for _ in self._species]
+            props = old + (site_properties or [{} for _ in species_list])
 
+        kwargs = {**self._construct_kwargs(), "site_properties": props}
+        kwargs.update(self._appended_cart(cart))
         return self.__class__._construct(
-            species=tuple(new_species),
-            positions=new_positions,
+            species=self._species + tuple(species_list),
+            positions=np.vstack([self._coords, native]),
             lattice=self.lattice,
-            **self._construct_kwargs(),
+            **kwargs,
         )
+
+    def _native_and_cart(self, coords: np.ndarray, cartesian: bool):
+        """(native, Cartesian) forms of new coordinates; Molecule: both Cartesian."""
+        return coords, coords
+
+    def _appended_cart(self, new_cart: np.ndarray) -> Dict[str, Any]:
+        """Extra construct kwargs carrying exact Cartesian rows (Crystal only)."""
+        return {}
+
+    def _min_image_distances(self, a_cart: np.ndarray, b_cart: np.ndarray) -> np.ndarray:
+        """Pairwise distances (len(a), len(b)); minimum image along periodic axes."""
+        diff = a_cart[:, None, :] - b_cart[None, :, :]
+        pbc = np.array(getattr(self, "pbc", (False, False, False)), dtype=bool)
+        if self.lattice is not None and pbc.any():
+            frac = diff @ self.lattice.inv_matrix
+            frac[..., pbc] -= np.round(frac[..., pbc])
+            diff = frac @ self.lattice.matrix
+        return np.linalg.norm(diff, axis=-1)
+
+    def _check_new_atom_distances(self, native: np.ndarray, cart: np.ndarray) -> None:
+        among = self._min_image_distances(cart, cart)
+        np.fill_diagonal(among, np.inf)
+        if among.size and among.min() < self._MIN_ADD_DISTANCE:
+            i, j = np.unravel_index(np.argmin(among), among.shape)
+            i, j = min(i, j), max(i, j)
+            d = among[i, j]
+            if d < self._DUPLICATE_DISTANCE:
+                raise ValueError(
+                    f"Duplicate positions detected in new atoms: positions {i} and {j} "
+                    f"are at the same location ({native[i].tolist()})."
+                )
+            raise ValueError(
+                f"Atoms being added are too close: distance between positions {i} and {j} "
+                f"is {d:.6f} Angstrom. Minimum allowed distance is {self._MIN_ADD_DISTANCE} Angstrom."
+            )
+        if not len(self._species):
+            return
+        nearest = self._min_image_distances(cart, self.positions).min(axis=1)
+        for idx, d in enumerate(nearest):
+            if d < self._DUPLICATE_DISTANCE:
+                raise ValueError(
+                    f"Cannot add atom at position {native[idx].tolist()}: atom already "
+                    f"exists at this location (distance: {d:.6f} Angstrom)."
+                )
+            if d < self._MIN_ADD_DISTANCE:
+                raise ValueError(
+                    f"Cannot add atom at position {native[idx].tolist()}: too close to "
+                    f"existing atom (distance: {d:.6f} Angstrom). "
+                    f"Minimum allowed distance is {self._MIN_ADD_DISTANCE} Angstrom."
+                )
 
     def remove_atom(
         self,
@@ -894,15 +966,9 @@ class Structure(ABC, MSONable):
 
         Warning:
             Subclasses that store per-atom lists (e.g. ``site_properties``)
-            must override ``_filter_per_atom_data`` so that those lists are
-            trimmed correctly.
+            must override ``_take_per_atom``.
         """
-        from ..analysis.selection import AtomSelection
-
-        if isinstance(index, AtomSelection):
-            if index.structure is not self:
-                raise ValueError("AtomSelection must be created from this structure")
-            index = index.indices
+        index = resolve_indices(self, index)
         if isinstance(index, int):
             index = [index]
 
@@ -912,19 +978,22 @@ class Structure(ABC, MSONable):
             if not (0 <= idx < n):
                 raise IndexError(f"Atom index {idx} out of range [0, {n - 1}]")
 
-        kept_indices = [i for i in range(n) if i not in set(index)]
+        removed = set(indices_to_remove)
+        kept_indices = [i for i in range(n) if i not in removed]
 
         new_species = [self.species[i] for i in kept_indices]
-        new_positions = self._positions[np.array(kept_indices, dtype=int)] if kept_indices else np.empty((0, 3), dtype=np.float64)
+        new_positions = self._coords[np.array(kept_indices, dtype=int)] if kept_indices else np.empty((0, 3), dtype=np.float64)
 
         # Propagate per-atom metadata via hooks when present.
-        per_atom = self._filter_per_atom_data(kept_indices)
+        per_atom = self._take_per_atom(kept_indices)
         return self.__class__._construct(
             species=tuple(new_species),
             positions=new_positions,
             lattice=self.lattice,
-            **self._construct_kwargs(),
-            **per_atom,
+            # per_atom overrides the stale per-atom lists in _construct_kwargs();
+            # passing both as separate ** expansions raised "multiple values for
+            # keyword argument 'site_properties'" in 0.8.0.
+            **{**self._construct_kwargs(), **per_atom},
         )
 
     # ------------------------------------------------------------------
@@ -959,12 +1028,32 @@ class Structure(ABC, MSONable):
         indices: Union[int, List[int], "AtomSelection"],
         new_species: Union[str, List[str], Dict[str, str]],
     ) -> "Structure":
-        from ..analysis.selection import AtomSelection
+        """
+        Substitute atoms with new species and return a new structure.
 
-        if isinstance(indices, AtomSelection):
-            if indices.structure is not self:
-                raise ValueError("AtomSelection must be created from this structure")
-            indices = indices.indices
+        Args:
+            indices: Atom index, list of indices, or AtomSelection to substitute.
+            new_species: New species symbol, list of symbols, or dict mapping
+                old->new species.
+
+        Returns:
+            Structure: New structure of the same type; positions (fractional and
+            Cartesian for Crystal), lattice, PBC and site properties are carried
+            over bit-exactly.
+
+        Raises:
+            IndexError: If an index is out of range.
+            ValueError: If the number of indices and species differ.
+            KeyError: If a dict mapping lacks a species.
+
+        Examples:
+            >>> new = crystal.substitute(0, 'Ge')
+            >>> new = crystal.substitute([0, 1], ['Ge', 'Ge'])
+            >>> new = crystal.substitute(AtomSelection(crystal).by_species('Si'), 'Ge')
+            >>> new = crystal.substitute([0, 1, 2], {'Si': 'Ge', 'O': 'S'})
+        """
+        # (0.8.4 and earlier: Crystal carried a near-identical copy of this method.)
+        indices = resolve_indices(self, indices)
 
         indices = self._validate_atom_indices(indices)
 
@@ -995,9 +1084,9 @@ class Structure(ABC, MSONable):
 
         return self.__class__._construct(
             species=tuple(species_list),
-            positions=self._positions,
+            positions=self._coords,
             lattice=self.lattice,
-            **self._construct_kwargs(),
+            **self._clone_kwargs(),
         )
 
     def substitute_all(self, old_species: str, new_species: str) -> "Structure":
@@ -1006,9 +1095,9 @@ class Structure(ABC, MSONable):
         ]
         return self.__class__._construct(
             species=tuple(species_list),
-            positions=self._positions,
+            positions=self._coords,
             lattice=self.lattice,
-            **self._construct_kwargs(),
+            **self._clone_kwargs(),
         )
 
     # ------------------------------------------------------------------
@@ -1021,11 +1110,9 @@ class Structure(ABC, MSONable):
 
         Warning:
             Subclasses that store per-atom lists (e.g. ``site_properties``)
-            must override ``_reorder_per_atom_data`` so that those lists are
-            reordered to match the new atom order, or override this method
-            entirely.
+            must override ``_take_per_atom``.
         """
-        atoms = list(zip(range(len(self.species)), self.species, self._positions))
+        atoms = list(zip(range(len(self.species)), self.species, self._coords))
 
         if sort_by == "element":
             elements = self.elements
@@ -1047,13 +1134,15 @@ class Structure(ABC, MSONable):
         sorted_positions = np.array([a[2] for a in sorted_atoms])
         sorted_indices = [a[0] for a in sorted_atoms]
 
-        per_atom = self._reorder_per_atom_data(sorted_indices)
+        per_atom = self._take_per_atom(sorted_indices)
         return self.__class__._construct(
             species=tuple(sorted_species),
             positions=sorted_positions,
             lattice=self.lattice,
-            **self._construct_kwargs(),
-            **per_atom,
+            # per_atom overrides the stale per-atom lists in _construct_kwargs();
+            # passing both as separate ** expansions raised "multiple values for
+            # keyword argument 'site_properties'" in 0.8.0.
+            **{**self._construct_kwargs(), **per_atom},
         )
 
     # ======================================================================

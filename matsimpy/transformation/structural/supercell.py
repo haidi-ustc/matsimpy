@@ -100,13 +100,16 @@ def make_supercell(
     is_diagonal = np.allclose(scaling_matrix, np.diag(np.diag(scaling_matrix)))
 
     # Calculate new lattice vectors
-    new_lattice_vectors = np.dot(scaling_matrix, crystal.lattice.lattice_vectors)
+    new_lattice_vectors = np.dot(scaling_matrix, crystal.lattice.matrix)
     new_lattice = Lattice(new_lattice_vectors)
 
     # Generate all atoms in supercell
     new_species = []
     new_positions = []
-    new_site_properties = [] if crystal.site_properties else None
+    # Read the (deep-copying) property once; 0.8.3 re-read it for every atom of
+    # every image, i.e. O(N^2 * images) deep copies.
+    site_props = crystal.site_properties
+    new_site_properties = [] if site_props else None
 
     if is_diagonal:
         # Simple diagonal case - use optimized approach
@@ -132,9 +135,9 @@ def make_supercell(
                         new_species.append(spec)
                         new_positions.append(new_pos.tolist())
 
-                        if new_site_properties is not None and crystal.site_properties:
+                        if new_site_properties is not None:
                             new_site_properties.append(
-                                copy.deepcopy(crystal.site_properties[atom_idx])
+                                copy.deepcopy(site_props[atom_idx])
                             )
     else:
         # General matrix case - use more robust approach
@@ -155,9 +158,9 @@ def make_supercell(
                 new_species.append(spec)
                 new_positions.append(new_pos.tolist())
 
-                if new_site_properties is not None and crystal.site_properties:
+                if new_site_properties is not None:
                     new_site_properties.append(
-                        copy.deepcopy(crystal.site_properties[atom_idx])
+                        copy.deepcopy(site_props[atom_idx])
                     )
 
         # Verify we found the correct number of atoms

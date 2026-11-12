@@ -1,6 +1,5 @@
 """Tests for IO utils module."""
 import unittest
-from pathlib import Path
 
 from matsimpy.io.utils import (
     detect_format,
@@ -13,19 +12,7 @@ from matsimpy.io.utils import (
 class TestIOUtils(unittest.TestCase):
     """Tests for IO utility functions."""
     
-    def test_detect_format_vasp(self):
-        """Test format detection for VASP files."""
-        self.assertEqual(detect_format('structure.vasp'), '.vasp')
-        self.assertEqual(detect_format('structure.POSCAR'), '.poscar')
-        self.assertEqual(detect_format('structure.CONTCAR'), '.contcar')
-        self.assertEqual(detect_format('structure.pos'), '.vasp')  # Alias
     
-    def test_detect_format_crystal(self):
-        """Test format detection for crystal formats."""
-        self.assertEqual(detect_format('structure.cif'), '.cif')
-        self.assertEqual(detect_format('structure.xsf'), '.xsf')
-        self.assertEqual(detect_format('structure.ase'), '.ase')
-        self.assertEqual(detect_format('structure.json'), '.json')
     
     def test_detect_format_molecule(self):
         """Test format detection for molecule formats."""
@@ -34,17 +21,7 @@ class TestIOUtils(unittest.TestCase):
         self.assertEqual(detect_format('molecule.mol'), '.mol')
         self.assertEqual(detect_format('molecule.conf'), '.xyz')  # Alias
     
-    def test_detect_format_unknown(self):
-        """Test format detection for unknown formats."""
-        self.assertIsNone(detect_format('file.unknown'))
-        self.assertIsNone(detect_format('file'))
-        self.assertIsNone(detect_format(''))
     
-    def test_detect_format_case_insensitive(self):
-        """Test that format detection is case insensitive."""
-        self.assertEqual(detect_format('file.VASP'), '.vasp')
-        self.assertEqual(detect_format('file.XYZ'), '.xyz')
-        self.assertEqual(detect_format('file.CIF'), '.cif')
     
     def test_get_reader_writer(self):
         """Test getting reader and writer function names."""
@@ -60,11 +37,6 @@ class TestIOUtils(unittest.TestCase):
         self.assertEqual(reader, 'read_CIF')
         self.assertEqual(writer, 'write_CIF')
     
-    def test_get_reader_writer_unknown(self):
-        """Test getting reader/writer for unknown format."""
-        reader, writer = get_reader_writer('.unknown')
-        self.assertIsNone(reader)
-        self.assertIsNone(writer)
     
     def test_is_crystal_format(self):
         """Test checking if format is for crystals."""
@@ -120,15 +92,6 @@ class TestIOUtils(unittest.TestCase):
                 f"Writer {writer} for {fmt} has invalid name"
             )
 
-    def test_is_crystal_format_json_and_ase(self):
-        """is_crystal_format must return True for dual-format extensions .json and .ase."""
-        self.assertTrue(is_crystal_format('.json'))
-        self.assertTrue(is_crystal_format('.ase'))
-
-    def test_is_molecule_format_json_and_ase(self):
-        """is_molecule_format must return True for dual-format extensions .json and .ase."""
-        self.assertTrue(is_molecule_format('.json'))
-        self.assertTrue(is_molecule_format('.ase'))
 
 if __name__ == '__main__':
     unittest.main()

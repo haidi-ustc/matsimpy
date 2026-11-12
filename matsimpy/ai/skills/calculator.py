@@ -42,21 +42,12 @@ def _calculate_lennard_jones(structure=None, sigma: float = 3.4, epsilon: float 
     if structure is None:
         return {"error": "No structure available. Create or read a structure first."}
 
-    calc = LennardJones(sigma=sigma, epsilon=epsilon)
-    calc.calculate(structure)
-    result = {
-        "formula": structure.formula,
-        "num_atoms": len(structure),
-        "energy": calc.get_potential_energy(),
-    }
-    try:
-        result["forces"] = calc.get_forces().tolist()
-    except Exception:
-        pass
-    try:
-        result["stress"] = calc.get_stress().tolist()
-    except Exception:
-        pass
+    r = LennardJones(sigma=sigma, epsilon=epsilon).compute(structure)
+    result = {"formula": structure.formula, "num_atoms": len(structure), "energy": r.energy}
+    if r.forces is not None:
+        result["forces"] = r.forces.tolist()
+    if r.stress is not None:
+        result["stress"] = r.stress.tolist()
     return result
 
 
@@ -78,15 +69,14 @@ def _write_calculator_input(calculator: str, structure=None, run: bool = False, 
     if cls is None:
         return {"error": f"Unknown calculator: {calculator}"}
 
-    calc = cls(run=run, **parameters)
-    calc.calculate(structure)
-    return {
-        "calculator": cls_name,
-        "formula": structure.formula,
-        "num_atoms": len(structure),
-        "run": run,
-        "parameters": calc.get_parameters() if hasattr(calc, "get_parameters") else parameters,
-    }
+    calc = cls(**parameters)
+    out = {"calculator": cls_name, "formula": structure.formula, "num_atoms": len(structure), "run": run}
+    if run:
+        out["energy"] = calc.compute(structure).energy
+    else:
+        out["directory"] = str(calc.write_input(structure))
+    out["parameters"] = calc.get_parameters()
+    return out
 
 
 def get_functions() -> list[FunctionDef]:

@@ -220,21 +220,19 @@ print("-" * 70)
 # Create Ar crystal and attach calculator
 ar_crystal = Crystal(['Ar'], [[0, 0, 0]], Lattice.cubic(5.0))
 lj_calc = LennardJones(sigma=3.4, epsilon=0.0104)
-ar_crystal.calc = lj_calc
 
 # Get energy using convenience method
-energy = ar_crystal.get_potential_energy()
+energy = lj_calc.get_potential_energy(ar_crystal)
 print(f"Ar crystal with LJ calculator:")
 print(f"  Energy: {energy:.6f} eV")
 
 # Get forces
-forces = ar_crystal.get_forces()
+forces = lj_calc.get_forces(ar_crystal)
 print(f"  Forces: {forces[0]}")
 
 # Same for molecule
 ar_dimer = Molecule(['Ar', 'Ar'], [[0, 0, 0], [3.4, 0, 0]])
-ar_dimer.calc = lj_calc
-energy_mol = ar_dimer.get_potential_energy()
+energy_mol = lj_calc.get_potential_energy(ar_dimer)
 print(f"\nAr dimer with LJ calculator:")
 print(f"  Energy: {energy_mol:.6f} eV")
 

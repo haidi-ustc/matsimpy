@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -69,9 +70,10 @@ class PlainTerminal(TerminalFrontend):
         self._output(response)
 
     def render_command(self, result: CommandResult) -> None:
-        """Render the controller's concise display text."""
-        if result.display_hint:
-            self._output(result.display_hint)
+        """Render the command's data (sessions, skills, ...) and its display text."""
+        text = format_command_result(result)
+        if text:
+            self._output(text)
 
 
 class PromptToolkitTerminal(PlainTerminal):
@@ -174,6 +176,46 @@ class PromptToolkitTerminal(PlainTerminal):
         return f" session {session_id or 'new'} | Enter submit | Esc+Enter newline | Ctrl+C cancel "
 
 
+def format_command_result(result: CommandResult) -> str:
+    """Plain-text rendering of a command's structured data plus its display hint."""
+    out: list[str] = []
+    if result.kind == "sessions":
+        for session in result.data["sessions"]:
+            out.append(
+                f"  {session['id']}: {session.get('source', 'unknown')} "
+                f"{session.get('workspace', '')}"
+            )
+    elif result.kind == "skills":
+        for skill in result.data["skills"]:
+            out.append(f"  [{skill['name']}] {skill.get('description', '')}")
+    elif result.kind == "skill-detail":
+        skill = result.data["skill"]
+        status = "loaded" if skill.get("loaded") else "ready"
+        out.append(f"  {skill['name']} ({skill.get('source', 'unknown')}, {status})")
+        out.append(f"  {skill.get('description', '')}")
+        if skill.get("keywords"):
+            out.append(f"  Keywords: {', '.join(skill['keywords'])}")
+        if skill.get("mode"):
+            out.append(f"  Mode: {skill['mode']}")
+        if skill.get("body_preview"):
+            out.append(f"  {skill['body_preview']}")
+        for function in skill.get("functions", []):
+            out.append(f"  {function['name']}: {function.get('description', '')}")
+            out.append(f"    Schema: {json.dumps(function.get('schema', {}))}")
+            if function.get("help"):
+                out.append(f"    Help: {function['help']}")
+    elif result.kind == "drafts":
+        for draft in result.data["drafts"]:
+            out.append(f"  {draft['name']}: {draft.get('status', 'draft')}")
+    elif result.kind in {"trace", "usage"}:
+        values = result.data.get(result.kind, {})
+        for key, value in values.items():
+            out.append(f"  {key.replace('_', ' ').title()}: {value}")
+    if result.display_hint:
+        out.append(result.display_hint if result.ok else f"⚠️ {result.display_hint}")
+    return "\n".join(out)
+
+
 def _prompt_toolkit_available() -> bool:
     try:
         import prompt_toolkit  # noqa: F401
@@ -193,6 +235,7 @@ def create_terminal(controller: ReplController) -> TerminalFrontend:
 
 
 __all__ = [
+    "format_command_result",
     "PlainTerminal",
     "PromptToolkitTerminal",
     "TerminalFrontend",

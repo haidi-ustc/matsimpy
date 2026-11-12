@@ -166,7 +166,7 @@ def write_POSCAR(crystal: Crystal, filename: str, title: Optional[str] = None) -
         f.write("1.0\n")
 
         # Write lattice vectors
-        for vec in crystal.lattice.lattice_vectors:
+        for vec in crystal.lattice.matrix:
             f.write(f"{vec[0]:.16f} {vec[1]:.16f} {vec[2]:.16f}\n")
 
         # Build species groups preserving the first-occurrence order

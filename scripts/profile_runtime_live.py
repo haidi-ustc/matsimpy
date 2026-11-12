@@ -13,7 +13,8 @@ import sys
 import time
 from pathlib import Path
 
-from matsimpy.ai.engine import AIEngine
+from matsimpy.ai import Agent
+from matsimpy.ai.cli import build_agent
 
 
 # ── Instrumentation ────────────────────────────────────────────────────────
@@ -53,9 +54,9 @@ def wrap_method(obj, method_name: str, phase_name: str):
     setattr(obj, method_name, wrapper)
 
 
-def instrument(engine: AIEngine, max_retries: int = 2) -> None:
+def instrument(agent: Agent, max_retries: int = 2) -> None:
     """Wrap runtime methods to collect timing. LLM calls retry up to max_retries times."""
-    rt = engine.runtime
+    rt = agent.runtime
     wrap_method(rt.session_store, "start_session",       "db.start_session")
     wrap_method(rt.session_store, "end_session",          "db.end_session")
     wrap_method(rt.session_store, "add_messages_batch",   "db.add_messages_batch")
@@ -201,8 +202,8 @@ def report():
 
 def main():
     MAX_RETRIES = 2
-    engine = AIEngine()
-    instrument(engine, max_retries=MAX_RETRIES)
+    agent = build_agent()  # same agent as the matsimpy-ai CLI
+    instrument(agent, max_retries=MAX_RETRIES)
 
     for name, prompts in EXAMPLES:
         print(f"\n▶ {name}  ({len(prompts)} turns, max_retries={MAX_RETRIES})", flush=True)
@@ -211,13 +212,13 @@ def main():
         for prompt in prompts:
             print(f"  [{name}] user: {prompt[:80]}...", flush=True)
             try:
-                result = engine.chat(prompt)
+                result = agent.run(prompt).response
                 display = result.replace("\n", " ")[:120]
                 print(f"  [{name}]  → {display}", flush=True)
             except Exception as exc:
                 print(f"  [{name}]  ✗ FAILED after {MAX_RETRIES} retries: {exc}", flush=True)
 
-        engine.conversation = engine.conversation[:1]
+        agent.session.new()  # fresh conversation per example
 
     report()
 

@@ -76,6 +76,11 @@ class SymmOp:
         affine_point = np.append(np.array(point, dtype=np.float64), 1.0)
         return np.dot(self._affine_matrix, affine_point)[:3]
 
+    def operate_multi(self, points: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Apply the operation to an (N, 3) array of points (vectorised ``operate``)."""
+        points = np.asarray(points, dtype=np.float64)
+        return points @ self._affine_matrix[:3, :3].T + self._affine_matrix[:3, 3]
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SymmOp):
             return NotImplemented
@@ -127,13 +132,13 @@ class SymmOp:
     @staticmethod
     def from_rotation_and_translation(
         rotation: NDArray[np.float64],
-        translation: NDArray[np.float64],
+        translation: NDArray[np.float64] = (0.0, 0.0, 0.0),
     ) -> "SymmOp":
         """Create a SymmOp from a rotation matrix and translation vector.
 
         Args:
             rotation: 3x3 rotation matrix.
-            translation: 3D translation vector.
+            translation: 3D translation vector (default: no translation).
 
         Returns:
             SymmOp combining the rotation and translation.

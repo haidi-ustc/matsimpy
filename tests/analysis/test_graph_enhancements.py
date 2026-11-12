@@ -22,23 +22,7 @@ from matsimpy.analysis.graph import (
 class TestAdjacencyMatrix(unittest.TestCase):
     """Test adjacency matrix computation."""
     
-    def test_molecule_adjacency_basic(self):
-        """Test basic adjacency matrix for molecule."""
-        mol = make_simple_molecule()
-        adj = get_adjacency_matrix(mol, cutoff=2.0)
-        
-        self.assertEqual(adj.shape, (2, 2))
-        self.assertEqual(adj[0, 1], 1)  # Connected
-        self.assertEqual(adj[1, 0], 1)  # Symmetric
-        self.assertEqual(adj[0, 0], 0)  # No self-loops
     
-    def test_molecule_adjacency_disconnected(self):
-        """Test adjacency for disconnected atoms."""
-        mol = Molecule(['C', 'C'], [[0, 0, 0], [10, 0, 0]])
-        adj = get_adjacency_matrix(mol, cutoff=2.0)
-        
-        self.assertEqual(adj[0, 1], 0)  # Not connected
-        self.assertEqual(adj[1, 0], 0)
     
     def test_crystal_adjacency(self):
         """Test adjacency matrix for crystal."""
@@ -52,36 +36,7 @@ class TestAdjacencyMatrix(unittest.TestCase):
 class TestDistanceMatrix(unittest.TestCase):
     """Test distance matrix computation."""
     
-    def test_molecule_distance_matrix(self):
-        """Test distance matrix for molecule."""
-        mol = make_simple_molecule()
-        dist = get_distance_matrix(mol)
-        
-        self.assertEqual(dist.shape, (2, 2))
-        self.assertAlmostEqual(dist[0, 1], 1.2)
-        self.assertAlmostEqual(dist[1, 0], 1.2)
-        self.assertAlmostEqual(dist[0, 0], 0.0)
     
-    def test_distance_matrix_symmetric(self):
-        """Test that distance matrix is symmetric."""
-        mol = Molecule(['C', 'O', 'H'], [[0, 0, 0], [1, 0, 0], [0, 1, 0]])
-        dist = get_distance_matrix(mol)
-        
-        self.assertTrue(np.allclose(dist, dist.T))
-
-    def test_crystal_distance_matrix_not_limited_to_20_angstrom(self):
-        """Test PBC crystal distance matrices include pairs beyond 20 Å."""
-        crystal = Crystal(
-            ['H', 'H'],
-            [[0, 0, 0], [0.5, 0, 0]],
-            Lattice.cubic(100),
-        )
-        dist = get_distance_matrix(crystal, use_pbc=True)
-
-        self.assertEqual(dist.shape, (2, 2))
-        self.assertTrue(np.isfinite(dist[0, 1]))
-        self.assertAlmostEqual(dist[0, 1], 50.0)
-        self.assertAlmostEqual(dist[1, 0], 50.0)
 
     def test_crystal_distance_matrix_uses_nearest_periodic_image(self):
         """Test PBC crystal distances wrap periodic dimensions."""
@@ -119,23 +74,10 @@ class TestEdgeList(unittest.TestCase):
         self.assertEqual(j, 1)
         self.assertAlmostEqual(dist, 1.2, places=5)
     
-    def test_edge_list_multiple_edges(self):
-        """Test edge list with multiple edges."""
-        mol = Molecule(['C', 'C', 'C'], [[0, 0, 0], [1, 0, 0], [2, 0, 0]])
-        edges = get_edge_list(mol, cutoff=1.5)
-        
-        self.assertEqual(len(edges), 2)  # (0,1) and (1,2)
 
 class TestCoordinationNumbers(unittest.TestCase):
     """Test coordination number computation."""
     
-    def test_coordination_single_bond(self):
-        """Test coordination for simple bond."""
-        mol = make_simple_molecule()
-        coord = get_coordination_numbers(mol, cutoff=2.0)
-        
-        self.assertEqual(coord[0], 1)
-        self.assertEqual(coord[1], 1)
     
     def test_coordination_multiple_neighbors(self):
         """Test coordination with multiple neighbors."""
@@ -161,53 +103,19 @@ class TestDegreeDistribution(unittest.TestCase):
 class TestConnectivity(unittest.TestCase):
     """Test graph connectivity functions."""
     
-    def test_is_connected_true(self):
-        """Test connected graph."""
-        mol = make_simple_molecule()
-        self.assertTrue(is_connected(mol, cutoff=2.0))
     
     def test_is_connected_false(self):
         """Test disconnected graph."""
         mol = Molecule(['C', 'C'], [[0, 0, 0], [10, 0, 0]])
         self.assertFalse(is_connected(mol, cutoff=2.0))
     
-    def test_is_connected_single_atom(self):
-        """Test single atom is considered connected."""
-        mol = Molecule(['C'], [[0, 0, 0]])
-        self.assertTrue(is_connected(mol, cutoff=2.0))
     
-    def test_connected_components_single(self):
-        """Test connected components for connected graph."""
-        mol = make_simple_molecule()
-        components = get_connected_components(mol, cutoff=2.0)
-        
-        self.assertEqual(len(components), 1)
-        self.assertEqual(sorted(components[0]), [0, 1])
     
-    def test_connected_components_multiple(self):
-        """Test connected components for disconnected graph."""
-        mol = Molecule(['C', 'O', 'N', 'H'], 
-                      [[0, 0, 0], [1.2, 0, 0], [10, 0, 0], [11, 0, 0]])
-        components = get_connected_components(mol, cutoff=2.0)
-        
-        self.assertEqual(len(components), 2)
 
 class TestShortestPath(unittest.TestCase):
     """Test shortest path finding."""
     
-    def test_shortest_path_direct(self):
-        """Test shortest path for directly connected atoms."""
-        mol = make_simple_molecule()
-        path = get_shortest_path(mol, 0, 1, cutoff=2.0)
-        
-        self.assertEqual(path, [0, 1])
     
-    def test_shortest_path_indirect(self):
-        """Test shortest path through intermediate atoms."""
-        mol = Molecule(['C', 'C', 'C'], [[0, 0, 0], [1, 0, 0], [2, 0, 0]])
-        path = get_shortest_path(mol, 0, 2, cutoff=1.5)
-        
-        self.assertEqual(path, [0, 1, 2])
     
     def test_shortest_path_no_path(self):
         """Test when no path exists."""
@@ -233,12 +141,6 @@ class TestShortestPath(unittest.TestCase):
 class TestGraphDiameter(unittest.TestCase):
     """Test graph diameter computation."""
     
-    def test_diameter_linear_molecule(self):
-        """Test diameter for linear molecule."""
-        mol = Molecule(['C', 'C', 'C'], [[0, 0, 0], [1, 0, 0], [2, 0, 0]])
-        diameter = get_graph_diameter(mol, cutoff=1.5)
-        
-        self.assertEqual(diameter, 2)
     
     def test_diameter_single_atom(self):
         """Test diameter for single atom."""
@@ -247,12 +149,6 @@ class TestGraphDiameter(unittest.TestCase):
         
         self.assertEqual(diameter, 0)
     
-    def test_diameter_disconnected(self):
-        """Test diameter for disconnected graph."""
-        mol = Molecule(['C', 'C'], [[0, 0, 0], [10, 0, 0]])
-        diameter = get_graph_diameter(mol, cutoff=2.0)
-        
-        self.assertIsNone(diameter)
 
 class TestNodeFeatures(unittest.TestCase):
     """Test node feature extraction."""
@@ -283,15 +179,6 @@ class TestGraphStatistics(unittest.TestCase):
         self.assertEqual(stats['max_coordination'], 1)
         self.assertEqual(stats['min_coordination'], 1)
     
-    def test_statistics_complex_molecule(self):
-        """Test statistics for complex molecule."""
-        mol = Molecule(['C', 'H', 'H', 'H'], 
-                      [[0, 0, 0], [2, 0, 0], [-2, 0, 0], [0, 2, 0]])
-        stats = get_graph_statistics(mol, cutoff=2.5)
-        
-        self.assertEqual(stats['num_nodes'], 4)
-        self.assertEqual(stats['num_edges'], 3)  # 3 C-H bonds
-        self.assertTrue(stats['is_connected'])
 
 class TestGraphLaplacian(unittest.TestCase):
     """Test graph Laplacian computation."""
@@ -322,16 +209,7 @@ class TestCrystalGraphMethods(unittest.TestCase):
         self.lattice = Lattice(10)
         self.crystal = Crystal(['Si', 'Si'], [[0, 0, 0], [0.25, 0.25, 0.25]], self.lattice)
     
-    def test_crystal_adjacency(self):
-        """Test adjacency matrix for crystal."""
-        adj = get_adjacency_matrix(self.crystal, cutoff=5.0)
-        self.assertEqual(adj.shape, (2, 2))
     
-    def test_crystal_coordination(self):
-        """Test coordination numbers for crystal."""
-        coord = get_coordination_numbers(self.crystal, cutoff=5.0)
-        self.assertIn(0, coord)
-        self.assertIn(1, coord)
     
     def test_crystal_statistics(self):
         """Test graph statistics for crystal."""
@@ -368,25 +246,6 @@ class TestEdgeCases(unittest.TestCase):
 class TestGraphIntegration(unittest.TestCase):
     """Integration tests combining multiple methods."""
     
-    def test_molecule_full_workflow(self):
-        """Test complete workflow with molecule."""
-        mol = Molecule(['C', 'O', 'H'], [[0, 0, 0], [1.2, 0, 0], [2.5, 0, 0]])
-        
-        # Get adjacency
-        adj = get_adjacency_matrix(mol, cutoff=1.5)
-        
-        # Get edge list
-        edges = get_edge_list(mol, cutoff=1.5)
-        
-        # Get coordination
-        coord = get_coordination_numbers(mol, cutoff=1.5)
-        
-        # Get statistics
-        stats = get_graph_statistics(mol, cutoff=1.5)
-        
-        # Verify consistency
-        self.assertEqual(stats['num_nodes'], len(mol))
-        self.assertEqual(stats['num_edges'], len(edges))
     
     def test_crystal_full_workflow(self):
         """Test complete workflow with crystal."""

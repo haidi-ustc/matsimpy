@@ -5,6 +5,7 @@ All mutation methods must return new objects without modifying the original.
 import unittest
 import numpy as np
 from matsimpy.core import Crystal, Molecule, Lattice
+from matsimpy.transformation import make_supercell, perturb_positions
 
 
 class TestImmutabilityCrystal(unittest.TestCase):
@@ -60,14 +61,14 @@ class TestImmutabilityCrystal(unittest.TestCase):
 
     def test_make_supercell_returns_new_object(self):
         original_len = len(self.crystal)
-        result = self.crystal.make_supercell([2, 2, 2])
+        result = make_supercell(self.crystal, [2, 2, 2])
         self.assertIsNot(result, self.crystal)
         self.assertEqual(len(self.crystal), original_len)
         self.assertEqual(len(result), original_len * 8)
 
     def test_perturb_returns_new_object(self):
         original_positions = self.crystal.positions.copy()
-        result = self.crystal.perturb(0.1, seed=42)
+        result = perturb_positions(self.crystal, 0.1, seed=42)
         self.assertIsNot(result, self.crystal)
         self.assertTrue(np.allclose(self.crystal.positions, original_positions))
         self.assertFalse(np.allclose(original_positions, result.positions))
@@ -140,7 +141,7 @@ class TestImmutabilityMolecule(unittest.TestCase):
 
     def test_perturb_returns_new_object(self):
         original_positions = self.mol.positions.copy()
-        result = self.mol.perturb(0.1, seed=42)
+        result = perturb_positions(self.mol, 0.1, seed=42)
         self.assertIsNot(result, self.mol)
         self.assertTrue(np.allclose(self.mol.positions, original_positions))
 
@@ -210,9 +211,9 @@ class TestNoPositionsSetter(unittest.TestCase):
         molecule = Molecule(["H"], [[0.0, 0.0, 0.0]])
 
         with self.assertRaises(ValueError):
-            crystal._positions[0, 0] = 0.25
+            crystal._coords[0, 0] = 0.25
         with self.assertRaises(ValueError):
-            molecule._positions[0, 0] = 0.25
+            molecule._coords[0, 0] = 0.25
 
 
 class TestNoSpeciesSetter(unittest.TestCase):

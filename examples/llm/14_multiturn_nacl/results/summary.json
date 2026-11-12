@@ -1,7 +1,0 @@
-{
-  "scenario": "14_multiturn_nacl",
-  "runs": 3,
-  "deterministic_pass_rate": 1.0,
-  "judge_pass_rate": 1.0,
-  "stable": true
-}

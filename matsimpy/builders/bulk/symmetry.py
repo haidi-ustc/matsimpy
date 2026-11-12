@@ -341,7 +341,7 @@ def _generate_from_spglib(
 
     # Create initial structure
     positions_array = np.array(positions)
-    lattice_matrix = lattice.lattice_vectors
+    lattice_matrix = lattice.matrix
 
     # First, try to get symmetry operations from spglib
     # This will find operations from the input structure

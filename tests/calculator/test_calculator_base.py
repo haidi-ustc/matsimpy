@@ -1,265 +1,131 @@
-"""
-Tests for base Calculator class.
-"""
+"""Contract tests for the stateless Calculator / FileIOCalculator base classes (0.9.0)."""
 
-import unittest
+import json
+
 import numpy as np
-# Import core classes first to avoid triggering calculator.__init__ imports
-from matsimpy.core import Crystal, Molecule, Lattice
-# Direct import from base module to avoid triggering ML imports
-from matsimpy.calculator.base import Calculator
+import pytest
+
+from matsimpy.calculator.base import Calculator, FileIOCalculator
+from matsimpy.calculator.results import Results
+from matsimpy.core import Crystal, Lattice, Molecule
+
 
 class MockCalculator(Calculator):
-    """Mock calculator for testing base class."""
+    def __init__(self, **parameters):
+        super().__init__(**parameters)
+        self.calls = 0
 
-    def _compute(self):
-        """Mock computation that sets fake results."""
-        self.results['energy'] = 1.0
-        self.results['forces'] = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
-        self.results['stress'] = np.eye(3)
-
-
-class _DummyRunCalculator(Calculator):
-    """Calculator that supports the run=True pipeline."""
-    def __init__(self, run=True, **kwargs):
-        super().__init__(run=run, **kwargs)
-        self.written = False
-        self.executed = False
-        self.parsed = False
-        self.read_called = False
-
-    def write_input(self, structure):
-        self.written = True
-        self.input_structure = structure
-
-    def _execute(self):
-        self.executed = True
-
-    def _parse_output(self):
-        self.parsed = True
-        self.results["energy"] = -1.0
-        self.results["forces"] = np.zeros((1, 3))
-
-    def read_results(self):
-        self.read_called = True
-        self._parse_output()
+    def _calculate(self, structure):
+        self.calls += 1
+        n = len(structure)
+        return {"energy": float(n), "forces": np.arange(3 * n, dtype=float).reshape(n, 3),
+                "stress": np.eye(3), "tag": "x"}
 
 
-class _DummyNoRunCalculator(Calculator):
-    """Calculator that supports run=False (offline) pipeline."""
-    def __init__(self, run=False, **kwargs):
-        super().__init__(run=run, **kwargs)
-
-    def write_input(self, structure):
-        self._input_written = True
-
-    def _parse_output(self):
-        self.results["energy"] = -5.0
-
-class TestCalculatorBase(unittest.TestCase):
-    """Tests for base Calculator class."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        self.calc = MockCalculator(sigma=3.4, epsilon=0.01)
-        # Use proper diamond structure (2 atoms in primitive cell)
-        from matsimpy.builders.bulk import from_prototype
-        self.crystal = from_prototype('diamond', 'Si', 5.43)
-        self.molecule = Molecule(['H', 'H'], [[0, 0, 0], [0.74, 0, 0]])
-    
-    def test_init(self):
-        """Test calculator initialization."""
-        self.assertEqual(self.calc.parameters['sigma'], 3.4)
-        self.assertEqual(self.calc.parameters['epsilon'], 0.01)
-        self.assertEqual(self.calc.structure, None)
-        self.assertEqual(len(self.calc.results), 0)
-        self.assertFalse(self.calc._calculation_performed)
-    
-    def test_set_parameters(self):
-        """Test setting parameters."""
-        self.calc.set_parameters(sigma=4.0, new_param=5.0)
-        self.assertEqual(self.calc.parameters['sigma'], 4.0)
-        self.assertEqual(self.calc.parameters['new_param'], 5.0)
-        self.assertEqual(self.calc.parameters['epsilon'], 0.01)  # Unchanged
-    
-    def test_get_parameters(self):
-        """Test getting parameters."""
-        params = self.calc.get_parameters()
-        self.assertEqual(params['sigma'], 3.4)
-        self.assertIsNot(params, self.calc.parameters)  # Should be copy
-    
-    def test_update_parameters(self):
-        """Test updating parameters."""
-        self.calc.update_parameters(sigma=5.0)
-        self.assertEqual(self.calc.parameters['sigma'], 5.0)
-        self.assertEqual(self.calc.parameters['epsilon'], 0.01)  # Unchanged
-    
-    def test_calculate(self):
-        """Test calculation on structure."""
-        self.calc.calculate(self.crystal)
-        self.assertEqual(self.calc.structure, self.crystal)
-        self.assertTrue(self.calc._calculation_performed)
-        self.assertIn('energy', self.calc.results)
-        self.assertIn('forces', self.calc.results)
-    
-    def test_calculate_molecule(self):
-        """Test calculation on molecule."""
-        self.calc.calculate(self.molecule)
-        self.assertEqual(self.calc.structure, self.molecule)
-        self.assertTrue(self.calc._calculation_performed)
-    
-    def test_calculate_invalid_structure(self):
-        """Test calculation with invalid structure."""
-        with self.assertRaises(ValueError):
-            self.calc.calculate("not a structure")
-    
-    def test_get_potential_energy(self):
-        """Test getting potential energy."""
-        self.calc.calculate(self.crystal)
-        energy = self.calc.get_potential_energy()
-        self.assertEqual(energy, 1.0)
-    
-    def test_get_potential_energy_not_calculated(self):
-        """Test getting energy before calculation."""
-        with self.assertRaises(ValueError):
-            self.calc.get_potential_energy()
-    
-    def test_get_forces(self):
-        """Test getting forces."""
-        self.calc.calculate(self.crystal)
-        forces = self.calc.get_forces()
-        self.assertEqual(forces.shape, (2, 3))
-        np.testing.assert_array_equal(forces, [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
-    
-    def test_get_forces_not_calculated(self):
-        """Test getting forces before calculation."""
-        with self.assertRaises(ValueError):
-            self.calc.get_forces()
-    
-    def test_get_stress(self):
-        """Test getting stress."""
-        self.calc.calculate(self.crystal)
-        stress = self.calc.get_stress()
-        self.assertEqual(stress.shape, (3, 3))
-        np.testing.assert_array_equal(stress, np.eye(3))
-    
-    def test_get_stress_not_calculated(self):
-        """Test getting stress before calculation."""
-        with self.assertRaises(ValueError):
-            self.calc.get_stress()
-    
-    def test_get_result(self):
-        """Test getting custom result."""
-        self.calc.calculate(self.crystal)
-        energy = self.calc.get_result('energy')
-        self.assertEqual(energy, 1.0)
-    
-    def test_get_result_not_found(self):
-        """Test getting non-existent result."""
-        self.calc.calculate(self.crystal)
-        with self.assertRaises(ValueError):
-            self.calc.get_result('nonexistent')
-    
-    def test_parameters_clear_results(self):
-        """Test that changing parameters clears results."""
-        self.calc.calculate(self.crystal)
-        self.assertTrue(self.calc._calculation_performed)
-        
-        self.calc.set_parameters(sigma=5.0)
-        self.assertFalse(self.calc._calculation_performed)
-        self.assertEqual(len(self.calc.results), 0)
-    
-    def test_repr(self):
-        """Test string representation."""
-        repr_str = repr(self.calc)
-        self.assertIn('MockCalculator', repr_str)
-        self.assertIn('sigma=3.4', repr_str)
-        self.assertIn('epsilon=0.01', repr_str)
-
-class TestCalculatorRunMode(unittest.TestCase):
-    """Tests for run-mode pipeline (run=True/False)."""
-
-    def setUp(self):
-        self.crystal = Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5.43))
-
-    def test_run_default_is_true(self):
-        calc = Calculator()
-        self.assertTrue(calc.run)
-
-    def test_run_false_stored(self):
-        calc = Calculator(run=False)
-        self.assertFalse(calc.run)
-
-    def test_run_true_calls_execute_and_parse(self):
-        calc = _DummyRunCalculator(run=True)
-        calc.calculate(self.crystal)
-        self.assertTrue(calc.written)
-        self.assertTrue(calc.executed)
-        self.assertTrue(calc.parsed)
-        self.assertFalse(calc.read_called)
-        self.assertEqual(calc.get_potential_energy(), -1.0)
-
-    def test_run_false_skips_execute_and_parse(self):
-        calc = _DummyRunCalculator(run=False)
-        calc.calculate(self.crystal)
-        self.assertTrue(calc.written)
-        self.assertFalse(calc.executed)
-        self.assertFalse(calc.parsed)
-
-    def test_read_results_after_offline_calculate(self):
-        calc = _DummyRunCalculator(run=False)
-        calc.calculate(self.crystal)
-        calc.read_results()
-        self.assertTrue(calc.read_called)
-        self.assertEqual(calc.get_potential_energy(), -1.0)
-
-    def test_offline_calculate_clears_previous_results(self):
-        calc = _DummyNoRunCalculator(run=False)
-        calc.calculate(self.crystal)
-        calc.read_results()
-        self.assertEqual(calc.get_potential_energy(), -5.0)
-
-        moved = Crystal(["Si"], [[0.25, 0.25, 0.25]], Lattice.cubic(5.43))
-        calc.calculate(moved)
-
-        self.assertEqual(calc.results, {})
-        with self.assertRaises(ValueError):
-            calc.get_potential_energy()
-
-    def test_structure_get_energy_does_not_reuse_offline_results_for_new_structure(self):
-        calc = _DummyNoRunCalculator(run=False)
-        calc.calculate(self.crystal)
-        calc.read_results()
-        self.assertEqual(calc.get_potential_energy(), -5.0)
-
-        moved = Crystal(["Si"], [[0.25, 0.25, 0.25]], Lattice.cubic(5.43))
-        moved.calc = calc
-
-        with self.assertRaises(ValueError):
-            moved.get_potential_energy()
-        self.assertEqual(calc.results, {})
-
-    def test_read_results_without_calculate(self):
-        calc = _DummyNoRunCalculator(run=False)
-        calc.read_results()
-        self.assertEqual(calc.get_potential_energy(), -5.0)
-
-    def test_get_energy_before_calculate_raises(self):
-        calc = _DummyRunCalculator(run=True)
-        with self.assertRaises(ValueError):
-            calc.get_potential_energy()
-
-    def test_get_forces_before_calculate_raises(self):
-        calc = _DummyRunCalculator(run=True)
-        with self.assertRaises(ValueError):
-            calc.get_forces()
-
-    def test_legacy_compute_still_works(self):
-        """Pure-Python calculators using _compute() should still work."""
-        calc = MockCalculator(sigma=3.4)
-        calc.calculate(self.crystal)
-        self.assertEqual(calc.get_potential_energy(), 1.0)
+class EnergyOnly(Calculator):
+    def _calculate(self, structure):
+        return Results(energy=-1.0)
 
 
-if __name__ == '__main__':
-    unittest.main()
+class DummyFileCalculator(FileIOCalculator):
+    def __init__(self, directory="dummy", scale=1.0):
+        super().__init__(directory, scale=scale)
+        self.executed = []
+
+    def write_input(self, structure, directory=None):
+        directory = self._dir(directory)
+        (directory / "in.json").write_text(json.dumps({"n": len(structure)}))
+        return directory
+
+    def _execute(self, directory):
+        self.executed.append(directory)
+        n = json.loads((directory / "in.json").read_text())["n"]
+        (directory / "out.json").write_text(json.dumps({"energy": -n * self.parameters["scale"]}))
+
+    def read_results(self, directory=None):
+        directory = self.directory if directory is None else directory
+        return Results(energy=json.loads((directory / "out.json").read_text())["energy"])
+
+
+@pytest.fixture
+def crystal():
+    return Crystal(["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]], Lattice.cubic(5.43))
+
+
+def test_compute_returns_frozen_results(crystal):
+    r = MockCalculator().compute(crystal)
+    assert r.energy == 2.0 and r.forces.shape == (2, 3)
+    assert r.extra["tag"] == "x"
+    with pytest.raises(ValueError):
+        r.forces[0, 0] = 1.0
+
+
+def test_calculator_keeps_no_structure_state():
+    calc = MockCalculator()
+    for gone in ("results", "structure", "calculate", "get_result", "run", "_calculation_performed",
+                 "read_results", "write_input", "update_parameters"):
+        assert not hasattr(calc, gone), gone
+
+
+def test_compute_caches_by_structure_and_parameters_invalidate(crystal):
+    calc = MockCalculator(sigma=1.0)
+    calc.compute(crystal)
+    calc.compute(crystal.copy())
+    assert calc.calls == 1
+    calc.compute(Molecule(["H", "H"], [[0, 0, 0], [0.74, 0, 0]]))
+    assert calc.calls == 2
+    calc.set_parameters(sigma=2.0)
+    calc.compute(crystal)
+    assert calc.calls == 3
+    assert calc.get_parameters() == {"sigma": 2.0}
+
+
+def test_compute_rejects_non_structures():
+    with pytest.raises(TypeError):
+        MockCalculator().compute("not a structure")
+
+
+def test_getters_require_structure_and_report_missing_quantities(crystal):
+    calc = MockCalculator()
+    assert calc.get_potential_energy(crystal) == 2.0
+    forces = calc.get_forces(crystal)
+    forces[0, 0] = 99.0  # writable copy, cache untouched
+    assert calc.compute(crystal).forces[0, 0] == 0.0
+    assert calc.get_stress(crystal).shape == (3, 3)
+    assert calc.get_stress(crystal, voigt=True).tolist() == [1, 1, 1, 0, 0, 0]
+    with pytest.raises(TypeError):
+        calc.get_stress(crystal, True)  # voigt is keyword-only
+    with pytest.raises(TypeError):
+        calc.get_potential_energy()  # no "last structure" any more
+    with pytest.raises(ValueError, match="Forces"):
+        EnergyOnly().get_forces(crystal)
+    with pytest.raises(ValueError, match="Stress"):
+        EnergyOnly().get_stress(crystal)
+
+
+def test_serialization_is_parameters_only(crystal):
+    calc = MockCalculator(sigma=3.4, epsilon=0.01)
+    calc.compute(crystal)
+    d = calc.as_dict()
+    assert d["parameters"] == {"sigma": 3.4, "epsilon": 0.01} and "results" not in d
+    assert MockCalculator.from_dict(d).parameters == calc.parameters
+    assert repr(calc) == "MockCalculator(sigma=3.4, epsilon=0.01)"
+
+
+def test_file_calculator_pipeline_and_offline_steps(crystal, tmp_path):
+    calc = DummyFileCalculator(directory=tmp_path / "run", scale=2.0)
+    assert calc.compute(crystal).energy == -4.0
+    assert calc.executed == [tmp_path / "run"]
+
+    offline = tmp_path / "offline"
+    assert calc.write_input(crystal, offline) == offline
+    assert not (offline / "out.json").exists()  # nothing executed
+    (offline / "out.json").write_text(json.dumps({"energy": -7.0}))
+    assert calc.read_results(offline).energy == -7.0
+    assert len(calc.executed) == 1
+
+
+def test_file_calculator_roundtrips_its_configuration(tmp_path):
+    calc = DummyFileCalculator(directory=tmp_path / "x", scale=3.0)
+    clone = DummyFileCalculator.from_dict(calc.as_dict())
+    assert clone.directory == calc.directory and clone.parameters == calc.parameters

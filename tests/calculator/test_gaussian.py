@@ -130,7 +130,7 @@ class TestGaussianOutput:
 
 
 class TestGaussianCalculator:
-    def test_run_false_writes_input_only(self, tmp_path):
+    def test_write_input_then_read_results(self, tmp_path):
         from matsimpy.calculator.gaussian.calculator import GaussianCalculator
 
         mol = Molecule(
@@ -142,14 +142,17 @@ class TestGaussianCalculator:
             route="# B3LYP/6-31G(d)",
             charge=0,
             spin=1,
-            run=False,
         )
-        calc.calculate(mol)
+        calc.write_input(mol)
         input_file = tmp_path / "input.gjf"
         assert input_file.exists()
-        assert "energy" not in calc.results
+        assert not (tmp_path / "output.log").exists()
+        (tmp_path / "output.log").write_text(" SCF Done:  E(RB3LYP) =  -76.4089   A.U. after 9 cycles\n")
+        r = calc.read_results()
+        assert r.energy == pytest.approx(-76.4089 * 27.211386245988)  # eV (0.8.x returned Hartree)
+        assert r.extra["energy_hartree"] == -76.4089
 
-    def test_run_true_attempts_execution(self, tmp_path):
+    def test_compute_attempts_execution(self, tmp_path):
         from matsimpy.calculator.gaussian.calculator import GaussianCalculator
 
         mol = Molecule(
@@ -161,24 +164,16 @@ class TestGaussianCalculator:
             route="# B3LYP/6-31G(d)",
             charge=0,
             spin=1,
-            run=True,
             gaussian_cmd="nonexistent_g09",
         )
         with pytest.raises((FileNotFoundError, RuntimeError)):
-            calc.calculate(mol)
+            calc.compute(mol)
 
     def test_init_defaults(self):
         from matsimpy.calculator.gaussian.calculator import GaussianCalculator
 
         calc = GaussianCalculator()
-        assert calc.route == "# B3LYP/6-31G(d)"
-        assert calc.charge == 0
-        assert calc.spin == 1
+        assert calc.parameters["route"] == "# B3LYP/6-31G(d)"
+        assert calc.parameters["charge"] == 0
+        assert calc.parameters["spin"] == 1
 
-    def test_run_parameter(self):
-        from matsimpy.calculator.gaussian.calculator import GaussianCalculator
-
-        calc = GaussianCalculator(run=True)
-        assert calc.run is True
-        calc2 = GaussianCalculator(run=False)
-        assert calc2.run is False

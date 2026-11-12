@@ -4,13 +4,13 @@ Molecular geometry builders.
 Build molecules with specific geometries (linear, bent, trigonal, etc.).
 """
 
-from typing import List
+from typing import List, Sequence
 import numpy as np
 from ...core import Molecule
 
 
 def build_linear(
-    species: List[str], bond_lengths: List[float], axis: List[float] = [1, 0, 0]
+    species: List[str], bond_lengths: List[float], axis: Sequence[float] = (1, 0, 0)
 ) -> Molecule:
     """
     Build linear molecule along an axis.
@@ -58,7 +58,7 @@ def build_bent(
     species: List[str],
     bond_lengths: List[float],
     angles: List[float],
-    plane_normal: List[float] = [0, 0, 1],
+    plane_normal: Sequence[float] = (0, 0, 1),
 ) -> Molecule:
     """
     Build bent molecule (e.g., H2O, bent triatomic).

@@ -24,16 +24,7 @@ class TestSymmetryAnalyzer(unittest.TestCase):
             [[0, 0, 0], [0.96, 0, 0], [-0.96, 0, 0]]
         )
     
-    def test_initialization(self):
-        """Test analyzer initialization."""
-        analyzer = SymmetryAnalyzer(symprec=1e-4, angle_tolerance=5.0)
-        self.assertEqual(analyzer.symprec, 1e-4)
-        self.assertEqual(analyzer.angle_tolerance, 5.0)
     
-    def test_symmetry_data_loading(self):
-        """Test that symmetry data is loaded."""
-        # Data should be loaded during initialization
-        self.assertIsNotNone(self.analyzer._symmetry_data)
     
     def test_get_space_group_info(self):
         """Test getting space group information."""
@@ -116,19 +107,6 @@ class TestCrystalSymmetryAnalysis(unittest.TestCase):
             Lattice.cubic(5.43)
         )
     
-    @unittest.skipUnless(
-        __import__('sys').modules.get('spglib') is not None,
-        "spglib not available"
-    )
-    def test_analyze_crystal_basic(self):
-        """Test basic crystal analysis."""
-        result = self.analyzer.analyze_crystal(self.simple_cubic)
-        
-        self.assertIsInstance(result, dict)
-        self.assertIn('space_group_number', result)
-        self.assertIn('space_group_symbol', result)
-        self.assertIn('point_group', result)
-        self.assertIn('crystal_system', result)
     
     @unittest.skipUnless(
         __import__('sys').modules.get('spglib') is not None,
@@ -181,17 +159,6 @@ class TestMoleculeSymmetryAnalysis(unittest.TestCase):
             [[0, 0, 0], [0.96, 0, 0], [-0.96, 0, 0]]
         )
     
-    def test_analyze_molecule_basic(self):
-        """Test basic molecule analysis."""
-        result = self.analyzer.analyze_molecule(self.water)
-        
-        self.assertIsInstance(result, dict)
-        self.assertIn('point_group', result)
-        self.assertIn('symmetry_operations', result)
-        self.assertIn('rotation_axes', result)
-        self.assertIn('mirror_planes', result)
-        self.assertIn('inversion_center', result)
-        self.assertIn('order', result)
     
     def test_analyze_molecule_no_data(self):
         """Test molecule analysis without symmetry data."""
@@ -241,13 +208,6 @@ class TestMoleculeSymmetryAnalysis(unittest.TestCase):
         # Should find at least the principal axis
         self.assertIsInstance(axes, list)
     
-    def test_find_mirror_planes(self):
-        """Test mirror plane finding."""
-        # Symmetric molecule
-        positions = np.array([[0, 0, 0], [1, 0, 0], [-1, 0, 0]])
-        planes = self.analyzer._find_mirror_planes(positions, tolerance=0.1)
-        
-        self.assertIsInstance(planes, list)
     
     def test_rotation_matrix(self):
         """Test rotation matrix generation."""

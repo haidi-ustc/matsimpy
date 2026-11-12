@@ -35,7 +35,7 @@ def _get_version() -> str:
 
         return version("MatSimPy")
     except PackageNotFoundError:  # pragma: no cover - source tree without install metadata
-        return "0.8.0"
+        return "0.9.0"
 
 
 __version__ = _get_version()

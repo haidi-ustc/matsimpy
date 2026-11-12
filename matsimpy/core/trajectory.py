@@ -1,11 +1,14 @@
-"""An immutable sequence of crystal structure frames."""
+"""An immutable sequence of crystal structure frames.
 
-from copy import deepcopy
+Per-frame data (energies, forces, ...) lives in each frame's ``metadata``;
+the separate ``frame_properties`` list of 0.8.x was removed in 0.9.0.
+"""
+
 from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple, Union, overload
 
 import numpy as np
 
-from monty.json import MSONable, MontyDecoder, jsanitize
+from monty.json import MSONable, MontyDecoder
 
 from .crystal import Crystal
 
@@ -17,7 +20,6 @@ class Trajectory(MSONable):
         self,
         frames: Iterable[Crystal],
         constant_lattice: bool = False,
-        frame_properties: Optional[Sequence[dict]] = None,
         charge: Optional[float] = None,
         spin: Optional[float] = None,
         spin_multiplicity: Optional[float] = None,
@@ -32,25 +34,48 @@ class Trajectory(MSONable):
                 raise ValueError("constant_lattice=True requires identical lattices")
         self._frames: Tuple[Crystal, ...] = copied
         self.constant_lattice = bool(constant_lattice)
-        properties = frame_properties if frame_properties is not None else [{} for _ in copied]
-        if len(properties) != len(copied):
-            raise ValueError("frame_properties must match the number of frames")
-        self.frame_properties = tuple(deepcopy(value) for value in properties)
         self.charge = charge
         self.spin = spin
         self.spin_multiplicity = spin_multiplicity
         self.time_step = time_step
         self.coords_are_displacement = bool(coords_are_displacement)
-        self.base_positions = None if base_positions is None else np.asarray(base_positions, dtype=float).copy()
+        if base_positions is None:
+            self._base_positions = None
+        else:
+            self._base_positions = np.array(base_positions, dtype=float, copy=True)
+            self._base_positions.flags.writeable = False
+        self._frozen = True
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Trajectory is an immutable value container: all state is fixed in
+        # __init__ (0.8.0 allowed e.g. ``traj.constant_lattice = True`` without
+        # re-validating the frames).
+        if self.__dict__.get("_frozen", False):
+            raise AttributeError(
+                f"Trajectory is immutable; cannot set {name!r}. Build a new Trajectory."
+            )
+        object.__setattr__(self, name, value)
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        base = self.__dict__.get("_base_positions")
+        if isinstance(base, np.ndarray):
+            base.flags.writeable = False
+
+    @property
+    def base_positions(self) -> Optional[np.ndarray]:
+        """Read-only view of the displacement reference positions, or ``None``."""
+        if self._base_positions is None:
+            return None
+        view = self._base_positions.view()
+        view.flags.writeable = False
+        return view
 
     @staticmethod
     def _copy_frame(frame: Crystal) -> Crystal:
         if not isinstance(frame, Crystal):
             raise TypeError("trajectory frames must be Crystal objects")
-        copied = frame.copy()
-        if hasattr(frame, "_extra_properties"):
-            copied._extra_properties = deepcopy(frame._extra_properties)
-        return copied
+        return frame.copy()  # metadata (e.g. per-frame forces) travels with the frame
 
     @classmethod
     def from_structures(
@@ -87,7 +112,6 @@ class Trajectory(MSONable):
         return self.__class__(
             (self._frames[value] for value in indices),
             constant_lattice=self.constant_lattice,
-            frame_properties=[self.frame_properties[value] for value in indices],
             charge=self.charge,
             spin=self.spin,
             spin_multiplicity=self.spin_multiplicity,
@@ -99,25 +123,19 @@ class Trajectory(MSONable):
         )
 
     def __iter__(self) -> Iterator[Crystal]:
-        return iter(self._frames)
+        # Yield independent copies, consistent with __getitem__; handing out the
+        # internal frames let callers mutate the trajectory through them.
+        return (self._copy_frame(frame) for frame in self._frames)
 
     def as_dict(self) -> Dict[str, Any]:
         return {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "frames": [
-                {
-                    "structure": frame.as_dict(),
-                    "extra_properties": jsanitize(
-                        getattr(frame, "_extra_properties", None),
-                        strict=True,
-                        recursive_msonable=True,
-                    ),
-                }
+                {"structure": frame.as_dict()}  # frame metadata is inside as_dict()
                 for frame in self._frames
             ],
             "constant_lattice": self.constant_lattice,
-            "frame_properties": jsanitize(self.frame_properties, strict=True),
             "charge": self.charge,
             "spin": self.spin,
             "spin_multiplicity": self.spin_multiplicity,
@@ -131,20 +149,22 @@ class Trajectory(MSONable):
         decoder = MontyDecoder()
         frames = []
         for item in d["frames"]:
-            # Accept the original direct-frame representation as well as the
-            # metadata-preserving representation.
+            # Readers for older files: direct frames, and frames with a separate
+            # "extra_properties" block (<=0.8.6), which now becomes frame metadata.
             if isinstance(item, dict) and "structure" in item:
                 frame = decoder.process_decoded(item["structure"])
                 extras = decoder.process_decoded(item.get("extra_properties"))
-                if extras is not None:
-                    frame._extra_properties = extras
+                if extras:
+                    frame = frame.with_metadata(**extras)
             else:
                 frame = decoder.process_decoded(item)
             frames.append(frame)
+        # <=0.8.7 files kept per-frame dicts in a parallel "frame_properties" list.
+        legacy = decoder.process_decoded(d.get("frame_properties")) or []
+        frames = [f.with_metadata(**props) if props else f for f, props in zip(frames, legacy)] + frames[len(legacy):]
         return cls(
             frames,
             constant_lattice=d.get("constant_lattice", False),
-            frame_properties=decoder.process_decoded(d.get("frame_properties")),
             charge=d.get("charge"), spin=d.get("spin"),
             spin_multiplicity=d.get("spin_multiplicity"), time_step=d.get("time_step"),
             coords_are_displacement=d.get("coords_are_displacement", False),

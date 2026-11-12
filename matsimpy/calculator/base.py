@@ -1,344 +1,175 @@
-"""
-Base calculator class for MatSimPy.
+"""Calculator base classes.
 
-All calculators inherit from this base class and implement the abstract methods.
+A calculator maps a structure to an immutable :class:`Results`::
+
+    r = calc.compute(structure)      # the one core API (cached, LRU)
+    r.energy, r.forces, r.stress
+
+Calculators hold parameters and a result cache only; they keep no "current
+structure" and no mutable results (both removed in 0.9.0).
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, Union
+from collections import OrderedDict
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, Union
+
 import numpy as np
 from monty.json import MSONable
+
 from ..core import Crystal, Molecule
+from .results import Results, stress_to_matrix, stress_to_voigt
+
+StructureT = Union[Crystal, Molecule]
 
 
 class Calculator(ABC, MSONable):
-    """
-    Base class for all calculators.
+    """Base class: subclasses implement :meth:`_calculate`.
 
-    Calculators are objects that can compute properties (energy, forces, stress, etc.)
-    for Crystal or Molecule structures. They follow an ASE-inspired interface but
-    are adapted for MatSimPy's architecture.
-
-    Attributes:
-        parameters (dict): Calculator-specific parameters
-        results (dict): Storage for calculation results
-        structure (Crystal or Molecule): The structure being calculated
+    Results are cached keyed by the structure's exact fingerprint (species,
+    coordinates, lattice, PBC, site properties); the ``cache_size`` most
+    recently used structures are kept.
 
     Example:
-        >>> from matsimpy import Crystal, Lattice
-        >>> from matsimpy.calculator import LennardJones
-        >>>
-        >>> crystal = Crystal(['Ar'], [[0,0,0]], Lattice.cubic(5.0))
         >>> calc = LennardJones(sigma=3.4, epsilon=0.0104)
-        >>> crystal.calc = calc
-        >>> calc.calculate(crystal)
-        >>> energy = calc.get_potential_energy()
+        >>> r = calc.compute(crystal)
+        >>> calc.get_potential_energy(crystal) == r.energy
+        True
     """
 
-    def __init__(self, run: bool = True, **parameters):
-        """
-        Initialize calculator with parameters.
+    #: Number of structures whose results are kept (least recently used evicted).
+    cache_size: int = 8
 
-        Args:
-            run: If True (default), execute external code and parse output.
-                 If False, only write input files. Call read_results() later
-                 to parse output files manually.
-            **parameters: Calculator-specific parameters
-        """
+    def __init__(self, **parameters: Any) -> None:
         self.parameters = parameters.copy()
-        self.results: Dict[str, Any] = {}
-        self.structure: Optional[Union[Crystal, Molecule]] = None
-        self._calculation_performed = False
-        self.run = run
-        # Hash of the structure last passed to calculate().  Used by Structure
-        # to detect when the calculator's cached results are stale (i.e. the
-        # attached structure has changed since the last calculate() call).
-        self._last_structure_hash: Optional[int] = None
+        self._cache: "OrderedDict[int, Results]" = OrderedDict()
 
-    def set_parameters(self, **kwargs) -> None:
-        """
-        Set calculator parameters.
+    # -- the core API ----------------------------------------------------------
 
-        Args:
-            **kwargs: Parameters to set
-        """
-        self.parameters.update(kwargs)
-        # Clear results if parameters change
-        self.results.clear()
-        self._calculation_performed = False
-        self._last_structure_hash = None
+    @abstractmethod
+    def _calculate(self, structure: StructureT) -> Union[Results, Mapping[str, Any]]:
+        """Compute *structure*; return :class:`Results` or a raw ``{"energy": ...}`` dict."""
 
-    def get_parameters(self) -> Dict[str, Any]:
-        """
-        Get current calculator parameters.
-
-        Returns:
-            dict: Copy of current parameters
-        """
-        return self.parameters.copy()
-
-    def update_parameters(self, **kwargs) -> None:
-        """
-        Update specific parameters without clearing others.
-
-        Args:
-            **kwargs: Parameters to update
-        """
-        self.set_parameters(**kwargs)
-
-    def calculate(self, structure: Union[Crystal, Molecule]) -> None:
-        """
-        Perform calculation on the given structure.
-
-        For pure-Python calculators that override _compute() (e.g. LJ, MatterSim),
-        the legacy _compute() path is used directly.
-
-        For external-code calculators (VASP, Gaussian, LAMMPS), this writes input
-        files, optionally executes the external program, and parses output.
-
-        When run=True (default): write_input → _execute → _parse_output
-        When run=False: write_input only. User calls read_results() later.
-
-        Args:
-            structure: Crystal or Molecule structure to calculate
+    def compute(self, structure: StructureT) -> Results:
+        """Return the immutable :class:`Results` for *structure* (cached, LRU).
 
         Raises:
-            ValueError: If structure is not a valid Crystal or Molecule
+            TypeError: If *structure* is not a Crystal or Molecule.
         """
         if not isinstance(structure, (Crystal, Molecule)):
-            raise ValueError(
-                f"Calculator requires Crystal or Molecule, got {type(structure)}"
+            raise TypeError(
+                f"structure must be a Crystal or Molecule, got {type(structure).__name__}"
             )
+        cache = self.__dict__.setdefault("_cache", OrderedDict())
+        key = structure._structural_hash()
+        hit = cache.get(key)
+        if hit is not None:
+            cache.move_to_end(key)
+            return hit
+        raw = self._calculate(structure)
+        result = raw if isinstance(raw, Results) else Results.from_raw(raw)
+        cache[key] = result
+        while len(cache) > max(1, int(self.cache_size)):
+            cache.popitem(last=False)
+        return result
 
-        self.results.clear()
-        self.structure = structure
-        self._calculation_performed = False
-        # Record the structure identity before running so that callers can
-        # cheaply detect whether results are stale for a different structure.
-        self._last_structure_hash = structure._structural_hash()
+    def _invalidate(self) -> None:
+        """Drop every cached result (call whenever parameters or the model change)."""
+        self.__dict__.setdefault("_cache", OrderedDict()).clear()
 
-        # Detect which path to take:
-        # - Legacy: subclass overrides _compute() (pure-Python calculators)
-        # - Run-mode: subclass overrides write_input() (external-code calculators)
-        if type(self)._compute is not Calculator._compute:
-            # Legacy path: pure-Python calculators (LJ, MatterSim)
-            self._compute()
-        else:
-            # Run-mode path: external-code calculators
-            self.write_input(structure)
-            if self.run:
-                self._execute()
-                self._parse_output()
+    # -- parameters ------------------------------------------------------------
 
-        self._calculation_performed = True
+    def set_parameters(self, **kwargs: Any) -> None:
+        """Update parameters (clears all cached results)."""
+        self.parameters.update(kwargs)
+        self._invalidate()
 
-    def _compute(self) -> None:
-        """
-        Perform the actual calculation (legacy path for pure-Python calculators).
+    def get_parameters(self) -> Dict[str, Any]:
+        """Copy of the current parameters."""
+        return self.parameters.copy()
 
-        Pure-Python calculators (LJ, MatterSim) override this method to compute
-        energy, forces, and stress directly without file I/O or subprocess calls.
+    # -- convenience getters (all require the structure) -------------------------
 
-        External-code calculators (VASP, Gaussian, LAMMPS) should NOT override
-        this — they use write_input() / _execute() / _parse_output() instead.
-        """
-        # Default no-op: external-code calculators use the run-mode pipeline
-        pass
-
-    def write_input(self, structure: Union[Crystal, Molecule]) -> None:
-        """
-        Write input files for external code.
-
-        Default implementation does nothing. Subclasses for external-code
-        calculators (VASP, Gaussian, LAMMPS) should override this.
-
-        Args:
-            structure: Crystal or Molecule to write inputs for
-        """
-        pass
-
-    def read_results(self) -> None:
-        """
-        Read and parse pre-existing output files.
-
-        Called by user after run=False calculate() and manual execution.
-        Calls _parse_output() internally; subclasses override _parse_output().
-        """
-        self._parse_output()
-        self._calculation_performed = True
-
-    def _execute(self) -> None:
-        """
-        Execute external code via subprocess.
-
-        Default implementation does nothing. Subclasses for external-code
-        calculators override this to run the relevant command.
-        """
-        pass
-
-    def _parse_output(self) -> None:
-        """
-        Parse output files produced by external code.
-
-        Default implementation does nothing. Subclasses override this
-        to parse output files and populate self.results.
-        """
-        pass
-
-    def get_potential_energy(self) -> float:
-        """
-        Get potential energy from calculation results.
-
-        Returns:
-            float: Potential energy in eV
-
-        Raises:
-            ValueError: If calculation has not been performed or energy not available
-        """
-        if not self._calculation_performed:
-            raise ValueError("Calculation not performed. Call calculate() first.")
-        if "energy" not in self.results:
+    def get_potential_energy(self, structure: StructureT) -> float:
+        """Potential energy (eV). Raises ValueError if the calculator gives none."""
+        energy = self.compute(structure).energy
+        if energy is None:
             raise ValueError("Energy not available in results.")
-        return self.results["energy"]
+        return energy
 
-    def get_forces(self) -> np.ndarray:
-        """
-        Get forces from calculation results.
-
-        Returns:
-            np.ndarray: Forces array of shape (N, 3) in eV/Å
-
-        Raises:
-            ValueError: If calculation has not been performed or forces not available
-        """
-        if not self._calculation_performed:
-            raise ValueError("Calculation not performed. Call calculate() first.")
-        if "forces" not in self.results:
+    def get_forces(self, structure: StructureT) -> np.ndarray:
+        """Forces (eV/Å), shape (N, 3), as a writable copy."""
+        forces = self.compute(structure).forces
+        if forces is None:
             raise ValueError("Forces not available in results.")
-        return np.array(self.results["forces"])
+        return forces.copy()
 
-    def get_stress(self, voigt: bool = False) -> np.ndarray:
-        """
-        Get stress tensor from calculation results.
-
-        Args:
-            voigt: If True, return Voigt notation [xx, yy, zz, yz, xz, xy].
-                   If False, return the full 3x3 tensor.
-
-        Returns:
-            np.ndarray: Stress tensor of shape (3, 3) or (6,) in eV/Å³
-
-        Raises:
-            ValueError: If calculation has not been performed or stress not available
-        """
-        if not self._calculation_performed:
-            raise ValueError("Calculation not performed. Call calculate() first.")
-        if "stress" not in self.results:
+    def get_stress(self, structure: StructureT, *, voigt: bool = False) -> np.ndarray:
+        """Stress (eV/Å³): 3x3, or Voigt [xx, yy, zz, yz, xz, xy] with ``voigt=True``."""
+        stress = self.compute(structure).stress
+        if stress is None:
             raise ValueError("Stress not available in results.")
-        stress = np.array(self.results["stress"])
-        if voigt:
-            if stress.shape == (6,):
-                return stress
-            if stress.shape != (3, 3):
-                raise ValueError(f"Stress must have shape (3, 3), got {stress.shape}")
-            return np.array(
-                [
-                    stress[0, 0],
-                    stress[1, 1],
-                    stress[2, 2],
-                    stress[1, 2],
-                    stress[0, 2],
-                    stress[0, 1],
-                ]
-            )
-        if stress.shape == (6,):
-            return np.array(
-                [
-                    [stress[0], stress[5], stress[4]],
-                    [stress[5], stress[1], stress[3]],
-                    [stress[4], stress[3], stress[2]],
-                ]
-            )
-        return stress
+        return stress_to_voigt(stress) if voigt else stress_to_matrix(stress)
 
-    def get_result(self, key: str) -> Any:
-        """
-        Get a specific result by key.
-
-        Args:
-            key: Result key (e.g., 'energy', 'forces', 'stress')
-
-        Returns:
-            Result value
-
-        Raises:
-            ValueError: If key not found in results
-        """
-        if key not in self.results:
-            raise ValueError(
-                f"Result '{key}' not available. Available: {list(self.results.keys())}"
-            )
-        return self.results[key]
+    # -- serialization (parameters only; results are never serialized) ----------
 
     def as_dict(self) -> Dict[str, Any]:
-        """
-        Serialize calculator to dictionary (MSONable).
-
-        Returns:
-            Dictionary representation of the calculator
-        """
-        d = {
+        return {
             "@module": self.__class__.__module__,
             "@class": self.__class__.__name__,
             "parameters": self.parameters.copy(),
         }
-        # Only include results if calculation has been performed
-        if self._calculation_performed and self.results:
-            # Convert numpy arrays to lists for JSON serialization
-            results_dict = {}
-            for key, value in self.results.items():
-                if isinstance(value, np.ndarray):
-                    results_dict[key] = value.tolist()
-                else:
-                    results_dict[key] = value
-            d["results"] = results_dict
-        return d
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Calculator":
-        """
-        Deserialize calculator from dictionary (MSONable).
-
-        Args:
-            d: Dictionary representation of the calculator
-
-        Returns:
-            Calculator instance
-        """
-        # Extract parameters
-        parameters = d.get("parameters", {})
-
-        # Create instance
-        calc = cls(**parameters)
-
-        # Restore results if present
-        if "results" in d:
-            # Convert lists back to numpy arrays
-            results = {}
-            for key, value in d["results"].items():
-                if isinstance(value, list):
-                    results[key] = np.array(value)
-                else:
-                    results[key] = value
-            calc.results = results
-            calc._calculation_performed = True
-
-        return calc
+        return cls(**d.get("parameters", {}))
 
     def __repr__(self) -> str:
-        """String representation of calculator."""
-        params_str = ", ".join(f"{k}={v}" for k, v in self.parameters.items())
-        return f"{self.__class__.__name__}({params_str})"
+        params = ", ".join(f"{k}={v}" for k, v in self.parameters.items())
+        return f"{self.__class__.__name__}({params})"
 
 
-__all__ = ["Calculator"]
+class FileIOCalculator(Calculator):
+    """Calculator that drives an external program through files.
+
+    ``compute(structure)`` = :meth:`write_input` → :meth:`_execute` →
+    :meth:`read_results`.  For offline work call the two file steps directly::
+
+        calc.write_input(structure, "run1")   # inputs only, nothing executed
+        ...                                    # run the program yourself
+        r = calc.read_results("run1")          # -> Results
+    """
+
+    def __init__(self, directory: Union[str, Path], **parameters: Any) -> None:
+        # Every constructor argument lives in ``parameters`` so that
+        # ``from_dict(as_dict())`` rebuilds the same calculator.
+        super().__init__(directory=str(directory), **parameters)
+
+    @property
+    def directory(self) -> Path:
+        return Path(self.parameters["directory"])
+
+    def _dir(self, directory: Optional[Union[str, Path]]) -> Path:
+        path = self.directory if directory is None else Path(directory)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @abstractmethod
+    def write_input(self, structure: StructureT, directory: Optional[Union[str, Path]] = None) -> Path:
+        """Write the program's input files into *directory* (default: ``self.directory``)."""
+
+    @abstractmethod
+    def read_results(self, directory: Optional[Union[str, Path]] = None) -> Results:
+        """Parse the program's output files in *directory* into :class:`Results`."""
+
+    @abstractmethod
+    def _execute(self, directory: Path) -> None:
+        """Run the external program in *directory*."""
+
+    def _calculate(self, structure: StructureT) -> Results:
+        directory = self.write_input(structure)
+        self._execute(directory)
+        return self.read_results(directory)
+
+
+__all__ = ["Calculator", "FileIOCalculator"]

@@ -1,22 +1,21 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "MatSimPy"
-version = "0.8.0"
+version = "0.9.0"
 description = "A package for materials simulation and analysis"
 readme = "README.md"
-requires-python = ">=3.9"
-license = {file = "LICENSE"}
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "haidi wang", email = "haidi@hfut.edu.cn"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,6 +29,11 @@ dependencies = [
     "monty",
     "tabulate",
     "pyyaml",
+    # imported at module import time by matsimpy.calculator.vasp.{inputs,outputs}
+    "orjson",
+    # space-group services are needed by builders and VASP k-point generation
+    # (0.8.1 listed it only under the 'analysis' extra)
+    "spglib",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +66,10 @@ parity = [
     "pymatgen==2025.6.14",
     "spglib",
 ]
+lammps = [
+    "pandas",
+    "ruamel.yaml",
+]
 ai = [
     "typer",
     "requests",
@@ -84,6 +92,8 @@ all = [
     "pyxtal>=1.0.0",
     "rdkit",
     "spglib",
+    "pandas",
+    "ruamel.yaml",
     "typer",
     "requests",
     "prompt-toolkit>=3.0",
@@ -102,6 +112,10 @@ packages = { find = {} }
 # Include JSON data files
 "matsimpy.core" = ["periodic_table.json"]
 "matsimpy.symmetry" = ["*.json", "*.yaml", "*.yml"]
+# Runtime data read via MODULE_DIR at import time (0.8.0 sdist omitted these,
+# so `import matsimpy.calculator.vasp` raised FileNotFoundError when installed)
+"matsimpy.calculator.vasp" = ["*.json", "*.json.bz2", "*.yaml"]
+"matsimpy.calculator.lammps" = ["*.yaml", "templates/*"]
 # Include test data files
 "tests" = ["POSCAR-cart.vasp", "POSCAR-frac.vasp"]
 
@@ -111,7 +125,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
-    "-v",
     "--strict-markers",
     "--tb=short",
 ]

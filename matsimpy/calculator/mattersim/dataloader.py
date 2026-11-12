@@ -88,7 +88,7 @@ class MatSimPyGraphConvertor:
         if isinstance(structure, Crystal):
             # Crystal: use actual cell and PBC
             positions = np.array(structure.cart_positions, dtype=np.float64)
-            cell = np.array(structure.lattice.lattice_vectors, dtype=np.float64)
+            cell = np.array(structure.lattice.matrix, dtype=np.float64)
             pbc = np.array(structure.pbc, dtype=bool)
 
             # Validate cell

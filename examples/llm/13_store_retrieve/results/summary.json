@@ -1,7 +1,0 @@
-{
-  "scenario": "13_store_retrieve",
-  "runs": 3,
-  "deterministic_pass_rate": 1.0,
-  "judge_pass_rate": 1.0,
-  "stable": true
-}

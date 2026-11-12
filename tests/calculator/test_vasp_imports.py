@@ -40,8 +40,8 @@ class TestVaspImports:
             incar={"ENCUT": 300, "ISMEAR": -5},
             kpoints=[1, 1, 1],
         )
-        assert calc.incar_params["ENCUT"] == 300
-        assert calc.kpoints_grid == [1, 1, 1]
+        assert calc.parameters["incar"]["ENCUT"] == 300
+        assert calc.parameters["kpoints"] == [1, 1, 1]
 
 
 class TestGaussianImports:
@@ -55,7 +55,7 @@ class TestGaussianImports:
             directory="/tmp/g09_test",
             route="# B3LYP/6-31G(d)",
         )
-        assert "B3LYP" in calc.route
+        assert "B3LYP" in calc.parameters["route"]
 
 
 class TestLammpsImports:
@@ -73,4 +73,4 @@ class TestLammpsImports:
             directory="/tmp/lammps_test",
             pair_style="lj/cut 10.0",
         )
-        assert "lj/cut" in calc.pair_style
+        assert "lj/cut" in calc.parameters["pair_style"]

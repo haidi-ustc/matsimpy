@@ -78,8 +78,8 @@ def build_nanotube(
 
     # Extract 2D lattice vectors from the base structure
     lattice_2d = base_2d.lattice
-    a1_3d = lattice_2d.lattice_vectors[0]
-    a2_3d = lattice_2d.lattice_vectors[1]
+    a1_3d = lattice_2d.matrix[0]
+    a2_3d = lattice_2d.matrix[1]
 
     # Work with 2D projections (xy plane)
     a1 = a1_3d[:2]

@@ -40,7 +40,7 @@ from monty.serialization import dumpfn, loadfn
 from tabulate import tabulate
 
 from matsimpy.core import Element, Lattice, Crystal
-from matsimpy.calculator.utils import clean_lines, str_delimited
+from matsimpy.calculator.utils import clean_lines, site_property_column, str_delimited
 from matsimpy.electronic_structure import Magmom
 from matsimpy.symmetry import SpacegroupAnalyzer
 
@@ -164,17 +164,27 @@ class Poscar(MSONable):
 
         site_properties: dict[str, Any] = {}
 
+        # pymatgen semantics: per-site data already on the structure is used when
+        # not passed explicitly (0.8.1 silently dropped e.g. a slab's
+        # selective_dynamics when the input sets / VaspCalculator wrote POSCAR).
+        if selective_dynamics is None:
+            selective_dynamics = site_property_column(structure, "selective_dynamics")
+        if velocities is None:
+            velocities = site_property_column(structure, "velocities")
+        if predictor_corrector is None:
+            predictor_corrector = site_property_column(structure, "predictor_corrector")
+
         if selective_dynamics is not None:
             selective_dynamics = np.asarray(selective_dynamics)
             if not selective_dynamics.all():
                 site_properties["selective_dynamics"] = selective_dynamics
 
-        if velocities:
+        if velocities is not None:
             velocities = np.asarray(velocities)
             if velocities.any():
                 site_properties["velocities"] = velocities
 
-        if predictor_corrector:
+        if predictor_corrector is not None:
             predictor_corrector = np.asarray(predictor_corrector)
             if predictor_corrector.any():
                 site_properties["predictor_corrector"] = predictor_corrector
@@ -182,18 +192,13 @@ class Poscar(MSONable):
         # Build site_properties list for Crystal constructor if any exist
         if site_properties:
             n_sites = len(structure)
-            sp_list = [{} for _ in range(n_sites)]
+            # Keep the structure's other per-site data (e.g. magmom); 0.8.1
+            # rebuilt the Crystal with only the POSCAR keys and dropped the rest.
+            sp_list = [dict(p) for p in structure.site_properties] or [{} for _ in range(n_sites)]
             for key, val_array in site_properties.items():
                 for i in range(n_sites):
                     sp_list[i][key] = val_array[i]
-            self.structure = Crystal(
-                list(structure.species),
-                structure.cart_positions.tolist(),
-                structure.lattice,
-                pbc=structure.pbc,
-                coords_are_cartesian=True,
-                site_properties=sp_list,
-            )
+            self.structure = structure.with_site_properties(sp_list)
         else:
             self.structure = structure.copy()
 
@@ -205,17 +210,23 @@ class Poscar(MSONable):
         if predictor_corrector_preamble:
             self._extra_properties["predictor_corrector_preamble"] = predictor_corrector_preamble
 
-        if lattice_velocities and np.any(lattice_velocities):
+        if lattice_velocities is not None and np.any(lattice_velocities):
             self._extra_properties["lattice_velocities"] = np.asarray(lattice_velocities)
 
         self.true_names: bool = true_names
         self.comment: str = structure.formula if comment is None else comment
         self.temperature: float = -1.0
 
-        # Backing fields for settable properties
-        self._velocities: ArrayLike | None = velocities
-        self._selective_dynamics: ArrayLike | None = selective_dynamics
-        self._predictor_corrector: ArrayLike | None = predictor_corrector
+        # Backing fields for settable properties, read back from the (possibly
+        # sorted) structure so they stay aligned with the atom order; 0.8.1 kept
+        # the pre-sort arrays when sort_structure=True.
+        self._velocities: ArrayLike | None = self._column("velocities")
+        self._selective_dynamics: ArrayLike | None = self._column("selective_dynamics")
+        self._predictor_corrector: ArrayLike | None = self._column("predictor_corrector")
+
+    def _column(self, key: str) -> np.ndarray | None:
+        values = site_property_column(self.structure, key)
+        return None if values is None else np.asarray(values)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in {"selective_dynamics", "velocities", "predictor_corrector"} and value is not None and len(value) > 0:
@@ -691,7 +702,7 @@ class Poscar(MSONable):
             lines.append(" ".join(self.site_symbols))
         lines.append(" ".join(map(str, self.natoms)))
 
-        if self.selective_dynamics:
+        if self.selective_dynamics is not None:
             lines.append("Selective dynamics")
 
         lines.append("direct" if direct else "cartesian")
@@ -718,7 +729,7 @@ class Poscar(MSONable):
                     stacklevel=2,
                 )
 
-        if self.velocities:
+        if self.velocities is not None and len(self.velocities) > 0:
             try:
                 lines.append("")
                 lines.extend(" ".join(format_str.format(val) for val in velo) for velo in self.velocities)
@@ -729,7 +740,7 @@ class Poscar(MSONable):
                     stacklevel=2,
                 )
 
-        if self.predictor_corrector:
+        if self.predictor_corrector is not None and len(self.predictor_corrector) > 0:
             lines.append("")
             if self.predictor_corrector_preamble:
                 lines.append(self.predictor_corrector_preamble)
@@ -822,12 +833,17 @@ class Poscar(MSONable):
         velocities *= scale * 1e-5  # these are in A/fs
 
         self.temperature = temperature
-        self.structure.site_properties.pop("selective_dynamics", None)
-        self.structure.site_properties.pop("predictor_corrector", None)
-
-        # Set as list[list] to be consistent with the other
-        # initializations
-        self.structure.add_site_property("velocities", velocities.tolist())
+        # Structures are immutable: rebuild the per-site properties instead of the
+        # pymatgen in-place pop()/add_site_property() calls (which crashed here).
+        props = []
+        for site_props, velo in zip(self.structure.site_properties or [{}] * len(self.structure), velocities):
+            site_props = {k: v for k, v in site_props.items() if k not in ("selective_dynamics", "predictor_corrector")}
+            site_props["velocities"] = velo.tolist()  # list[list] like the other initialisations
+            props.append(site_props)
+        self.structure = self.structure.with_site_properties(props)
+        self._selective_dynamics = None
+        self._predictor_corrector = None
+        self._velocities = velocities
 
 
 class BadPoscarWarning(UserWarning):
@@ -2636,7 +2652,7 @@ class PotcarSingle:
         potcar_stats_1: dict,
         potcar_stats_2: dict,
         tolerance: float = 1.0e-6,
-        check_potcar_fields: Sequence[str] = ["header", "data"],
+        check_potcar_fields: Sequence[str] = ("header", "data"),
     ) -> bool:
         """
         Compare PotcarSingle._summary_stats to assess if they are the same within a tolerance.

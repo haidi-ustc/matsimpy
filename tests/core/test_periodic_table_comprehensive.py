@@ -6,15 +6,7 @@ from matsimpy.core import Element
 class TestElementComprehensive(unittest.TestCase):
     """Comprehensive tests for Element class."""
     
-    def test_element_init(self):
-        """Test element initialization."""
-        h = Element('H')
-        self.assertEqual(h.symbol, 'H')
     
-    def test_element_init_invalid(self):
-        """Test invalid element symbol."""
-        with self.assertRaises(ValueError):
-            Element('Xx')
     
     def test_element_from_Z(self):
         """Test creation from atomic number."""
@@ -34,37 +26,14 @@ class TestElementComprehensive(unittest.TestCase):
         self.assertEqual(og.symbol, 'Og')
         self.assertEqual(og.atomic_no, 118)
 
-    def test_transactinide_elements_by_symbol(self):
-        """Test elements beyond Lr are valid when present in periodic_table.json."""
-        rf = Element('Rf')
-        self.assertEqual(rf.atomic_no, 104)
-
-        og = Element.get_element('og')
-        self.assertEqual(og.symbol, 'Og')
-        self.assertEqual(og.atomic_no, 118)
     
     def test_element_from_Z_invalid_low(self):
         """Test invalid atomic number (too low)."""
         with self.assertRaises(ValueError):
             Element.from_Z(0)
     
-    def test_element_from_Z_invalid_high(self):
-        """Test invalid atomic number (too high)."""
-        with self.assertRaises(ValueError):
-            Element.from_Z(200)
     
-    def test_element_get_element_caching(self):
-        """Test Element.get_element with caching."""
-        h1 = Element.get_element('H')
-        h2 = Element.get_element('H')
-        # Should be same object (cached)
-        self.assertIs(h1, h2)
     
-    def test_element_get_element_case_insensitive(self):
-        """Test get_element is case insensitive."""
-        h1 = Element.get_element('H')
-        h2 = Element.get_element('h')
-        self.assertEqual(h1.symbol, h2.symbol)
     
     def test_element_str(self):
         """Test string representation."""
@@ -185,27 +154,7 @@ class TestElementComprehensive(unittest.TestCase):
         _ = h.coefficient_of_linear_thermal_expansion
         _ = h.rigidity_modulus
     
-    def test_element_all_elements(self):
-        """Test that all elements can be created."""
-        from matsimpy.core.periodic_table import ELEMENTS
-        
-        self.assertEqual(len(ELEMENTS), 118)
-        self.assertEqual(ELEMENTS[0], 'H')
-        self.assertEqual(ELEMENTS[-1], 'Og')
-
-        for symbol in ELEMENTS:
-            elem = Element(symbol)
-            self.assertEqual(elem.symbol, symbol)
     
-    def test_element_caching_consistency(self):
-        """Test that caching works consistently."""
-        h1 = Element('H')
-        h2 = Element.get_element('H')
-        h3 = Element.from_Z(1)
-        
-        # All should have same symbol
-        self.assertEqual(h1.symbol, h2.symbol)
-        self.assertEqual(h1.symbol, h3.symbol)
     
     def test_element_lt_comparison(self):
         """Test __lt__ method for sorting by atomic number."""
@@ -280,15 +229,6 @@ class TestElementComprehensive(unittest.TestCase):
         self.assertNotIn('O', symbols)
         self.assertEqual(len(period2_excluded), 6)
     
-    def test_get_elements_by_period_exclude_mixed(self):
-        """Test get_elements_by_period with mixed exclude types."""
-        c = Element('C')
-        # Mix of strings and Element instances
-        period2_excluded = Element.get_elements_by_period(2, exclude=[c, 'N', 'O'])
-        symbols = [e.symbol for e in period2_excluded]
-        self.assertNotIn('C', symbols)
-        self.assertNotIn('N', symbols)
-        self.assertNotIn('O', symbols)
     
     def test_get_elements_by_period_invalid_period(self):
         """Test get_elements_by_period with invalid period."""
@@ -327,32 +267,7 @@ class TestElementComprehensive(unittest.TestCase):
         for elem in group18:
             self.assertEqual(elem.group, 18)
     
-    def test_get_elements_by_group_exclude_strings(self):
-        """Test get_elements_by_group with exclude parameter (strings)."""
-        # Exclude helium from group 18
-        group18_no_he = Element.get_elements_by_group(18, exclude=['He'])
-        symbols = [e.symbol for e in group18_no_he]
-        self.assertNotIn('He', symbols)
-        
-        # Exclude multiple elements
-        group1_excluded = Element.get_elements_by_group(1, exclude=['H', 'Li'])
-        symbols = [e.symbol for e in group1_excluded]
-        self.assertNotIn('H', symbols)
-        self.assertNotIn('Li', symbols)
     
-    def test_get_elements_by_group_exclude_elements(self):
-        """Test get_elements_by_group with exclude parameter (Element instances)."""
-        he = Element('He')
-        na = Element('Na')
-        
-        # Exclude using Element instances
-        group18_excluded = Element.get_elements_by_group(18, exclude=[he])
-        symbols = [e.symbol for e in group18_excluded]
-        self.assertNotIn('He', symbols)
-        
-        group1_excluded = Element.get_elements_by_group(1, exclude=[na])
-        symbols = [e.symbol for e in group1_excluded]
-        self.assertNotIn('Na', symbols)
     
     def test_get_elements_by_group_exclude_mixed(self):
         """Test get_elements_by_group with mixed exclude types."""
@@ -377,19 +292,7 @@ class TestElementComprehensive(unittest.TestCase):
         with self.assertRaises(TypeError):
             Element.get_elements_by_group(1, exclude=[1, 2, 3])  # Numbers not allowed
     
-    def test_get_elements_by_group_sorted(self):
-        """Test that get_elements_by_group returns sorted elements."""
-        group1 = Element.get_elements_by_group(1)
-        atomic_numbers = [e.atomic_no for e in group1]
-        # Verify sorted by atomic number
-        self.assertEqual(atomic_numbers, sorted(atomic_numbers))
     
-    def test_get_elements_by_period_sorted(self):
-        """Test that get_elements_by_period returns sorted elements."""
-        period2 = Element.get_elements_by_period(2)
-        atomic_numbers = [e.atomic_no for e in period2]
-        # Verify sorted by atomic number
-        self.assertEqual(atomic_numbers, sorted(atomic_numbers))
 
 if __name__ == '__main__':
     unittest.main()

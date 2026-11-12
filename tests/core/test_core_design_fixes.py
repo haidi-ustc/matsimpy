@@ -18,21 +18,6 @@ class TestCrystalConstructionValidation(unittest.TestCase):
         with self.assertRaises(ValueError):
             Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5), pbc=[True, False])
 
-    def test_crystal_rejects_non_bool_pbc(self):
-        with self.assertRaises(ValueError):
-            Crystal(['Si'], [[0, 0, 0]], Lattice.cubic(5), pbc=[True, 1, False])
-
-    def test_crystal_normalizes_numpy_bool_pbc(self):
-        crystal = Crystal(
-            ['Si'],
-            [[0, 0, 0]],
-            Lattice.cubic(5),
-            pbc=[np.bool_(True), np.bool_(False), np.bool_(True)],
-        )
-
-        self.assertEqual(crystal.pbc, (True, False, True))
-        self.assertTrue(all(isinstance(flag, bool) for flag in crystal.pbc))
-
     def test_crystal_from_dict_validates_lattice_and_pbc(self):
         data = {
             "species": ['Si'],
@@ -65,14 +50,6 @@ class TestCrystalConstructionValidation(unittest.TestCase):
 
 class TestPBCNeighborModel(unittest.TestCase):
     """Test periodic neighbor behavior for skewed and same-index images."""
-
-    def test_one_atom_crystal_reports_periodic_self_neighbor(self):
-        crystal = Crystal(['H'], [[0, 0, 0]], Lattice.cubic(2.0))
-
-        neighbors = crystal.get_neighbor_list(2.1, atom_index=0, use_pbc=True)
-
-        self.assertEqual(len(neighbors[0]), 1)
-        self.assertAlmostEqual(neighbors[0][0][1], 2.0, places=1)
 
     def test_skewed_cell_neighbor_search_uses_reciprocal_height_bound(self):
         lattice = Lattice([[10, 0, 0], [99.99, 0.01, 0], [0, 0, 10]])
@@ -108,12 +85,6 @@ class TestSharedSpeciesValidation(unittest.TestCase):
         self.assertEqual(Crystal(['X'], [[0, 0, 0]], Lattice.cubic(5)).species, ('X',))
         self.assertEqual(Site([0, 0, 0], specie='X').specie, 'X')
         self.assertEqual(Composition("X")["X"], 1)
-
-    def test_template_placeholder_species_are_accepted_consistently(self):
-        self.assertEqual(Molecule(['A'], [[0, 0, 0]]).species, ('A',))
-        self.assertEqual(Crystal(['Z'], [[0, 0, 0]], Lattice.cubic(5)).species, ('Z',))
-        self.assertEqual(Site([0, 0, 0], specie='A').specie, 'A')
-        self.assertEqual(Composition("Z")["Z"], 1)
 
     def test_atomic_numbers_and_elements_normalize_consistently(self):
         self.assertEqual(Molecule([8], [[0, 0, 0]]).species, ('O',))

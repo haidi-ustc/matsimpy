@@ -16,6 +16,19 @@ if TYPE_CHECKING:
 Ha_to_eV = 27.211386245988  # Hartree to eV conversion
 
 
+def site_property_column(structure, key: str):
+    """Return ``[props[key] for each site]`` or ``None`` if any site lacks *key*.
+
+    Ported pymatgen code reads ``structure.site_properties[key]`` (a dict of
+    per-site lists); MatSimPy stores a tuple of per-site dicts.  Use this
+    adapter instead of ``site_properties.get(key)`` / ``[key]``.
+    """
+    props = structure.site_properties
+    if not props or any(key not in p for p in props):
+        return None
+    return [p[key] for p in props]
+
+
 def clean_lines(string_list: list[str], remove_empty_lines: bool = True) -> list[str]:
     """Strip whitespace and optionally remove empty lines from a list of strings.
 
@@ -80,6 +93,7 @@ def str_delimited(
 __all__ = [
     "Ha_to_eV",
     "clean_lines",
+    "site_property_column",
     "make_symmetric_matrix_from_upper_tri",
     "get_angle",
     "str_delimited",

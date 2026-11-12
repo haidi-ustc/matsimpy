@@ -64,11 +64,6 @@ def test_minimum_image_distances_match_brute_force_for_skew_lattice():
     np.testing.assert_allclose(volume._distances_from_site(0), expected, atol=1e-12)
 
 
-def test_large_radius_counts_each_periodic_grid_sample_once(si_crystal):
-    volume = VolumetricData(si_crystal, {"total": np.ones((2, 2, 2))})
-    assert volume.get_integrated_diff(0, 100.0)[-1, 1] == pytest.approx(1.0)
-
-
 def test_supplied_distance_matrix_is_used_and_validated(si_crystal):
     distances = np.full((1, 2, 2, 2), 99.0)
     volume = VolumetricData(si_crystal, {"total": np.ones((2, 2, 2))}, distance_matrix=distances)

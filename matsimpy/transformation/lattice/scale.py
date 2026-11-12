@@ -59,7 +59,7 @@ def scale_lattice(
     """
     scale_matrix = _validate_scale_factor(scale_factor)
 
-    new_lattice_vectors = np.dot(scale_matrix, crystal.lattice.lattice_vectors)
+    new_lattice_vectors = np.dot(scale_matrix, crystal.lattice.matrix)
     new_lattice = Lattice(new_lattice_vectors)
 
     # Fractional positions are invariant under uniform lattice scaling;

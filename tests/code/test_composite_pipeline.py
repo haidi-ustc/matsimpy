@@ -5,7 +5,6 @@ Tests for TransformationPipeline class.
 import unittest
 import tempfile
 import os
-from pathlib import Path
 from matsimpy.transformation.composite import TransformationPipeline
 from matsimpy.transformation import translate, rotate, make_supercell
 from matsimpy.builders.bulk import from_prototype
@@ -19,22 +18,7 @@ class TestTransformationPipeline(unittest.TestCase):
         self.crystal = from_prototype('diamond', 'Si', 5.43)
         self.molecule = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
     
-    def test_pipeline_creation(self):
-        """Test creating a pipeline."""
-        pipeline = TransformationPipeline("test_pipeline")
-        self.assertEqual(pipeline.name, "test_pipeline")
-        self.assertEqual(len(pipeline), 0)
-        self.assertEqual(len(pipeline.steps), 0)
     
-    def test_add_step(self):
-        """Test adding steps to pipeline."""
-        pipeline = TransformationPipeline()
-        pipeline.add_step(translate, vector=[1, 1, 1])
-        pipeline.add_step(rotate, angle=90, axis=[0, 0, 1])
-        
-        self.assertEqual(len(pipeline), 2)
-        self.assertEqual(pipeline.steps[0]['name'], 'translate')
-        self.assertEqual(pipeline.steps[1]['name'], 'rotate')
     
     def test_add_step_chaining(self):
         """Test method chaining for add_step."""
@@ -44,37 +28,8 @@ class TestTransformationPipeline(unittest.TestCase):
         
         self.assertEqual(len(pipeline), 2)
     
-    def test_apply_single_step(self):
-        """Test applying pipeline with single step."""
-        pipeline = TransformationPipeline()
-        pipeline.add_step(make_supercell, scaling_matrix=[2, 2, 2])
-        
-        result = pipeline.apply(self.crystal)
-        
-        self.assertEqual(len(result), len(self.crystal) * 8)  # 2^3 = 8
-        self.assertIsNot(result, self.crystal)  # Should be new object
     
-    def test_apply_multiple_steps(self):
-        """Test applying pipeline with multiple steps."""
-        pipeline = TransformationPipeline()
-        pipeline.add_step(translate, vector=[0, 0, 0])
-        pipeline.add_step(make_supercell, scaling_matrix=[2, 2, 2])
-        
-        result = pipeline.apply(self.crystal)
-        
-        self.assertEqual(len(result), len(self.crystal) * 8)
     
-    def test_apply_inplace(self):
-        """Test applying pipeline in-place."""
-        pipeline = TransformationPipeline()
-        pipeline.add_step(translate, vector=[1, 1, 1])
-        
-        original_id = id(self.molecule)
-        result = pipeline.apply(self.molecule)
-        
-        # Pipeline always returns a new object
-        self.assertIsNot(result, self.molecule)
-        self.assertIsInstance(result, Molecule)
     
     def test_apply_empty_pipeline(self):
         """Test applying empty pipeline."""

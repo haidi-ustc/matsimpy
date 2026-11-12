@@ -2,12 +2,12 @@
 
 **MatSimPy (Materials Simulation in Python)** is a Python library for building, transforming, analyzing, and storing crystal/molecular structures with a clean, ASE-like workflow.
 
-[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-core%20suite-brightgreen)](tests/)
 
-**Version**: v0.8.0
+**Version**: v0.9.0 (incompatible with 0.8.x — see [MIGRATION_0.9.md](MIGRATION_0.9.md))
 
 ## Table of Contents
 
@@ -126,7 +126,7 @@ These results use classes from `matsimpy.electronic_structure` and
 
 ## Quick Start
 
-Structures are **immutable by default** — all mutation methods return new objects without modifying the original.
+Structures are **immutable** — all mutation methods return new objects without modifying the original.
 
 ```python
 from matsimpy import Crystal, Molecule, Lattice, Composition
@@ -144,6 +144,12 @@ print(len(doped))        # 4 (new object)
 # Chained mutations (returns new objects each step)
 result = crystal.substitute(0, 'K').add_atom('H', [0.1, 0, 0])
 print(result.formula)    # KClH
+
+# Per-site properties (one value per atom) and structure-level metadata
+magnetic = crystal.with_site_property('magmom', [1.0, -1.0])
+print(magnetic.site_property('magmom'))       # [1.0, -1.0]
+tagged = magnetic.with_metadata(source='example')
+print(tagged.metadata['source'])              # example (read-only mapping)
 
 # Molecule (Cartesian)
 molecule = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
@@ -419,11 +425,30 @@ from matsimpy.calculator import LennardJones
 # Classical potential calculator
 crystal = Crystal(['Ar'], [[0,0,0]], Lattice.cubic(5.0))
 calc = LennardJones(sigma=3.4, epsilon=0.0104)
-crystal.calc = calc
 
-# Get energy and forces
-energy = crystal.get_potential_energy()
-forces = crystal.get_forces()
+# Immutable, typed results (energy in eV, forces in eV/Å, stress in eV/Å³)
+result = calc.compute(crystal)
+print(result.energy, result.forces.shape, result.stress_voigt)
+
+# Convenience getters share the same cache
+energy = calc.get_potential_energy(crystal)
+forces = calc.get_forces(crystal)
+```
+
+Results are cached on the calculator by the structure's exact fingerprint
+(LRU over the last `calc.cache_size` structures, default 8), so one calculator
+can be reused across many structures; structures never carry a calculator.
+
+External codes (VASP, Gaussian, LAMMPS) use the same `compute()`; the two file
+steps can also be called on their own (offline workflow):
+
+```python notest
+from matsimpy.calculator import VaspCalculator
+
+calc = VaspCalculator(directory="si_run", incar={"ENCUT": 400}, kpoints=[4, 4, 4])
+r = calc.compute(crystal)                  # write_input -> run VASP -> read_results
+calc.write_input(crystal, "si_offline")    # inputs only; run VASP yourself
+r = calc.read_results("si_offline")        # -> Results
 ```
 
 MatterSim needs the separate `mattersim` package and either a valid local model
@@ -434,8 +459,7 @@ by MatterSim and are not bundled with MatSimPy.
 from matsimpy.calculator import Mattersim
 
 ml_calc = Mattersim(model_path='model.pth', model_type='mace')
-crystal.calc = ml_calc
-energy = crystal.get_potential_energy()
+energy = ml_calc.get_potential_energy(crystal)
 ```
 
 ### Configuration
@@ -456,19 +480,19 @@ config.set('calculator.mattersim.default_device', 'cuda', save=True)
 
 ```python
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.symmetry import get_conventional_cell
+from matsimpy.symmetry import get_conventional_cell, get_symmetry_info
 
 # Create crystal structure
 crystal = from_prototype('diamond', 'Si', 5.43)
 
 # Get symmetry information
-sym_info = crystal.get_symmetry_info()
+sym_info = get_symmetry_info(crystal)
 print(f"Space group: {sym_info['space_group_symbol']}")  # Fd-3m
 print(f"Point group: {sym_info['point_group']}")        # m-3m
 print(f"Crystal system: {sym_info['crystal_system']}")  # Cubic
 
 # Get conventional cell
-conventional = crystal.get_conventional_cell()
+conventional = get_conventional_cell(crystal)
 print(f"Primitive: {len(crystal)} atoms")         # 2 atoms
 print(f"Conventional: {len(conventional)} atoms") # 8 atoms
 ```
@@ -533,7 +557,7 @@ matsimpy-ai -v -c "analyze bonds in nacl.cif"
 matsimpy-ai doctor --workspace ~/my-project
 ```
 
-```python
+```python notest
 from matsimpy.ai import Agent
 
 agent = Agent(workspace="project")
@@ -547,7 +571,9 @@ print(result.tools, result.artifacts, result.trace_id)
 explicit context and isolation. `review_evolution()`, `approve_skill()`,
 `reject_skill()`, and `rollback_skill()` expose the reviewed lifecycle. Lower
 level `AgentSession`, `AgentRuntime`, and `ReplController` remain public for
-custom clients. `AIEngine` is retained as a deprecated compatibility facade.
+custom clients; `ReplController.for_agent(agent)` builds the controller used by
+the `matsimpy-ai` terminal (`load_skill()` adds a skill's instructions to the
+context).
 
 Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
 

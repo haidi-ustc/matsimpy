@@ -60,9 +60,8 @@ try:
     print("-" * 70)
 
     calc = LennardJones(sigma=2.35, epsilon=0.01)
-    crystal.calc = calc
-    energy = crystal.get_potential_energy()
-    forces = crystal.get_forces()
+    energy = calc.get_potential_energy(crystal)
+    forces = calc.get_forces(crystal)
 
     results = {
         'energy': float(energy),

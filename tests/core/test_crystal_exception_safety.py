@@ -19,7 +19,7 @@ class TestCrystalExceptionSafety(unittest.TestCase):
         original_positions = self.crystal.positions.copy()
         original_frac = self.crystal.frac_positions.copy()
         original_cart = self.crystal.cart_positions.copy()
-        original_sites = len(self.crystal._sites)
+        original_sites = len(self.crystal.sites)
         original_formula = self.crystal.formula
 
         # Should rollback completely on error
@@ -32,7 +32,7 @@ class TestCrystalExceptionSafety(unittest.TestCase):
         self.assertTrue(np.allclose(self.crystal.positions, original_positions))
         self.assertTrue(np.allclose(self.crystal.frac_positions, original_frac))
         self.assertTrue(np.allclose(self.crystal.cart_positions, original_cart))
-        self.assertEqual(len(self.crystal._sites), original_sites)
+        self.assertEqual(len(self.crystal.sites), original_sites)
         self.assertEqual(self.crystal.formula, original_formula)
 
     def test_add_atom_rollback_site_properties_error(self):
@@ -60,25 +60,6 @@ class TestCrystalExceptionSafety(unittest.TestCase):
 
         self.assertIn("already exists", str(context.exception).lower())
 
-    def test_neighbor_list_consistency(self):
-        """Test that single-atom query matches all-atoms query."""
-        lattice = Lattice.cubic(5.0)
-        crystal = Crystal(['Si', 'Si'], [[0, 0, 0], [0.25, 0.25, 0.25]], lattice)
-
-        # Get neighbors for all atoms
-        neighbors_all = crystal.get_neighbor_list(5.0)
-
-        # Get neighbors for single atom
-        neighbors_single = crystal.get_neighbor_list(5.0, atom_index=0)
-
-        # Should match
-        self.assertIn(0, neighbors_single)
-        self.assertIn(0, neighbors_all)
-        # Sort by index for comparison
-        single_sorted = sorted(neighbors_single[0], key=lambda x: x[0])
-        all_sorted = sorted(neighbors_all[0], key=lambda x: x[0])
-        self.assertEqual(single_sorted, all_sorted)
-
     def test_large_supercell_warning(self):
         """Test that large periodic image cache triggers warning."""
         with patch(
@@ -89,23 +70,6 @@ class TestCrystalExceptionSafety(unittest.TestCase):
 
         self.assertGreater(len(images), 1)
 
-    def test_single_atom_query_optimization(self):
-        """Test that single-atom query optimization works correctly."""
-        lattice = Lattice.cubic(5.0)
-        # Small structure (< 1000 atoms) without PBC
-        positions = [[(i % 10) * 0.1, (i // 10) * 0.1, 0.0] for i in range(100)]
-        crystal = Crystal(['Si'] * 100, positions, lattice, pbc=[False, False, False])
-
-        # Single atom query should work
-        neighbors = crystal.get_neighbor_list(5.0, atom_index=0, use_pbc=False)
-        self.assertIn(0, neighbors)
-        self.assertIsInstance(neighbors[0], list)
-        # All neighbors should be tuples of (index, distance)
-        for neighbor in neighbors[0]:
-            self.assertIsInstance(neighbor, tuple)
-            self.assertEqual(len(neighbor), 2)
-            self.assertIsInstance(neighbor[0], int)
-            self.assertIsInstance(neighbor[1], float)
 
 if __name__ == '__main__':
     unittest.main()

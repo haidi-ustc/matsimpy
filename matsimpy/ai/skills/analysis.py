@@ -61,10 +61,13 @@ def _analyze_connectivity(path, cutoff=2.0):
 
 
 def _analyze_symmetry(path):
+    from matsimpy.core import Crystal
+    from matsimpy.symmetry import get_symmetry_info
+
     s = _load_structure(path)
-    if hasattr(s, "get_symmetry_info"):
-        return s.get_symmetry_info()
-    return {"error": "Symmetry analysis requires Crystal with spglib installed"}
+    if isinstance(s, Crystal):
+        return get_symmetry_info(s)
+    return {"error": "Symmetry analysis requires a Crystal"}
 
 
 def get_functions() -> list[FunctionDef]:

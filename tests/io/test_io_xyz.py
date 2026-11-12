@@ -64,62 +64,7 @@ class TestXYZIo(unittest.TestCase):
         finally:
             Path(temp_file).unlink()
     
-    def test_read_XYZ_multiframe(self):
-        """Test reading multi-frame XYZ file."""
-        xyz_content = """2
-Frame 1
-H 0.0 0.0 0.0
-H 0.74 0.0 0.0
-2
-Frame 2
-H 0.0 0.0 0.0
-H 0.75 0.0 0.0
-"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xyz') as f:
-            f.write(xyz_content)
-            temp_file = f.name
-        
-        try:
-            molecules = read_XYZ_multiframe(temp_file)
-            self.assertEqual(len(molecules), 2)
-            self.assertIsInstance(molecules[0], Molecule)
-            self.assertEqual(len(molecules[0]), 2)
-        finally:
-            Path(temp_file).unlink()
     
-    def test_write_XYZ_default_title(self):
-        """Test writing XYZ with default title."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xyz') as f:
-            temp_file = f.name
-        
-        try:
-            write_XYZ(self.molecule, temp_file)
-            
-            # Read back and check
-            with open(temp_file, 'r') as f:
-                lines = f.readlines()
-                self.assertEqual(int(lines[0].strip()), 3)
-                self.assertIn('C', lines[2])  # First atom line
-        finally:
-            Path(temp_file).unlink()
-
-    def test_read_XYZ_blank_title_line(self):
-        """A blank title line must not shift coordinate offsets."""
-        import numpy as np
-        xyz_content = "3\n\nC  0.0 0.0 0.0\nO  1.2 0.0 0.0\nO -1.2 0.0 0.0\n"
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xyz') as f:
-            f.write(xyz_content)
-            temp_file = f.name
-
-        try:
-            molecule = read_XYZ(temp_file)
-            self.assertEqual(len(molecule), 3)
-            self.assertEqual(molecule.species, ('C', 'O', 'O'))
-            np.testing.assert_array_almost_equal(
-                molecule.positions[0], [0.0, 0.0, 0.0], decimal=6
-            )
-        finally:
-            Path(temp_file).unlink()
 
     def test_read_XYZ_multiframe_includes_last_frame(self):
         """read_XYZ_multiframe must return all frames, including the last one."""

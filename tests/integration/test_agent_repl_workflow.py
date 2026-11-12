@@ -21,7 +21,7 @@ from matsimpy.ai import (
 )
 from matsimpy.ai.cli import _register_all_skills
 from matsimpy.ai.doctor import Doctor, render_diagnostics
-from matsimpy.ai.engine import AIEngine
+from matsimpy.ai import Agent, DeepSeekProvider
 from matsimpy.ai.repl import ReplController
 from matsimpy.ai.skill import SkillManager
 from matsimpy.ai.terminal import PromptToolkitTerminal
@@ -154,7 +154,7 @@ def test_restart_resume_and_retry_replace_failed_turn(tmp_path):
     assert restarted.session.turns[-1].parent_attempt_id == failed.attempt_id
 
 
-def test_engine_repl_discovers_precedence_and_activates_standard_skill(
+def test_agent_repl_discovers_precedence_and_activates_standard_skill(
     tmp_path, monkeypatch
 ):
     home = tmp_path / "home"
@@ -173,11 +173,11 @@ def test_engine_repl_discovers_precedence_and_activates_standard_skill(
         "WORKSPACE INSTRUCTIONS",
         "create_molecule unavailable_tool",
     )
-    engine = AIEngine(api_key="unused", workspace_path=str(workspace))
-    _register_all_skills(engine.skill_manager)
+    agent = Agent(workspace=str(workspace), provider=DeepSeekProvider("unused"))
+    _register_all_skills(agent.skill_manager)
 
-    listed = engine.repl_controller.execute("/skills shared-flow")
-    loaded = engine.repl_controller.execute("/load-skill shared-flow")
+    listed = ReplController.for_agent(agent).execute("/skills shared-flow")
+    loaded = ReplController.for_agent(agent).execute("/load-skill shared-flow")
 
     assert listed.ok
     assert listed.data["skill"]["source"] == "workspace"
@@ -185,7 +185,7 @@ def test_engine_repl_discovers_precedence_and_activates_standard_skill(
     assert listed.data["skill"]["allowed_tools"] == ["create_molecule"]
     assert loaded.ok
     assert loaded.data["skill"] == {"name": "shared-flow", "loaded": True}
-    assert engine.agent.session.context_messages[-1].content.endswith(
+    assert agent.session.context_messages[-1].content.endswith(
         "WORKSPACE INSTRUCTIONS"
     )
 
@@ -218,19 +218,19 @@ def test_public_workspace_switch_rebinds_standard_skill_roots(tmp_path, monkeypa
         "Second only",
         "SECOND ONLY",
     )
-    engine = AIEngine(api_key="unused", workspace_path=str(first))
-    _register_all_skills(engine.skill_manager)
-    assert engine.repl_controller.execute("/skills first-only").ok
+    agent = Agent(workspace=str(first), provider=DeepSeekProvider("unused"))
+    _register_all_skills(agent.skill_manager)
+    assert ReplController.for_agent(agent).execute("/skills first-only").ok
 
-    engine.agent.switch_workspace(second)
-    listed = engine.repl_controller.execute("/skills")
-    loaded = engine.repl_controller.execute("/load-skill shared-flow")
+    agent.switch_workspace(second)
+    listed = ReplController.for_agent(agent).execute("/skills")
+    loaded = ReplController.for_agent(agent).execute("/load-skill shared-flow")
 
     names = {item["name"] for item in listed.data["skills"]}
     assert "first-only" not in names
     assert "second-only" in names
     assert loaded.ok
-    assert engine.agent.session.context_messages[-1].content.endswith(
+    assert agent.session.context_messages[-1].content.endswith(
         "SECOND WORKSPACE INSTRUCTIONS"
     )
 
@@ -263,12 +263,12 @@ def test_interactive_completion_skips_legacy_and_invalid_user_skill_directories(
             ChatMessage.assistant("submitted"), [], "stop"
         ),
     )
-    engine = AIEngine(api_key="unused", workspace_path=str(workspace))
-    _register_all_skills(engine.skill_manager)
+    agent = Agent(workspace=str(workspace), provider=DeepSeekProvider("unused"))
+    _register_all_skills(agent.skill_manager)
     rendered = []
     with create_pipe_input() as pipe:
         terminal = PromptToolkitTerminal(
-            engine.repl_controller,
+            ReplController.for_agent(agent),
             history_path=tmp_path / "history",
             input=pipe,
             output=DummyOutput(),
@@ -279,10 +279,10 @@ def test_interactive_completion_skips_legacy_and_invalid_user_skill_directories(
         terminal.run()
 
     assert "submitted" in rendered
-    listed = engine.repl_controller.execute("/skills")
+    listed = ReplController.for_agent(agent).execute("/skills")
     assert listed.ok
     assert "valid-flow" in {item["name"] for item in listed.data["skills"]}
-    diagnostics = engine.agent.skill_library.diagnostics
+    diagnostics = agent.skill_library.diagnostics
     assert {(item.code, item.skill_name) for item in diagnostics} == {
         ("legacy-generated-root", "generated"),
         ("invalid-skill", "invalid-skill"),
@@ -301,13 +301,13 @@ def test_prompt_toolkit_plain_enter_submits_to_real_controller(tmp_path, monkeyp
         return ChatResponse(ChatMessage.assistant("submitted"), [], "stop")
 
     monkeypatch.setattr("matsimpy.ai.provider.DeepSeekProvider.chat", respond)
-    engine = AIEngine(api_key="unused", workspace_path=str(tmp_path / "workspace"))
-    _register_all_skills(engine.skill_manager)
+    agent = Agent(workspace=str(tmp_path / "workspace"), provider=DeepSeekProvider("unused"))
+    _register_all_skills(agent.skill_manager)
     rendered = []
     submitted_by_enter = Event()
     with create_pipe_input() as pipe:
         terminal = PromptToolkitTerminal(
-            engine.repl_controller,
+            ReplController.for_agent(agent),
             history_path=tmp_path / "history",
             input=pipe,
             output=DummyOutput(),
