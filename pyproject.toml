@@ -116,8 +116,6 @@ packages = { find = {} }
 # so `import matsimpy.calculator.vasp` raised FileNotFoundError when installed)
 "matsimpy.calculator.vasp" = ["*.json", "*.json.bz2", "*.yaml"]
 "matsimpy.calculator.lammps" = ["*.yaml", "templates/*"]
-# Include test data files
-"tests" = ["POSCAR-cart.vasp", "POSCAR-frac.vasp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
