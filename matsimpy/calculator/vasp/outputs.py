@@ -885,7 +885,9 @@ class Vasprun(MSONable):
             run_type = "HF"
         elif math.isclose(self.parameters.get("HFSCREEN", 0.30), 0.30):
             run_type = "HSE03"
-        elif math.isclose(self.parameters.get("HFSCREEN", 0.20), 0.20):
+        # HSE06 is run with HFSCREEN between 0.2 and 0.207 (both are common in
+        # practice); an exact match on 0.2 mislabeled 0.207 runs as PBE0.
+        elif 0.2 <= self.parameters.get("HFSCREEN", 0.20) <= 0.21:
             run_type = "HSE06"
         elif math.isclose(self.parameters.get("AEXX", 0.20), 0.20):
             run_type = "B3LYP"

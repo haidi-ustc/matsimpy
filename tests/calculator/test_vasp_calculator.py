@@ -37,11 +37,25 @@ class TestVaspCalculator:
 
         fixtures = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
         if not os.path.isfile(os.path.join(fixtures, "vasprun.xml")):
-            import pytest
             pytest.skip("repository asset not available: tests/calculator/fixtures/vasp")
+        import numpy as np
+        from matsimpy.calculator.vasp.outputs import Vasprun
+
         calc = VaspCalculator(directory=fixtures)
         r = calc.read_results()
-        assert r.energy is not None and r.forces is not None
+        last = Vasprun(os.path.join(fixtures, "vasprun.xml")).ionic_steps[-1]
+
+        assert r.energy == pytest.approx(-269.38319884, abs=1e-7)
+        # forces: final ionic step, as written (eV/A); 0.8.x returned None here
+        assert r.forces.shape == (25, 3)
+        np.testing.assert_array_equal(r.forces, np.asarray(last["forces"]))
+        # stress: kBar (pressure positive) -> eV/A^3 (tension positive)
+        kbar_to_ev_per_a3 = 0.1 / 160.21766208
+        assert r.stress.shape == (3, 3)
+        np.testing.assert_allclose(
+            r.stress, -np.asarray(last["stress"]) * kbar_to_ev_per_a3, rtol=1e-6
+        )
+        assert r.stress[2, 2] > 0  # raw zz = -1.159 kBar (tensile) -> positive
 
     def test_init_with_defaults(self):
         from matsimpy.calculator.vasp import VaspCalculator

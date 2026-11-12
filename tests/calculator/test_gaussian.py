@@ -152,6 +152,24 @@ class TestGaussianCalculator:
         assert r.energy == pytest.approx(-76.4089 * 27.211386245988)  # eV (0.8.x returned Hartree)
         assert r.extra["energy_hartree"] == -76.4089
 
+    def test_read_results_from_real_log_is_last_scf_energy_in_ev(self, tmp_path):
+        """A real multi-step log: the calculator reports the final SCF energy in eV,
+        consistent with the native GaussianOutput parser (which reports Hartree)."""
+        import shutil
+
+        from matsimpy.calculator.gaussian.calculator import GaussianCalculator
+        from matsimpy.calculator.gaussian.gaussian import GaussianOutput
+
+        source = os.path.join(FIXTURES_DIR, "methane.log")
+        shutil.copy(source, tmp_path / "output.log")
+        r = GaussianCalculator(directory=str(tmp_path)).read_results()
+
+        hartree = GaussianOutput(source).final_energy
+        assert hartree == pytest.approx(-39.9768775602)
+        assert r.extra["energy_hartree"] == pytest.approx(hartree)
+        assert r.energy == pytest.approx(hartree * 27.211386245988)
+        assert r.forces is None and r.stress is None
+
     def test_compute_attempts_execution(self, tmp_path):
         from matsimpy.calculator.gaussian.calculator import GaussianCalculator
 

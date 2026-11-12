@@ -195,6 +195,37 @@ class TestVasprun:
         assert vr.parameters is not None
         assert vr.parameters["NELM"] == 60
 
+    def test_run_type_detects_hse06_with_hfscreen_0207(self):
+        """The fixture is an HSE06 run with HFSCREEN=0.207 (not exactly 0.2).
+
+        An exact ``isclose(HFSCREEN, 0.2)`` check labelled it as
+        "PBEO or other Hybrid Functional".
+        """
+        from matsimpy.calculator.vasp.outputs import Vasprun
+
+        vr = Vasprun(os.path.join(FIXTURES_DIR, "vasprun.xml"))
+        assert vr.parameters["HFSCREEN"] == pytest.approx(0.207)
+        assert vr.run_type == "HSE06"
+
+    @pytest.mark.parametrize(
+        ("hfscreen", "expected"),
+        [
+            (0.2, "HSE06"),
+            (0.207, "HSE06"),
+            (0.21, "HSE06"),
+            (0.3, "HSE03"),
+            (0.25, "PBEO or other Hybrid Functional"),
+        ],
+    )
+    def test_run_type_hfscreen_ranges(self, hfscreen, expected):
+        import copy
+
+        from matsimpy.calculator.vasp.outputs import Vasprun
+
+        vr = copy.copy(Vasprun(os.path.join(FIXTURES_DIR, "vasprun.xml")))
+        vr.parameters = {**vr.parameters, "HFSCREEN": hfscreen}
+        assert vr.run_type == expected
+
     @pytest.mark.parametrize("parser_name", ["Vasprun", "BSVasprun"])
     def test_as_dict_uses_native_reciprocal_lattice(self, parser_name):
         """Both XML serializers must use MatSimPy's reciprocal-lattice API."""

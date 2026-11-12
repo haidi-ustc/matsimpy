@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- VASP: `Vasprun.run_type` reported HSE06 runs with `HFSCREEN=0.207` as
+  "PBEO or other Hybrid Functional", because 0.2 was matched exactly. Any `HFSCREEN`
+  from 0.2 to 0.21 is now HSE06. The label is stored in `ComputedEntry.parameters`.
+
+### Tests
+- Restored `tests/calculator/fixtures` (VASP and Gaussian outputs), which the 0.8.5–0.9.0
+  sdists did not include. 24 real-file tests that were skipped now run.
+- The VASP calculator test now checks real `vasprun.xml` values: energy, final-step forces,
+  and stress converted from kBar to eV/Å³ with tension positive. A Gaussian test reads a real
+  multi-step log and checks the final SCF energy in eV.
+
 ## 0.9.0 — 2026-11-12
 
 A deliberately **incompatible** refactor. Every removed or changed API, with its replacement, is
