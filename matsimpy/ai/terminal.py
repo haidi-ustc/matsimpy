@@ -1,243 +1,115 @@
-"""Interactive and dependency-free terminal frontends for the agent REPL."""
+"""Terminal front ends of the agent: plain ``input()``, or prompt_toolkit with history and completion."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from .repl import CommandResult, ReplController
+from .repl import ReplController
 
+__all__ = ["PlainTerminal", "PromptToolkitTerminal", "create_terminal", "format_event"]
 
-class TerminalFrontend(ABC):
-    """Terminal interface over a :class:`ReplController`."""
-
-    def __init__(self, controller: ReplController) -> None:
-        self.controller = controller
-
-    @abstractmethod
-    def run(self) -> None:
-        """Read and execute input until the user exits."""
+BANNER = "MatSimPy AI. Type a request, /help for commands, /quit to exit."
 
 
-class PlainTerminal(TerminalFrontend):
-    """Portable terminal requiring only the Python standard library."""
+def format_event(event: str, data: dict) -> str | None:
+    """One progress line for an agent event (``on_event``)."""
+    if event == "tool_call":
+        arguments = json.dumps(data["arguments"], ensure_ascii=False)
+        return f"  → {data['name']} {arguments if len(arguments) < 160 else arguments[:157] + '...'}"
+    if event == "tool_result" and not data["ok"]:
+        return f"  ✗ {data['name']}: {data['result'].get('error', '')[:200]}"
+    if event == "warning":
+        return f"  ! {data['message']}"
+    return None
+
+
+class PlainTerminal:
+    """Read requests and commands with ``input()``; needs only the standard library."""
 
     def __init__(
         self,
         controller: ReplController,
         *,
-        input_reader: Callable[[str], str] | None = None,
-        output_writer: Callable[[str], Any] | None = None,
+        input_reader: Callable[[str], str] = input,
+        output_writer: Callable[[str], Any] = print,
     ) -> None:
-        super().__init__(controller)
-        self._input = input_reader or input
-        self._output = output_writer or print
+        self.controller = controller
+        self.read = input_reader
+        self.write = output_writer
 
     def run(self) -> None:
-        self._output("MatSimPy AI — /skills lists skills, /quit exits")
+        self.write(BANNER)
         while True:
             try:
-                text = self._input("\n👤 › ").strip()
+                line = self.read("\n› ").strip()
             except EOFError:
-                self._output("Goodbye.")
+                self.write("Goodbye.")
                 return
             except KeyboardInterrupt:
-                self._output("Cancelled. Enter another request or /quit.")
+                self.write("(Ctrl+D or /quit exits)")
                 continue
-            if not text:
+            if not line:
                 continue
             try:
-                if self._execute(text):
+                if self.handle(line):
                     return
             except KeyboardInterrupt:
-                self._output("Cancelled current turn.")
-            except Exception as exc:
-                self._output(f"Error: {exc}")
+                self.write("Cancelled; the turn was discarded.")
 
-    def _execute(self, text: str) -> bool:
-        if text.startswith("/"):
-            result = self.controller.execute(text)
-            self.render_command(result)
-            return result.exit_requested
-        turn = self.controller.session.run(text)
-        self.render_response(turn.final_response)
+    def handle(self, line: str) -> bool:
+        """Run one line; returns True when the user asked to exit."""
+        if line.startswith("/"):
+            result = self.controller.execute(line)
+            self.write(result.text if result.ok else f"! {result.text}")
+            return result.exit
+        result = self.controller.agent.run(line)
+        if result.status == "error":
+            self.write(f"! {result.response}")
+        else:
+            self.render(result.response)
         return False
 
-    def render_response(self, response: str) -> None:
-        """Render an LLM response as safe plain text."""
-        self._output(response)
-
-    def render_command(self, result: CommandResult) -> None:
-        """Render the command's data (sessions, skills, ...) and its display text."""
-        text = format_command_result(result)
-        if text:
-            self._output(text)
+    def render(self, text: str) -> None:
+        self.write(text)
 
 
 class PromptToolkitTerminal(PlainTerminal):
-    """Enhanced terminal with history, multiline editing, and completion."""
+    """History, completion of commands, and Markdown output (with rich, if installed)."""
 
-    def __init__(
-        self,
-        controller: ReplController,
-        *,
-        history_path: str | Path | None = None,
-        output_writer: Callable[[str], Any] | None = None,
-        input: Any | None = None,
-        output: Any | None = None,
-    ) -> None:
-        # All optional imports deliberately remain inside construction.
+    def __init__(self, controller: ReplController, *, history_path: str | Path | None = None, **session_options):
         from prompt_toolkit import PromptSession
-        from prompt_toolkit.completion import Completer, Completion
+        from prompt_toolkit.completion import WordCompleter
         from prompt_toolkit.history import FileHistory
-        from prompt_toolkit.key_binding import KeyBindings
-
-        markdown_output = output_writer
-        if output_writer is None:
-            try:
-                from rich.console import Console
-                from rich.markdown import Markdown
-
-                console = Console(markup=False)
-                output_writer = console.print
-
-                def markdown_output(text: str) -> None:
-                    console.print(Markdown(text))
-            except ImportError:
-                output_writer = print
-                markdown_output = output_writer
-
-        terminal = self
-
-        class AgentCompleter(Completer):
-            def get_completions(self, document, complete_event):
-                word = document.get_word_before_cursor()
-                for candidate in terminal.completion_candidates(word):
-                    yield Completion(candidate, start_position=-len(word))
 
         path = Path(history_path or Path.home() / ".matsimpy" / "ai_history")
         path.parent.mkdir(parents=True, exist_ok=True)
-        bindings = KeyBindings()
-
-        @bindings.add("c-m", eager=True)
-        def _submit(event) -> None:
-            event.current_buffer.validate_and_handle()
-
-        @bindings.add("escape", "c-m", eager=True)
-        def _insert_newline(event) -> None:
-            event.current_buffer.insert_text("\n")
-
-        session_options = {
-            "history": FileHistory(str(path)),
-            "completer": AgentCompleter(),
-            "multiline": True,
-            "key_bindings": bindings,
-            "bottom_toolbar": self.bottom_toolbar,
-        }
-        if input is not None:
-            session_options["input"] = input
-        if output is not None:
-            session_options["output"] = output
-        self.prompt_session = PromptSession(**session_options)
-        super().__init__(
-            controller,
-            input_reader=lambda prompt: self.prompt_session.prompt(prompt),
-            output_writer=output_writer,
+        words = list(controller.command_names()) + [s.name for s in controller.agent.skills.discover()]
+        self.prompt_session = PromptSession(
+            history=FileHistory(str(path)),
+            completer=WordCompleter(words, sentence=True),
+            bottom_toolbar=lambda: f" session {controller.agent.session.id} | {controller.agent.provider.model} ",
+            **session_options,
         )
-        self._markdown_output = markdown_output or self._output
-
-    def render_response(self, response: str) -> None:
-        """Render an LLM response as Markdown when Rich is available."""
-        self._markdown_output(response)
-
-    def completion_candidates(self, prefix: str) -> tuple[str, ...]:
-        """Return slash-command and skill-name completion candidates."""
-        candidates: set[str] = set(self.controller.command_names())
-        library = getattr(self.controller, "skill_library", None)
-        if library is not None:
-            for skill in library.discover():
-                name = (
-                    skill.get("name")
-                    if isinstance(skill, dict)
-                    else getattr(skill, "name", None)
-                )
-                if name:
-                    candidates.add(str(name))
-        folded = prefix.casefold()
-        return tuple(
-            sorted(item for item in candidates if item.casefold().startswith(folded))
-        )
-
-    def bottom_toolbar(self) -> str:
-        """Show the active durable session without performing I/O."""
-        session_id = getattr(self.controller.session, "conversation_id", None)
-        return f" session {session_id or 'new'} | Enter submit | Esc+Enter newline | Ctrl+C cancel "
-
-
-def format_command_result(result: CommandResult) -> str:
-    """Plain-text rendering of a command's structured data plus its display hint."""
-    out: list[str] = []
-    if result.kind == "sessions":
-        for session in result.data["sessions"]:
-            out.append(
-                f"  {session['id']}: {session.get('source', 'unknown')} "
-                f"{session.get('workspace', '')}"
-            )
-    elif result.kind == "skills":
-        for skill in result.data["skills"]:
-            out.append(f"  [{skill['name']}] {skill.get('description', '')}")
-    elif result.kind == "skill-detail":
-        skill = result.data["skill"]
-        status = "loaded" if skill.get("loaded") else "ready"
-        out.append(f"  {skill['name']} ({skill.get('source', 'unknown')}, {status})")
-        out.append(f"  {skill.get('description', '')}")
-        if skill.get("keywords"):
-            out.append(f"  Keywords: {', '.join(skill['keywords'])}")
-        if skill.get("mode"):
-            out.append(f"  Mode: {skill['mode']}")
-        if skill.get("body_preview"):
-            out.append(f"  {skill['body_preview']}")
-        for function in skill.get("functions", []):
-            out.append(f"  {function['name']}: {function.get('description', '')}")
-            out.append(f"    Schema: {json.dumps(function.get('schema', {}))}")
-            if function.get("help"):
-                out.append(f"    Help: {function['help']}")
-    elif result.kind == "drafts":
-        for draft in result.data["drafts"]:
-            out.append(f"  {draft['name']}: {draft.get('status', 'draft')}")
-    elif result.kind in {"trace", "usage"}:
-        values = result.data.get(result.kind, {})
-        for key, value in values.items():
-            out.append(f"  {key.replace('_', ' ').title()}: {value}")
-    if result.display_hint:
-        out.append(result.display_hint if result.ok else f"⚠️ {result.display_hint}")
-    return "\n".join(out)
-
-
-def _prompt_toolkit_available() -> bool:
-    try:
-        import prompt_toolkit  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-def create_terminal(controller: ReplController) -> TerminalFrontend:
-    """Create the best installed frontend, falling back without error."""
-    if _prompt_toolkit_available():
+        super().__init__(controller, input_reader=self.prompt_session.prompt)
         try:
-            return PromptToolkitTerminal(controller)
+            from rich.console import Console
+            from rich.markdown import Markdown
+
+            console = Console()
+            self._markdown = lambda text: console.print(Markdown(text))
         except ImportError:
-            pass
-    return PlainTerminal(controller)
+            self._markdown = print
+
+    def render(self, text: str) -> None:
+        self._markdown(text)
 
 
-__all__ = [
-    "format_command_result",
-    "PlainTerminal",
-    "PromptToolkitTerminal",
-    "TerminalFrontend",
-    "create_terminal",
-]
+def create_terminal(controller: ReplController) -> PlainTerminal:
+    """prompt_toolkit if it is installed, else the plain terminal."""
+    try:
+        return PromptToolkitTerminal(controller)
+    except ImportError:
+        return PlainTerminal(controller)

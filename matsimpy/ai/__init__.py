@@ -1,88 +1,36 @@
-"""
-AI module for MatSimPy — LLM function calling + interactive REPL.
+"""MatSimPy's AI agent: an LLM that works through MatSimPy tools.
 
-Provides:
-- Agent: simple, structured Python interface
-- DeepSeekProvider: OpenAI-compatible client for DeepSeek API
-- SkillManager: progressive skill loading (like Claude skills)
-- FunctionDef/Skill: metadata for LLM-callable functions
-- FunctionExecutor: validates parameters and executes tool calls
-- Interactive REPL with /commands
+- :mod:`~matsimpy.ai.tools`: tools derived from Python functions
+  (:class:`ToolCatalog`, :class:`ToolExecutor`).  Mark a function with
+  :func:`matsimpy.utils.tooling.tool` to make it a tool.
+- :mod:`~matsimpy.ai.skills`: Agent Skills, loaded progressively.
+- :mod:`~matsimpy.ai.mcp`: MCP client (stdio, HTTP) and stdio server.
+- :mod:`~matsimpy.ai.agent`: the agent loop and JSON sessions.
+- ``matsimpy-ai``: REPL, one-shot tasks, ``doctor``, ``skills``, ``tools`` and ``mcp`` commands.
 
-Usage::
+Example::
 
-    >>> from matsimpy.ai import Agent
-    >>> result = Agent(workspace="project").run("Create an FCC copper crystal")
-    >>> print(result.response)
+    from matsimpy.ai import Agent
 
-    # Or launch the interactive REPL:
-    >>> from matsimpy.ai.cli import main
-    >>> main()
+    with Agent(workspace="project") as agent:
+        print(agent.run("Build rocksalt NaCl with a=5.64 and save it as nacl.cif").response)
 
-Requirements:
-    - requests
-    - DEEPSEEK_API_KEY environment variable (or inject a provider into Agent)
+The default provider needs ``DEEPSEEK_API_KEY``; any object with a
+``chat(messages, tools)`` method (:class:`ChatProvider`) can be passed instead.
 """
 
-from .conversation import ChatMessage, ToolCall, ChatResponse
-from .skill import FunctionDef, Skill, SkillManager
-from .provider import DeepSeekProvider
-from .providers import ChatProvider
-from .executor import FunctionExecutor
-from .runtime import AgentRuntime, TaskResult
-from .session_store import SessionStore, SkillVersion
-from .session import AgentSession, SessionTurn
-from .agent import Agent, AgentResult
-from .repl import AgentSkillSummaries, CommandResult, ReplController
-from .terminal import (
-    PlainTerminal,
-    PromptToolkitTerminal,
-    TerminalFrontend,
-    create_terminal,
-)
+from .agent import Agent, AgentResult, Session, ToolRecord
 from .doctor import Diagnostic, Doctor
-from .evolution import (
-    EvolutionCandidate,
-    EvolutionManager,
-    EvolutionPolicy,
-    ReplayContext,
-    SkillEvolutionError,
-)
-from .memory import AgentMemory, MemoryEntry, MemoryValidationError
+from .mcp import MCPClient, MCPError, MCPServer, MCPServerConfig, load_config
+from .memory import AgentMemory
+from .provider import ChatMessage, ChatProvider, ChatResponse, DeepSeekProvider, ToolCall
+from .repl import CommandResult, ReplController
+from .skills import Skill, SkillError, SkillLibrary, SkillSummary
+from .tools import Tool, ToolCatalog, ToolContext, ToolError, ToolExecutor, ToolResult
 
 __all__ = [
-    "Agent",
-    "AgentResult",
-    "AgentSkillSummaries",
-    "CommandResult",
-    "ReplController",
-    "TerminalFrontend",
-    "PlainTerminal",
-    "PromptToolkitTerminal",
-    "create_terminal",
-    "AgentRuntime",
-    "ChatProvider",
-    "DeepSeekProvider",
-    "Diagnostic",
-    "Doctor",
-    "EvolutionCandidate",
-    "EvolutionManager",
-    "EvolutionPolicy",
-    "ReplayContext",
-    "SkillEvolutionError",
-    "SkillVersion",
-    "AgentMemory",
-    "MemoryEntry",
-    "MemoryValidationError",
-    "TaskResult",
-    "SessionStore",
-    "AgentSession",
-    "SessionTurn",
-    "SkillManager",
-    "FunctionDef",
-    "Skill",
-    "FunctionExecutor",
-    "ChatMessage",
-    "ToolCall",
-    "ChatResponse",
+    "Agent", "AgentResult", "AgentMemory", "ChatMessage", "ChatProvider", "ChatResponse", "CommandResult",
+    "DeepSeekProvider", "Diagnostic", "Doctor", "MCPClient", "MCPError", "MCPServer", "MCPServerConfig",
+    "ReplController", "Session", "Skill", "SkillError", "SkillLibrary", "SkillSummary", "Tool", "ToolCall",
+    "ToolCatalog", "ToolContext", "ToolError", "ToolExecutor", "ToolRecord", "ToolResult", "load_config",
 ]
