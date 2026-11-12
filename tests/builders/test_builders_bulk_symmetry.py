@@ -30,19 +30,33 @@ class TestFromSpaceGroup(unittest.TestCase):
     
     
 
-    def test_from_space_group_validates_requested_group_by_default(self):
-        """Default SG generation should reject inputs that detect as another group."""
-        lattice = Lattice.cubic(5.64)
-
-        with self.assertRaisesRegex(ValueError, "not requested 225"):
-            from_space_group(
-                225,
-                ['Na', 'Cl'],
-                [[0, 0, 0], [0.5, 0.5, 0.5]],
-                lattice=lattice,
+    def test_from_space_group_expands_the_asymmetric_unit(self):
+        """The group's operations generate the conventional cell (the docstring example)."""
+        cases = [
+            (225, ['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], 5.64, {'Na': 4, 'Cl': 4}),
+            (225, ['Cu'], [[0, 0, 0]], 3.61, {'Cu': 4}),
+            (227, ['Si'], [[0.125, 0.125, 0.125]], 5.43, {'Si': 8}),  # origin choice 2
+            (194, ['Mg'], [[1 / 3, 2 / 3, 0.25]], [3.21, 5.21], {'Mg': 2}),
+            (166, ['Bi'], [[0, 0, 0.2339]], [4.55, 11.86], {'Bi': 6}),  # hexagonal axes
+        ]
+        for number, species, positions, params, counts in cases:
+            crystal = from_space_group(number, species, positions, lattice_params=params)
+            self.assertEqual(
+                {element: [str(s) for s in crystal.species].count(element) for element in counts},
+                counts,
+                number,
             )
+        symbol = from_space_group('Fm-3m', ['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0.5]], lattice_params=5.64)
+        self.assertEqual(len(symbol), 8)
 
-    
+    def test_from_space_group_rejects_a_higher_symmetry_result(self):
+        """One atom at the origin of P23 is simple cubic, Pm-3m: not the requested group."""
+        with self.assertRaisesRegex(ValueError, "space group 221, not requested 195"):
+            from_space_group(195, ['Po'], [[0, 0, 0]], lattice_params=3.35)
+        with self.assertRaisesRegex(ValueError, "overlaps"):
+            from_space_group(225, ['Na', 'Cl'], [[0, 0, 0], [0.5, 0.5, 0]], lattice_params=5.0,
+                             validate_sg=False)
+
     def test_from_space_group_invalid(self):
         """Test invalid space group."""
         with self.assertRaises((ValueError, TypeError)):

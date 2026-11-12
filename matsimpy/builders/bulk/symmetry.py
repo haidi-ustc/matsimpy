@@ -78,7 +78,6 @@ def from_space_group(
         lattice,
         symprec,
         angle_tolerance,
-        require_requested_group=validate_sg,
     )
 
     if validate_sg:
@@ -316,100 +315,71 @@ def _get_default_space_group(crystal_system: str) -> int:
     return defaults.get(crystal_system.lower(), 221)
 
 
+def _default_hall_number(space_group_number: int) -> int:
+    """The Hall number of the standard setting of a space group.
+
+    This is spglib's first setting of the group, except that origin choice 2 is used
+    where there are two (as in the International Tables and pymatgen).
+    """
+    settings = [
+        hall for hall in range(1, 531)
+        if spglib.get_spacegroup_type(hall).number == space_group_number
+    ]
+    for hall in settings:
+        if spglib.get_spacegroup_type(hall).choice == "2":
+            return hall
+    return settings[0]
+
+
 def _generate_from_spglib(
     space_group_number: int,
     species: List[str],
     positions: List[List[float]],
     lattice: Lattice,
-    symprec: float,
-    angle_tolerance: float,
-    require_requested_group: bool = True,
+    symprec: float = 1e-5,
+    angle_tolerance: float = -1.0,
 ) -> Crystal:
+    """Apply the space group's operations to the asymmetric unit.
+
+    The operations come from spglib's database for the standard setting, so
+    ``positions`` are fractional coordinates of the conventional cell, e.g.
+    Na (0, 0, 0) and Cl (1/2, 1/2, 1/2) in Fm-3m give the 8-atom rocksalt cell.
     """
-    Generate structure using spglib with requested space group.
-
-    Gets symmetry operations from spglib by analyzing an input structure that
-    should already match the requested space group, then applies those
-    operations. If require_requested_group is True and spglib detects another
-    group, the caller's exact space-group contract cannot be satisfied and this
-    raises. Otherwise, the detected operations are used as a loose symmetry
-    expansion path.
-    """
-    # Convert species to atomic numbers
-    analyzer = SymmetryAnalyzer()
-    numbers = [analyzer._element_to_number(spec) for spec in species]
-
-    # Create initial structure
-    positions_array = np.array(positions)
-    lattice_matrix = lattice.matrix
-
-    # First, try to get symmetry operations from spglib
-    # This will find operations from the input structure
-    dataset = spglib.get_symmetry_dataset(
-        (lattice_matrix, positions_array, numbers),
-        symprec=symprec,
-        angle_tolerance=angle_tolerance,
+    positions_array = np.asarray(positions, dtype=float).reshape(-1, 3)
+    if len(positions_array) != len(species):
+        raise ValueError(
+            f"Got {len(species)} species but {len(positions_array)} positions"
+        )
+    operations = spglib.get_symmetry_from_database(
+        _default_hall_number(space_group_number)
     )
+    tolerance = max(symprec, 1e-8)
 
-    if dataset is None:
-        raise ValueError(
-            f"spglib could not detect symmetry for requested space group "
-            f"{space_group_number}"
-        )
+    unique_positions: List[np.ndarray] = []
+    unique_species: List[str] = []
+    for specie, position in zip(species, positions_array):
+        orbit_start = len(unique_positions)
+        for rotation, translation in zip(
+            operations["rotations"], operations["translations"]
+        ):
+            image = (rotation @ position + translation) % 1.0
+            image[np.isclose(image, 1.0, atol=tolerance)] = 0.0
+            duplicate = False
+            for existing in unique_positions:
+                difference = image - existing
+                difference -= np.round(difference)
+                if np.allclose(difference, 0.0, atol=tolerance):
+                    duplicate = True
+                    break
+            if not duplicate:
+                unique_positions.append(image)
+                unique_species.append(specie)
+        if len(unique_positions) == orbit_start:
+            raise ValueError(
+                f"Position {position.tolist()} of {specie} overlaps an earlier atom"
+            )
 
-    # Get symmetry operations
-    if hasattr(dataset, "rotations"):
-        rotations = dataset.rotations
-        translations = dataset.translations
-        detected_sg = (
-            dataset.number if hasattr(dataset, "number") else dataset["number"]
-        )
-    else:
-        rotations = dataset["rotations"]
-        translations = dataset["translations"]
-        detected_sg = dataset["number"]
-
-    if require_requested_group and int(detected_sg) != space_group_number:
-        raise ValueError(
-            f"Input positions/lattice have space group {int(detected_sg)}, "
-            f"not requested {space_group_number}. Provide an asymmetric unit "
-            "compatible with the requested space group."
-        )
-
-    # Generate all equivalent positions using symmetry operations
-    all_positions = []
-    all_species = []
-
-    # Start with asymmetric unit positions
-    for i, pos in enumerate(positions_array):
-        species_atom = species[i]
-
-        # Apply all symmetry operations
-        for rot, trans in zip(rotations, translations):
-            new_pos = rot @ pos + trans
-            # Wrap to [0, 1)
-            new_pos = new_pos % 1.0
-            # Ensure positive
-            new_pos = new_pos % 1.0
-            all_positions.append(new_pos.tolist())
-            all_species.append(species_atom)
-
-    # Remove duplicates (within tolerance)
-    unique_positions = []
-    unique_species = []
-    tolerance = 1e-5
-
-    for pos, spec in zip(all_positions, all_species):
-        is_duplicate = False
-        for existing_pos in unique_positions:
-            if np.allclose(pos, existing_pos, atol=tolerance):
-                is_duplicate = True
-                break
-        if not is_duplicate:
-            unique_positions.append(pos)
-            unique_species.append(spec)
-
-    return Crystal(unique_species, unique_positions, lattice)
+    return Crystal(unique_species, [p.tolist() for p in unique_positions], lattice)
 
 
 def _validate_space_group(
