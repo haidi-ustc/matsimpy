@@ -47,8 +47,9 @@ CRYSTAL_PROTOTYPES = {
         "description": "Rocksalt (NaCl) structure (primitive)",
     },
     "wurtzite": {
-        "species": ["X", "Y"],
-        "positions": [[1 / 3, 2 / 3, 0], [1 / 3, 2 / 3, 3 / 8]],
+        # P6_3mc, both species on 2b (z = 0 and the ideal u = 3/8)
+        "species": ["X", "X", "Y", "Y"],
+        "positions": [[1 / 3, 2 / 3, 0], [2 / 3, 1 / 3, 1 / 2], [1 / 3, 2 / 3, 3 / 8], [2 / 3, 1 / 3, 7 / 8]],
         "lattice_type": "hexagonal",
         "description": "Wurtzite structure",
     },

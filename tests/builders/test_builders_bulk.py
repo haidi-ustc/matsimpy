@@ -30,9 +30,10 @@ class TestPrototypeBuilder(unittest.TestCase):
         """Test wurtzite structure generation."""
         gan = from_prototype('wurtzite', ['Ga', 'N'], [3.19, 5.19])
         
-        self.assertEqual(len(gan.species), 2)
-        self.assertIn('Ga', gan.species)
-        self.assertIn('N', gan.species)
+        # two formula units: with one, the structure was P6mm, not wurtzite
+        self.assertEqual(sorted(gan.species), ['Ga', 'Ga', 'N', 'N'])
+        from matsimpy.symmetry import SpacegroupAnalyzer
+        self.assertEqual(SpacegroupAnalyzer(gan).get_space_group_symbol(), 'P6_3mc')
         # Check hexagonal lattice
         self.assertAlmostEqual(gan.lattice.a, 3.19, places=2)
         self.assertAlmostEqual(gan.lattice.c, 5.19, places=2)
