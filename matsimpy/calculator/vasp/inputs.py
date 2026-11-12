@@ -41,6 +41,7 @@ from monty.serialization import dumpfn, loadfn
 from tabulate import tabulate
 
 from matsimpy.core import Element, Lattice, Crystal
+from matsimpy.core._validation import normalize_species
 from matsimpy.calculator.utils import clean_lines, site_property_column, str_delimited
 from matsimpy.calculator.vasp._resources import load_resource
 from matsimpy.electronic_structure import Magmom
@@ -58,12 +59,6 @@ def _is_valid_symbol(symbol: str) -> bool:
     except ValueError:
         return False
 
-# get_el_sp: simple Element lookup
-def get_el_sp(el):
-    """Get Element from string — matsimpy equivalent of pymatgen get_el_sp."""
-    if isinstance(el, Element):
-        return el
-    return Element(el)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -398,8 +393,9 @@ class Poscar(MSONable):
                 potcar_path = next((f for f in potcars if f == f"{dirname}/POTCAR"), min(potcars))
 
                 potcar = Potcar.from_file(potcar_path)
-                names = [sym.split("_")[0] for sym in potcar.symbols]
-                map(get_el_sp, names)  # ensure valid names
+                # canonical symbols; an unknown name raises and falls back to the POSCAR's own
+                # (``map(get_el_sp, names)`` was never consumed, so nothing was validated)
+                names = [normalize_species(sym.split("_")[0], allow_dummy=False) for sym in potcar.symbols]
             except Exception:
                 names = None
 
