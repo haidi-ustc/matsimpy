@@ -4,12 +4,14 @@ Random alloy generation.
 Generate random solid solution alloys with specified compositions.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional
 import numpy as np
 from ...core import Crystal
 from ...transformation.chemical.substitution import substitute
 
 
+@tool
 def generate_random_alloy(
     base_structure: Crystal,
     substitution_species: List[str],

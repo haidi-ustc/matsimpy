@@ -5,11 +5,13 @@ Generate surface slabs from bulk structures with various Miller indices,
 vacuum spacing, and terminations.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import Tuple, Optional
 import numpy as np
 from ...core import Crystal, Lattice
 
 
+@tool
 def generate_slab(
     bulk: Crystal,
     miller_index: Tuple[int, int, int],

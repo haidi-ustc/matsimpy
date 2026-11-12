@@ -5,12 +5,14 @@ Replace atoms in structures with new species.
 Can use selection utilities from matsimpy.analysis.selection for flexible atom selection.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Union, Dict
 import numpy as np
 from ...core import Crystal, Molecule
 from ..base import _validate_structure
 
 
+@tool
 def substitute(
     structure: Union[Crystal, Molecule],
     indices: Union[int, List[int], "AtomSelection"],
@@ -135,6 +137,7 @@ def substitute(
         raise TypeError(f"Unsupported structure type: {type(structure)}")
 
 
+@tool
 def substitute_all(
     structure: Union[Crystal, Molecule],
     old_species: str,

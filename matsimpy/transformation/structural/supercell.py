@@ -4,6 +4,7 @@ Supercell generation tools.
 Create supercells from unit cells by repeating the unit cell.
 """
 
+from matsimpy.utils.tooling import tool
 import copy
 import itertools
 from typing import List, Union
@@ -47,6 +48,7 @@ def _translation_representatives(
     )
 
 
+@tool
 def make_supercell(
     crystal: Crystal,
     scaling_matrix: Union[List[int], List[List[int]], np.ndarray],

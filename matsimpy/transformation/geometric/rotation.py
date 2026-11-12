@@ -4,12 +4,14 @@ Rotation transformations for structures.
 Provides both functional (immutable-style) and in-place rotation operations.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional, Union
 import numpy as np
 from ...core import Crystal, Molecule
 from ..base import _validate_structure
 
 
+@tool
 def rotate(
     structure: Union[Crystal, Molecule],
     angle: float,
@@ -91,6 +93,7 @@ def rotate(
         )
 
 
+@tool
 def rotate_around_axis(
     structure: Union[Crystal, Molecule],
     angle: float,

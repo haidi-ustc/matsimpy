@@ -2,12 +2,14 @@
 Strain and deformation operations for crystal lattices.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Union, Optional
 import numpy as np
 from ...core import Crystal, Lattice
 from .._helpers import validate_positive_scalar
 
 
+@tool
 def apply_strain(
     crystal: Crystal,
     strain_matrix: Union[List[List[float]], np.ndarray],
@@ -49,6 +51,7 @@ def apply_strain(
     )
 
 
+@tool
 def apply_deformation(
     crystal: Crystal,
     deformation_matrix: Union[List[List[float]], np.ndarray],
@@ -98,6 +101,7 @@ def apply_deformation(
     )
 
 
+@tool
 def perturb_lattice(
     crystal: Crystal,
     amplitude: float,

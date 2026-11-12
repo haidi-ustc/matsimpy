@@ -4,12 +4,14 @@ Point defect builders.
 Create various types of point defects in crystal structures.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional, Union, Tuple
 import numpy as np
 from ...core import Crystal, Lattice
 from ...transformation.chemical.substitution import substitute
 
 
+@tool
 def create_vacancy(
     structure: Crystal, indices: Union[int, List[int]]
 ) -> Crystal:
@@ -41,6 +43,7 @@ def create_vacancy(
     return structure.remove_atom(indices)
 
 
+@tool
 def create_interstitial(
     structure: Crystal,
     species: Union[str, List[str]],
@@ -99,6 +102,7 @@ def create_interstitial(
     return result
 
 
+@tool
 def create_substitution(
     structure: Crystal,
     indices: Union[int, List[int]],
@@ -144,6 +148,7 @@ def create_substitution(
     return substitute(structure, indices, new_species)
 
 
+@tool
 def create_frenkel(
     structure: Crystal,
     index: int,
@@ -197,6 +202,7 @@ def create_frenkel(
     return result
 
 
+@tool
 def create_schottky(
     structure: Crystal,
     indices: Optional[List[int]] = None,
@@ -244,6 +250,7 @@ def create_schottky(
     return create_vacancy(structure, indices)
 
 
+@tool
 def create_antisite(
     structure: Crystal, index1: int, index2: int
 ) -> Crystal:

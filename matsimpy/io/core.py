@@ -11,6 +11,7 @@ Usage::
     >>> write(crystal, 'output.cif')
 """
 
+from matsimpy.utils.tooling import tool
 from pathlib import Path
 from typing import Optional, Union
 
@@ -18,6 +19,7 @@ from ..core import Crystal, Molecule, Structure
 from .registry import registry
 
 
+@tool(name="read_structure", paths=("filename",))
 def read(
     filename: str,
     format: Optional[str] = None,
@@ -41,6 +43,7 @@ def read(
     return registry.read(filename, format=format, **kwargs)
 
 
+@tool(name="write_structure", paths=("filename",))
 def write(
     structure: Union[Crystal, Molecule, Structure],
     filename: str,

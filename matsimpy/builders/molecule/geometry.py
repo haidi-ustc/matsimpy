@@ -4,11 +4,13 @@ Molecular geometry builders.
 Build molecules with specific geometries (linear, bent, trigonal, etc.).
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Sequence
 import numpy as np
 from ...core import Molecule
 
 
+@tool
 def build_linear(
     species: List[str], bond_lengths: List[float], axis: Sequence[float] = (1, 0, 0)
 ) -> Molecule:
@@ -54,6 +56,7 @@ def build_linear(
     return Molecule(species, positions)
 
 
+@tool
 def build_bent(
     species: List[str],
     bond_lengths: List[float],
@@ -194,6 +197,7 @@ def build_trigonal_planar(
     return Molecule(species, positions)
 
 
+@tool
 def build_tetrahedral(
     central_atom: str, peripheral_atoms: List[str], bond_length: float
 ) -> Molecule:

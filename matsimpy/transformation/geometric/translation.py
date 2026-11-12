@@ -4,12 +4,14 @@ Translation transformations for structures.
 Provides both functional (immutable-style) and in-place translation operations.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Union
 import numpy as np
 from ...core import Crystal, Molecule
 from ..base import _validate_structure
 
 
+@tool
 def translate(
     structure: Union[Crystal, Molecule], vector: List[float]
 ) -> Union[Crystal, Molecule]:
@@ -63,6 +65,7 @@ def translate(
         )
 
 
+@tool
 def translate_to_origin(
     structure: Union[Crystal, Molecule]
 ) -> Union[Crystal, Molecule]:
