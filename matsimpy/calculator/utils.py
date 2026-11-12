@@ -30,11 +30,13 @@ def site_property_column(structure, key: str):
 
 
 def clean_lines(string_list: list[str], remove_empty_lines: bool = True) -> list[str]:
-    """Strip whitespace and optionally remove empty lines from a list of strings.
+    """Remove ``#`` comments and surrounding whitespace; optionally drop empty lines.
 
+    Both VASP and LAMMPS treat text after ``#`` as a comment, so
+    ``"5.43  # a"`` becomes ``"5.43"`` and a comment-only line becomes empty.
     Adapted from pymatgen.util.io_utils.clean_lines.
     """
-    stripped = [line.strip() for line in string_list]
+    stripped = [line.split("#", 1)[0].strip() for line in string_list]
     if remove_empty_lines:
         return [line for line in stripped if line]
     return stripped
