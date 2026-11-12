@@ -10,16 +10,37 @@
   `CRECT`, `SQR`, `HEX2D`). When the atoms break the cell's symmetry, the path of the
   lower symmetry is used. The k-points are fractional coordinates of the input cell's
   reciprocal lattice, with zero along the vacuum axis.
-- Crystal prototype identifiers: `matsimpy.symmetry.get_prototype(crystal)` returns an
-  identifier such as `AB_cF2_Fm-3m_a_b` (rocksalt), the same for every crystal of that
-  structure type, independent of the elements, atom order and supercell.
-  `get_prototype_info` returns its parts as a frozen `PrototypeInfo`.
-  `PrototypeDatabase` is a read-only map from identifier to structure names, with JSON
-  load/save; `merge` and `with_structures` return a new database.
+- Crystal prototype identifiers in the style of AFLOW labels:
+  `matsimpy.symmetry.get_prototype(crystal)` returns e.g. `AB_cF8_225_a_b` for rocksalt
+  (anonymized formula, Pearson symbol, space-group number, Wyckoff letters). The
+  identifier is the same for every description of a crystal: any cell, origin, axis
+  order, atom order or supercell. It is also the same for every crystal of that
+  structure type, independent of the elements.
+  - Wyckoff letters are canonical. As in AFLOW, every axis permutation and origin
+    shift that keeps the space-group setting is tried, and the description with the
+    smallest letter sum (a=1, b=2, ...) wins; ties go to the lexicographically
+    smallest letter sequence. YBa2Cu3O7 gives AFLOW's `k_cj_aijl_f` letters,
+    diamond is `a` and zincblende `a_c` from any cell.
+  - The Pearson symbol counts the conventional cell (rocksalt `cF8` also from a
+    primitive input; rhombohedral lattices count the rhombohedral cell, corundum `hR10`).
+  - The symmetry tolerance is chosen per crystal by default (`symprec=None`): it starts
+    at 1/100 of the shortest interatomic distance and is halved until the symmetry is
+    consistent with the crystal. A real MnO POSCAR with 6-decimal coordinates is
+    `Fm-3m`, where a fixed 1e-5 gives `I4mm`. An explicit `symprec` is used as given.
+    A value above a quarter of the shortest distance is rejected, because spglib 2.8
+    crashes the interpreter from about 0.45 of it.
+  - Unlike AFLOW, elements are named A, B, ... by count, not alphabetically, so the
+    identifier does not change when elements are substituted.
+
+  `get_prototype_info` returns the parts as a frozen `PrototypeInfo`, including the
+  tolerance used. `PrototypeDatabase` is a read-only map from identifier to structure
+  names, with JSON load/save; `merge` and `with_structures` return a new database.
   `matsimpy.builders.bulk` adds `build_prototype_database(files)`,
   `structures_from_prototype(database, prototype, ...)` (new crystals by element
-  substitution) and `suggest_element_substitutions`. The identifiers are the same as
-  in branch1's `CrystalPrototype`, which this replaces.
+  substitution) and `suggest_element_substitutions`. This replaces branch1's
+  `CrystalPrototype`. Its identifiers (`AB_cF2_Fm-3m_a_b`, space-group symbol,
+  primitive-cell count, setting-dependent letters, fixed 1e-5 tolerance) are not
+  compatible with the new ones.
 
 ### Fixed
 - VASP: `Vasprun.run_type` reported HSE06 runs with `HFSCREEN=0.207` as
@@ -89,6 +110,8 @@
 - `THIRD_PARTY_NOTICES.md` is back and is shipped in the sdist and the wheel.
   `symmetry/kpath.py` adapts ASE code under BSD-2-Clause, which requires the notice.
   The file had been deleted, although the source header still pointed to it.
+- Builders: the `wurtzite` prototype had one formula unit, which made it a P6mm
+  structure, not wurtzite. It now has two (P6_3mc, both species on 2b).
 
 ### Known issues
 - MatSimPy ships no POTCAR reference data, because POTCARs are copyrighted. The packaged
@@ -97,15 +120,6 @@
 - There are two POSCAR readers: `matsimpy.io` (`matsimpy/io/vasp.py`) and
   `calculator.vasp.inputs.Poscar`. Only the second reads VASP 4 files, where species
   names follow the coordinates or come from a POTCAR.
-- Prototype identifiers use spglib's Wyckoff letters without reducing them over the
-  space group's Euclidean normalizer. Two descriptions of the same crystal can therefore
-  differ in the letters: diamond is `a` with `to_primitive=True` and `b` with `False`,
-  and zincblende is `a_c` and `a_d`. The Pearson part counts the atoms of the
-  standardized cell, which is the primitive cell by default (rocksalt `cF2`; the
-  crystallographic symbol is `cF8`). The default `symprec=1e-5` is too tight for
-  coordinates given to 6 decimals: a real MnO POSCAR comes out as `I4mm`, and
-  `symprec=1e-3` gives `Fm-3m`. All three behaviours are kept from branch1, so
-  identifiers stay comparable with existing databases.
 
 ### Tests
 - Restored `tests/calculator/fixtures` (VASP and Gaussian outputs), which the 0.8.5–0.9.0
@@ -123,6 +137,7 @@
   against pymatgen. POTCAR tests use only pymatgen's placeholder POTCARs.
 - `test_crystal_from_file_poscar` looked for a file that does not exist and silently
   passed. It now reads a real POSCAR and checks it.
+- Removed `tests/POSCAR-cart.vasp` and `tests/POSCAR-frac.vasp`. No test used them.
 
 ## 0.9.0 — 2026-11-12
 
