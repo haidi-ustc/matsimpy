@@ -42,11 +42,18 @@ class TestIncar:
 
     @pytest.mark.parametrize("name", ["INCAR", "INCAR_2", "INCAR_C2", "INCAR.lobster"])
     def test_write_read_roundtrip(self, name, tmp_path):
+        """0.8.x-0.9.0 wrote " =  ['ENCUT', 400.0]" lines (str_delimited), which VASP
+        cannot parse and Incar.from_file read back as an empty INCAR."""
+        import re
+
         from matsimpy.calculator.vasp.inputs import Incar
 
         incar = Incar.from_file(_fixture(name))
         fpath = tmp_path / "INCAR"
         incar.write_file(fpath)
+        lines = fpath.read_text().splitlines()
+        assert len(lines) == len(incar) > 3
+        assert all(re.fullmatch(r"[A-Z_0-9]+ = \S.*", line) for line in lines), lines
         assert dict(Incar.from_file(fpath)) == dict(incar)
 
     def test_diff(self):
@@ -117,14 +124,6 @@ KPOINTS_FILES = [
 
 
 class TestKpoints:
-    def test_from_file(self):
-        """Parse KPOINTS from real VASP KPOINTS fixture."""
-        from matsimpy.calculator.vasp.inputs import Kpoints
-
-        kpt = Kpoints.from_file(_fixture("KPOINTS"))
-        assert kpt is not None
-        assert kpt.kpts is not None
-
     def test_gamma_file(self):
         from matsimpy.calculator.vasp.inputs import Kpoints
 
@@ -211,18 +210,6 @@ class TestPoscar:
         from matsimpy.calculator.vasp.inputs import Poscar
 
         return Poscar.from_file(_fixture("POSCAR_C2"), check_for_potcar=False).structure
-
-    def test_from_file(self):
-        """Parse the VASP 4 POSCAR fixture (FePO4, symbols after the coordinates)."""
-        from matsimpy.calculator.vasp.inputs import Poscar
-
-        poscar = Poscar.from_file(
-            _fixture("POSCAR"),
-            check_for_potcar=False,
-            read_velocities=False,
-        )
-        assert len(poscar.structure) == 24
-        assert poscar.site_symbols == ["Fe", "P", "O"]
 
     def test_from_str_basic(self):
         """Parse POSCAR text (VASP 5 format)."""

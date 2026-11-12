@@ -74,6 +74,11 @@ def test_lattice_classification_and_path(name):
     kpath = HighSymmKpath(_one_atom_layer(matrix))
     assert kpath.bravais == kpath.kpath["bravais"] == bravais
     assert kpath.kpath["path"] == [PATHS[bravais]]
+    # no k-point has a component along the vacuum axis
+    assert all(point[2] == 0 for point in kpath.kpath["kpoints"].values())
+    points, labels = kpath.get_kpoints(line_density=10)
+    assert len(points) == len(labels)
+    assert np.all(np.asarray(points)[:, 2] == 0)
 
 
 @pytest.mark.parametrize("name", LATTICES)
@@ -88,15 +93,6 @@ def test_special_points_are_zone_corners_and_edge_midpoints(name):
             assert lines >= 2, label
         else:
             assert lines == 1, label
-
-
-@pytest.mark.parametrize("name", LATTICES)
-def test_points_have_no_component_along_the_vacuum_axis(name):
-    kpath = HighSymmKpath(_one_atom_layer(LATTICES[name][0]))
-    assert all(point[2] == 0 for point in kpath.kpath["kpoints"].values())
-    points, labels = kpath.get_kpoints(line_density=10)
-    assert len(points) == len(labels)
-    assert np.all(np.asarray(points)[:, 2] == 0)
 
 
 @pytest.mark.parametrize("name", LATTICES)
@@ -160,18 +156,20 @@ def test_graphene_has_no_out_of_plane_points():
     assert kpath.bravais == "hp"
     assert kpath.kpath["path"] == [[G, "M", "K", G]]
     assert kpath.kpath["kpoints"]["K"] == pytest.approx((1/3, 1/3, 0))
+    assert _zone_lines(kpath, "K") == 2
     # the same cell as a 3D crystal keeps its 3D path with k_z points
     bulk = HighSymmKpath(Crystal(graphene.species, graphene.frac_positions, graphene.lattice))
     assert {"A", "L", "H"} <= set(bulk.kpath["kpoints"])
 
 
-def test_mos2_monolayer_is_hexagonal():
-    lattice = Lattice.hexagonal(3.16, 20)
+def test_buckled_mos2_monolayer_is_hexagonal():
+    """Atoms off the mid-plane (S above and below Mo) keep the layer hexagonal."""
     dz = 1.56 / 20
-    mos2 = Crystal(["Mo", "S", "S"], [[1/3, 2/3, .5], [2/3, 1/3, .5 + dz], [2/3, 1/3, .5 - dz]], lattice, pbc=LAYER)
+    mos2 = Crystal(["Mo", "S", "S"], [[1/3, 2/3, .5], [2/3, 1/3, .5 + dz], [2/3, 1/3, .5 - dz]],
+                   Lattice.hexagonal(3.16, 20), pbc=LAYER)
     kpath = HighSymmKpath(mos2)
     assert kpath.bravais == "hp"
-    assert _zone_lines(kpath, "K") == 2
+    assert kpath.kpath["path"] == [[G, "M", "K", G]]
 
 
 def test_vacuum_along_another_axis():

@@ -4,6 +4,7 @@ Test data copied from thirds/pymatgen-core/test-files/io/vasp/outputs/.
 Uses matsimpy constructs. May import pymatgen as optional reference oracle.
 """
 
+import functools
 import json
 import os
 from types import SimpleNamespace
@@ -18,6 +19,15 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
 
 def _fixture(name):
     return os.path.join(FIXTURES_DIR, name)
+
+
+@functools.lru_cache(maxsize=None)
+def _volumetric(cls_name, name):
+    """Parse a volumetric fixture once per session (CHGCAR.NiO_SOC takes seconds).
+    Callers must not modify the returned object."""
+    from matsimpy.calculator.vasp import outputs
+
+    return getattr(outputs, cls_name).from_file(_fixture(name))
 
 
 def test_chgcar_native_arithmetic_and_serialization():
@@ -58,7 +68,7 @@ def test_volumetric_native_write_and_read(tmp_path, volumetric_cls_name, fixture
     from matsimpy.calculator.vasp import outputs
 
     volumetric_cls = getattr(outputs, volumetric_cls_name)
-    original = volumetric_cls.from_file(_fixture(fixture))
+    original = _volumetric(volumetric_cls_name, fixture)
     path = tmp_path / volumetric_cls_name.upper()
 
     original.write_file(path)
@@ -87,9 +97,7 @@ def test_volumetric_optional_pymatgen_reference(volumetric_cls_name, fixture, ke
     pytest.importorskip("pymatgen")
     import pymatgen.io.vasp.outputs as pmg_outputs
 
-    from matsimpy.calculator.vasp import outputs
-
-    ours = getattr(outputs, volumetric_cls_name).from_file(_fixture(fixture))
+    ours = _volumetric(volumetric_cls_name, fixture)
     ref = getattr(pmg_outputs, volumetric_cls_name).from_file(_fixture(fixture))
     assert ours.dim == tuple(ref.dim)
     np.testing.assert_allclose(ours.structure.lattice.matrix, ref.structure.lattice.matrix)
@@ -100,7 +108,7 @@ def test_volumetric_optional_pymatgen_reference(volumetric_cls_name, fixture, ke
 def test_noncollinear_chgcar_native_write_and_read(tmp_path):
     from matsimpy.calculator.vasp.outputs import Chgcar
 
-    original = Chgcar.from_file(_fixture("CHGCAR.NiO_SOC.gz"))
+    original = _volumetric("Chgcar", "CHGCAR.NiO_SOC.gz")
     assert set(original.data) >= {"total", "diff_x", "diff_y", "diff_z"}
     path = tmp_path / "CHGCAR"
 
@@ -117,7 +125,7 @@ def test_noncollinear_chgcar_native_write_and_read(tmp_path):
 def test_noncollinear_chgcar_rejects_partial_components(tmp_path):
     from matsimpy.calculator.vasp.outputs import Chgcar
 
-    original = Chgcar.from_file(_fixture("CHGCAR.NiO_SOC.gz"))
+    original = _volumetric("Chgcar", "CHGCAR.NiO_SOC.gz")
     data = {"total": original.data["total"], "diff_x": original.data["diff_x"]}
 
     with pytest.raises(ValueError, match="missing diff_y, diff_z"):

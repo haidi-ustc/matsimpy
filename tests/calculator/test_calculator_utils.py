@@ -11,7 +11,6 @@ import pytest
 from matsimpy.calculator.utils import clean_lines, micro_pyawk
 
 VASP_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
-INCARS = ["INCAR", "INCAR_2", "INCAR_C2", "INCAR.lobster"]
 
 
 def _lines(name):
@@ -49,35 +48,6 @@ def test_lammps_data_header_accepts_trailing_comments(tmp_path):
     data = LammpsData.from_file(str(path), atom_style="atomic")
     assert len(data.atoms) == 2
     assert data.box.bounds == [[0.0, 10.0]] * 3
-
-
-@pytest.mark.parametrize("name", INCARS)
-def test_incar_written_as_tag_equals_value_and_round_trips(tmp_path, name):
-    """0.8.x-0.9.0 wrote " =  ['ENCUT', 400.0]" lines (str_delimited), which VASP
-    cannot parse and Incar.from_file read back as an empty INCAR."""
-    from matsimpy.calculator.vasp.inputs import Incar
-
-    incar = Incar.from_file(os.path.join(VASP_DIR, name))
-    assert len(incar) > 3
-    out = tmp_path / "INCAR"
-    incar.write_file(out)
-
-    lines = out.read_text().splitlines()
-    assert len(lines) == len(incar)
-    assert all(re.fullmatch(r"[A-Z_0-9]+ = \S.*", line) for line in lines), lines
-    assert Incar.from_file(out) == incar
-
-
-@pytest.mark.requires_pymatgen
-@pytest.mark.parametrize("name", INCARS)
-def test_incar_parsing_matches_pymatgen(name):
-    pytest.importorskip("pymatgen")
-    from pymatgen.io.vasp.inputs import Incar as PymatgenIncar
-
-    from matsimpy.calculator.vasp.inputs import Incar
-
-    path = os.path.join(VASP_DIR, name)
-    assert dict(Incar.from_file(path)) == dict(PymatgenIncar.from_file(path))
 
 
 def test_micro_pyawk_runs_records_with_predicates_on_a_real_outcar():

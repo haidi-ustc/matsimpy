@@ -1,6 +1,6 @@
 """Packaged VASP data files are loaded strictly.
 
-Before 0.9.1 a missing or broken file was replaced by ``{}``: a misspelled
+In 0.9.0 a missing or broken file was replaced by ``{}``: a misspelled
 input-set name gave a set without INCAR defaults, and POTCAR_STATS_PATH pointed
 at a file that does not exist, so POTCAR validation silently had no reference data.
 """
