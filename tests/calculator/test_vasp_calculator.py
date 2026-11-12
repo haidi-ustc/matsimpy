@@ -57,6 +57,17 @@ class TestVaspCalculator:
         )
         assert r.stress[2, 2] > 0  # raw zz = -1.159 kBar (tensile) -> positive
 
+    def test_write_input_writes_a_parseable_incar(self, tmp_path):
+        """Every INCAR written by 0.9.0 was " =  [tag, value]" lines (unreadable)."""
+        from matsimpy.calculator.vasp import VaspCalculator
+        from matsimpy.calculator.vasp.inputs import Incar
+
+        calc = VaspCalculator(directory=str(tmp_path), copy_potcar=False)
+        calc.write_input(Crystal(["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]], Lattice.cubic(5.43)))
+        lines = (tmp_path / "INCAR").read_text().splitlines()
+        assert "ENCUT = 400.0" in lines
+        assert dict(Incar.from_file(tmp_path / "INCAR")) == dict(Incar(calc.parameters["incar"]))
+
     def test_init_with_defaults(self):
         from matsimpy.calculator.vasp import VaspCalculator
         calc = VaspCalculator()

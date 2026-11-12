@@ -6,8 +6,12 @@ a direct pymatgen dependency for basic operations.
 
 from __future__ import annotations
 
+import os
+import re
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence
+
 import numpy as np
-from typing import TYPE_CHECKING
+from monty.io import zopen
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -75,26 +79,74 @@ def get_angle(v1: NDArray[np.floating], v2: NDArray[np.floating]) -> float:
 
 
 def str_delimited(
-    items: list[str],
-    header: str | None = None,
-    delimiter: str = "|",
-    width: int = 80,
+    rows: Iterable[Iterable[Any]],
+    header: Iterable[Any] | None = None,
+    delimiter: str = "\t",
 ) -> str:
-    """Format a list of strings as a delimited block.
+    """Join the fields of each row with ``delimiter``, one row per line.
 
-    Adapted from pymatgen.util.string.str_delimited.
+    ``str_delimited([["ENCUT", 400]], None, " = ")`` gives ``"ENCUT = 400"``.
+    Adapted from pymatgen.util.string.str_delimited. (0.8.x-0.9.0 wrote
+    ``"<delimiter> <row>"``, i.e. ``" =  ['ENCUT', 400]"``, which made every
+    INCAR file unreadable.)
     """
-    lines = []
-    if header:
-        lines.append(header)
-    for item in items:
-        lines.append(f"{delimiter} {item}")
+    lines: list[str] = []
+    if header is not None:
+        lines.append(delimiter.join(str(item) for item in header))
+    for row in rows:
+        lines.append(delimiter.join(str(item) for item in row))
     return "\n".join(lines)
+
+
+def micro_pyawk(
+    filename: str | os.PathLike[str],
+    search: Sequence[Sequence[Any]],
+    results: Any = None,
+    debug: Callable[[Any, re.Match[str]], Any] | None = None,
+    postdebug: Callable[[Any, str], Any] | None = None,
+) -> Any:
+    """Scan a text file line by line, running ``(regex, predicate, action)`` records.
+
+    For every line and every record whose regex matches, ``action(results, match)``
+    is called if ``predicate`` is ``None`` or ``predicate(results, line)`` is true.
+    ``results`` (default ``{}``) is returned. ``debug(results, match)`` runs before
+    each action and ``postdebug(results, line)`` after each line.
+    Adapted from pymatgen.util.io_utils.micro_pyawk (0.8.x-0.9.0 took a
+    ``{key: pattern}`` dict instead, so every OUTCAR reader built on it failed).
+    """
+    if results is None:
+        results = {}
+    if isinstance(search, dict):
+        raise TypeError("search must be a sequence of (regex, predicate, action) records")
+    records = []
+    for record in search:
+        if len(record) != 3:
+            raise ValueError("each search record must be (regex, predicate, action)")
+        pattern, predicate, action = record
+        if predicate is not None and not callable(predicate):
+            raise TypeError("predicate must be callable or None")
+        if not callable(action):
+            raise TypeError("action must be callable")
+        records.append((re.compile(pattern), predicate, action))
+
+    with zopen(filename, mode="rt", encoding="utf-8") as file:
+        for line in file:
+            for pattern, predicate, action in records:
+                match = pattern.search(line)
+                if match is None or (predicate is not None and not predicate(results, line)):
+                    continue
+                if debug is not None:
+                    debug(results, match)
+                action(results, match)
+            if postdebug is not None:
+                postdebug(results, line)
+    return results
 
 
 __all__ = [
     "Ha_to_eV",
     "clean_lines",
+    "micro_pyawk",
     "site_property_column",
     "make_symmetric_matrix_from_upper_tri",
     "get_angle",

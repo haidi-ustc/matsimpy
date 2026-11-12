@@ -325,3 +325,36 @@ class TestProcarProjectionOnElements:
             procar.get_projection_on_elements(
                 Crystal(["Fe", "O"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(4))
             )
+
+
+class TestOutcarOnDemandReaders:
+    """The read_* methods built on micro_pyawk all failed with "could not be parsed":
+    micro_pyawk expected a {key: pattern} dict, its callers pass pymatgen records."""
+
+    @pytest.fixture
+    def outcar(self):
+        from matsimpy.calculator.vasp.outputs import Outcar
+
+        return Outcar(os.path.join(FIXTURES_DIR, "OUTCAR"))
+
+    def test_read_pseudo_zval(self, outcar):
+        outcar.read_pseudo_zval()
+        assert outcar.zval_dict == {"Li": 1.0, "Ni": 10.0, "O": 6.0}
+
+    @pytest.mark.parametrize(
+        "method", ["read_igpar", "read_lepsilon", "read_lepsilon_ionic", "read_internal_strain_tensor"]
+    )
+    def test_reader_runs_on_a_real_outcar(self, outcar, method):
+        getattr(outcar, method)()
+
+    @pytest.mark.requires_pymatgen
+    def test_lepsilon_matches_pymatgen(self, outcar):
+        pytest.importorskip("pymatgen")
+        from pymatgen.io.vasp.outputs import Outcar as PymatgenOutcar
+
+        reference = PymatgenOutcar(os.path.join(FIXTURES_DIR, "OUTCAR"))
+        outcar.read_lepsilon()
+        reference.read_lepsilon()
+        np.testing.assert_allclose(
+            np.asarray(outcar.dielectric_tensor, float), np.asarray(reference.dielectric_tensor, float)
+        )
