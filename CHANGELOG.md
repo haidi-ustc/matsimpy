@@ -52,6 +52,8 @@ from the fixes below. The guide is [docs/ai.md](docs/ai.md).
 - `Agent` meta-tools (`search_tools`, `load_tools`, `activate_skill`,
   `read_skill_resource`, `propose_skill`). Only loaded tools' schemas are sent to the
   model.
+- `matsimpy-ai` renders answers as Markdown on a terminal, in the REPL and with `-c`
+  (rich), and prints the Markdown source when piped or with `--raw`.
 - `matsimpy-ai` subcommands `tools list|show`, `skills list|install|remove|validate|approve|reject`
   and `mcp serve|list`; `-t` adds a module of `@tool` functions.
 - `examples/ai/extending.py`: a custom tool, Skill and MCP server, offline.

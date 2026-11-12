@@ -271,7 +271,8 @@ class Agent:
             session.turns.pop()
         for key, value in usage.items():
             session.usage[key] = session.usage.get(key, 0) + value
-        self.save()
+        if session.turns or (self.sessions_dir / f"{session.id}.json").exists():
+            self.save()  # a session whose only turn failed is not worth listing
         return result
 
     def _loop(self, records: list[ToolRecord], usage: dict[str, int]) -> AgentResult:

@@ -157,6 +157,7 @@ def test_provider_errors_and_interrupts_leave_no_half_turn(make_agent, scripted)
     failed = agent.run("build")
     assert failed.status == "error" and "ConnectionError: network down" in failed.response
     assert agent.session.messages == [] and agent.session.turns == []
+    assert agent.list_sessions() == []  # an empty session is not saved
     with pytest.raises(KeyboardInterrupt):
         agent.run("build again")
     assert agent.session.messages == [] and agent.session.turns == []

@@ -51,6 +51,7 @@ def main(
     resume: Optional[str] = typer.Option(None, "--resume", "-r", help="Resume a saved session."),
     tool_modules: list[str] = TOOL_MODULES,
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Do not show tool calls."),
+    raw: bool = typer.Option(False, "--raw", help="Print answers as Markdown source (the default when piped)."),
 ) -> None:
     """Chat with the MatSimPy agent, or run one request with -c.
 
@@ -64,7 +65,7 @@ def main(
     if ctx.invoked_subcommand is not None:
         return
     from .repl import ReplController
-    from .terminal import create_terminal
+    from .terminal import create_terminal, markdown_printer
 
     try:
         agent = build_agent(workspace, model, api_key, base_url, tool_modules, verbose=not quiet)
@@ -76,9 +77,12 @@ def main(
             agent.resume(resume)
         if command:
             result = agent.run(command)
-            typer.echo(result.response)
+            if result.status == "error":
+                typer.echo(f"Error: {result.response}", err=True)
+            else:
+                markdown_printer(markdown=False if raw else None)(result.response)
             raise typer.Exit(0 if result.status == "success" else 1)
-        create_terminal(ReplController(agent)).run()
+        create_terminal(ReplController(agent), markdown=False if raw else None).run()
 
 
 @app.command("doctor")

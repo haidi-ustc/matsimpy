@@ -32,6 +32,11 @@ matsimpy-ai -w ~/project -r 20261112-101500-ab12   # resume a session of that wo
 matsimpy-ai doctor [--network]                # check key, workspace, tools, skills, MCP
 ```
 
+Answers are Markdown. On a terminal they are rendered (headings, tables, lists, code)
+with rich. When the output is piped, or with `--raw`, the Markdown source is printed.
+Tool calls are shown as `→ name {arguments}` lines on stderr; `-q` hides them. `-c`
+exits with 1 when the request fails.
+
 ```python
 from matsimpy.ai import Agent
 

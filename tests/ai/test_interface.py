@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 import pytest
@@ -12,7 +13,7 @@ from matsimpy.ai.doctor import Doctor, render_diagnostics
 from matsimpy.ai.provider import ChatMessage, DeepSeekProvider, ToolCall, parse_chat_completion
 from matsimpy.ai.repl import ReplController
 from matsimpy.ai.skills import PACKAGED_SKILLS, SkillLibrary
-from matsimpy.ai.terminal import PlainTerminal, format_event
+from matsimpy.ai.terminal import PlainTerminal, format_event, markdown_printer
 
 from .test_mcp import ROOT, our_server
 from .test_skills import make_skill
@@ -143,6 +144,39 @@ def test_plain_terminal(agent):
     assert output[-1] == "Goodbye."
 
 
+MARKDOWN = "## Result\n\n**NaCl** has `2` atoms.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"
+
+
+def test_markdown_printer_renders_on_a_terminal_and_keeps_source_when_piped():
+    import io
+
+    pytest.importorskip("rich")
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+    piped, tty = io.StringIO(), Tty()
+    markdown_printer(piped)(MARKDOWN)
+    markdown_printer(tty)(MARKDOWN)
+    assert piped.getvalue() == MARKDOWN + "\n"
+    rendered = re.sub(r"\x1b\[[0-9;]*m", "", tty.getvalue())  # rich colours a terminal
+    assert "NaCl has 2 atoms." in rendered and "**" not in rendered and "|---|" not in rendered
+    raw = Tty()
+    markdown_printer(raw, markdown=False)(MARKDOWN)
+    assert raw.getvalue() == MARKDOWN + "\n"
+
+
+def test_plain_terminal_renders_answers_as_markdown(agent, capsys):
+    pytest.importorskip("rich")
+    agent.provider.script[:] = [MARKDOWN]
+    lines = iter(["show it", "/quit"])
+    PlainTerminal(ReplController(agent), input_reader=lambda prompt: next(lines), markdown=True).run()
+    output = re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out)
+    assert "NaCl has 2 atoms." in output and "**NaCl**" not in output
+    assert output.rstrip().endswith("Goodbye.")
+
+
 def test_format_event():
     assert format_event("tool_call", {"name": "t", "arguments": {"a": 1}}) == '  → t {"a": 1}'
     assert format_event("tool_result", {"name": "t", "ok": False, "result": {"error": "bad"}}) == "  ✗ t: bad"
@@ -214,6 +248,13 @@ def test_cli(tmp_path, monkeypatch, scripted):
     monkeypatch.setattr(cli, "build_agent", build)
     one_shot = runner.invoke(cli.app, ["-c", "do it"])
     assert one_shot.exit_code == 0 and one_shot.output.strip() == "Done."
+
+    def failing(*args, **kwargs):
+        return Agent(scripted(RuntimeError("provider down")), workspace=workspace, mcp_servers={})
+
+    monkeypatch.setattr(cli, "build_agent", failing)
+    failed = runner.invoke(cli.app, ["-c", "do it", "--raw"])
+    assert failed.exit_code == 1 and "provider down" in failed.output
 
 
 def test_cli_mcp_serve_is_a_working_server(tmp_path):

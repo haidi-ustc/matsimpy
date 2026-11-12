@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from .repl import ReplController
 
-__all__ = ["PlainTerminal", "PromptToolkitTerminal", "create_terminal", "format_event"]
+__all__ = ["PlainTerminal", "PromptToolkitTerminal", "create_terminal", "format_event", "markdown_printer"]
 
 BANNER = "MatSimPy AI. Type a request, /help for commands, /quit to exit."
 
@@ -26,6 +27,28 @@ def format_event(event: str, data: dict) -> str | None:
     return None
 
 
+def markdown_printer(stream=None, *, markdown: bool | None = None) -> Callable[[str], None]:
+    """A function that prints the model's Markdown answers to ``stream`` (default stdout).
+
+    The Markdown is rendered with rich when ``markdown`` is true, or by default when the
+    stream is a terminal and rich is installed. Otherwise the Markdown source is printed,
+    so piped output stays plain text.
+    """
+    stream = stream or sys.stdout
+    if markdown is None:
+        markdown = hasattr(stream, "isatty") and stream.isatty()
+    if markdown:
+        try:
+            from rich.console import Console
+            from rich.markdown import Markdown
+        except ImportError:
+            pass
+        else:
+            console = Console(file=stream)
+            return lambda text: console.print(Markdown(text))
+    return lambda text: print(text, file=stream)
+
+
 class PlainTerminal:
     """Read requests and commands with ``input()``; needs only the standard library."""
 
@@ -34,11 +57,15 @@ class PlainTerminal:
         controller: ReplController,
         *,
         input_reader: Callable[[str], str] = input,
-        output_writer: Callable[[str], Any] = print,
+        output_writer: Callable[[str], Any] | None = None,
+        markdown: bool | None = None,
     ) -> None:
+        """``markdown``: render answers as Markdown (default: when stdout is a terminal).
+        A custom ``output_writer`` receives every line, answers included, as plain text."""
         self.controller = controller
         self.read = input_reader
-        self.write = output_writer
+        self.write = output_writer or print
+        self._render = markdown_printer(markdown=markdown) if output_writer is None else self.write
 
     def run(self) -> None:
         self.write(BANNER)
@@ -73,13 +100,14 @@ class PlainTerminal:
         return False
 
     def render(self, text: str) -> None:
-        self.write(text)
+        self._render(text)
 
 
 class PromptToolkitTerminal(PlainTerminal):
     """History, completion of commands, and Markdown output (with rich, if installed)."""
 
-    def __init__(self, controller: ReplController, *, history_path: str | Path | None = None, **session_options):
+    def __init__(self, controller: ReplController, *, history_path: str | Path | None = None,
+                 markdown: bool | None = None, **session_options):
         from prompt_toolkit import PromptSession
         from prompt_toolkit.completion import WordCompleter
         from prompt_toolkit.history import FileHistory
@@ -93,23 +121,12 @@ class PromptToolkitTerminal(PlainTerminal):
             bottom_toolbar=lambda: f" session {controller.agent.session.id} | {controller.agent.provider.model} ",
             **session_options,
         )
-        super().__init__(controller, input_reader=self.prompt_session.prompt)
-        try:
-            from rich.console import Console
-            from rich.markdown import Markdown
-
-            console = Console()
-            self._markdown = lambda text: console.print(Markdown(text))
-        except ImportError:
-            self._markdown = print
-
-    def render(self, text: str) -> None:
-        self._markdown(text)
+        super().__init__(controller, input_reader=self.prompt_session.prompt, markdown=markdown)
 
 
-def create_terminal(controller: ReplController) -> PlainTerminal:
+def create_terminal(controller: ReplController, *, markdown: bool | None = None) -> PlainTerminal:
     """prompt_toolkit if it is installed, else the plain terminal."""
     try:
-        return PromptToolkitTerminal(controller)
+        return PromptToolkitTerminal(controller, markdown=markdown)
     except ImportError:
-        return PlainTerminal(controller)
+        return PlainTerminal(controller, markdown=markdown)

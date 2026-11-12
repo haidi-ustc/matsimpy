@@ -24,6 +24,10 @@ class CommandResult:
     data: Any = field(default=None, compare=False)
 
 
+
+def _turns(count: int) -> str:
+    return f"{count} turn" if count == 1 else f"{count} turns"
+
 class ReplController:
     """Run ``/commands`` against an :class:`~matsimpy.ai.agent.Agent`."""
 
@@ -84,14 +88,14 @@ class ReplController:
         sessions = self.agent.list_sessions()
         if not sessions:
             return CommandResult("No saved sessions.", data=sessions)
-        lines = [f"{s['id']}  {s['turns']} turns  {s['first_request']}" for s in sessions]
+        lines = [f"{s['id']}  {_turns(s['turns'])}  {s['first_request']}" for s in sessions]
         return CommandResult("\n".join(lines), data=sessions)
 
     def _resume(self, argument: str) -> CommandResult:
         if not argument:
             raise ValueError("usage: /resume <id>")
         session = self.agent.resume(argument)
-        return CommandResult(f"Resumed {session.id} ({len(session.turns)} turns).")
+        return CommandResult(f"Resumed {session.id} ({_turns(len(session.turns))}).")
 
     def _undo(self, argument: str) -> CommandResult:
         text = self.agent.undo()

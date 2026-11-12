@@ -94,7 +94,7 @@ class Doctor:
 
     def _skills(self) -> list[Diagnostic]:
         skills = self.skills.discover()
-        results = [Diagnostic("skills", "pass", f"{len(skills)} skills: {', '.join(s.name for s in skills)}")]
+        results = [Diagnostic("skills", "pass", f"{len(skills)} skill{'' if len(skills) == 1 else 's'}: {', '.join(s.name for s in skills)}")]
         for path, problem in self.skills.problems.items():
             results.append(Diagnostic("skills", "warn", f"skipped {path}: {problem}", "Fix or remove the skill."))
         drafts = self.skills.drafts() if "user" in self.skills.roots else []
