@@ -2,6 +2,7 @@
 
 from matsimpy.storage import DataStorage, MemoryBackend
 from matsimpy.io import read as io_read
+from matsimpy.ai.executor import get_active_executor
 from matsimpy.ai.skill import FunctionDef
 
 SKILL_NAME = "storage"
@@ -11,13 +12,24 @@ SKILL_KEYWORDS: list[str] = [
 ]
 
 
-# Session-level in-memory store
-_store = DataStorage(backend=MemoryBackend())
+def _session_store() -> DataStorage:
+    """The calling agent session's in-memory database.
+
+    Stored on the active executor, so separate agents (and sessions) never
+    see each other's documents. A module-level store was shared by all of them.
+    """
+    executor = get_active_executor()
+    if executor is None:
+        raise RuntimeError("storage skill functions must run inside an agent tool call")
+    store = executor.skill_state.get(SKILL_NAME)
+    if store is None:
+        store = executor.skill_state[SKILL_NAME] = DataStorage(backend=MemoryBackend())
+    return store
 
 
 def _store_structure(path, metadata=None):
     s = io_read(path)
-    doc_id = _store.store_data(s, metadata=metadata or {})
+    doc_id = _session_store().store_data(s, metadata=metadata or {})
     return {
         "doc_id": doc_id,
         "formula": s.formula,
@@ -26,7 +38,7 @@ def _store_structure(path, metadata=None):
 
 
 def _retrieve_structure(doc_id):
-    s = _store.retrieve_data(doc_id)
+    s = _session_store().retrieve_data(doc_id)
     return {
         "formula": s.formula,
         "num_atoms": len(s),
@@ -35,7 +47,7 @@ def _retrieve_structure(doc_id):
 
 
 def _query_structures(key, value, limit=20):
-    results = _store.query({f"metadata.{key}": value}, limit=limit)
+    results = _session_store().query({f"metadata.{key}": value}, limit=limit)
     return {
         "count": len(results),
         "results": [

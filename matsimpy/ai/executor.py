@@ -40,6 +40,9 @@ class FunctionExecutor:
         self._adaptations: dict[str, set[str]] = {}  # fn_name → {arg_keys to deserialize}
         self._retry_count: dict[str, int] = {}        # fn_name → auto-retry attempts
         self._max_retries: int = 3                    # max auto-retries per function per session
+        # Per-session state owned by skills (e.g. the storage skill's database),
+        # keyed by skill name. Lives and dies with this executor.
+        self.skill_state: dict[str, object] = {}
 
     # ── public API ──────────────────────────────────────────────────
 
@@ -313,6 +316,11 @@ def set_last_structure(s):
         executor._registry[ref] = s
 
 
+def get_active_executor() -> FunctionExecutor | None:
+    """Return the executor selected for the current execution context, if any."""
+    return _active_executor.get()
+
+
 def _set_active_executor(exe: FunctionExecutor) -> None:
     """Register an executor in the current context for legacy callers."""
     _active_executor.set(exe)
@@ -331,6 +339,7 @@ def active_executor(executor: FunctionExecutor) -> Iterator[FunctionExecutor]:
 __all__ = [
     "FunctionExecutor",
     "active_executor",
+    "get_active_executor",
     "get_last_structure",
     "set_last_structure",
     "_set_active_executor",

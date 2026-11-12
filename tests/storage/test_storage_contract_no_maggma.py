@@ -51,3 +51,16 @@ def test_maggma_backend_constructor_reports_missing_maggma(monkeypatch):
         MaggmaBackend(use_memory_store=True)
 
 
+
+
+def test_raw_dict_storage_rejects_reserved_metadata_keys():
+    """The dict path skipped the reserved-key check that the MSONable path applies."""
+    from matsimpy.storage import DataStorage, MemoryBackend
+
+    storage = DataStorage(backend=MemoryBackend())
+    with pytest.raises(ValueError, match="reserved"):
+        storage.store_data({"x": 1}, metadata={"doc_id": "shadow"})
+    # ids of ordinary dict documents are unchanged by the check
+    from matsimpy.storage.schema import DocumentEnvelope
+
+    assert storage.store_data({"x": 1}) == DocumentEnvelope.generate_id({"x": 1}, None)
