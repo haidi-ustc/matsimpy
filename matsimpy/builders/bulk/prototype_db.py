@@ -26,8 +26,7 @@ __all__ = ["build_prototype_database", "structures_from_prototype", "suggest_ele
 
 def build_prototype_database(
     structure_files: Iterable[str | os.PathLike[str]],
-    symprec: float = 1e-5,
-    to_primitive: bool = True,
+    symprec: float | None = None,
     database: PrototypeDatabase | None = None,
 ) -> PrototypeDatabase:
     """Return a database mapping each file's prototype to the file's base name.
@@ -38,7 +37,7 @@ def build_prototype_database(
     """
     structures = [(os.path.basename(os.fspath(path)), read(os.fspath(path))) for path in structure_files]
     base = PrototypeDatabase() if database is None else database
-    return base.with_structures(structures, symprec=symprec, to_primitive=to_primitive)
+    return base.with_structures(structures, symprec=symprec)
 
 
 def suggest_element_substitutions(elements: Sequence[str]) -> dict[str, list[str]]:

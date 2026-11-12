@@ -1,19 +1,20 @@
 """Crystal prototype identifiers and the read-only prototype database.
 
-Expected identifiers of real structures (pymatgen 2026.10.24 test files, see
-tests/calculator/fixtures/vasp/PROVENANCE.md) are textbook Wyckoff sites,
-e.g. antifluorite Li2O: O 4a, Li 8c.  The identifiers also match branch1 and
-its CrystalPrototype reference database (checked when porting).
+Expected identifiers are independent references: textbook Wyckoff sites of
+real structures (pymatgen 2026.10.24 test files, see
+tests/calculator/fixtures/vasp/PROVENANCE.md), e.g. antifluorite Li2O O 4a /
+Li 8c, and AFLOW's label for YBa2Cu3O7, A2B3C7D_oP13_47_k_cj_aijl_f.
 """
 
 import os
 import pickle
 from dataclasses import FrozenInstanceError
 
+import numpy as np
 import pytest
 
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.core import Crystal, Molecule
+from matsimpy.core import Crystal, Lattice, Molecule
 from matsimpy.io import read
 from matsimpy.symmetry import PrototypeDatabase, PrototypeInfo, get_prototype, get_prototype_info
 from matsimpy.transformation.structural import make_supercell
@@ -31,54 +32,154 @@ def _rocksalt(elements=("Na", "Cl")):
     return from_prototype("rocksalt", list(elements), 5.64)
 
 
+def _redescribe(crystal, rng):
+    """The same crystal in another cell, origin, atom order and orientation."""
+    while True:
+        change = rng.integers(-1, 2, size=(3, 3))
+        if round(abs(np.linalg.det(change))) == 1:
+            break
+    matrix = np.asarray(crystal.lattice.matrix, float)
+    new_matrix = change @ matrix
+    cartesian = np.asarray(crystal.frac_positions) @ matrix + rng.random(3) @ matrix
+    frac = (cartesian @ np.linalg.inv(new_matrix)) % 1
+    order = rng.permutation(len(crystal))
+    rotation, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+    rotation[:, 0] *= np.sign(np.linalg.det(rotation))
+    return Crystal([crystal.species[i] for i in order], frac[order], Lattice(new_matrix @ rotation.T))
+
+
+REAL = [
+    ("POSCAR_C2", "A_cF8_227_a"),  # diamond, C 8a
+    ("POSCAR_Li2O", "AB2_cF12_225_a_c"),  # antifluorite, O 4a, Li 8c; 96-atom supercell
+    ("POSCAR_MnO", "AB_cF8_225_a_b"),  # rocksalt; primitive 2-atom cell
+    ("POSCAR_bcc", "A_cI2_229_a"),
+    ("POSCAR_fcc", "A_cF4_225_a"),  # 8-atom supercell of the primitive cell
+    ("POSCAR.AlN", "AB_hP4_186_b_b"),  # wurtzite, Al 2b, N 2b
+    ("POSCAR_Al12O18", "A2B3_hR10_167_c_e"),  # corundum, Al 12c, O 18e; rhombohedral count
+]
+
+
+@pytest.mark.parametrize(("fixture", "expected"), REAL)
+def test_real_structures_have_textbook_prototypes(fixture, expected):
+    assert get_prototype(_real(fixture)) == expected
+
+
+@pytest.mark.parametrize(("fixture", "expected"), REAL)
+def test_identifier_is_invariant_under_redescription(fixture, expected):
+    rng = np.random.default_rng(7)
+    crystal = _real(fixture)
+    assert {get_prototype(_redescribe(crystal, rng)) for _ in range(4)} == {expected}
+
+
+def _ybco(permutation=(0, 1, 2), shift=(0, 0, 0)):
+    """YBa2Cu3O7 (Pmmm) in the ITA description Y 1h, Ba 2t, Cu 1a 2q, O 1e 2q 2r 2s."""
+    species = ["Y", "Ba", "Ba", "Cu", "Cu", "Cu"] + ["O"] * 7
+    positions = np.array([
+        [.5, .5, .5], [.5, .5, .184], [.5, .5, .816], [0, 0, 0], [0, 0, .355], [0, 0, .645],
+        [0, .5, 0], [.5, 0, .378], [.5, 0, .622], [0, .5, .378], [0, .5, .622], [0, 0, .159], [0, 0, .841],
+    ])
+    axes = np.eye(3)[list(permutation)]
+    lattice = axes @ np.diag([3.82, 3.89, 11.68])
+    return Crystal(species, (positions @ axes.T + shift) % 1, Lattice(lattice))
+
+
 @pytest.mark.parametrize(
-    ("fixture", "symprec", "expected"),
+    ("permutation", "shift"),
+    [((0, 1, 2), (0, 0, 0)), ((2, 0, 1), (0, 0, 0)), ((1, 0, 2), (.5, 0, .5)), ((0, 2, 1), (.5, .5, .5))],
+)
+def test_wyckoff_letters_match_aflow_for_ybco(permutation, shift):
+    """AFLOW: A2B3C7D_oP13_47_k_cj_aijl_f (Ba k, Cu c j, O a i j l, Y f), the
+    smallest letter sum of the 48 axis/origin choices.  The given ITA
+    description (sum 105) and its re-descriptions all give it."""
+    info = get_prototype_info(_ybco(permutation, shift))
+    assert info.space_group_number == 47
+    assert info.pearson_symbol == "oP13"
+    # anonymized by count: Y (1) -> A, Ba (2) -> B, Cu (3) -> C, O (7) -> D
+    assert info.prototype == "AB2C3D7_oP13_47_f_k_cj_aijl"
+
+
+@pytest.mark.parametrize(
+    ("name", "elements", "expected"),
     [
-        ("POSCAR_C2", 1e-5, "A_cF2_Fd-3m_a"),  # diamond, C 8a
-        ("POSCAR_Li2O", 1e-5, "AB2_cF3_Fm-3m_a_c"),  # antifluorite, 96-atom supercell
-        ("POSCAR_MnO", 1e-3, "AB_cF2_Fm-3m_a_b"),  # rocksalt
-        ("POSCAR_bcc", 1e-5, "A_cI1_Im-3m_a"),  # conventional bcc cell
-        ("POSCAR_fcc", 1e-5, "A_cF1_Fm-3m_a"),  # 8-atom fcc supercell
-        ("POSCAR.AlN", 1e-5, "AB_hP4_P6_3mc_b_b"),  # wurtzite, Al 2b, N 2b
-        ("POSCAR_Al12O18", 1e-3, "A2B3_hR10_R-3c_c_e"),  # corundum, Al 12c, O 18e
+        ("diamond", "Si", "A_cF8_227_a"),
+        ("zincblende", ["Ga", "As"], "AB_cF8_216_a_c"),
+        ("rocksalt", ["Na", "Cl"], "AB_cF8_225_a_b"),
+        ("wurtzite", ["Zn", "O"], "AB_hP4_186_b_b"),
+        ("perovskite", ["Sr", "Ti", "O"], "ABC3_cP5_221_a_b_c"),
+        ("hcp", "Mg", "A_hP2_194_c"),
     ],
 )
-def test_real_structures_have_textbook_prototypes(fixture, symprec, expected):
-    assert get_prototype(_real(fixture), symprec=symprec) == expected
-
-
-def test_default_symprec_is_tight_for_six_digit_coordinates():
-    """1e-5 (branch1's default, kept for identifier compatibility) sees the
-    rounding noise of a real POSCAR as a lower symmetry."""
-    assert get_prototype(_real("POSCAR_MnO")) == "AB_tI2_I4mm_a_a"
+def test_builder_prototypes(name, elements, expected):
+    """Primitive and conventional cells give the same letters and the
+    conventional-cell Pearson symbol (diamond was a/b, zincblende a_c/a_d)."""
+    crystal = from_prototype(name, elements, 4.0)
+    assert get_prototype(crystal) == expected
+    conventional = make_supercell(crystal, [[-1, 1, 1], [1, -1, 1], [1, 1, -1]])
+    assert get_prototype(conventional) == expected
 
 
 def test_prototype_info_components():
     info = get_prototype_info(_real("POSCAR_Li2O"))
-    assert info == PrototypeInfo("AB2", "cF3", "Fm-3m", "a_c", "AB2_cF3_Fm-3m_a_c")
-    assert info.as_dict()["pearson_symbol"] == "cF3"
+    assert info.as_dict() == {
+        "anonymized_formula": "AB2",
+        "pearson_symbol": "cF12",
+        "space_group_number": 225,
+        "space_group_symbol": "Fm-3m",
+        "wyckoff_fingerprint": "a_c",
+        "prototype": "AB2_cF12_225_a_c",
+        "symprec": pytest.approx(info.symprec),
+    }
+    assert isinstance(info, PrototypeInfo)
     with pytest.raises(FrozenInstanceError):
         info.prototype = "x"
 
 
-def test_conventional_cell_gives_the_crystallographic_pearson_symbol():
-    assert get_prototype_info(_real("POSCAR_Li2O"), to_primitive=False).pearson_symbol == "cF12"
-    assert get_prototype_info(_rocksalt(), to_primitive=False).pearson_symbol == "cF8"
+class TestTolerance:
+    def test_adaptive_tolerance_is_a_hundredth_of_the_shortest_distance(self):
+        # MnO: Mn-O 2.26 A
+        assert get_prototype_info(_real("POSCAR_MnO")).symprec == pytest.approx(0.0226, abs=1e-4)
+
+    def test_explicit_tolerance_is_used_as_given(self):
+        """1e-5 sees the rounding noise of the 6-decimal POSCAR as lower symmetry."""
+        info = get_prototype_info(_real("POSCAR_MnO"), symprec=1e-5)
+        assert info.symprec == 1e-5
+        assert info.space_group_symbol == "I4mm"
+
+    def test_inconsistent_tolerance_is_halved(self, monkeypatch):
+        import matsimpy.symmetry.prototype as module
+
+        real = module._standardize
+        tried = []
+
+        def standardize(crystal, symprec):
+            tried.append(symprec)
+            return None if len(tried) < 3 else real(crystal, symprec)
+
+        monkeypatch.setattr(module, "_standardize", standardize)
+        info = get_prototype_info(_real("POSCAR_MnO"))
+        assert tried == pytest.approx([tried[0], tried[0] / 2, tried[0] / 4])
+        assert info.symprec == tried[-1]
+        assert info.prototype == "AB_cF8_225_a_b"
+
+    def test_no_consistent_tolerance_raises(self, monkeypatch):
+        import matsimpy.symmetry.prototype as module
+
+        monkeypatch.setattr(module, "_standardize", lambda crystal, symprec: None)
+        with pytest.raises(ValueError, match="any tolerance"):
+            get_prototype(_rocksalt())
+        with pytest.raises(ValueError, match="symprec=0.01"):
+            get_prototype(_rocksalt(), symprec=0.01)
+
+    def test_tolerance_above_a_quarter_of_the_shortest_distance_is_rejected(self):
+        """spglib 2.8 crashes the interpreter from about 0.45 of the distance."""
+        with pytest.raises(ValueError, match="too large"):
+            get_prototype(_rocksalt(), symprec=1.0)  # Na-Cl 2.82 A
 
 
 def test_invariant_under_element_substitution():
     assert {get_prototype(_rocksalt(pair)) for pair in [("Na", "Cl"), ("Cs", "Cl"), ("Mg", "O")]} == {
-        "AB_cF2_Fm-3m_a_b"
+        "AB_cF8_225_a_b"
     }
-
-
-def test_invariant_under_atom_order_and_supercell():
-    crystal = _rocksalt()
-    shuffled = Crystal(list(reversed(crystal.species)), list(reversed(crystal.frac_positions)), crystal.lattice)
-    assert get_prototype(shuffled) == get_prototype(crystal)
-    assert get_prototype(make_supercell(crystal, [2, 2, 1])) == get_prototype(crystal)
-    diamond = _real("POSCAR_C2")
-    assert get_prototype(make_supercell(diamond, [2, 1, 1])) == get_prototype(diamond)
 
 
 def test_molecule_raises_type_error():
@@ -96,12 +197,6 @@ def test_slab_raises_value_error():
 def test_rejects_invalid_symprec(symprec):
     with pytest.raises((TypeError, ValueError), match="symprec"):
         get_prototype(_rocksalt(), symprec=symprec)
-
-
-@pytest.mark.parametrize("to_primitive", [None, 0, 1, "yes"])
-def test_requires_boolean_to_primitive(to_primitive):
-    with pytest.raises(TypeError, match="to_primitive"):
-        get_prototype(_rocksalt(), to_primitive=to_primitive)
 
 
 def test_missing_spglib_raises_import_error(monkeypatch):
@@ -154,9 +249,9 @@ class TestPrototypeDatabase:
             [("C2", _real("POSCAR_C2")), ("Li2O", _real("POSCAR_Li2O")), ("NaCl", _rocksalt())]
         )
         assert db.as_dict() == {
-            "A_cF2_Fd-3m_a": ["C2"],
-            "AB2_cF3_Fm-3m_a_c": ["Li2O"],
-            "AB_cF2_Fm-3m_a_b": ["NaCl"],
+            "A_cF8_227_a": ["C2"],
+            "AB2_cF12_225_a_c": ["Li2O"],
+            "AB_cF8_225_a_b": ["NaCl"],
         }
 
     def test_pickle(self):
@@ -170,21 +265,21 @@ class TestBuilders:
     def test_build_prototype_database_from_files(self):
         from matsimpy.builders.bulk import build_prototype_database
 
-        db = build_prototype_database([os.path.join(VASP, f) for f in self.FILES], symprec=1e-3)
+        db = build_prototype_database([os.path.join(VASP, f) for f in self.FILES])
         assert db.as_dict() == {
-            "A_cF2_Fd-3m_a": ["POSCAR_C2"],
-            "AB2_cF3_Fm-3m_a_c": ["POSCAR_Li2O"],
-            "AB_cF2_Fm-3m_a_b": ["POSCAR_MnO"],
-            "A_cI1_Im-3m_a": ["POSCAR_bcc"],
+            "A_cF8_227_a": ["POSCAR_C2"],
+            "AB2_cF12_225_a_c": ["POSCAR_Li2O"],
+            "AB_cF8_225_a_b": ["POSCAR_MnO"],
+            "A_cI2_229_a": ["POSCAR_bcc"],
         }
 
     def test_build_merges_into_an_existing_database(self):
         from matsimpy.builders.bulk import build_prototype_database
 
-        existing = PrototypeDatabase({"A_cF2_Fd-3m_a": ["existing.vasp"]})
+        existing = PrototypeDatabase({"A_cF8_227_a": ["existing.vasp"]})
         db = build_prototype_database([os.path.join(VASP, "POSCAR_C2")], database=existing)
-        assert db["A_cF2_Fd-3m_a"] == ("existing.vasp", "POSCAR_C2")
-        assert existing["A_cF2_Fd-3m_a"] == ("existing.vasp",)
+        assert db["A_cF8_227_a"] == ("existing.vasp", "POSCAR_C2")
+        assert existing["A_cF8_227_a"] == ("existing.vasp",)
 
     def test_build_propagates_file_errors(self, tmp_path):
         from matsimpy.builders.bulk import build_prototype_database
@@ -193,23 +288,23 @@ class TestBuilders:
             build_prototype_database([tmp_path / "missing.vasp"])
 
     def _db(self):
-        return PrototypeDatabase({"AB_cF2_Fm-3m_a_b": ["POSCAR_MnO"]})
+        return PrototypeDatabase({"AB_cF8_225_a_b": ["POSCAR_MnO"]})
 
     def test_structures_from_prototype(self):
         from matsimpy.builders.bulk import structures_from_prototype
 
         structures = structures_from_prototype(
-            self._db(), "AB_cF2_Fm-3m_a_b", VASP,
+            self._db(), "AB_cF8_225_a_b", VASP,
             element_substitutions={"Mn": ["Mn", "Ni"], "O": ["O", "S"]}, max_structures=3,
         )
         assert [sorted(s.species) for s in structures] == [["Mn", "O"], ["Mn", "S"], ["Ni", "O"]]
-        assert all(get_prototype(s, symprec=1e-3) == "AB_cF2_Fm-3m_a_b" for s in structures)
+        assert all(get_prototype(s) == "AB_cF8_225_a_b" for s in structures)
 
     def test_substitutions_are_simultaneous(self):
         from matsimpy.builders.bulk import structures_from_prototype
 
         (swapped,) = structures_from_prototype(
-            self._db(), "AB_cF2_Fm-3m_a_b", VASP, element_substitutions={"Mn": ["O"], "O": ["Mn"]}
+            self._db(), "AB_cF8_225_a_b", VASP, element_substitutions={"Mn": ["O"], "O": ["Mn"]}
         )
         template = _real("POSCAR_MnO")
         assert list(swapped.species) == [{"Mn": "O", "O": "Mn"}[s] for s in template.species]
@@ -218,14 +313,14 @@ class TestBuilders:
         from matsimpy.builders.bulk import structures_from_prototype, suggest_element_substitutions
 
         options = suggest_element_substitutions(["Mn", "O"])
-        structures = structures_from_prototype(self._db(), "AB_cF2_Fm-3m_a_b", VASP, max_structures=5)
+        structures = structures_from_prototype(self._db(), "AB_cF8_225_a_b", VASP, max_structures=5)
         assert len(structures) == 5
         assert all(set(s.species) <= set(options["Mn"]) | set(options["O"]) for s in structures)
 
     def test_zero_limit(self):
         from matsimpy.builders.bulk import structures_from_prototype
 
-        assert structures_from_prototype(self._db(), "AB_cF2_Fm-3m_a_b", VASP, max_structures=0) == []
+        assert structures_from_prototype(self._db(), "AB_cF8_225_a_b", VASP, max_structures=0) == []
 
     @pytest.mark.parametrize(
         ("kwargs", "error", "match"),
@@ -243,7 +338,7 @@ class TestBuilders:
         from matsimpy.builders.bulk import structures_from_prototype
 
         with pytest.raises(error, match=match):
-            structures_from_prototype(self._db(), "AB_cF2_Fm-3m_a_b", VASP, **kwargs)
+            structures_from_prototype(self._db(), "AB_cF8_225_a_b", VASP, **kwargs)
 
     def test_unknown_prototype_and_missing_template(self, tmp_path):
         from matsimpy.builders.bulk import structures_from_prototype
@@ -251,7 +346,7 @@ class TestBuilders:
         with pytest.raises(ValueError, match="No template structure"):
             structures_from_prototype(self._db(), "UNKNOWN", VASP)
         with pytest.raises(FileNotFoundError, match="Template structure file not found"):
-            structures_from_prototype(self._db(), "AB_cF2_Fm-3m_a_b", tmp_path)
+            structures_from_prototype(self._db(), "AB_cF8_225_a_b", tmp_path)
 
 
 class TestSuggestions:
@@ -274,3 +369,15 @@ class TestSuggestions:
         from matsimpy.builders.bulk import suggest_element_substitutions
 
         assert suggest_element_substitutions(["Xx"]) == {"Xx": ["Xx"]}
+
+
+def test_wyckoff_letter_values_continue_after_z():
+    """spglib names the 27th Wyckoff position "A" (Pmmm general position 8A);
+    it must count as 27, not as a negative number, in the letter sum."""
+    from matsimpy.symmetry.prototype import _letter_value
+
+    assert [_letter_value(letter) for letter in "azA"] == [1, 26, 27]
+    point = np.array([.11, .23, .37])
+    signs = [(1, 1, 1), (-1, -1, 1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1), (1, 1, -1), (1, -1, 1), (-1, 1, 1)]
+    general = Crystal(["Si"] * 8, [(np.array(s) * point) % 1 for s in signs], Lattice(np.diag([3., 4., 5.])))
+    assert get_prototype(general) == "A_oP8_47_A"
