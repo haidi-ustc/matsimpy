@@ -96,3 +96,7 @@ configs
 # Git worktrees
 .worktrees/
 thirds
+
+# live LLM example evidence
+examples/llm/*/results/
+examples/llm/stability-report.json

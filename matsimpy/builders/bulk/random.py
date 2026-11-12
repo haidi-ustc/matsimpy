@@ -4,10 +4,12 @@ Random bulk crystal generation.
 Generate random crystal structures with symmetry constraints using PyXtal.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional
 from ...core import Crystal, Lattice
 
 
+@tool
 def random_crystal(
     dim: int, group: int, species: List[str], num_ions: List[int], **kwargs
 ) -> Crystal:

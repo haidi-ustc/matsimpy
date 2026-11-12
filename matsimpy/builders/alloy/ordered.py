@@ -4,6 +4,7 @@ Ordered alloy generation.
 Generate ordered intermetallic compounds and structured alloys.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import Dict, List
 from ...core import Crystal, Lattice
 from ...transformation.chemical.substitution import substitute
@@ -42,6 +43,7 @@ def generate_ordered_alloy(
     return substitute(base_structure, indices, species_list)
 
 
+@tool
 def generate_intermetallic(
     elements: List[str],
     composition: str,

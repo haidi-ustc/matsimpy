@@ -7,7 +7,7 @@
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-core%20suite-brightgreen)](tests/)
 
-**Version**: v0.10.0 (see [CHANGELOG.md](CHANGELOG.md) and [MIGRATION_0.10.md](MIGRATION_0.10.md))
+**Version**: v0.10.0 (see [CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 
@@ -15,7 +15,6 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Core Conventions](#core-conventions)
-- [AI Command Line](#ai-command-line-interface)
 - [Project Structure](#project-structure)
 - [Examples](#examples)
 - [Testing](#testing)
@@ -31,7 +30,7 @@
 - **Symmetry**: space groups, conventional/primitive cells, high-symmetry k-paths for 3D and 2D (layer) crystals, and AFLOW-style prototype identifiers (`AB_cF8_225_a_b`) with a `PrototypeDatabase`
 - **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
 - **Extensibility**: Plugin entry points for registries, including IO formats
-- **AI REPL**: Optional LLM function calling via DeepSeek models. Built-in MatSimPy skills expose core, builders, transformations, analysis, IO, storage, calculators, and symmetry tools. Use `matsimpy-ai -c "build fcc Cu"` for single-shot mode
+- **AI agent**: Optional LLM agent (DeepSeek or any OpenAI-compatible API) that calls MatSimPy functions marked with `@tool`; extensible with Agent Skills and MCP servers, and itself an MCP server. See [docs/ai.md](docs/ai.md)
 - **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT file/workflow interfaces for VASP, Gaussian, and LAMMPS — optional
 - **Native VASP compatibility layer**: read and write VASP inputs and outputs without
   installing pymatgen. Native DOS, band-structure, computed-entry, and trajectory
@@ -96,7 +95,7 @@ pip install -e '.[dev,parity]'
 # Data storage (maggma)
 pip install -e .[storage]
 
-# AI REPL
+# AI agent
 pip install -e .[ai]
 
 # Everything
@@ -577,136 +576,39 @@ assert id1 == id2
 storage.close()
 ```
 
-### AI REPL
+### AI agent
 
-Interactive LLM-powered assistant. The REPL, single-shot CLI, and public
-``Agent`` facade use the same durable runtime.
+An optional LLM agent (`pip install -e .[ai]`) that works through MatSimPy functions.
+The full guide, including adding tools, writing Skills and configuring MCP servers, is
+[docs/ai.md](docs/ai.md).
 
 ```bash
-# Install with AI extras
-pip install -e .[ai]
-
-# Set API key
 export DEEPSEEK_API_KEY="sk-..."
-
-# Interactive REPL
-matsimpy-ai
-matsimpy-ai --workspace ~/my-project --model deepseek-v4-pro
-
-# Single-shot command
-matsimpy-ai -c "create fcc Cu crystal and save to cu.vasp"
-matsimpy-ai -v -c "analyze bonds in nacl.cif"
-
-# Offline-by-default, secret-safe configuration checks
-matsimpy-ai doctor --workspace ~/my-project
+matsimpy-ai                                   # interactive; /help lists the commands
+matsimpy-ai -c "build rocksalt NaCl with a=5.64 angstrom and save it as nacl.cif"
+matsimpy-ai doctor                            # check key, workspace, tools, skills, MCP
+matsimpy-ai mcp serve -w ~/project            # serve MatSimPy's tools to other MCP clients
 ```
 
 ```python notest
 from matsimpy.ai import Agent
 
-agent = Agent(workspace="project")
-result = agent.run("Create FCC copper, analyze it, and save copper.cif")
-print(result.response, result.status)
-print(result.tools, result.artifacts, result.trace_id)
+with Agent(workspace="project") as agent:
+    result = agent.run("Create FCC copper, analyze it, and save copper.cif")
+    print(result.status, result.response, [call.name for call in result.tool_calls])
 ```
 
-`AgentResult` also exposes `usage` and inactive `evolution_candidates`.
-`Agent.add_context()`, `conversation_messages()`, and `switch_workspace()` manage
-explicit context and isolation. `review_evolution()`, `approve_skill()`,
-`reject_skill()`, and `rollback_skill()` expose the reviewed lifecycle. Lower
-level `AgentSession`, `AgentRuntime`, and `ReplController` remain public for
-custom clients; `ReplController.for_agent(agent)` builds the controller used by
-the `matsimpy-ai` terminal (`load_skill()` adds a skill's instructions to the
-context).
-
-Skills load progressively — builders load when user mentions "slab" or "vacancy", analysis loads for "bond" or "symmetry". Agent memory persists across sessions (`~/.matsimpy/ai/memory/`).
-
-Builder and transformation tools are generated from the live MatSimPy registries.
-New registered functions and plugins therefore become available to the LLM without
-adding matching wrappers under `matsimpy.ai`; explicit registry schemas take
-priority, with callable signatures used when a registry does not provide one.
-
-Named structures should use prototype builders, while `create_crystal` is the
-low-level interface for explicitly supplied fractional coordinates:
-
-```bash
-matsimpy-ai -c "build rocksalt NaCl with a=5.64 angstrom and save it as nacl.cif"
-```
-
-AI boundary and live-provider tests can be run independently:
-
-```bash
-pytest tests/ai/ -q -m "not requires_llm"
-pytest tests/ai/test_live_llm.py -q -m requires_llm
-```
-
-The runtime records searchable task traces in its SQLite state database and
-keeps bounded memory files. Reusable workflows are drafts until an explicit,
-evidence-backed approval using a positive numeric version ID.
-
-Runtime commands:
-
-In the enhanced terminal, Enter submits and Esc+Enter inserts a newline for
-multiline input. LLM responses render as Rich Markdown when Rich is installed;
-commands and status messages remain plain text.
-
-```text
-/help
-/new                         /sessions
-/resume <session-id>         /retry                 /undo
-/skills [query]              /load-skill <name>
-/trace
-/usage                       /drafts
-/evolve review [candidate]
-/approve <version-id>        /reject <version-id>
-/rollback <version-id>
-/quit                        /q                     /exit
-```
-
-`/approve-skill` and `/reject-skill` remain aliases for compatibility.
-
-Standard Agent Skills use a directory containing `SKILL.md` (and optional
-`references/` resources):
-
-```text
-inspect-crystal/
-├── SKILL.md
-└── references/workflow.md
-```
-
-```yaml
----
-name: inspect-crystal
-description: Inspect a saved crystal
-allowed-tools: read_structure analyze_structure
----
-Read references/workflow.md before execution.
-```
-
-Skill source precedence is `workspace > user > packaged`; the roots are
-`<workspace>/.matsimpy/skills`, `~/.matsimpy/ai/skills`, and installed package
-skills. Discovery reads bounded metadata, while activation and reference reads
-are explicit. Resolved `SKILL.md` and resource paths must remain inside the
-skill root, and `allowed-tools` is intersected with the live tool catalog.
-Invalid UTF-8, oversized files, escaping symlinks, absolute paths, and `..`
-escapes are rejected.
-
-Legacy `*.skill.md` files can be converted with
-`matsimpy.ai.skill_loader.migrate_legacy_skill(source, destination, dry_run=True)`.
-Migration never overwrites a non-identical destination and never activates a
-skill; migrated drafts remain undiscoverable until approval.
-
-Approval lifecycle: a successful trace may create an inactive draft;
-`/evolve review <version-id>` performs static validation and capability-limited
-deterministic replay; the user inspects provenance, diff, evidence, and the
-`approvable` flag before `/approve <version-id>` or `/reject <version-id>`.
-Revisions repeat that lifecycle, and `/rollback <version-id>` creates a new
-audited version. Approval rechecks the reviewed content hash and current live
-`FunctionDef` bindings. Evolved skills cannot install dependencies, execute
-bundled scripts, edit MatSimPy source, or exceed their allowed-tool set.
-
-See the `matsimpy.ai` module docstrings for the complete API, command,
-migration, security, restart/retry, and approval reference.
+- **Tools** come from MatSimPy functions marked with `@tool`
+  (`matsimpy.utils.tooling`). Their names, schemas and descriptions are read from the
+  signature and docstring, so new library functions reach the model without wrappers.
+- **Skills** are folders with a `SKILL.md` (Agent Skills format) and an optional
+  `tools.py`. They are loaded only when activated. Manage them with
+  `matsimpy-ai skills install|remove|validate`. Skills the model proposes stay drafts
+  until `/approve`.
+- **MCP**: servers listed in `~/.matsimpy/ai/mcp.json` or `<workspace>/mcp.json`
+  (stdio or Streamable HTTP) add their tools to the agent.
+- **Sessions** are JSON files in `<workspace>/.matsimpy/sessions/` (`/resume`,
+  `/undo`, `/retry`).
 
 ## Core Conventions
 
@@ -798,28 +700,11 @@ matsimpy/
 ├── calculator/        # Energy/force calculators
 ├── config/            # Global configuration (ConfigManager)
 ├── symmetry/          # Space groups, k-paths (3D and 2D), prototype identifiers (spglib)
-├── ai/                # Optional AI REPL and skill runtime
+├── ai/                # Optional LLM agent: tools, Skills, MCP, REPL (docs/ai.md)
 ├── exceptions.py      # MatSimPyError, FormatError, StructureTypeError, etc.
 ├── plugins.py         # Plugin discovery via entry points
 └── constants.py       # POSITION_TOL, LATTICE_TOL
 ```
-
-## AI Command-Line Interface
-
-MatSimPy includes an optional AI command-line interface in the `[ai]` extra:
-
-```bash
-# Install AI dependencies
-pip install -e .[ai]
-
-# Launch interactive REPL
-matsimpy-ai
-
-# Run a single natural-language task
-matsimpy-ai -c "create fcc Cu crystal and save to cu.vasp"
-```
-
-The AI CLI provides natural-language access to structure generation, transformations, analysis, format conversion, storage, and calculator helpers through MatSimPy tool calls.
 
 ## Examples
 
@@ -834,6 +719,7 @@ Comprehensive examples are available in the `examples/` directory:
 - **Storage**: `storage_basic.py`
 - **Symmetry**: `symmetry_basic.py`
 - **Config**: `config_basic.py`
+- **AI agent**: `ai/extending.py` (custom tool, Skill and MCP, offline) and `llm/` (live LLM scenarios with a judge)
 
 Run an example:
 
@@ -863,8 +749,9 @@ their sources are listed in `tests/calculator/fixtures/vasp/PROVENANCE.md`.
 
 ## Documentation
 
-- **Changes and upgrades**: [CHANGELOG.md](CHANGELOG.md) and [MIGRATION_0.10.md](MIGRATION_0.10.md)
+- **Changes and upgrades**: [CHANGELOG.md](CHANGELOG.md)
 - **Examples**: the `examples/` directory
+- **AI agent**: [docs/ai.md](docs/ai.md)
 - **API reference**: module docstrings; `docs/conf.py` configures a Sphinx autodoc build
 - **Third-party code**: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 

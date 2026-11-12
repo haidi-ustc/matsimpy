@@ -2,6 +2,7 @@
 Symmetry analysis implementation for crystals and molecules.
 """
 
+from matsimpy.utils.tooling import tool
 import numpy as np
 import warnings
 from typing import Dict, List, Optional, Tuple, Union, Any
@@ -791,6 +792,7 @@ class SymmetryAnalyzer:
         return ops
 
 
+@tool
 def analyze_symmetry(
     structure: Union[Crystal, Molecule],
     symprec: float = 1e-5,
@@ -827,6 +829,7 @@ def analyze_symmetry(
         raise TypeError(f"Unsupported structure type: {type(structure)}")
 
 
+@tool
 def get_symmetry_info(
     crystal: Crystal, symprec: float = 1e-5, angle_tolerance: float = -1.0
 ) -> Dict[str, Any]:
@@ -841,6 +844,7 @@ def get_symmetry_info(
     return {k: info.get(k) for k in keys}
 
 
+@tool
 def get_conventional_cell(
     crystal: Crystal, symprec: float = 1e-5, angle_tolerance: float = -1.0
 ) -> Crystal:

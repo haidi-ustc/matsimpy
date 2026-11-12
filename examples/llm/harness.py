@@ -3,29 +3,28 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import requests
+import shutil
+import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import requests
+
 from matsimpy import io
-from matsimpy.ai.conversation import ChatMessage
-from matsimpy.ai.memory import AgentMemory
-from matsimpy.ai.provider import DeepSeekProvider
-from matsimpy.ai.runtime import AgentRuntime
-from matsimpy.ai.session import AgentSession
-from matsimpy.ai.session_store import SessionStore
-from matsimpy.ai.skill import Skill, SkillManager
-from matsimpy.ai.skill_loader import discover_builtin_skills
+from matsimpy.ai.agent import Agent, AgentResult
+from matsimpy.ai.mcp import MCPServerConfig
+from matsimpy.ai.provider import ChatMessage, DeepSeekProvider
+from matsimpy.ai.skills import SkillLibrary
 
 from .scenarios import Scenario, get_scenario
 
 
 DEFAULT_REPETITIONS = 3
 ROOT = Path(__file__).resolve().parent
+REPOSITORY = ROOT.parents[1]
 SECRET_KEYS = {"api_key", "authorization", "token", "password", "secret"}
 
 
@@ -67,23 +66,37 @@ class EvaluationReport:
         )
 
 
-def _manager() -> SkillManager:
-    manager = SkillManager()
-    for item in discover_builtin_skills():
-        skill = Skill(item["name"], item["description"], item["functions"])
-        skill.keywords = item["keywords"]
-        manager.register(skill)
-    manager.load("core")
-    return manager
+def matsimpy_mcp_server(workspace: Path) -> MCPServerConfig:
+    """MatSimPy's own MCP server (``matsimpy-ai mcp serve``) as a stdio subprocess."""
+    return MCPServerConfig("matsimpy", command=sys.executable, cwd=str(REPOSITORY),
+                           args=("-m", "matsimpy.ai.cli", "mcp", "serve", "-w", str(workspace)))
+
+
+def build_agent(workspace: Path, provider=None, *, mcp: bool = False) -> Agent:
+    """An agent isolated from the user's configuration: packaged skills only, no memory,
+    and no MCP servers except MatSimPy's own one when ``mcp`` is true."""
+    return Agent(
+        provider or DeepSeekProvider(),
+        workspace=workspace,
+        skills=SkillLibrary(workspace, user=None),
+        mcp_servers={"matsimpy": matsimpy_mcp_server(workspace)} if mcp else {},
+        memory=None,
+    )
+
+
+def _record(call) -> dict:
+    return {"name": call.name, "arguments": dict(call.arguments), "result": dict(call.result),
+            "status": "success" if call.ok else "failure"}
 
 
 def _artifact_inventory(workspace: Path) -> list[dict]:
     structures = {".cif", ".xyz", ".vasp", ".poscar", ".json", ".pdb", ".xsf", ".mol"}
     inventory = []
-    for path in sorted(workspace.iterdir()):
-        if not path.is_file() or path.name in {"state.db"}:
-            continue
-        item = {"path": path.name, "bytes": path.stat().st_size}
+    for path in sorted(workspace.rglob("*")):
+        relative = path.relative_to(workspace)
+        if not path.is_file() or any(part.startswith(".") for part in relative.parts):
+            continue  # skip the agent's own .matsimpy/ session files
+        item = {"path": relative.as_posix(), "bytes": path.stat().st_size}
         if path.suffix.casefold() in structures:
             try:
                 structure = io.read(path)
@@ -131,15 +144,14 @@ def _judge(provider: DeepSeekProvider, scenario: Scenario, evidence: dict) -> di
     return parsed
 
 
-def _execute_prompts(session: AgentSession, prompts: tuple[str, ...]) -> tuple[list[dict], list[str]]:
-    """Execute scenario prompts on one active conversation branch."""
+def _execute_prompts(agent: Agent, prompts: tuple[str, ...]) -> tuple[list[dict], list[str]]:
+    """Run the scenario prompts as consecutive turns of one conversation."""
     records: list[dict] = []
     final_outputs: list[str] = []
     for prompt in prompts:
-        turn = session.run(prompt)
-        assert turn.result is not None
-        records.extend(turn.result.tool_calls)
-        final_outputs.append(turn.result.final_response)
+        result: AgentResult = agent.run(prompt)
+        records.extend(_record(call) for call in result.tool_calls)
+        final_outputs.append(result.response)
     return records, final_outputs
 
 
@@ -148,22 +160,12 @@ def execute_once(scenario: Scenario, run_number: int, *, judge: bool = True) -> 
     scenario_dir = ROOT / f"{scenario.id}_{scenario.slug}"
     workspace = scenario_dir / "results" / "workspaces" / f"run-{run_number}"
     workspace.mkdir(parents=True, exist_ok=True)
-    for child in workspace.iterdir():
-        if child.is_file():
-            child.unlink()
+    shutil.rmtree(workspace)
+    workspace.mkdir()
 
     provider = DeepSeekProvider()
-    store = SessionStore(workspace / "state.db")
-    runtime = AgentRuntime(
-        provider=provider,
-        skill_manager=_manager(),
-        session_store=store,
-        memory=AgentMemory(workspace / "memory"),
-        workspace_path=workspace,
-        source="llm-example",
-    )
-    session = AgentSession(lambda: runtime, store)
-    records, final_outputs = _execute_prompts(session, scenario.prompts)
+    with build_agent(workspace, provider, mcp=scenario.mcp) as agent:
+        records, final_outputs = _execute_prompts(agent, scenario.prompts)
 
     evidence = {
         "scenario": f"{scenario.id}_{scenario.slug}",
@@ -286,6 +288,7 @@ def run_scenario(identifier: str, repetitions: int = DEFAULT_REPETITIONS, *, jud
 
 
 __all__ = [
-    "DEFAULT_REPETITIONS", "EvaluationReport", "execute_once", "refresh_markdown_records",
+    "DEFAULT_REPETITIONS", "EvaluationReport", "build_agent", "execute_once", "matsimpy_mcp_server",
+    "refresh_markdown_records",
     "rejudge_failures", "run_scenario", "sanitize_evidence",
 ]

@@ -4,6 +4,7 @@ Atom manipulation operations (move, swap, merge, split).
 Works for both Crystal and Molecule structures.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional, Union
 import numpy as np
 from ...core import Crystal, Molecule
@@ -14,6 +15,7 @@ from .._helpers import (
 )
 
 
+@tool
 def move_atoms(
     structure: Union[Crystal, Molecule],
     indices: Union[int, List[int]],
@@ -90,6 +92,7 @@ def move_atoms(
         )
 
 
+@tool
 def swap_atoms(
     structure: Union[Crystal, Molecule], index1: int, index2: int
 ) -> Union[Crystal, Molecule]:
@@ -144,6 +147,7 @@ def swap_atoms(
         )
 
 
+@tool
 def merge_atoms(
     structure: Union[Crystal, Molecule],
     index1: int,
@@ -225,6 +229,7 @@ def merge_atoms(
         )
 
 
+@tool
 def split_atom(
     structure: Union[Crystal, Molecule],
     index: int,

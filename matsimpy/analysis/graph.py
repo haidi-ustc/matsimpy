@@ -31,6 +31,7 @@ Example:
     >>> graph = create_structure_graph(mol, cutoff=2.0)
 """
 
+from matsimpy.utils.tooling import tool
 import numpy as np
 from collections import deque
 from typing import Optional, Union, Dict, Any, List, Tuple, Set
@@ -907,6 +908,7 @@ def get_adjacency_matrix(
     return graph.adjacency_matrix
 
 
+@tool
 def get_distance_matrix(
     structure: Union[Crystal, Molecule], use_pbc: Optional[bool] = None
 ) -> np.ndarray:
@@ -993,6 +995,7 @@ def get_edge_list(
     return edges
 
 
+@tool
 def get_coordination_numbers(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
@@ -1063,6 +1066,7 @@ def get_degree_distribution(
     return graph.degree_distribution
 
 
+@tool
 def is_connected(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
@@ -1096,6 +1100,7 @@ def is_connected(
     return graph.is_connected
 
 
+@tool
 def get_connected_components(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
@@ -1131,6 +1136,7 @@ def get_connected_components(
     return graph.connected_components
 
 
+@tool
 def get_shortest_path(
     structure: Union[Crystal, Molecule],
     start_idx: int,
@@ -1241,6 +1247,7 @@ def get_node_features(
     return graph.node_features
 
 
+@tool
 def get_graph_statistics(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,
@@ -1325,6 +1332,7 @@ def structure_to_networkx(
     return graph.to_networkx()
 
 
+@tool
 def get_rings(
     structure: Union[Crystal, Molecule],
     cutoff: float = 3.0,

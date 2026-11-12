@@ -5,6 +5,7 @@ Provides functions to export lists of structures to well-formatted LaTeX tables
 for use in papers, reports, and documentation.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Union, Optional, Callable
 from ..core import Crystal, Molecule
 
@@ -320,6 +321,7 @@ def _format_molecule_column(
         return "N/A"
 
 
+@tool
 def structures_to_latex_table(
     structures: List[Union[Crystal, Molecule]],
     caption: str = "Structures",
@@ -418,6 +420,7 @@ def structures_to_latex_table(
         return "\n".join(lines)
 
 
+@tool(paths=("filename",))
 def save_latex_table(
     structures: List[Union[Crystal, Molecule]], filename: str, **kwargs
 ) -> None:

@@ -5,6 +5,7 @@ Provides operations specific to molecular structures like fragmentation,
 merging, and conformer generation.
 """
 
+from matsimpy.utils.tooling import tool
 from numbers import Integral
 from typing import Dict, List, Optional, Tuple
 import copy
@@ -92,6 +93,7 @@ def fragment_molecule(
     return fragments
 
 
+@tool
 def align_molecules(
     molecule1: Molecule, molecule2: Molecule, indices1: List[int], indices2: List[int]
 ) -> Molecule:
@@ -259,6 +261,7 @@ def generate_conformers(
     return conformers
 
 
+@tool
 def merge_molecules(
     molecule1: Molecule,
     molecule2: Molecule,

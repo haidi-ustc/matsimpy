@@ -37,6 +37,7 @@ and transformations, which are above this layer).
 
 from __future__ import annotations
 
+from matsimpy.utils.tooling import tool
 import itertools
 import json
 import math
@@ -290,6 +291,7 @@ def _canonical_groups(conventional, dataset, counts, symprec):
     return best[1]
 
 
+@tool
 def get_prototype_info(crystal: Crystal, symprec: float | None = None) -> PrototypeInfo:
     """Return the components of the crystal's prototype identifier.
 
@@ -331,6 +333,7 @@ def get_prototype_info(crystal: Crystal, symprec: float | None = None) -> Protot
     )
 
 
+@tool
 def get_prototype(crystal: Crystal, symprec: float | None = None) -> str:
     """Return the prototype identifier, e.g. ``AB_cF8_225_a_b`` for rocksalt.
 

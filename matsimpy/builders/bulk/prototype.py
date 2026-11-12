@@ -4,6 +4,7 @@ Prototype-based bulk crystal generation.
 Generate crystals from common structural prototypes (FCC, BCC, diamond, etc.).
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional, Union, Dict
 import numpy as np
 import math
@@ -113,6 +114,7 @@ def _parse_compound_formula(formula: str) -> List[str]:
     return elements
 
 
+@tool
 def from_prototype(
     prototype: str,
     species: Union[str, List[str]],

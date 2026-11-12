@@ -7,12 +7,14 @@ dichalcogenides (MoS2, WS2, etc.), hexagonal boron nitride (hBN),
 and any other 2D crystal structure.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Tuple, Optional, Union
 from math import sqrt, gcd, atan2, sin, cos, pi
 import numpy as np
 from ...core import Crystal, Lattice
 
 
+@tool
 def build_nanotube(
     base_2d: Crystal,
     chirality: Tuple[int, int],
@@ -286,6 +288,7 @@ def _find_translation_vector(
     return T, t1, t2
 
 
+@tool
 def build_carbon_nanotube(
     n: int,
     m: int,

@@ -2,12 +2,14 @@
 Lattice transformation and standardization operations.
 """
 
+from matsimpy.utils.tooling import tool
 import copy
 from typing import Dict, List, Optional, Union
 import numpy as np
 from ...core import Crystal, Lattice
 
 
+@tool
 def rotate_lattice(
     crystal: Crystal,
     rotation_matrix: Union[List[List[float]], np.ndarray],
@@ -62,6 +64,7 @@ def rotate_lattice(
     )
 
 
+@tool
 def transform_lattice(
     crystal: Crystal,
     transformation_matrix: Union[List[List[float]], np.ndarray],
@@ -213,6 +216,7 @@ def _map_site_properties(
     return [copy.deepcopy(site_props[index]) for index in mapping]
 
 
+@tool
 def standardize_cell(
     crystal: Crystal, to_primitive: bool = False
 ) -> Crystal:

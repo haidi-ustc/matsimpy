@@ -1,36 +1,110 @@
-"""DeepSeek API provider — OpenAI-compatible chat completions.
+"""Chat messages and the LLM provider.
 
-Supports:
-- deepseek-v4-pro (recommended)
-- deepseek-v4-flash (fast)
-- deepseek-chat (deprecated 2026/07/24)
-- deepseek-reasoner (deprecated 2026/07/24)
-
-Endpoints:
-- OpenAI-compatible: POST /v1/chat/completions
-- Anthropic-compatible: POST /anthropic/v1/messages (future)
+:class:`ChatProvider` is the interface the agent needs: one ``chat`` call that
+takes messages and tool schemas and returns the next assistant message.
+:class:`DeepSeekProvider` implements it for DeepSeek and any other
+OpenAI-compatible ``/v1/chat/completions`` endpoint (``base_url``).
 """
 
 from __future__ import annotations
+
 import json
 import os
-import requests
-from .conversation import ChatMessage, ToolCall, ChatResponse
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
-# Available models
+__all__ = [
+    "ChatMessage",
+    "ChatProvider",
+    "ChatResponse",
+    "DEFAULT_BASE_URL",
+    "DEFAULT_MODEL",
+    "DeepSeekProvider",
+    "MODELS",
+    "ToolCall",
+]
+
 MODELS = {
-    "deepseek-v4-pro": "Most capable model — best for tool use and complex reasoning",
-    "deepseek-v4-flash": "Fast and affordable — good for simple queries",
-    "deepseek-chat": "DEPRECATED — will be removed 2026/07/24",
-    "deepseek-reasoner": "DEPRECATED — will be removed 2026/07/24",
+    "deepseek-v4-pro": "Most capable model; best for tool use and complex reasoning",
+    "deepseek-v4-flash": "Fast and affordable; good for simple tasks",
 }
-
 DEFAULT_MODEL = "deepseek-v4-pro"
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 
 
+@dataclass
+class ChatMessage:
+    """One message of a conversation, in the OpenAI chat format."""
+
+    role: str  # system | user | assistant | tool
+    content: str
+    tool_calls: list[dict] | None = None
+    tool_call_id: str | None = None
+
+    def to_dict(self) -> dict:
+        data: dict[str, Any] = {"role": self.role, "content": self.content}
+        if self.tool_calls:
+            data["tool_calls"] = self.tool_calls
+        if self.tool_call_id:
+            data["tool_call_id"] = self.tool_call_id
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ChatMessage:
+        return cls(data["role"], data.get("content") or "", data.get("tool_calls"), data.get("tool_call_id"))
+
+    @classmethod
+    def system(cls, content: str) -> ChatMessage:
+        return cls("system", content)
+
+    @classmethod
+    def user(cls, content: str) -> ChatMessage:
+        return cls("user", content)
+
+    @classmethod
+    def assistant(cls, content: str, tool_calls: list[ToolCall] | None = None) -> ChatMessage:
+        calls = [call.to_dict() for call in tool_calls] if tool_calls else None
+        return cls("assistant", content, calls)
+
+    @classmethod
+    def tool(cls, content: str, tool_call_id: str) -> ChatMessage:
+        return cls("tool", content, tool_call_id=tool_call_id)
+
+
+@dataclass
+class ToolCall:
+    """A tool call requested by the model."""
+
+    id: str
+    name: str
+    arguments: dict
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "type": "function",
+                "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
+
+
+@dataclass
+class ChatResponse:
+    """The model's next message."""
+
+    message: ChatMessage
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    finish_reason: str = "stop"  # stop | tool_calls | length
+    usage: dict[str, int] = field(default_factory=dict)
+
+
+class ChatProvider(Protocol):
+    """What the agent needs from an LLM."""
+
+    model: str
+
+    def chat(self, messages: list[ChatMessage], tools: list[dict] | None = None) -> ChatResponse:
+        """The next assistant message for ``messages``, optionally calling ``tools``."""
+
+
 class DeepSeekProvider:
-    """OpenAI-compatible client for DeepSeek API."""
+    """Client for DeepSeek or another OpenAI-compatible chat-completions API."""
 
     def __init__(
         self,
@@ -38,86 +112,50 @@ class DeepSeekProvider:
         model: str | None = None,
         base_url: str | None = None,
         request_timeout: float = 120,
-    ):
+    ) -> None:
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
         if not self.api_key:
-            raise ValueError(
-                "DeepSeek API key required. Set DEEPSEEK_API_KEY env var "
-                "or pass api_key to DeepSeekProvider()."
-            )
+            raise ValueError("DeepSeek API key required: set DEEPSEEK_API_KEY or pass api_key")
         self.model = model or os.getenv("MATSIMPY_AI_MODEL") or DEFAULT_MODEL
-        self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+        self.base_url = (base_url or os.getenv("MATSIMPY_AI_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
         self.request_timeout = request_timeout
-        self._endpoint = f"{self.base_url}/v1/chat/completions"
 
-    def chat(
-        self,
-        messages: list[ChatMessage],
-        tools: list[dict] | None = None,
-        tool_choice: str = "auto",
-    ) -> ChatResponse:
-        """Send chat completion request. Returns response with any tool calls.
+    @property
+    def endpoint(self) -> str:
+        return f"{self.base_url}/v1/chat/completions"
 
-        Uses OpenAI-compatible endpoint: POST {base_url}/v1/chat/completions
-        """
-        payload = {
-            "model": self.model,
-            "messages": [m.to_dict() for m in messages],
-        }
+    def chat(self, messages: list[ChatMessage], tools: list[dict] | None = None) -> ChatResponse:
+        import requests
+
+        payload: dict[str, Any] = {"model": self.model, "messages": [m.to_dict() for m in messages]}
         if tools:
             payload["tools"] = tools
-            payload["tool_choice"] = tool_choice
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
-        resp = requests.post(
-            self._endpoint,
+            payload["tool_choice"] = "auto"
+        response = requests.post(
+            self.endpoint,
             json=payload,
-            headers=headers,
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
             timeout=self.request_timeout,
         )
-        resp.raise_for_status()
-        data = resp.json()
-
-        choice = data["choices"][0]
-        msg_data = choice["message"]
-        finish_reason = choice.get("finish_reason", "stop")
-
-        tool_calls = []
-        if "tool_calls" in msg_data and msg_data["tool_calls"]:
-            for tc in msg_data["tool_calls"]:
-                try:
-                    args = json.loads(tc["function"]["arguments"])
-                except (json.JSONDecodeError, KeyError):
-                    args = {}
-                tool_calls.append(ToolCall(
-                    id=tc["id"],
-                    name=tc["function"]["name"],
-                    arguments=args,
-                ))
-
-        message = ChatMessage(
-            role=msg_data.get("role", "assistant"),
-            content=msg_data.get("content", "") or "",
-            tool_calls=[{
-                "id": tc.id,
-                "type": "function",
-                "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
-            } for tc in tool_calls] if tool_calls else None,
-        )
-
-        return ChatResponse(
-            message=message,
-            tool_calls=tool_calls,
-            finish_reason=finish_reason,
-        )
-
-    @classmethod
-    def list_models(cls) -> dict:
-        return MODELS
+        response.raise_for_status()
+        return parse_chat_completion(response.json())
 
 
-__all__ = ["DeepSeekProvider", "MODELS", "DEFAULT_MODEL"]
+def parse_chat_completion(data: dict) -> ChatResponse:
+    """A :class:`ChatResponse` from an OpenAI-format chat-completion body."""
+    choice = data["choices"][0]
+    message = choice["message"]
+    calls = []
+    for item in message.get("tool_calls") or []:
+        try:
+            arguments = json.loads(item["function"].get("arguments") or "{}")
+        except json.JSONDecodeError:
+            arguments = {"__invalid_json__": item["function"].get("arguments")}
+        calls.append(ToolCall(item["id"], item["function"]["name"], arguments if isinstance(arguments, dict) else {}))
+    usage = {key: value for key, value in (data.get("usage") or {}).items() if isinstance(value, int)}
+    return ChatResponse(
+        ChatMessage.assistant(message.get("content") or "", calls),
+        calls,
+        choice.get("finish_reason") or "stop",
+        usage,
+    )

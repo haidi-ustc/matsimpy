@@ -4,6 +4,7 @@ Atom organization operations (sort, center, perturb).
 Works for both Crystal and Molecule structures.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional, Union, Callable
 import numpy as np
 
@@ -18,6 +19,7 @@ from .._helpers import (
 )
 
 
+@tool
 def sort_atoms(
     structure: Union[Crystal, Molecule],
     key: Union[str, Callable] = "species",
@@ -96,6 +98,7 @@ def sort_atoms(
         )
 
 
+@tool
 def center_structure(
     structure: Union[Crystal, Molecule],
     center: Optional[List[float]] = None,
@@ -157,6 +160,7 @@ def center_structure(
         )
 
 
+@tool
 def perturb_positions(
     structure: Union[Crystal, Molecule],
     amplitude: float,

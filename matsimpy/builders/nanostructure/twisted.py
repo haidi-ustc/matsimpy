@@ -5,6 +5,7 @@ Generate twisted bilayer and multilayer structures (e.g., twisted bilayer graphe
 at magic angles, twisted transition metal dichalcogenides).
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Tuple, Optional, Union
 import numpy as np
 from copy import deepcopy
@@ -12,6 +13,7 @@ from ...core import Crystal, Lattice
 from ...transformation import rotate, translate
 
 
+@tool
 def build_twisted_bilayer(
     layer: Crystal,
     twist_angle: float,
@@ -168,6 +170,7 @@ def build_twisted_bilayer(
     return Crystal(combined_species, combined_positions.tolist(), new_lattice)
 
 
+@tool
 def build_magic_angle_twisted(
     layer: Crystal,
     n: int,
@@ -227,6 +230,7 @@ def build_magic_angle_twisted(
     )
 
 
+@tool
 def build_twisted_multilayer(
     layer: Crystal,
     num_layers: int,

@@ -2,6 +2,7 @@
 Lattice scaling and volume operations.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import List, Optional, Union
 import numpy as np
 from ...core import Crystal, Lattice
@@ -34,6 +35,7 @@ def _validate_scale_factor(
     return np.diag(factors)
 
 
+@tool
 def scale_lattice(
     crystal: Crystal,
     scale_factor: Union[float, List[float], np.ndarray],
@@ -76,6 +78,7 @@ def scale_lattice(
     )
 
 
+@tool
 def set_volume(
     crystal: Crystal, target_volume: float
 ) -> Crystal:
@@ -105,6 +108,7 @@ def set_volume(
     return scale_lattice(crystal, scale_factor)
 
 
+@tool
 def optimize_lattice(
     crystal: Crystal,
     target_density: Optional[float] = None,

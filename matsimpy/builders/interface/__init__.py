@@ -21,11 +21,13 @@ Examples:
     >>> interface = create_simple_interface(si, ge, vacuum=5.0)
 """
 
+from matsimpy.utils.tooling import tool
 import numpy as np
 
 from ...core import Crystal, Lattice
 
 
+@tool
 def create_simple_interface(
     substrate: Crystal,
     film: Crystal,

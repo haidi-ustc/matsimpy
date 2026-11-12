@@ -1,9 +1,86 @@
 # Changelog
 
+## Unreleased
+
+The AI module (`matsimpy.ai`) is rewritten around three extension points: tools derived
+from Python functions, Agent Skills, and MCP. The rest of MatSimPy is unchanged apart
+from the fixes below. The guide is [docs/ai.md](docs/ai.md).
+
+### Breaking changes
+- Removed modules: `matsimpy.ai.runtime`, `executor`, `skill`, `skill_loader`, `skills`
+  (package), `evolution`, `session_store`, `catalog`, `agent_skills`, `session`,
+  `conversation` and `providers`. Their classes (`AgentRuntime`, `AgentSession`,
+  `SkillManager`, `FunctionDef`, `FunctionExecutor`, `get_active_executor`,
+  `SessionStore`, `SkillVersion`, `EvolutionManager`, `EvolutionCandidate`,
+  `TaskResult` and others) have no direct replacement. Use `Agent`, `ToolCatalog`,
+  `ToolExecutor` and `SkillLibrary` instead.
+- `ChatMessage`, `ToolCall`, `ChatResponse` and `ChatProvider` moved to
+  `matsimpy.ai.provider`.
+- `AgentResult` is `(response, status, tool_calls, usage)`. `tool_calls` holds
+  `ToolRecord(name, arguments, ok, result)` objects. `artifacts`, `trace_id` and
+  `evolution_candidates` are gone.
+- Sessions are JSON files in `<workspace>/.matsimpy/sessions/` instead of a SQLite
+  database. Sessions saved by 0.10.0 cannot be resumed.
+- Skills use the Agent Skills format (folders with `SKILL.md`). Legacy `*.skill.md`
+  files and the version/rollback lifecycle are gone. Proposed Skills are drafts that you
+  approve or reject by name.
+- REPL commands: `/load-skill` is `/skill`; `/trace`, `/evolve`, `/rollback`,
+  `/approve-skill` and `/reject-skill` are removed; `/approve` and `/reject` take a draft
+  name. The `matsimpy-ai -v` flag is replaced by `-q` (tool calls are shown by default).
+- Tool names follow the functions: `read_structure`/`write_structure` (from
+  `io.read`/`io.write`) and the builder and transformation function names. The result
+  of `write_structure` reports `filename` instead of `saved_to`.
+- `matsimpy.builders.bulk.from_space_group` now generates the structure from the
+  space group's operations (see Fixed). Code that passed a complete cell and relied on
+  the old behaviour gets more atoms, or an error if the result has a different group.
+
+### Added
+- `matsimpy.utils.tooling.tool`: a decorator that marks a function as an AI tool. The
+  name, JSON schema and description are derived from the signature and docstring
+  (Google, NumPy or Sphinx). About 80 builder, transformation, I/O, symmetry and graph
+  analysis functions are marked.
+- `matsimpy.ai.tools`: `Tool`, `ToolCatalog` (discovery of marked functions, search,
+  reload), `ToolExecutor` (argument validation, structure references such as
+  `structure:3`, workspace-confined paths) and `ToolContext`.
+- `matsimpy.ai.skills.SkillLibrary`: Agent Skills with progressive loading, a
+  `tools.py` per Skill, packaged/user/workspace roots, install from a folder or zip,
+  remove, validate, and drafts that need approval. Packaged Skill: `vasp-inputs`. Its
+  `kpoint_mesh` tool matches pymatgen's `Kpoints.automatic_density`.
+- `matsimpy.ai.mcp`: an MCP client (stdio and Streamable HTTP) configured by
+  `mcp.json`, and an MCP server. `matsimpy-ai mcp serve` serves every tool over stdio.
+  Interoperability with the official `mcp` SDK is tested.
+- `Agent` meta-tools (`search_tools`, `load_tools`, `activate_skill`,
+  `read_skill_resource`, `propose_skill`). Only loaded tools' schemas are sent to the
+  model.
+- `matsimpy-ai` renders answers as Markdown on a terminal, in the REPL and with `-c`
+  (rich), and prints the Markdown source when piped or with `--raw`.
+- `matsimpy-ai` subcommands `tools list|show`, `skills list|install|remove|validate|approve|reject`
+  and `mcp serve|list`; `-t` adds a module of `@tool` functions.
+- `examples/ai/extending.py`: a custom tool, Skill and MCP server, offline.
+  `examples/llm` gains scenarios for a Skill (16) and an MCP server (17), and a README
+  per scenario.
+- `docs/ai.md`.
+
+### Fixed
+- `from_space_group` read the symmetry off the input positions instead of applying
+  the requested group, so an asymmetric unit was rejected. Its own docstring example
+  (rocksalt NaCl in Fm-3m) raised "space group 221, not requested 225". It now applies
+  the operations of the group's standard setting from spglib's database (origin choice
+  2 where there are two; hexagonal axes for rhombohedral groups) and checks the result.
+- `examples/builders_bulk.py` (hcp arguments, unknown `fluorite` prototype,
+  `from_space_group` call) and `examples/transformation_composite.py` (lambdas cannot
+  be sent to worker processes; missing `__main__` guard for the `spawn` start method)
+  printed errors and warnings. `tests/test_examples.py` now runs every example and fails
+  on printed errors or warnings.
+
+### Removed
+- `MIGRATION_0.10.md`. Breaking changes are listed in this changelog.
+- `scripts/profile_runtime.py` and `scripts/profile_runtime_live.py`, which profiled
+  the removed runtime.
+
 ## 0.10.0 — 2026-11-12
 
-New features and bug fixes; no API is removed. Changes that can affect existing code are
-listed in [MIGRATION_0.10.md](MIGRATION_0.10.md).
+New features and bug fixes; no API is removed.
 
 ### Added
 - `HighSymmKpath` supports two-dimensional crystals (`pbc` with exactly one `False`
@@ -146,7 +223,6 @@ listed in [MIGRATION_0.10.md](MIGRATION_0.10.md).
   `test_core_integrity_091.py` is now `test_core_integrity.py`.
 
 ### Documentation
-- `MIGRATION_0.10.md` lists the changes that can affect code written for 0.9.0.
 - Removed `MIGRATION_0.9.md` (the 0.8.x → 0.9.0 guide).
 - README: symmetry section with 2D k-path and prototype examples (run by the test suite),
   corrected prototype list, test commands and documentation links (it pointed to

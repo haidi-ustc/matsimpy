@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "matsimpy": {
+      "command": "matsimpy-ai",
+      "args": ["mcp", "serve", "-w", "${HOME}/matsimpy-mcp"]
+    },
+    "remote-example": {
+      "type": "http",
+      "url": "https://mcp.example.org/mcp",
+      "headers": {"Authorization": "Bearer ${EXAMPLE_MCP_TOKEN}"},
+      "disabled": true
+    }
+  }
+}

@@ -4,11 +4,13 @@ Adsorbate placement on surfaces.
 Tools for adding adsorbates to slab surfaces.
 """
 
+from matsimpy.utils.tooling import tool
 from typing import Tuple, Union
 import numpy as np
 from ...core import Crystal, Molecule
 
 
+@tool
 def add_adsorbate(
     slab: Crystal,
     adsorbate: Union[str, Crystal, Molecule],

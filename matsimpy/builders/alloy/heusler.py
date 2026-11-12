@@ -10,9 +10,11 @@ Heusler alloys are intermetallic compounds with specific crystal structures
 that exhibit interesting magnetic and electronic properties.
 """
 
+from matsimpy.utils.tooling import tool
 from ...core import Crystal, Lattice
 
 
+@tool
 def build_heusler(
     X: str,
     Y: str,
@@ -279,6 +281,7 @@ def build_inverse_heusler_quaternary(
     return Crystal(species, positions, lattice)
 
 
+@tool
 def build_full_heusler(
     X: str,
     Y: str,
@@ -307,6 +310,7 @@ def build_full_heusler(
     return _build_full_heusler(X, Y, Z, lattice_constant)
 
 
+@tool
 def build_half_heusler(
     X: str,
     Y: str,
@@ -335,6 +339,7 @@ def build_half_heusler(
     return _build_half_heusler(X, Y, Z, lattice_constant)
 
 
+@tool
 def build_inverse_heusler(
     X: str,
     Y: str,

@@ -73,7 +73,7 @@ def main() -> int:
         selected = scenarios_needing_runs(selected, repetitions=args.repetitions)
         print(f"incremental run: {len(selected)} scenario(s) need execution", flush=True)
     def execute(scenario):
-        print(f"[{scenario.id}/15] {scenario.name}", flush=True)
+        print(f"[{scenario.id}/{len(SCENARIOS)}] {scenario.name}", flush=True)
         report = _execute_scenario(scenario.id, args.repetitions, args.no_judge)
         print(
             f"  deterministic={report.deterministic_pass_rate:.0%} "
@@ -105,7 +105,7 @@ def main() -> int:
                 report = future.result()
                 reports.append(report)
                 print(
-                    f"[{scenario.id}/15] deterministic={report.deterministic_pass_rate:.0%} "
+                    f"[{scenario.id}/{len(SCENARIOS)}] deterministic={report.deterministic_pass_rate:.0%} "
                     f"judge={report.judge_pass_rate:.0%} stable={report.stable}",
                     flush=True,
                 )
