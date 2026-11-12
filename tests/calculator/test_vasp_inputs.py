@@ -1,16 +1,25 @@
 """Tests for VASP input file classes.
 
-Test data copied from thirds/pymatgen-core/test-files/io/vasp/.
-Uses matsimpy Crystal/Lattice classes and matsimpy imports.
-May import pymatgen only as an optional reference oracle.
+All VASP data comes from unmodified pymatgen 2026.10.24 test files
+(see fixtures/vasp/PROVENANCE.md). pymatgen is used only as an optional
+reference oracle.
 """
 
 import os
-import pytest
+
 import numpy as np
-from matsimpy.core import Crystal, Lattice, Composition
+import pytest
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
+
+
+def _fixture(name):
+    return os.path.join(FIXTURES_DIR, name)
+
+
+def _read_text(name):
+    with open(_fixture(name)) as fh:
+        return fh.read()
 
 
 class TestIncar:
@@ -18,7 +27,7 @@ class TestIncar:
         """Parse INCAR from real VASP INCAR fixture."""
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar.from_file(os.path.join(FIXTURES_DIR, "INCAR"))
+        incar = Incar.from_file(_fixture("INCAR"))
         assert incar["ALGO"] == "Damped"
         assert float(incar["EDIFF"]) == pytest.approx(1e-4)
         assert isinstance(incar["LORBIT"], int)
@@ -26,58 +35,85 @@ class TestIncar:
     def test_from_dict_and_get(self):
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar({"ENCUT": 400, "ISMEAR": 0, "SIGMA": 0.05})
-        assert incar["ENCUT"] == 400
-        assert incar["ISMEAR"] == 0
+        parsed = Incar.from_file(_fixture("INCAR_2"))
+        rebuilt = Incar(dict(parsed))
+        assert dict(rebuilt) == dict(parsed)
+        assert rebuilt["ISIF"] == parsed["ISIF"] == 3
 
-    def test_write_read_roundtrip(self, tmp_path):
+    @pytest.mark.parametrize("name", ["INCAR", "INCAR_2", "INCAR_C2", "INCAR.lobster"])
+    def test_write_read_roundtrip(self, name, tmp_path):
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar({"ENCUT": 400, "ISMEAR": 0})
+        incar = Incar.from_file(_fixture(name))
         fpath = tmp_path / "INCAR"
         incar.write_file(fpath)
-        text = fpath.read_text()
-        assert "ENCUT" in text
-        assert "400" in text
+        assert dict(Incar.from_file(fpath)) == dict(incar)
 
     def test_diff(self):
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar1 = Incar({"ENCUT": 400, "ISMEAR": 0})
-        incar2 = Incar({"ENCUT": 500, "ISMEAR": 0})
+        incar1 = Incar.from_file(_fixture("INCAR"))
+        incar2 = Incar.from_file(_fixture("INCAR_2"))
         diff = incar1.diff(incar2)
-        # diff returns dict with 'Different' key for things that differ
-        assert "Different" in diff
-        assert "ENCUT" in diff["Different"]
+        assert diff["Different"]["ENCUT"] == {
+            "INCAR1": incar1["ENCUT"],
+            "INCAR2": None,  # INCAR_2 has no ENCUT
+        }
+        assert diff["Different"]["ISMEAR"] == {"INCAR1": incar1["ISMEAR"], "INCAR2": incar2["ISMEAR"]}
+        assert set(diff["Same"]) | set(diff["Different"]) == set(incar1) | set(incar2)
 
     def test_get_str(self):
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar({"ENCUT": 400, "ISMEAR": 0})
-        s = incar.get_str()
-        assert "ENCUT" in s
-        assert "400" in s
+        incar = Incar.from_file(_fixture("INCAR"))
+        lines = incar.get_str().splitlines()
+        assert "ALGO = Damped" in lines
+        assert dict(Incar.from_str(incar.get_str())) == dict(incar)
 
     def test_key_case_insensitive(self):
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar.from_str("ALGO = Fast\nENCUT = 480\nEDIFF = 1e-07\n")
+        incar = Incar.from_file(_fixture("INCAR"))
         incar["encut"] = 490
         assert incar["ENCUT"] == 490
         assert incar.get("encut") == 490
 
-    def test_check_params(self):
+    @pytest.mark.parametrize("name", ["INCAR", "INCAR_2", "INCAR_C2", "INCAR.lobster"])
+    def test_check_params(self, name):
+        import warnings
+
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar({"ENCUT": 400, "LWAVE": False})
-        incar.check_params()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            Incar.from_file(_fixture(name)).check_params()
 
     def test_incar_set_and_get(self):
         from matsimpy.calculator.vasp.inputs import Incar
 
-        incar = Incar({})
+        incar = Incar()
         incar["ENCUT"] = 500
         assert incar["ENCUT"] == 500
+
+    @pytest.mark.parametrize("name", ["INCAR", "INCAR_2", "INCAR_C2", "INCAR.lobster"])
+    def test_optional_pymatgen_reference(self, name):
+        pytest.importorskip("pymatgen")
+        from pymatgen.io.vasp.inputs import Incar as PmgIncar
+
+        from matsimpy.calculator.vasp.inputs import Incar
+
+        assert dict(Incar.from_file(_fixture(name))) == dict(PmgIncar.from_file(_fixture(name)))
+
+
+KPOINTS_FILES = [
+    "KPOINTS",
+    "KPOINTS_auto",
+    "KPOINTS_gamma",
+    "KPOINTS_band",
+    "KPOINTS_cartesian",
+    "KPOINTS_explicit",
+    "KPOINTS_explicit_tet",
+]
 
 
 class TestKpoints:
@@ -85,120 +121,145 @@ class TestKpoints:
         """Parse KPOINTS from real VASP KPOINTS fixture."""
         from matsimpy.calculator.vasp.inputs import Kpoints
 
-        kpt = Kpoints.from_file(os.path.join(FIXTURES_DIR, "KPOINTS"))
+        kpt = Kpoints.from_file(_fixture("KPOINTS"))
         assert kpt is not None
         assert kpt.kpts is not None
 
+    def test_gamma_file(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        kpt = Kpoints.from_file(_fixture("KPOINTS_gamma"))
+        assert kpt.style.name == "Gamma"
+        assert [list(k) for k in kpt.kpts] == [[4, 4, 4]]
+
+    def test_line_mode_file(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        kpt = Kpoints.from_file(_fixture("KPOINTS_band"))
+        assert kpt.style.name == "Line_mode"
+        assert kpt.num_kpts == 16
+        assert kpt.labels[0] == "Γ"
+
+    def test_explicit_tetrahedra_file(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        kpt = Kpoints.from_file(_fixture("KPOINTS_explicit_tet"))
+        assert kpt.num_kpts == 4
+        assert list(kpt.kpts_weights) == [1, 1, 2, 4]
+        assert kpt.tet_number > 0
+
+    @pytest.mark.parametrize("name", KPOINTS_FILES)
+    def test_write_read_roundtrip(self, name, tmp_path):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        kpt = Kpoints.from_file(_fixture(name))
+        fpath = tmp_path / "KPOINTS"
+        kpt.write_file(fpath)
+        again = Kpoints.from_file(fpath)
+        assert again.style == kpt.style
+        assert again.num_kpts == kpt.num_kpts
+        np.testing.assert_allclose(np.asarray(again.kpts, float), np.asarray(kpt.kpts, float))
+
+    @pytest.mark.parametrize("name", KPOINTS_FILES)
+    def test_optional_pymatgen_reference(self, name):
+        pytest.importorskip("pymatgen")
+        from pymatgen.io.vasp.inputs import Kpoints as PmgKpoints
+
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        ours = Kpoints.from_file(_fixture(name))
+        ref = PmgKpoints.from_file(_fixture(name))
+        assert ours.style.name == ref.style.name
+        assert ours.num_kpts == ref.num_kpts
+        np.testing.assert_allclose(np.asarray(ours.kpts, float), np.asarray(ref.kpts, float))
+        assert list(ours.kpts_shift) == pytest.approx(list(ref.kpts_shift))
+        assert ours.labels == ref.labels
+        if ref.kpts_weights is not None:
+            assert list(ours.kpts_weights) == pytest.approx(list(ref.kpts_weights))
+        assert ours.tet_number == ref.tet_number
+        assert ours.tet_weight == pytest.approx(ref.tet_weight)
+        assert ours.tet_connections == ref.tet_connections
+
+    # Generators: the data is produced by the API from parameters.
     def test_automatic(self):
         from matsimpy.calculator.vasp.inputs import Kpoints
 
-        kpt = Kpoints.automatic([4, 4, 4])
-        assert kpt.style.value == 0  # Automatic enum
+        kpt = Kpoints.automatic(10)
+        assert kpt.style.name == "Automatic"
+        parsed = Kpoints.from_file(_fixture("KPOINTS_auto"))
+        assert [list(k) for k in kpt.kpts] == [list(k) for k in parsed.kpts]
 
     def test_gamma_automatic(self):
         from matsimpy.calculator.vasp.inputs import Kpoints
 
-        kpt = Kpoints.gamma_automatic([2, 2, 2])
-        assert kpt.style.value == 1  # Gamma enum
+        kpt = Kpoints.gamma_automatic([4, 4, 4])
+        parsed = Kpoints.from_file(_fixture("KPOINTS_gamma"))
+        assert kpt.style == parsed.style
+        assert [list(k) for k in kpt.kpts] == [list(k) for k in parsed.kpts]
 
     def test_monkhorst_pack(self):
         from matsimpy.calculator.vasp.inputs import Kpoints
 
         kpt = Kpoints.monkhorst_automatic([6, 6, 6])
-        assert kpt is not None
-
-    def test_write_file(self, tmp_path):
-        from matsimpy.calculator.vasp.inputs import Kpoints
-
-        kpt = Kpoints.automatic([3, 3, 3])
-        fpath = tmp_path / "KPOINTS"
-        kpt.write_file(fpath)
-        text = fpath.read_text()
-        assert "3 3 3" in text or "Automatic" in text
+        assert kpt.style.name == "Monkhorst"
+        assert [list(k) for k in kpt.kpts] == [[6, 6, 6]]
 
 
 class TestPoscar:
     @pytest.fixture
-    def si_crystal(self):
-        return Crystal(
-            ["Si", "Si"],
-            [[0, 0, 0], [0.25, 0.25, 0.25]],
-            Lattice.cubic(5.43),
-        )
+    def c2_structure(self):
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        return Poscar.from_file(_fixture("POSCAR_C2"), check_for_potcar=False).structure
 
     def test_from_file(self):
-        """Parse POSCAR from real VASP POSCAR fixture."""
+        """Parse the VASP 4 POSCAR fixture (FePO4, symbols after the coordinates)."""
         from matsimpy.calculator.vasp.inputs import Poscar
 
         poscar = Poscar.from_file(
-            os.path.join(FIXTURES_DIR, "POSCAR"),
+            _fixture("POSCAR"),
             check_for_potcar=False,
             read_velocities=False,
         )
-        assert poscar is not None
-        assert poscar.structure is not None
-        # POSCAR fixture contains LiFePO4
-        assert len(poscar.structure) > 0
-        assert "Fe" in poscar.site_symbols or "Li" in poscar.site_symbols
+        assert len(poscar.structure) == 24
+        assert poscar.site_symbols == ["Fe", "P", "O"]
 
     def test_from_str_basic(self):
-        """Parse POSCAR from string (VASP 5 format)."""
+        """Parse POSCAR text (VASP 5 format)."""
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar_str = """Si test
-1.0
-5.43 0 0
-0 5.43 0
-0 0 5.43
-Si
-1
-Direct
-0 0 0
-"""
-        poscar = Poscar.from_str(poscar_str)
-        assert poscar is not None
-        assert "Si" in str(poscar)
-        assert poscar.structure.formula == "Si"
+        poscar = Poscar.from_str(_read_text("POSCAR_C2"))
+        assert poscar.structure.formula == "C2"
+        assert poscar.site_symbols == ["C"]
 
     def test_from_str_vasp4_with_symbols(self):
-        """VASP 4 type with symbols at the end."""
+        """VASP 4 file: no symbol line, symbols at the end of the coordinate lines."""
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar_str = """Test1
-1.0
-3.840198 0.000000 0.000000
-1.920099 3.325710 0.000000
-0.000000 -2.217138 3.135509
-1 1
-direct
-0.000000 0.000000 0.000000 Si
-0.750000 0.500000 0.750000 F
-"""
-        poscar = Poscar.from_str(poscar_str)
-        assert poscar is not None
-        # Verify the structure has both Si and F
-        formula = poscar.structure.formula
-        assert "Si" in formula
-        assert "F" in formula
+        poscar = Poscar.from_str(_read_text("POSCAR"))
+        assert poscar.natoms == [4, 4, 16]
+        assert poscar.structure.composition.reduced_formula == "FePO4"
+        # line 2 is a negative scale factor, i.e. the cell volume
+        assert poscar.structure.lattice.volume == pytest.approx(300.65685512, rel=1e-6)
 
-    def test_from_str_selective_dynamics(self):
-        """POSCAR with selective dynamics."""
+    def test_from_str_symbols_natoms_multilines(self):
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar_str = """Test3
-1.0
-3.840198 0.000000 0.000000
-1.920099 3.325710 0.000000
-0.000000 -2.217138 3.135509
-1 1
-Selective dynamics
-direct
-0.000000 0.000000 0.000000 T T T Si
-0.750000 0.500000 0.750000 F F F O
-"""
-        poscar = Poscar.from_str(poscar_str)
-        selective_dynamics = [list(x) for x in poscar.selective_dynamics]
-        assert selective_dynamics == [[True, True, True], [False, False, False]]
+        poscar = Poscar.from_str(_read_text("POSCAR_symbols_natoms_multilines"))
+        assert len(poscar.structure) == 53
+        assert poscar.structure.composition.reduced_formula == "Fe35Cr16Ni2"
+
+    def test_selective_dynamics_roundtrip(self):
+        """No pymatgen test file has selective dynamics, so the flags are set via
+        the API on a real structure, written by the library and parsed back."""
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        structure = Poscar.from_file(_fixture("POSCAR.AlN"), check_for_potcar=False).structure
+        flags = [[True, True, True], [False, False, False], [True, False, True], [False, True, False]]
+        text = Poscar(structure, selective_dynamics=flags).get_str()
+        assert "Selective dynamics" in text
+        parsed = Poscar.from_str(text)
+        assert [list(x) for x in parsed.selective_dynamics] == flags
 
     def test_from_str_empty_raises(self):
         from matsimpy.calculator.vasp.inputs import Poscar
@@ -206,61 +267,54 @@ direct
         with pytest.raises(ValueError, match="Empty POSCAR"):
             Poscar.from_str("")
 
-    def test_site_symbols(self, si_crystal):
+    def test_site_symbols(self, c2_structure):
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar = Poscar(si_crystal)
-        assert "Si" in poscar.site_symbols
+        assert Poscar(c2_structure).site_symbols == ["C"]
 
-    def test_comment_default(self, si_crystal):
+    def test_comment_default(self, c2_structure):
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar = Poscar(si_crystal)
-        assert poscar.comment == si_crystal.formula
+        poscar = Poscar(c2_structure)
+        assert poscar.comment == c2_structure.formula
 
-    def test_comment_custom(self, si_crystal):
+    def test_comment_custom(self, c2_structure):
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar = Poscar(si_crystal, comment="Custom POSCAR")
+        poscar = Poscar(c2_structure, comment="Custom POSCAR")
         assert poscar.comment == "Custom POSCAR"
 
-    def test_write_file(self, si_crystal, tmp_path):
+    @pytest.mark.parametrize("name", ["POSCAR_C2", "POSCAR.AlN", "POSCAR_symbols_natoms_multilines", "POSCAR"])
+    def test_write_read_roundtrip(self, name, tmp_path):
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar = Poscar(si_crystal)
+        structure = Poscar.from_file(_fixture(name), check_for_potcar=False).structure
         fpath = tmp_path / "POSCAR"
-        poscar.write_file(fpath)
-        text = fpath.read_text()
-        assert "Si" in text
+        Poscar(structure).write_file(fpath)
+        again = Poscar.from_file(fpath, check_for_potcar=False).structure
+        assert again.composition == structure.composition
+        np.testing.assert_allclose(again.lattice.matrix, structure.lattice.matrix, atol=1e-8)
+        np.testing.assert_allclose(again.frac_positions, structure.frac_positions, atol=1e-8)
 
-    def test_get_str_format(self, si_crystal):
-        from matsimpy.calculator.vasp.inputs import Poscar
-
-        poscar = Poscar(si_crystal)
-        s = poscar.get_str()
-        # Should contain comment line, scale, lattice, species, coords
-        assert "Si" in s
-        lines = s.split("\n")
-        assert len(lines) > 5
-
-    @pytest.mark.skipif(
-        not os.path.exists(os.path.join(FIXTURES_DIR, "POSCAR")),
-        reason="Fixture not available",
-    )
-    def test_optional_pymatgen_reference(self):
+    @pytest.mark.parametrize("name", ["POSCAR", "POSCAR_C2", "POSCAR.AlN", "POSCAR_symbols_natoms_multilines"])
+    def test_optional_pymatgen_reference(self, name):
         """Compare matsimpy Poscar parsing against pymatgen as reference oracle."""
         pytest.importorskip("pymatgen")
         from pymatgen.io.vasp.inputs import Poscar as PmgPoscar
+
         from matsimpy.calculator.vasp.inputs import Poscar
 
-        poscar_path = os.path.join(FIXTURES_DIR, "POSCAR")
-        pmg_poscar = PmgPoscar.from_file(poscar_path, check_for_potcar=False, read_velocities=False)
-        ms_poscar = Poscar.from_file(poscar_path, check_for_potcar=False, read_velocities=False)
-
-        # Compare site symbols
+        path = _fixture(name)
+        pmg_poscar = PmgPoscar.from_file(path, check_for_potcar=False, read_velocities=False)
+        ms_poscar = Poscar.from_file(path, check_for_potcar=False, read_velocities=False)
         assert ms_poscar.site_symbols == pmg_poscar.site_symbols
-        # Compare natoms
         assert ms_poscar.natoms == pmg_poscar.natoms
+        np.testing.assert_allclose(
+            ms_poscar.structure.lattice.matrix, pmg_poscar.structure.lattice.matrix, atol=1e-10
+        )
+        np.testing.assert_allclose(
+            ms_poscar.structure.frac_positions, pmg_poscar.structure.frac_coords, atol=1e-10
+        )
 
 
 class TestSettings:

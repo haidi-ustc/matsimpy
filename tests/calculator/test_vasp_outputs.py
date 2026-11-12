@@ -16,22 +16,28 @@ from monty.json import MontyDecoder
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
 
 
+def _fixture(name):
+    return os.path.join(FIXTURES_DIR, name)
+
+
 def test_chgcar_native_arithmetic_and_serialization():
     from matsimpy.calculator.vasp.outputs import Chgcar
-    from matsimpy.core import Crystal, Lattice
 
-    chgcar = Chgcar(Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(2)), {"total": np.ones((2, 2, 2))})
+    chgcar = Chgcar.from_file(_fixture("CHGCAR.nospin.gz"))
+    total = chgcar.data["total"]
     doubled = chgcar + chgcar
     assert type(doubled) is Chgcar
-    np.testing.assert_array_equal(doubled.data["total"], 2)
+    np.testing.assert_array_equal(doubled.data["total"], 2 * total)
     decoded = MontyDecoder().process_decoded(doubled.as_dict())
     assert type(decoded) is Chgcar
-    np.testing.assert_array_equal(decoded.data["total"], 2)
+    np.testing.assert_array_equal(decoded.data["total"], 2 * total)
 
+    # a supplied distance matrix (every grid point 99 A from the site) is used
+    # and survives JSON serialization
     cached = Chgcar(
         chgcar.structure,
-        {"total": np.ones((2, 2, 2))},
-        distance_matrix=np.full((1, 2, 2, 2), 99.0),
+        {"total": total},
+        distance_matrix=np.full((1, *chgcar.dim), 99.0),
     )
     assert cached.get_integrated_diff(0, 1.0)[-1, 1] == 0
     restored = MontyDecoder().process_decoded(json.loads(json.dumps(cached.as_dict())))
@@ -39,76 +45,99 @@ def test_chgcar_native_arithmetic_and_serialization():
     assert restored.get_integrated_diff(0, 1.0)[-1, 1] == 0
 
 
-@pytest.mark.parametrize("volumetric_cls_name", ["Chgcar", "Locpot", "Elfcar"])
-def test_scalar_volumetric_native_write_and_read(tmp_path, volumetric_cls_name):
+@pytest.mark.parametrize(
+    ("volumetric_cls_name", "fixture"),
+    [
+        ("Chgcar", "CHGCAR.nospin.gz"),
+        ("Chgcar", "CHGCAR.spin.gz"),
+        ("Locpot", "LOCPOT.gz"),
+        ("Elfcar", "ELFCAR.gz"),
+    ],
+)
+def test_volumetric_native_write_and_read(tmp_path, volumetric_cls_name, fixture):
     from matsimpy.calculator.vasp import outputs
-    from matsimpy.core import Crystal, Lattice
 
     volumetric_cls = getattr(outputs, volumetric_cls_name)
-    structure = Crystal(["Si"], [[0.125, 0.25, 0.375]], Lattice.cubic(2))
-    total = np.arange(8, dtype=float).reshape(2, 2, 2)
+    original = volumetric_cls.from_file(_fixture(fixture))
     path = tmp_path / volumetric_cls_name.upper()
 
-    volumetric_cls(structure, {"total": total}).write_file(path)
+    original.write_file(path)
     restored = volumetric_cls.from_file(path)
 
-    np.testing.assert_allclose(restored.structure.frac_positions, structure.frac_positions)
-    np.testing.assert_allclose(restored.data["total"], total)
+    np.testing.assert_allclose(restored.structure.frac_positions, original.structure.frac_positions)
+    assert set(restored.data) == set(original.data)
+    for key, values in original.data.items():
+        np.testing.assert_allclose(restored.data[key], values, rtol=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("volumetric_cls_name", "fixture", "key_map"),
+    [
+        ("Chgcar", "CHGCAR.nospin.gz", {"total": "total"}),
+        ("Chgcar", "CHGCAR.spin.gz", {"total": "total", "diff": "diff"}),
+        ("Chgcar", "CHGCAR.NiO_SOC.gz", {k: k for k in ("total", "diff_x", "diff_y", "diff_z")}),
+        ("Locpot", "LOCPOT.gz", {"total": "total"}),
+        # pymatgen 2026 names the ELFCAR spin channels spin_up/spin_down;
+        # MatSimPy keeps total (spin up) / diff (spin down)
+        ("Elfcar", "ELFCAR.gz", {"total": "spin_up", "diff": "spin_down"}),
+    ],
+)
+@pytest.mark.requires_pymatgen
+def test_volumetric_optional_pymatgen_reference(volumetric_cls_name, fixture, key_map):
+    pytest.importorskip("pymatgen")
+    import pymatgen.io.vasp.outputs as pmg_outputs
+
+    from matsimpy.calculator.vasp import outputs
+
+    ours = getattr(outputs, volumetric_cls_name).from_file(_fixture(fixture))
+    ref = getattr(pmg_outputs, volumetric_cls_name).from_file(_fixture(fixture))
+    assert ours.dim == tuple(ref.dim)
+    np.testing.assert_allclose(ours.structure.lattice.matrix, ref.structure.lattice.matrix)
+    for our_key, ref_key in key_map.items():
+        np.testing.assert_allclose(ours.data[our_key], ref.data[ref_key])
 
 
 def test_noncollinear_chgcar_native_write_and_read(tmp_path):
     from matsimpy.calculator.vasp.outputs import Chgcar
-    from matsimpy.core import Crystal, Lattice
 
-    structure = Crystal(["Fe"], [[0.125, 0.25, 0.375]], Lattice.cubic(2))
-    total = np.arange(8, dtype=float).reshape(2, 2, 2)
-    components = {
-        "diff_x": np.full((2, 2, 2), 1.0),
-        "diff_y": np.full((2, 2, 2), 2.0),
-        "diff_z": np.full((2, 2, 2), 3.0),
-    }
+    original = Chgcar.from_file(_fixture("CHGCAR.NiO_SOC.gz"))
+    assert set(original.data) >= {"total", "diff_x", "diff_y", "diff_z"}
     path = tmp_path / "CHGCAR"
 
-    Chgcar(structure, {"total": total, **components}).write_file(path)
+    original.write_file(path)
     restored = Chgcar.from_file(path)
 
-    assert path.read_text().count("   2   2   2\n") == 4
-    np.testing.assert_allclose(restored.data["total"], total)
-    for key, values in components.items():
-        np.testing.assert_allclose(restored.data[key], values)
+    # one grid-dimension header per block: total + three magnetization components
+    dim_tokens = [str(n) for n in original.dim]
+    assert sum(line.split() == dim_tokens for line in path.read_text().splitlines()) == 4
+    for key in ("total", "diff_x", "diff_y", "diff_z"):
+        np.testing.assert_allclose(restored.data[key], original.data[key], rtol=1e-10)
 
 
 def test_noncollinear_chgcar_rejects_partial_components(tmp_path):
     from matsimpy.calculator.vasp.outputs import Chgcar
-    from matsimpy.core import Crystal, Lattice
 
-    structure = Crystal(["Fe"], [[0, 0, 0]], Lattice.cubic(2))
-    data = {"total": np.ones((1, 1, 1)), "diff_x": np.ones((1, 1, 1))}
+    original = Chgcar.from_file(_fixture("CHGCAR.NiO_SOC.gz"))
+    data = {"total": original.data["total"], "diff_x": original.data["diff_x"]}
 
     with pytest.raises(ValueError, match="missing diff_y, diff_z"):
-        Chgcar(structure, data).write_file(tmp_path / "CHGCAR")
+        Chgcar(original.structure, data).write_file(tmp_path / "CHGCAR")
 
 
 def test_xdatcar_native_get_str_write_and_roundtrip(tmp_path):
     from matsimpy.calculator.vasp.outputs import Xdatcar
-    from matsimpy.core import Crystal, Lattice
 
-    lattice = Lattice.cubic(3)
-    frames = [
-        Crystal(["Si", "O"], [[0.0, 0.0, 0.0], [0.25, 0.5, 0.75]], lattice),
-        Crystal(["Si", "O"], [[0.1, 0.2, 0.3], [0.35, 0.6, 0.85]], lattice),
-    ]
-    xdatcar = Xdatcar.__new__(Xdatcar)
-    xdatcar.structures = frames
-    xdatcar.comment = "native trajectory"
+    xdatcar = Xdatcar(_fixture("XDATCAR_5"))
+    frames = xdatcar.structures
+    assert len(frames) == 4
     path = tmp_path / "XDATCAR"
 
-    text = xdatcar.get_str(significant_figures=6)
-    xdatcar.write_file(path, significant_figures=6)
+    text = xdatcar.get_str(significant_figures=8)
+    xdatcar.write_file(path, significant_figures=8)
     restored = Xdatcar(path)
 
     assert path.read_text() == text
-    assert "Si O\n1 1\n" in text
+    assert "Li O\n2 1\n" in text
     assert len(restored.structures) == len(frames)
     for actual, expected in zip(restored.structures, frames):
         assert list(actual.species) == list(expected.species)
@@ -219,37 +248,41 @@ class TestVasprun:
         actual = np.asarray(data["input"]["lattice_rec"]["lattice_vectors"])
         np.testing.assert_allclose(actual, expected, atol=1e-8)
 
-    def test_update_charge_from_potcar_uses_native_composition(self):
-        """POTCAR charge updates must consume Composition.composition."""
-        from matsimpy.calculator.vasp.inputs import Incar
+    @pytest.mark.parametrize(
+        ("fixture", "expected_charge"),
+        [
+            # Si2, valence 4 each, NELECT 9: one POTCAR per element
+            ("vasprun.charged.xml.gz", -1.0),
+            # B split into two atom types, valence 3 each, NELECT 7: one POTCAR per atom type
+            ("vasprun.split.charged.xml.gz", -1.0),
+        ],
+    )
+    def test_update_charge_from_potcar_uses_native_composition(self, fixture, expected_charge):
+        """POTCAR charge updates must consume Composition.composition.
+
+        Real POTCARs cannot be shipped, so each placeholder POTCAR carries only
+        the element and valence that the run itself records in its atomtypes
+        table."""
+        import gzip
+        import xml.etree.ElementTree as ET
+
         from matsimpy.calculator.vasp.outputs import Vasprun
-        from matsimpy.core import Crystal, Lattice
 
-        structure = Crystal(
-            ["Si", "O"],
-            [[0, 0, 0], [0.25, 0.25, 0.25]],
-            Lattice.cubic(5.0),
-        )
-        vasprun = Vasprun.__new__(Vasprun)
-        vasprun.initial_structure = structure
-        vasprun.final_structure = structure.copy()
-        vasprun.ionic_steps = [
-            {"structure": structure},
-            {"structure": vasprun.final_structure},
-        ]
-        vasprun.atomic_symbols = ["Si", "O"]
-        vasprun.incar = Incar({})
-        vasprun.parameters = {"NELECT": 9.0}
+        path = os.path.join(FIXTURES_DIR, fixture)
+        with gzip.open(path) as fh:
+            root = ET.parse(fh).getroot()
+        rows = root.find(".//array[@name='atomtypes']/set")
         potcar = [
-            SimpleNamespace(element="Si", ZVAL=4.0),
-            SimpleNamespace(element="O", ZVAL=6.0),
+            SimpleNamespace(element=rc[1].text.strip(), ZVAL=float(rc[3].text))
+            for rc in rows
         ]
-        vasprun.get_potcars = lambda _path: potcar
 
+        vasprun = Vasprun(path, parse_potcar_file=False)
+        vasprun.get_potcars = lambda _path: potcar
         vasprun.update_charge_from_potcar(False)
 
-        assert vasprun.initial_structure._charge == pytest.approx(1.0)
-        assert vasprun.final_structure._charge == pytest.approx(1.0)
+        assert vasprun.initial_structure._charge == pytest.approx(expected_charge)
+        assert vasprun.final_structure._charge == pytest.approx(expected_charge)
 
     @pytest.mark.requires_pymatgen
     def test_optional_pymatgen_reference(self):

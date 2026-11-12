@@ -26,6 +26,13 @@ inputs or outputs by hand, and do not edit these copies.
 | FePO4.vasp | inputs/FePO4.vasp |
 | POSCAR_fcc | inputs/POSCAR_fcc |
 | nmr/cs/basic/hydromagnesite/POSCAR | fixtures/nmr/cs/basic/hydromagnesite/POSCAR |
+| POSCAR_C2 | inputs/POSCAR_C2 |
+| POSCAR_symbols_natoms_multilines | inputs/POSCAR_symbols_natoms_multilines |
+| KPOINTS_auto, KPOINTS_gamma, KPOINTS_band, KPOINTS_cartesian, KPOINTS_explicit, KPOINTS_explicit_tet | inputs/ (same names) |
+| CHGCAR.nospin.gz, CHGCAR.spin.gz, CHGCAR.NiO_SOC.gz | outputs/ (same names) |
+| LOCPOT.gz, ELFCAR.gz | outputs/ (same names) |
+| XDATCAR_5 | outputs/XDATCAR_5 |
+| vasprun.charged.xml.gz, vasprun.split.charged.xml.gz | outputs/ (same names) |
 | fake_potcars/POTCAR.gz | inputs/fake_potcars/POTCAR.gz |
 | fake_potcars/POT_GGA_PAW_PBE_54/POTCAR.{Fe,Fe_pv,P,O}.gz | inputs/fake_potcars/POT_GGA_PAW_PBE_54/ (same names) |
 
@@ -37,3 +44,11 @@ with POSCAR.AlN (4 atoms). The two come from different runs.
 POTCARs are copyrighted, so real POTCARs and POTCAR-derived reference statistics
 are never used. POTCAR tests use only pymatgen's placeholder POTCARs
 (`fake_potcars`, TITEL lines marked `; FAKE`).
+
+No test file has selective dynamics. Tests for it set the flags through the
+`Poscar` API on a real structure (POSCAR.AlN), write the file with the library
+and parse it back; no POSCAR text is written by hand.
+
+The test files contain no POTCARs for the charged runs, and the real POTCARs in
+`inputs/POTCAR_*.gz` are not used. The charge test gives each placeholder POTCAR
+only the element and valence that the run records in its own `atomtypes` table.

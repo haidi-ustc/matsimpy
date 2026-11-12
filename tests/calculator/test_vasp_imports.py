@@ -1,24 +1,23 @@
 """Tests for VASP calculator — imports and basic functionality."""
 
-import pytest
-import numpy as np
-from matsimpy.core import Crystal, Lattice
+import os
+
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
 
 
 class TestVaspImports:
     def test_import_incar(self):
         from matsimpy.calculator.vasp.inputs import Incar
-        incar = Incar({"ENCUT": 400, "ISMEAR": 0})
-        assert incar["ENCUT"] == 400
+        incar = Incar.from_file(os.path.join(FIXTURES_DIR, "INCAR"))
+        assert incar["ENCUT"] == 500
 
     def test_import_poscar(self):
         from matsimpy.calculator.vasp.inputs import Poscar
         # POSCAR from string works without requiring pymatgen Structure
-        poscar = Poscar.from_str(
-            "Si test\n1.0\n5.43 0 0\n0 5.43 0\n0 0 5.43\nSi\n1\nDirect\n0 0 0"
-        )
-        assert poscar is not None
-        assert "Si" in str(poscar)
+        with open(os.path.join(FIXTURES_DIR, "POSCAR_C2")) as fh:
+            poscar = Poscar.from_str(fh.read())
+        assert poscar.site_symbols == ["C"]
+        assert "C" in str(poscar)
 
     def test_import_kpoints(self):
         from matsimpy.calculator.vasp.inputs import Kpoints

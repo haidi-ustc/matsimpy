@@ -91,33 +91,27 @@ class TestVASPIo(unittest.TestCase):
     
 
     def test_read_POSCAR_selective_dynamics(self):
-        """Optional Selective dynamics line must not corrupt coordinate parsing."""
-        poscar_content = (
-            "Selective dynamics test\n"
-            "1.0\n"
-            "5.0  0.0  0.0\n"
-            "0.0  5.0  0.0\n"
-            "0.0  0.0  5.0\n"
-            "Si\n"
-            "2\n"
-            "Selective dynamics\n"
-            "Direct\n"
-            "0.0  0.0  0.0  T T T\n"
-            "0.5  0.5  0.5  F F F\n"
-        )
+        """Optional Selective dynamics line must not corrupt coordinate parsing.
+
+        No pymatgen test file has selective dynamics, so the file is written by
+        the VASP Poscar writer from the real POSCAR.AlN structure."""
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        fixture = Path(__file__).parents[1] / "calculator" / "fixtures" / "vasp" / "POSCAR.AlN"
+        source = Poscar.from_file(fixture, check_for_potcar=False).structure
+        flags = [[True, True, True], [False, False, False], [True, False, True], [False, True, False]]
+        text = Poscar(source, selective_dynamics=flags).get_str()
+        self.assertIn("Selective dynamics", text)
+
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.vasp') as f:
-            f.write(poscar_content)
+            f.write(text)
             temp_file = f.name
 
         try:
             crystal = read_POSCAR(temp_file)
-            self.assertEqual(len(crystal), 2)
-            self.assertEqual(crystal.species, ('Si', 'Si'))
+            self.assertEqual(crystal.species, tuple(source.species))
             np.testing.assert_array_almost_equal(
-                crystal.frac_positions[0], [0.0, 0.0, 0.0], decimal=6
-            )
-            np.testing.assert_array_almost_equal(
-                crystal.frac_positions[1], [0.5, 0.5, 0.5], decimal=6
+                crystal.frac_positions, source.frac_positions, decimal=6
             )
         finally:
             Path(temp_file).unlink()
