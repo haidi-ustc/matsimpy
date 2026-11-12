@@ -684,7 +684,7 @@ class Vasprun(MSONable):
         Note that this method is only implemented for optical properties
         calculated with GGA and BSE.
         """
-        diel_data = self.dielectric_data.get("freq_dependent") or self.dielectric_data["density"]
+        diel_data = self.dielectric_data.get("freq_dependent") or self.dielectric_data.get("density")
         if diel_data:
             real_avg = [sum(diel_data[1][i][:3]) / 3 for i in range(len(diel_data[0]))]
             imag_avg = [sum(diel_data[2][i][:3]) / 3 for i in range(len(diel_data[0]))]
@@ -2608,7 +2608,11 @@ class Outcar:
             tables.append(table_contents)
             if first_one_only:
                 break
-        retained_data: list[TableData] | TableData = tables[-1] if last_one_only or first_one_only else tables
+        if not tables:
+            # the table is not in this OUTCAR (e.g. no elastic/NMR run): nothing to read
+            retained_data: list[TableData] | TableData = []
+        else:
+            retained_data = tables[-1] if last_one_only or first_one_only else tables
         if attribute_name is not None:
             self.data[attribute_name] = retained_data
         return retained_data

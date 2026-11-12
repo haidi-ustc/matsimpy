@@ -261,3 +261,34 @@ direct
         assert ms_poscar.site_symbols == pmg_poscar.site_symbols
         # Compare natoms
         assert ms_poscar.natoms == pmg_poscar.natoms
+
+
+class TestSettings:
+    """SETTINGS was referenced but never defined: Poscar.from_file and
+    Potcar(symbols) raised NameError."""
+
+    def test_poscar_from_file_with_default_arguments(self):
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        poscar = Poscar.from_file(os.path.join(FIXTURES_DIR, "POSCAR"))
+        assert poscar.structure.formula == "Fe4P4O16"
+
+    def test_settings_read_pmg_environment_variables(self, monkeypatch):
+        from matsimpy.calculator.vasp.inputs import SETTINGS
+
+        monkeypatch.delenv("PMG_VASP_PSP_DIR", raising=False)
+        assert SETTINGS.get("PMG_VASP_PSP_DIR") is None
+        monkeypatch.setenv("PMG_VASP_PSP_DIR", "/opt/psp")
+        assert SETTINGS.get("PMG_VASP_PSP_DIR") == "/opt/psp"
+        assert "PMG_VASP_PSP_DIR" in dict(SETTINGS)
+        for raw, expected in [("false", False), ("0", False), ("True", True)]:
+            monkeypatch.setenv("PMG_POTCAR_CHECKS", raw)
+            assert SETTINGS.get("PMG_POTCAR_CHECKS") is expected
+        assert SETTINGS.get("HOME") is None  # only PMG_* keys
+
+    def test_potcar_from_symbols_reports_missing_psp_dir(self, monkeypatch):
+        from matsimpy.calculator.vasp.inputs import PmgVaspPspDirError, Potcar
+
+        monkeypatch.delenv("PMG_VASP_PSP_DIR", raising=False)
+        with pytest.raises(PmgVaspPspDirError, match="PMG_VASP_PSP_DIR environment variable"):
+            Potcar(["Si"], functional="PBE")

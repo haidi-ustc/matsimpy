@@ -20,6 +20,7 @@ import re
 import subprocess
 import warnings
 from collections import Counter, UserDict
+from collections.abc import Mapping
 from enum import Enum, unique
 from glob import glob
 from hashlib import sha256
@@ -78,6 +79,36 @@ __author__ = "Shyue Ping Ong, Geoffroy Hautier, Rickard Armiento, Vincent L Chev
 __copyright__ = "Copyright 2011, The Materials Project"
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+class _EnvSettings(Mapping):
+    """pymatgen-style settings, read from ``PMG_*`` environment variables on access.
+
+    Keys used here: ``PMG_VASP_PSP_DIR`` (directory holding e.g. POT_GGA_PAW_PBE),
+    ``PMG_DEFAULT_FUNCTIONAL``, ``PMG_POTCAR_CHECKS`` ("false"/"0" disables the
+    POTCAR lookup in Poscar.from_file) and ``PMG_VASP_EXE``. Unlike pymatgen, no
+    ``.pmgrc.yaml`` is read. 0.8.x-0.9.0 referenced ``SETTINGS`` without defining
+    it, so Poscar.from_file and Potcar(symbols) raised NameError.
+    """
+
+    _BOOLEAN = {"PMG_POTCAR_CHECKS"}
+
+    def __getitem__(self, key: str) -> Any:
+        if not key.startswith("PMG_") or key not in os.environ:
+            raise KeyError(key)
+        value = os.environ[key]
+        if key in self._BOOLEAN:
+            return value.strip().lower() not in {"0", "false", "no", "off"}
+        return value
+
+    def __iter__(self) -> Iterator[str]:
+        return (key for key in os.environ if key.startswith("PMG_"))
+
+    def __len__(self) -> int:
+        return sum(1 for _ in self)
+
+
+SETTINGS: Mapping[str, Any] = _EnvSettings()
 
 # Note: there are multiple releases of the {LDA,PBE} {52,54} POTCARs
 #     the original (UNIVIE) releases include no SHA256 hashes nor COPYR fields
@@ -2594,7 +2625,10 @@ class PotcarSingle:
         functional_subdir = SETTINGS.get("PMG_VASP_PSP_SUB_DIRS", {}).get(functional, cls.functional_dir[functional])
         PMG_VASP_PSP_DIR = SETTINGS.get("PMG_VASP_PSP_DIR")
         if PMG_VASP_PSP_DIR is None:
-            raise PmgVaspPspDirError("Set PMG_VASP_PSP_DIR=<directory-path> in .pmgrc.yaml (needed to find POTCARs)")
+            raise PmgVaspPspDirError(
+                "Set the PMG_VASP_PSP_DIR environment variable to your POTCAR directory "
+                "(the one containing e.g. POT_GGA_PAW_PBE); it is needed to find POTCARs"
+            )
         if not os.path.isdir(PMG_VASP_PSP_DIR):
             raise FileNotFoundError(f"{PMG_VASP_PSP_DIR=} does not exist.")
 

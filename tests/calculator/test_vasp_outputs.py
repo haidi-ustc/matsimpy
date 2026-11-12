@@ -358,3 +358,23 @@ class TestOutcarOnDemandReaders:
         np.testing.assert_allclose(
             np.asarray(outcar.dielectric_tensor, float), np.asarray(reference.dielectric_tensor, float)
         )
+
+
+def test_outcar_tables_absent_from_the_run_read_as_empty():
+    """read_table_pattern indexed tables[-1] and raised IndexError when the OUTCAR
+    has no such table (e.g. read_elastic_tensor on a relaxation)."""
+    from matsimpy.calculator.vasp.outputs import Outcar
+
+    outcar = Outcar(os.path.join(FIXTURES_DIR, "OUTCAR"))
+    outcar.read_elastic_tensor()
+    assert outcar.data["elastic_tensor"] == []
+    for method in ("read_piezo_tensor", "read_nmr_efg", "read_chemical_shielding", "read_fermi_contact_shift"):
+        getattr(outcar, method)()
+
+
+def test_optical_absorption_coeff_is_none_without_dielectric_data():
+    from matsimpy.calculator.vasp.outputs import Vasprun
+
+    vasprun = Vasprun(os.path.join(FIXTURES_DIR, "vasprun.xml"))
+    assert vasprun.dielectric_data == {}
+    assert vasprun.optical_absorption_coeff is None
