@@ -2193,8 +2193,8 @@ class PotcarSingle:
         # and possibly SHA256 hashes contained in the file itself.
         if not self.is_valid:
             warnings.warn(
-                f"POTCAR data with symbol {self.symbol} is not known to pymatgen. Your "
-                "POTCAR may be corrupted or pymatgen's POTCAR database is incomplete.",
+                f"POTCAR data with symbol {self.symbol} could not be verified: MatSimPy "
+                "ships no POTCAR reference statistics, or this POTCAR is not among them.",
                 UnknownPotcarWarning,
                 stacklevel=2,
             )
@@ -2447,10 +2447,13 @@ class PotcarSingle:
 
         # Thus we have to look for matches in all POTCAR dirs, not just the ones with
         # consistent values of LEXCH
+        # MatSimPy ships no POTCAR reference statistics (POTCARs are copyrighted), so a
+        # functional may be absent: that means "cannot verify", not an error.
         for func in self.functional_dir:
-            for titel_no_spc in self._potcar_summary_stats[func]:
+            reference = self._potcar_summary_stats.get(func, {})
+            for titel_no_spc in reference:
                 if self.TITEL.replace(" ", "") == titel_no_spc:
-                    for potcar_subvariant in self._potcar_summary_stats[func][titel_no_spc]:
+                    for potcar_subvariant in reference[titel_no_spc]:
                         if self.VRHFIN.replace(" ", "") == potcar_subvariant["VRHFIN"]:
                             possible_match = {
                                 "POTCAR_FUNCTIONAL": func,
@@ -2743,7 +2746,7 @@ class PotcarSingle:
 
         identity: dict[str, list] = {"potcar_functionals": [], "potcar_symbols": []}
         for func in self.functional_dir:
-            for ref_psp in self._potcar_summary_stats[func].get(self.TITEL.replace(" ", ""), []):
+            for ref_psp in self._potcar_summary_stats.get(func, {}).get(self.TITEL.replace(" ", ""), []):
                 if self.VRHFIN.replace(" ", "") != ref_psp["VRHFIN"]:
                     continue
 
@@ -3143,7 +3146,7 @@ class Potcar(list, MSONable):
                 titel_no_spc = titel.replace(" ", "")
                 symbol = titel.split(" ")[1].strip()
 
-                for stats in PotcarSingle._potcar_summary_stats[functional].get(titel_no_spc, []):
+                for stats in PotcarSingle._potcar_summary_stats.get(functional, {}).get(titel_no_spc, []):
                     if PotcarSingle.compare_potcar_stats(spec["summary_stats"], stats):
                         potcar.append(PotcarSingle.from_symbol_and_functional(symbol=symbol, functional=functional))
                         matched[ispec] = True

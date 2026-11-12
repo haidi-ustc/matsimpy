@@ -1070,11 +1070,14 @@ class VaspInputSet(InputGenerator, abc.ABC):
 
         # Warn if the selected POTCARs do not correspond to the chosen user_potcar_functional
         for p_single in potcar:
-            if user_potcar_functional not in p_single.identify_potcar()[0]:
+            known_functionals = p_single.identify_potcar(mode="data")[0]
+            # Without reference statistics nothing is identified; loading the POTCAR has
+            # already raised UnknownPotcarWarning, so only report a positive mismatch.
+            if known_functionals and user_potcar_functional not in p_single.identify_potcar()[0]:
                 warnings.warn(
-                    f"POTCAR data with symbol {p_single.symbol} is not known by pymatgen to "
+                    f"POTCAR data with symbol {p_single.symbol} is not known to MatSimPy to "
                     f"correspond with the selected {user_potcar_functional=}. This POTCAR "
-                    f"is known to correspond with functionals {p_single.identify_potcar(mode='data')[0]}. "
+                    f"is known to correspond with functionals {known_functionals}. "
                     "Please verify that you are using the right POTCARs!",
                     BadInputSetWarning,
                     stacklevel=2,

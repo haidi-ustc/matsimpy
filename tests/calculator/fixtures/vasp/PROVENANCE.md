@@ -22,8 +22,14 @@ inputs or outputs by hand, and do not edit these copies.
 | PROCAR.simple | outputs/PROCAR.simple |
 | vasprun.hse06.xml.gz | outputs/vasprun.hse06.xml.gz |
 | vasprun.xml | outputs/vasprun.xml.gz (decompressed) |
+| fake_potcars/POTCAR.gz | inputs/fake_potcars/POTCAR.gz |
+| fake_potcars/POT_GGA_PAW_PBE_54/POTCAR.{Fe,Fe_pv,P,O}.gz | inputs/fake_potcars/POT_GGA_PAW_PBE_54/ (same names) |
 
 The test files contain no PROCAR together with a structure from the same
 calculation. `Procar.get_projection_on_elements` only uses the structure's atom
 count and species order, so the tests pair PROCAR.new_format_5.4.4.gz (4 ions)
 with POSCAR.AlN (4 atoms). The two come from different runs.
+
+POTCARs are copyrighted, so real POTCARs and POTCAR-derived reference statistics
+are never used. POTCAR tests use only pymatgen's placeholder POTCARs
+(`fake_potcars`, TITEL lines marked `; FAKE`).
