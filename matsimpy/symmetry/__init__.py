@@ -18,14 +18,19 @@ in the symmetry directory, providing access to:
 from .analyzer import SymmetryAnalyzer, analyze_symmetry, get_conventional_cell, get_symmetry_info
 from .kpath import HighSymmKpath
 from .matcher import StructureMatcher
+from .prototype import PrototypeDatabase, PrototypeInfo, get_prototype, get_prototype_info
 from .spacegroup import SpacegroupAnalyzer
 
 __all__ = [
     "HighSymmKpath",
+    "PrototypeDatabase",
+    "PrototypeInfo",
     "SpacegroupAnalyzer",
     "StructureMatcher",
     "SymmetryAnalyzer",
     "analyze_symmetry",
     "get_conventional_cell",
+    "get_prototype",
+    "get_prototype_info",
     "get_symmetry_info",
 ]

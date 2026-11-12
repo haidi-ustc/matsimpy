@@ -33,6 +33,7 @@ inputs or outputs by hand, and do not edit these copies.
 | LOCPOT.gz, ELFCAR.gz | outputs/ (same names) |
 | XDATCAR_5 | outputs/XDATCAR_5 |
 | vasprun.charged.xml.gz, vasprun.split.charged.xml.gz | outputs/ (same names) |
+| POSCAR_Li2O, POSCAR_MnO, POSCAR_bcc, POSCAR_Al12O18 | inputs/ (same names) |
 | fake_potcars/POTCAR.gz | inputs/fake_potcars/POTCAR.gz |
 | fake_potcars/POT_GGA_PAW_PBE_54/POTCAR.{Fe,Fe_pv,P,O}.gz | inputs/fake_potcars/POT_GGA_PAW_PBE_54/ (same names) |
 

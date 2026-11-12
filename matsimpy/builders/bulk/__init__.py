@@ -32,6 +32,7 @@ Examples:
 
 from .random import random_crystal
 from .prototype import from_prototype, list_prototypes, CRYSTAL_PROTOTYPES
+from .prototype_db import build_prototype_database, structures_from_prototype, suggest_element_substitutions
 from .symmetry import from_space_group, from_crystal_system, list_space_groups_by_system
 
 __all__ = [
@@ -39,6 +40,9 @@ __all__ = [
     "from_prototype",
     "list_prototypes",
     "CRYSTAL_PROTOTYPES",
+    "build_prototype_database",
+    "structures_from_prototype",
+    "suggest_element_substitutions",
     "from_space_group",
     "from_crystal_system",
     "list_space_groups_by_system",
