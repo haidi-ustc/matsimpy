@@ -7,7 +7,7 @@
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-core%20suite-brightgreen)](tests/)
 
-**Version**: v0.10.0 (see [CHANGELOG.md](CHANGELOG.md))
+**Version**: v0.11.0 (see [CHANGELOG.md](CHANGELOG.md))
 
 ## Table of Contents
 

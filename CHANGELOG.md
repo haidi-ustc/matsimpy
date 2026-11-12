@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 — 2026-11-12
 
 The AI module (`matsimpy.ai`) is rewritten around three extension points: tools derived
 from Python functions, Agent Skills, and MCP. The rest of MatSimPy is unchanged apart
