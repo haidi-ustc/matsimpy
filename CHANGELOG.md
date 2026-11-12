@@ -52,16 +52,26 @@
 - VASP: removed the local `get_el_sp` copy. POTCAR symbols in `Poscar.from_file` are
   resolved with the core `normalize_species`. The old `map(get_el_sp, ...)` call was
   never evaluated, so the names were never checked.
+- VASP: reading any POTCAR raised `KeyError`: `Potcar.from_file`, `Potcar(symbols)`, and
+  `Poscar.from_file` with a POTCAR in the same directory. The POTCAR checks looked up
+  the empty reference tables by functional. A POTCAR that cannot be checked now gives
+  `UnknownPotcarWarning` and is still read. Input sets warn about a POTCAR functional
+  mismatch only when the reference data shows one.
+- `matsimpy.io.read` now recognises files named `POSCAR` and `CONTCAR`, including
+  `POSCAR.*`, `POSCAR_*` and the same CONTCAR forms. Before, it used only the file
+  extension. Format handlers can declare name patterns (`FormatHandler.filename_patterns`).
+- `matsimpy.io` POSCAR reader: a POSCAR with an empty first (comment) line was read
+  wrongly, because the empty line was dropped and every later line shifted by one.
+  A VASP 4 file, which has no element-symbol line, now raises a `ValueError` that says
+  VASP 4 is not supported. Before, it raised an unrelated parse error.
 
 ### Known issues
-- The packaged POTCAR reference files (`vasp_potcar_stats.json` and both hash files)
-  are empty (`{}`), and have been since 0.8.0. Because of this, `Potcar.from_file` and
-  `PotcarSingle` raise `KeyError` for any real POTCAR, and `Poscar.from_file` ignores a
-  POTCAR in the same directory.
-- `matsimpy.io.read` picks the format only from the file extension, so a file named
-  `POSCAR` or `CONTCAR` is not recognised. Its POSCAR reader (`matsimpy/io/vasp.py`) is
-  separate from `calculator.vasp.inputs.Poscar` and cannot read VASP 4 files, where
-  species names follow the coordinates.
+- MatSimPy ships no POTCAR reference data, because POTCARs are copyrighted. The packaged
+  files (`vasp_potcar_stats.json` and both hash files) are empty (`{}`). POTCARs are
+  read but cannot be checked: every POTCAR gives `UnknownPotcarWarning`.
+- There are two POSCAR readers: `matsimpy.io` (`matsimpy/io/vasp.py`) and
+  `calculator.vasp.inputs.Poscar`. Only the second reads VASP 4 files, where species
+  names follow the coordinates or come from a POTCAR.
 
 ### Tests
 - Restored `tests/calculator/fixtures` (VASP and Gaussian outputs), which the 0.8.5–0.9.0
@@ -74,7 +84,9 @@
 - VASP test data comes only from the pymatgen 2026.10.24 test files, unmodified. Sources
   are listed in `tests/calculator/fixtures/vasp/PROVENANCE.md`. `KPOINTS` is now the
   original file; the old copy had an extra trailing space. Tests that built VASP data by
-  hand now use real files.
+  hand now use real files: INCAR, KPOINTS (7 styles), POSCAR, CHGCAR (no spin, spin,
+  noncollinear), LOCPOT, ELFCAR, XDATCAR and charged vasprun files. Each is also compared
+  against pymatgen. POTCAR tests use only pymatgen's placeholder POTCARs.
 
 ## 0.9.0 — 2026-11-12
 
