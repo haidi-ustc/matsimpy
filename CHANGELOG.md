@@ -6,6 +6,35 @@
 - VASP: `Vasprun.run_type` reported HSE06 runs with `HFSCREEN=0.207` as
   "PBEO or other Hybrid Functional", because 0.2 was matched exactly. Any `HFSCREEN`
   from 0.2 to 0.21 is now HSE06. The label is stored in `ComputedEntry.parameters`.
+- VASP: `Procar.get_projection_on_elements` raised `AttributeError`, because it called
+  `.symbol` on species, which are plain strings. It now also raises a clear `ValueError`
+  when the structure and the PROCAR have different numbers of atoms.
+- VASP: packaged data files (input-set YAMLs, POTCAR hashes and statistics, vdW
+  parameters) were loaded by a helper that returned `{}` on any error. A misspelled input
+  set gave a set with no INCAR defaults. `POTCAR_STATS_PATH` named a file that does not
+  exist (`potcar-summary-stats.json.bz2`), so POTCAR validation had no reference data.
+  Loading now raises `FileNotFoundError` or `FormatError`, and `POTCAR_STATS_PATH` is
+  `vasp_potcar_stats.json`.
+- `calculator.utils.clean_lines` now removes `#` comments. POSCAR files with a comment
+  after the scale or lattice values raised `ValueError`. LAMMPS data headers such as
+  `2 atoms  # comment` were not recognised, so the file could not be read.
+- Core: `add_atom` and `_construct` accepted NaN/Inf positions. Only the public
+  constructor checked for them. The check now runs in `_set_state`, which every
+  construction path goes through, and at the start of `add_atom`.
+- Core: `==` ignored `pbc`, so a slab equalled the bulk crystal with the same cell. The
+  calculator cache key already included `pbc`.
+- Storage: `DataStorage.store_data` did not check plain-dict data for reserved metadata
+  keys (`doc_id`, ...), which the MSONable path already rejected. Existing document IDs
+  are unchanged.
+- AI: the storage skill used one module-level database shared by every agent in the
+  process. Each agent session (executor) now has its own database, kept in the new
+  `FunctionExecutor.skill_state`. `matsimpy.ai.executor.get_active_executor()` is
+  public.
+
+### Known issue
+- The packaged POTCAR reference files (`vasp_potcar_stats.json` and both hash files)
+  are empty (`{}`), and have been since 0.8.0. POTCAR identification and validation have
+  no reference data until real statistics are added.
 
 ### Tests
 - Restored `tests/calculator/fixtures` (VASP and Gaussian outputs), which the 0.8.5–0.9.0
@@ -13,6 +42,8 @@
 - The VASP calculator test now checks real `vasprun.xml` values: energy, final-step forces,
   and stress converted from kBar to eV/Å³ with tension positive. A Gaussian test reads a real
   multi-step log and checks the final SCF energy in eV.
+- `tests/test_sdist_contents.py` builds the sdist and fails if the test fixtures or the
+  VASP package data are missing from it.
 
 ## 0.9.0 — 2026-11-12
 
