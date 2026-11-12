@@ -116,6 +116,8 @@ packages = { find = {} }
 # so `import matsimpy.calculator.vasp` raised FileNotFoundError when installed)
 "matsimpy.calculator.vasp" = ["*.json", "*.json.bz2", "*.yaml"]
 "matsimpy.calculator.lammps" = ["*.yaml", "templates/*"]
+# Packaged agent skills (SKILL.md, resources, tools.py)
+"matsimpy.ai" = ["builtin_skills/*/*", "builtin_skills/*/*/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
