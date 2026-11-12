@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+- `HighSymmKpath` supports two-dimensional crystals (`pbc` with exactly one `False`
+  axis, e.g. a monolayer in a slab cell). The layer is classified as one of the five 2D
+  Bravais lattices from its in-plane symmetry, not just its cell shape: `bravais` is
+  `mp`, `op`, `oc`, `tp` or `hp`, and `kpath["variant"]` is ASE's name (`OBL`, `RECT`,
+  `CRECT`, `SQR`, `HEX2D`). When the atoms break the cell's symmetry, the path of the
+  lower symmetry is used. The k-points are fractional coordinates of the input cell's
+  reciprocal lattice, with zero along the vacuum axis.
+
 ### Fixed
 - VASP: `Vasprun.run_type` reported HSE06 runs with `HFSCREEN=0.207` as
   "PBEO or other Hybrid Functional", because 0.2 was matched exactly. Any `HFSCREEN`
@@ -64,6 +73,12 @@
   wrongly, because the empty line was dropped and every later line shifted by one.
   A VASP 4 file, which has no element-symbol line, now raises a `ValueError` that says
   VASP 4 is not supported. Before, it raised an unrelated parse error.
+- `HighSymmKpath` ignored `pbc`. A monolayer got the 3D path of its slab cell, which
+  includes k-points along the vacuum axis (for graphene: A, L and H). Structures with
+  fewer than two periodic axes now raise `ValueError` instead of getting a 3D path.
+- `THIRD_PARTY_NOTICES.md` is back and is shipped in the sdist and the wheel.
+  `symmetry/kpath.py` adapts ASE code under BSD-2-Clause, which requires the notice.
+  The file had been deleted, although the source header still pointed to it.
 
 ### Known issues
 - MatSimPy ships no POTCAR reference data, because POTCARs are copyrighted. The packaged
