@@ -35,7 +35,9 @@ def read_POSCAR(filename: str) -> Crystal:
         raise FileNotFoundError(f"POSCAR file not found: {filename}")
 
     with open(filepath, "r") as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        raw = [line.strip() for line in f.readlines()]
+    # Line 1 is the comment and may be empty; blank lines after it carry no data.
+    lines = raw[:1] + [line for line in raw[1:] if line]
 
     if len(lines) < 8:
         raise ValueError(f"Invalid POSCAR file: too few lines ({len(lines)})")
@@ -80,6 +82,11 @@ def read_POSCAR(filename: str) -> Crystal:
     species_line = lines[5].split()
     if not species_line:
         raise ValueError("Empty species line in POSCAR")
+    if all(token.isdigit() for token in species_line):
+        raise ValueError(
+            "VASP 4 format POSCAR (no element-symbol line after the lattice) is not "
+            "supported; add a line with the element symbols before the atom counts."
+        )
 
     # Read species counts (line 6)
     if len(lines) < 7:
@@ -233,6 +240,7 @@ from .registry import registry, FormatHandler
 _POSCAR_HANDLER = FormatHandler(
     name="vasp-poscar",
     extensions=(".vasp", ".poscar"),
+    filename_patterns=("POSCAR", "POSCAR.*", "POSCAR_*"),
     aliases=("poscar", "vasp", "POSCAR"),
     description="VASP POSCAR format (periodic crystal structures)",
     reader=read_POSCAR,
@@ -244,6 +252,7 @@ _POSCAR_HANDLER = FormatHandler(
 _CONTCAR_HANDLER = FormatHandler(
     name="vasp-contcar",
     extensions=(".contcar",),
+    filename_patterns=("CONTCAR", "CONTCAR.*", "CONTCAR_*"),
     aliases=("contcar", "CONTCAR"),
     description="VASP CONTCAR format (output structure)",
     reader=read_CONTCAR,

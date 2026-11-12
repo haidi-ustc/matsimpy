@@ -9,6 +9,7 @@ if/elif dispatch chain in io/core.py with table-driven lookup.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import fnmatch
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -24,6 +25,9 @@ class FormatHandler:
     Attributes:
         name: Unique handler name, e.g. "vasp-poscar", "cif", "xyz".
         extensions: File extensions this handler claims, e.g. (".vasp",).
+        filename_patterns: Case-sensitive ``fnmatch`` patterns for whole file
+            names without a usable extension, e.g. ("POSCAR", "POSCAR.*").
+            Checked only when no extension matches.
         aliases: Alternate names users can use, e.g. ("poscar", "vasp").
         description: Human-readable one-liner.
         reader: Callable for reading; None if write-only.
@@ -36,6 +40,7 @@ class FormatHandler:
 
     name: str
     extensions: tuple[str, ...] = ()
+    filename_patterns: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
     description: str = ""
     reader: Callable | None = None
@@ -115,9 +120,19 @@ class FormatRegistry:
 
     # ------------------------------------------------------------------
     def detect(self, filename: str) -> FormatHandler | None:
-        """Return the handler matching *filename* extension, or None."""
-        ext = Path(filename).suffix.lower()
-        return self._by_extension.get(ext)
+        """Return the handler for *filename*, or None.
+
+        The extension decides first; otherwise the file name is matched against
+        the handlers' ``filename_patterns`` (e.g. ``POSCAR``, ``CONTCAR.relax``).
+        """
+        path = Path(filename)
+        handler = self._by_extension.get(path.suffix.lower())
+        if handler is not None:
+            return handler
+        for candidate in self._by_name.values():
+            if any(fnmatch.fnmatchcase(path.name, pattern) for pattern in candidate.filename_patterns):
+                return candidate
+        return None
 
     # ------------------------------------------------------------------
     def get(self, name_or_alias: str) -> FormatHandler | None:
@@ -160,7 +175,7 @@ class FormatRegistry:
             handler = self.detect(filename)
             if handler is None:
                 raise ValueError(
-                    f"Could not detect file format from extension: {filename}. "
+                    f"Could not detect file format from extension or file name: {filename}. "
                     f"Specify format explicitly."
                 )
 
@@ -202,7 +217,7 @@ class FormatRegistry:
             handler = self.detect(filename)
             if handler is None:
                 raise ValueError(
-                    f"Could not detect file format from extension: {filename}. "
+                    f"Could not detect file format from extension or file name: {filename}. "
                     f"Specify format explicitly."
                 )
 

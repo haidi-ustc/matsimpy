@@ -16,12 +16,16 @@ inputs or outputs by hand, and do not edit these copies.
 | KPOINTS | inputs/KPOINTS |
 | OSZICAR | outputs/OSZICAR |
 | OUTCAR | outputs/OUTCAR.gz (decompressed) |
-| POSCAR | inputs/POSCAR |
+| POSCAR | inputs/POSCAR (VASP 4 format: no symbol line) |
 | POSCAR.AlN | inputs/POSCAR.AlN |
 | PROCAR.new_format_5.4.4.gz | outputs/PROCAR.new_format_5.4.4.gz |
 | PROCAR.simple | outputs/PROCAR.simple |
 | vasprun.hse06.xml.gz | outputs/vasprun.hse06.xml.gz |
 | vasprun.xml | outputs/vasprun.xml.gz (decompressed) |
+| CONTCAR_Li2O | outputs/CONTCAR_Li2O |
+| FePO4.vasp | inputs/FePO4.vasp |
+| POSCAR_fcc | inputs/POSCAR_fcc |
+| nmr/cs/basic/hydromagnesite/POSCAR | fixtures/nmr/cs/basic/hydromagnesite/POSCAR |
 | fake_potcars/POTCAR.gz | inputs/fake_potcars/POTCAR.gz |
 | fake_potcars/POT_GGA_PAW_PBE_54/POTCAR.{Fe,Fe_pv,P,O}.gz | inputs/fake_potcars/POT_GGA_PAW_PBE_54/ (same names) |
 
