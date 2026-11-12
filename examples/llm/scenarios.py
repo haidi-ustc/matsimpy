@@ -45,6 +45,27 @@ def _one_of_tools(*names: str) -> Validator:
     return validate
 
 
+def _vasp_inputs(directory: str) -> Validator:
+    """write_vasp_input wrote INCAR, KPOINTS and POSCAR, with the mesh kpoint_mesh chose."""
+    def validate(evidence: dict) -> list[str]:
+        calls = {call["name"]: call for call in evidence["tool_calls"] if call.get("status") == "success"}
+        if "write_vasp_input" not in calls or "kpoint_mesh" not in calls:
+            return ["missing successful write_vasp_input or kpoint_mesh call"]
+        errors = []
+        written = calls["write_vasp_input"]
+        if not {"INCAR", "KPOINTS", "POSCAR"} <= set(written["result"].get("files", [])):
+            errors.append(f"expected INCAR, KPOINTS and POSCAR, got {written['result'].get('files')}")
+        if written["arguments"].get("directory") != directory:
+            errors.append(f"expected directory {directory!r}, got {written['arguments'].get('directory')!r}")
+        mesh = calls["kpoint_mesh"]["result"].get("result")
+        if written["arguments"].get("kpoints") != mesh:
+            errors.append(f"KPOINTS {written['arguments'].get('kpoints')} is not the kpoint_mesh result {mesh}")
+        if any(item["path"].endswith("POTCAR") for item in evidence.get("artifacts", [])):
+            errors.append("a POTCAR was written")
+        return errors
+    return validate
+
+
 def _all(*validators: Validator) -> Validator:
     def validate(evidence: dict) -> list[str]:
         return [error for validator in validators for error in validator(evidence)]
@@ -61,6 +82,7 @@ class Scenario:
     required_tools: frozenset[str]
     validate: Validator = _valid
     scientific_context: str = ""
+    mcp: bool = False  # connect MatSimPy's own MCP server as "matsimpy"
 
 
 SCENARIOS = [
@@ -119,6 +141,16 @@ SCENARIOS = [
     Scenario("15", "error_recovery", "Invalid prototype recovery", "recovery", (
         "Try to build prototype unobtainium for Cu; if MatSimPy rejects it, recover by building fcc Cu with a=3.61 A and save recovered.cif",
     ), frozenset({"from_prototype", "write_structure"}), _saved(".cif", 1)),
+    Scenario("16", "vasp_skill", "VASP inputs through a Skill", "skill", (
+        "Prepare VASP relaxation inputs for diamond silicon with a=5.43 A in the directory si_relax, "
+        "using a k-point density of 1000 per reciprocal atom",
+    ), frozenset({"from_prototype", "activate_skill", "kpoint_mesh", "write_vasp_input"}), _vasp_inputs("si_relax"),
+        "kpoint_mesh is only available after activating the packaged vasp-inputs skill. No POTCAR is "
+        "written; the user must supply licensed POTCARs."),
+    Scenario("17", "mcp_iron", "BCC iron through an MCP server", "mcp", (
+        "Using only the tools of the matsimpy MCP server (names starting with matsimpy__), "
+        "build bcc iron with a=2.87 A and save it as fe.cif",
+    ), frozenset({"matsimpy__from_prototype", "matsimpy__write_structure"}), _saved("fe.cif", 1), mcp=True),
 ]
 
 
