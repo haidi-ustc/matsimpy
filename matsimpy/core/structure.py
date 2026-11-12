@@ -53,6 +53,13 @@ if TYPE_CHECKING:
     from ..analysis.selection import AtomSelection
 
 
+def _require_finite_positions(positions: np.ndarray) -> None:
+    """Raise ValueError if ``positions`` contains NaN or +/-Inf."""
+    if not np.isfinite(positions).all():
+        kind = "NaN" if np.isnan(positions).any() else "infinite"
+        raise ValueError(f"Positions cannot contain {kind} values.")
+
+
 class Structure(ABC, MSONable):
     """
     Abstract base class for representing crystal and molecule structures.
@@ -155,6 +162,9 @@ class Structure(ABC, MSONable):
                 f"Number of positions ({len(pos)}) must match "
                 f"number of species ({len(self._species)})"
             )
+        # Checked here, not only in __init__, so _construct and add_atom
+        # (which both end here) cannot create atoms at NaN/Inf positions.
+        _require_finite_positions(pos)
         pos.flags.writeable = False
         self._coords = pos  # native: fractional (Crystal) / Cartesian (Molecule)
         self._lattice = lattice
@@ -752,6 +762,11 @@ class Structure(ABC, MSONable):
             # One has lattice, other doesn't
             return False
 
+        # Periodicity is part of the physical system (a slab is not the bulk
+        # crystal with the same cell); _structural_hash already includes it.
+        if getattr(self, "pbc", None) != getattr(other, "pbc", None):
+            return False
+
         return True
 
     @property
@@ -856,6 +871,8 @@ class Structure(ABC, MSONable):
             new = new.reshape(1, -1)
         if new.ndim != 2 or new.shape[1] != 3:
             raise ValueError("Each position must be a 3D coordinate [x, y, z].")
+        # before any distance or frac/cart arithmetic turns inf into NaN
+        _require_finite_positions(new)
         if len(species_list) != len(new):
             raise ValueError(
                 f"Number of species ({len(species_list)}) must match "
