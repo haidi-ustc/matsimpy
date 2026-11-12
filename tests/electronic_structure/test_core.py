@@ -44,6 +44,46 @@ def test_magmom_rejects_non_vector_values():
         Magmom([1, 2])
 
 
+@pytest.mark.parametrize("value", [float("nan"), [0, float("inf"), 0]])
+def test_magmom_rejects_non_finite_values(value):
+    with pytest.raises(ValueError, match="finite"):
+        Magmom(value)
+
+
+def test_magmom_is_immutable():
+    """``moment`` was a writable ndarray attribute that could also be reassigned."""
+    source = [1.0, 2.0, 3.0]
+    magmom = Magmom(source)
+    source[0] = 99.0  # the input is copied
+    assert magmom.moment.tolist() == [1.0, 2.0, 3.0]
+
+    with pytest.raises(ValueError, match="read-only"):
+        magmom.moment[0] = 5.0
+    for name in ("moment", "_moment", "anything"):
+        with pytest.raises(AttributeError, match="immutable"):
+            setattr(magmom, name, 1.0)
+    with pytest.raises(AttributeError, match="immutable"):
+        del magmom._moment
+    assert magmom == Magmom([1, 2, 3])
+
+
+def test_magmom_sequence_scalar_and_copy_protocols():
+    import copy
+    import pickle
+
+    vector = Magmom([1, 2, 3])
+    assert len(vector) == 3 and tuple(vector) == (1.0, 2.0, 3.0) and vector[1] == 2.0
+    assert float(Magmom(2.5)) == 2.5  # z component of a collinear moment
+    assert repr(vector) == "Magmom([1.0, 2.0, 3.0])"
+    assert Magmom(vector) == vector
+    for clone in (pickle.loads(pickle.dumps(vector)), copy.deepcopy(vector), copy.copy(vector)):
+        assert clone == vector
+        assert not clone.moment.flags.writeable
+    assert vector != [1.0, 2.0, 3.0]
+    with pytest.raises(TypeError):
+        hash(vector)
+
+
 @pytest.mark.requires_pymatgen
 def test_enum_values_match_pymatgen_2025_6_14():
     pytest.importorskip("pymatgen")
