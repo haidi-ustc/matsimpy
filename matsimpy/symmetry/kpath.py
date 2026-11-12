@@ -9,8 +9,11 @@ from ASE 3.29.0, ``ase/lattice/__init__.py`` (classes CUB through MCLC) and
 Copyright (C) 2010--2025 the ASE developers.  Those adapted portions are
 provided under the BSD 2-Clause License; its notice is reproduced in
 ``THIRD_PARTY_NOTICES.md``.  MatSimPy modifications remove ASE objects and
-imports, use plain NumPy data, map labels to pymatgen spelling, and cover only
-the 14 three-dimensional Setyawan--Curtarolo Bravais families required here.
+imports, use plain NumPy data, map labels to pymatgen spelling, and cover the
+14 three-dimensional Setyawan--Curtarolo Bravais families.  The special points
+and paths of the five 2D Bravais lattices are adapted from the same ASE file
+(classes OBL, RECT, CRECT, SQR and HEX2D); the classification of a layer from
+its in-plane point group is MatSimPy's own.
 
 Scientific source: W. Setyawan and S. Curtarolo, Computational Materials
 Science 49, 299--312 (2010), Tables 2--19, doi:10.1016/j.commatsci.2010.05.010.
@@ -178,9 +181,187 @@ def _representative_paths():
 PATHS=_representative_paths()
 
 
+# --- Two-dimensional (layer) crystals ---------------------------------------
+#
+# Special points and paths of the five 2D Bravais lattices follow ASE 3.29.0,
+# ``ase/lattice/__init__.py`` classes OBL, RECT, CRECT, SQR and HEX2D (see the
+# third-party notice above).  Each table is defined for ASE's canonical cell:
+# OBL a < b, alpha < 90; RECT a < b; CRECT |a| = |b|, alpha < 90; SQR; HEX2D
+# with gamma = 120 degrees.
+
+_2D_VARIANTS = {"mp": "OBL", "op": "RECT", "oc": "CRECT", "tp": "SQR", "hp": "HEX2D"}
+_2D_NAMES_PATHS = {
+    "OBL": ("GYHCH1X", "GYHCH1XG"),
+    "RECT": ("GXSY", "GXSYGS"),
+    "CRECT": ("GXA1Y", "GXA1YG"),
+    "SQR": ("GMX", "MGXM"),
+    "HEX2D": ("GMK", "GMKG"),
+}
+# Points that never move with the metric; preferred when coincident points merge.
+_2D_FIXED_LABELS = {"OBL": {"G", "Y", "C", "X"}, "CRECT": {"G", "Y"}}
+
+
+def _2d_points(variant, a, b, alpha):
+    """Fractional special points in the canonical 2D cell (a, b, alpha in degrees)."""
+    if variant == "SQR":
+        return [[0, 0], [.5, .5], [0, .5]]
+    if variant == "RECT":
+        return [[0, 0], [.5, 0], [.5, .5], [0, .5]]
+    if variant == "HEX2D":
+        return [[0, 0], [0, .5], [1/3, 1/3]]
+    co = np.cos(alpha*_D)
+    if variant == "CRECT":
+        eta = np.sin(alpha*_D/2)**2/np.sin(alpha*_D)**2; xi = eta*co
+        return [[0, 0], [eta, -eta], [.5+xi, .5-xi], [.5, .5]]
+    eta = (1-a*co/b)/(2*np.sin(alpha*_D)**2); nu = .5-eta*b*co/a
+    return [[0, 0], [0, .5], [eta, 1-nu], [.5, .5], [1-eta, nu], [.5, 0]]
+
+
+def _primitive_integer(vector):
+    vector = np.asarray(vector, dtype=int)
+    divisor = math.gcd(abs(int(vector[0])), abs(int(vector[1])))
+    return vector // divisor
+
+
+def _null_vector(matrix):
+    """Primitive integer vector spanning the kernel of a rank-1 2x2 integer matrix."""
+    row = matrix[0] if np.any(matrix[0]) else matrix[1]
+    return _primitive_integer([row[1], -row[0]])
+
+
+def _gauss_reduce(basis, metric):
+    """Lagrange--Gauss reduction of an integer 2D basis (columns) under a metric."""
+    basis = np.array(basis, dtype=int)
+    for _ in range(100):
+        u, v = basis[:, 0], basis[:, 1]
+        if u @ metric @ u > v @ metric @ v:
+            basis = basis[:, ::-1].copy(); continue
+        m = int(np.rint((u @ metric @ v)/(u @ metric @ u)))
+        if m == 0:
+            return basis
+        basis[:, 1] = v - m*u
+    raise ValueError("could not reduce the two-dimensional lattice")
+
+
+class _Layer:
+    """In-plane lattice and point group of a crystal with two periodic axes."""
+
+    def __init__(self, structure, dataset):
+        pbc = tuple(bool(x) for x in structure.pbc)
+        self.axes = [i for i in range(3) if pbc[i]]
+        (normal,) = [i for i in range(3) if not pbc[i]]
+        vectors = np.asarray(structure.lattice.matrix, float)[self.axes]
+        self.metric = vectors @ vectors.T
+        self.blocks = []
+        for rotation in np.asarray(dataset.rotations, dtype=int):
+            # keep operations that map the layer plane onto itself
+            if any(rotation[i, normal] or rotation[normal, i] for i in self.axes):
+                continue
+            block = rotation[np.ix_(self.axes, self.axes)]
+            if not any(np.array_equal(block, seen) for seen in self.blocks):
+                self.blocks.append(block)
+
+    def length(self, n):
+        return float(np.sqrt(n @ self.metric @ n))
+
+    def angle(self, u, v):
+        cosine = (u @ self.metric @ v)/(self.length(u)*self.length(v))
+        return float(np.degrees(np.arccos(np.clip(cosine, -1, 1))))
+
+    def classify(self):
+        """Return (bravais, integer basis columns) adapted to the layer symmetry.
+
+        Time reversal adds the in-plane 2-fold axis, so a k-path needs only the
+        rotations and mirrors of the layer.  Without a mirror the IBZ is half the
+        zone and the oblique path is used even for a square or hexagonal cell.
+        """
+        det = [round(np.linalg.det(b)) for b in self.blocks]
+        mirrors = [b for b, d in zip(self.blocks, det) if d == -1]
+        traces = {int(np.trace(b)) for b, d in zip(self.blocks, det) if d == 1}
+        reduced = _gauss_reduce(np.eye(2, dtype=int), self.metric)
+        if mirrors and traces & {1, -1}:
+            u, v = reduced.T
+            if self.angle(u, v) < 90: v = -v
+            return "hp", np.column_stack([u, v])
+        if mirrors and 0 in traces:
+            return "tp", reduced
+        if mirrors:
+            mirror = mirrors[0]
+            plus = _null_vector(mirror - np.eye(2, dtype=int))
+            minus = _null_vector(mirror + np.eye(2, dtype=int))
+            if abs(round(np.linalg.det(np.column_stack([plus, minus])))) == 1:
+                if self.length(plus) > self.length(minus): plus, minus = minus, plus
+                return "op", np.column_stack([plus, minus])
+            u = (plus+minus)//2; v = mirror @ u
+            if self.angle(u, v) > 90: v = -v
+            return "oc", np.column_stack([u, v])
+        u, v = reduced.T
+        if self.angle(u, v) > 90: v = -v
+        return "mp", np.column_stack([u, v])
+
+
+def _merge_coincident(variant, points, path):
+    """Drop labels whose point coincides with the previous one on the path.
+
+    At the edges of their parameter ranges the OBL and CRECT tables put several
+    labels on one point, e.g. H = C = H1 for a rectangular cell.  The fixed
+    label of each run is kept."""
+    fixed = _2D_FIXED_LABELS.get(variant, set())
+    merged = []
+    for label in path:
+        if merged and np.allclose(points[label], points[merged[-1]], atol=1e-10):
+            if label in fixed and merged[-1] not in fixed: merged[-1] = label
+            continue
+        merged.append(label)
+    return merged
+
+
+def _definition_2d(structure, dataset):
+    layer = _Layer(structure, dataset)
+    bravais, basis = layer.classify()
+    variant = _2D_VARIANTS[bravais]
+    u, v = basis.T
+    names, path = _2D_NAMES_PATHS[variant]
+    table = dict(zip(_tokens(names), _2d_points(variant, layer.length(u), layer.length(v), layer.angle(u, v))))
+    # f_input = P^-T f_basis: k.a_j is invariant under the change of real-space basis
+    to_input = np.linalg.inv(basis.astype(float)).T
+    points = {}
+    for name, fractional in table.items():
+        full = np.zeros(3)
+        full[layer.axes] = to_input @ np.asarray(fractional, float)
+        points[name] = full
+    # k -> -k (time reversal) maps the whole path onto an equivalent one; use
+    # the orientation with fewer negative coordinates.
+    coordinates = np.array(list(points.values()))
+    if np.sum(-coordinates > 1e-12) > np.sum(coordinates > 1e-12):
+        points = {name: -point + 0.0 for name, point in points.items()}
+    path = _merge_coincident(variant, points, _tokens(path))
+    points = {_label(n, variant): tuple(map(float, points[n])) for n in points if n in path}
+    return bravais, variant, points, [[_label(n, variant) for n in path]]
+
+
 class HighSymmKpath:
+    """High-symmetry k-path of a crystal (Setyawan--Curtarolo; 2D per ASE).
+
+    With three periodic axes the path is defined in the standard primitive
+    cell, as in pymatgen.  With two periodic axes (a slab or monolayer,
+    ``pbc`` with one False entry) the layer's 2D Bravais lattice is classified
+    from its in-plane point group, and the k-points are fractional coordinates
+    of the input cell's reciprocal lattice with zero along the non-periodic
+    axis.  ``bravais`` is then one of ``mp, op, oc, tp, hp``.
+    """
+
     def __init__(self,structure,symprec=.01,angle_tolerance=5.):
-        self.structure=structure; self.analyzer=SpacegroupAnalyzer(structure,symprec,angle_tolerance); self.bravais=_bravais(self.analyzer._dataset())
+        self.structure=structure; self.analyzer=SpacegroupAnalyzer(structure,symprec,angle_tolerance)
+        periodic=sum(bool(x) for x in getattr(structure,"pbc",(True,True,True)))
+        if periodic==2:
+            self.bravais,variant,points,paths=_definition_2d(structure,self.analyzer._dataset())
+            self.kpath={"kpoints":points,"path":paths,"bravais":self.bravais,"variant":variant}
+            self._reciprocal=2*np.pi*np.linalg.inv(np.asarray(structure.lattice.matrix,float)).T
+            return
+        if periodic!=3:
+            raise ValueError(f"a k-path needs two or three periodic axes; pbc={tuple(structure.pbc)}")
+        self.bravais=_bravais(self.analyzer._dataset())
         conventional=self.analyzer.get_conventional_standard_structure(); primitive=self.analyzer.get_primitive_standard_structure(); params=_parameters(self.bravais,conventional,primitive)
         # ASE's SC metric-boundary tolerance is 2e-4 and is deliberately
         # pinned independently of spglib's positional symmetry tolerance.
