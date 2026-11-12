@@ -10,6 +10,16 @@
   `CRECT`, `SQR`, `HEX2D`). When the atoms break the cell's symmetry, the path of the
   lower symmetry is used. The k-points are fractional coordinates of the input cell's
   reciprocal lattice, with zero along the vacuum axis.
+- Crystal prototype identifiers: `matsimpy.symmetry.get_prototype(crystal)` returns an
+  identifier such as `AB_cF2_Fm-3m_a_b` (rocksalt), the same for every crystal of that
+  structure type, independent of the elements, atom order and supercell.
+  `get_prototype_info` returns its parts as a frozen `PrototypeInfo`.
+  `PrototypeDatabase` is a read-only map from identifier to structure names, with JSON
+  load/save; `merge` and `with_structures` return a new database.
+  `matsimpy.builders.bulk` adds `build_prototype_database(files)`,
+  `structures_from_prototype(database, prototype, ...)` (new crystals by element
+  substitution) and `suggest_element_substitutions`. The identifiers are the same as
+  in branch1's `CrystalPrototype`, which this replaces.
 
 ### Fixed
 - VASP: `Vasprun.run_type` reported HSE06 runs with `HFSCREEN=0.207` as
@@ -87,6 +97,15 @@
 - There are two POSCAR readers: `matsimpy.io` (`matsimpy/io/vasp.py`) and
   `calculator.vasp.inputs.Poscar`. Only the second reads VASP 4 files, where species
   names follow the coordinates or come from a POTCAR.
+- Prototype identifiers use spglib's Wyckoff letters without reducing them over the
+  space group's Euclidean normalizer. Two descriptions of the same crystal can therefore
+  differ in the letters: diamond is `a` with `to_primitive=True` and `b` with `False`,
+  and zincblende is `a_c` and `a_d`. The Pearson part counts the atoms of the
+  standardized cell, which is the primitive cell by default (rocksalt `cF2`; the
+  crystallographic symbol is `cF8`). The default `symprec=1e-5` is too tight for
+  coordinates given to 6 decimals: a real MnO POSCAR comes out as `I4mm`, and
+  `symprec=1e-3` gives `Fm-3m`. All three behaviours are kept from branch1, so
+  identifiers stay comparable with existing databases.
 
 ### Tests
 - Restored `tests/calculator/fixtures` (VASP and Gaussian outputs), which the 0.8.5–0.9.0
@@ -102,6 +121,8 @@
   hand now use real files: INCAR, KPOINTS (7 styles), POSCAR, CHGCAR (no spin, spin,
   noncollinear), LOCPOT, ELFCAR, XDATCAR and charged vasprun files. Each is also compared
   against pymatgen. POTCAR tests use only pymatgen's placeholder POTCARs.
+- `test_crystal_from_file_poscar` looked for a file that does not exist and silently
+  passed. It now reads a real POSCAR and checks it.
 
 ## 0.9.0 — 2026-11-12
 

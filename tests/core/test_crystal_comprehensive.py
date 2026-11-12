@@ -25,11 +25,13 @@ class TestCrystalComprehensive(unittest.TestCase):
     
     def test_crystal_from_file_poscar(self):
         """Test reading POSCAR file using from_file."""
-        poscar_file = Path(__file__).parent / "POSCAR-frac.vasp"
-        if poscar_file.exists():
-            crystal = read(str(poscar_file))
-            self.assertIsInstance(crystal, Crystal)
-            self.assertGreater(len(crystal), 0)
+        # real pymatgen test file (tests/calculator/fixtures/vasp/PROVENANCE.md);
+        # the old path did not exist, so the test never read anything
+        poscar_file = Path(__file__).parents[1] / "calculator" / "fixtures" / "vasp" / "POSCAR_C2"
+        crystal = read(str(poscar_file))
+        self.assertIsInstance(crystal, Crystal)
+        self.assertEqual(crystal.species, ("C", "C"))
+        self.assertAlmostEqual(crystal.lattice.volume, 2 * 1.786855**3, places=5)
     
     
     
