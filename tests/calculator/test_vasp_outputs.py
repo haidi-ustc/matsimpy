@@ -195,36 +195,17 @@ class TestVasprun:
         assert vr.parameters is not None
         assert vr.parameters["NELM"] == 60
 
-    def test_run_type_detects_hse06_with_hfscreen_0207(self):
-        """The fixture is an HSE06 run with HFSCREEN=0.207 (not exactly 0.2).
-
-        An exact ``isclose(HFSCREEN, 0.2)`` check labelled it as
-        "PBEO or other Hybrid Functional".
-        """
-        from matsimpy.calculator.vasp.outputs import Vasprun
-
-        vr = Vasprun(os.path.join(FIXTURES_DIR, "vasprun.xml"))
-        assert vr.parameters["HFSCREEN"] == pytest.approx(0.207)
-        assert vr.run_type == "HSE06"
-
     @pytest.mark.parametrize(
-        ("hfscreen", "expected"),
-        [
-            (0.2, "HSE06"),
-            (0.207, "HSE06"),
-            (0.21, "HSE06"),
-            (0.3, "HSE03"),
-            (0.25, "PBEO or other Hybrid Functional"),
-        ],
+        ("fixture", "hfscreen"), [("vasprun.xml", 0.207), ("vasprun.hse06.xml.gz", 0.2)]
     )
-    def test_run_type_hfscreen_ranges(self, hfscreen, expected):
-        import copy
-
+    def test_run_type_detects_hse06(self, fixture, hfscreen):
+        """Both real HSE06 runs: HFSCREEN=0.207 was labelled "PBEO or other Hybrid
+        Functional" by an exact ``isclose(HFSCREEN, 0.2)`` check."""
         from matsimpy.calculator.vasp.outputs import Vasprun
 
-        vr = copy.copy(Vasprun(os.path.join(FIXTURES_DIR, "vasprun.xml")))
-        vr.parameters = {**vr.parameters, "HFSCREEN": hfscreen}
-        assert vr.run_type == expected
+        vr = Vasprun(os.path.join(FIXTURES_DIR, fixture))
+        assert vr.parameters["HFSCREEN"] == pytest.approx(hfscreen)
+        assert vr.run_type == "HSE06"
 
     @pytest.mark.parametrize("parser_name", ["Vasprun", "BSVasprun"])
     def test_as_dict_uses_native_reciprocal_lattice(self, parser_name):
@@ -289,42 +270,63 @@ class TestVasprun:
 
 class TestProcarProjectionOnElements:
     """Procar.get_projection_on_elements had no coverage and crashed with
-    AttributeError: species are plain symbol strings, not Element objects."""
+    AttributeError: species are plain symbol strings, not Element objects.
 
-    @staticmethod
-    def _procar(nions):
+    Real pymatgen files; see fixtures/vasp/PROVENANCE.md for why the PROCAR is
+    paired with POSCAR.AlN (only atom count and species order matter here).
+    """
+
+    @pytest.fixture
+    def procar(self):
         from matsimpy.calculator.vasp.outputs import Procar
-        from matsimpy.electronic_structure.core import Spin
 
-        procar = Procar.__new__(Procar)
-        procar.nkpoints, procar.nbands, procar.nions = 1, 2, nions
-        # data[kpoint, band, ion, orbital]; ion i carries weight i + 1 per orbital
-        data = np.zeros((1, 2, nions, 3))
-        for ion in range(nions):
-            data[:, :, ion, :] = ion + 1
-        procar.data = {Spin.up: data}
-        return procar, Spin
+        return Procar(os.path.join(FIXTURES_DIR, "PROCAR.new_format_5.4.4.gz"))
 
-    def test_sums_projections_per_element_symbol(self):
-        from matsimpy.core import Crystal, Lattice
+    @pytest.fixture
+    def aln(self):
+        from matsimpy.calculator.vasp.inputs import Poscar
 
-        crystal = Crystal(
-            ["Fe", "O", "Fe"], [[0, 0, 0], [0.5, 0.5, 0.5], [0.5, 0, 0]], Lattice.cubic(4)
+        return Poscar.from_file(os.path.join(FIXTURES_DIR, "POSCAR.AlN"), check_for_potcar=False).structure
+
+    def test_sums_projections_per_element_symbol(self, procar, aln):
+        assert procar.nions == len(aln) == 4 and aln.species == ("Al", "Al", "N", "N")
+        proj = procar.get_projection_on_elements(aln)
+
+        for spin, data in procar.data.items():
+            for band in (0, procar.nbands - 1):
+                for kpoint in (0, procar.nkpoints - 1):
+                    got = proj[spin][band][kpoint]
+                    assert set(got) == {"Al", "N"}
+                    assert got["Al"] == pytest.approx(data[kpoint, band, 0:2, :].sum())
+                    assert got["N"] == pytest.approx(data[kpoint, band, 2:4, :].sum())
+
+    @pytest.mark.requires_pymatgen
+    def test_matches_pymatgen(self, procar, aln):
+        pytest.importorskip("pymatgen")
+        from pymatgen.core import Structure
+        from pymatgen.io.vasp.outputs import Procar as PymatgenProcar
+
+        reference = PymatgenProcar(os.path.join(FIXTURES_DIR, "PROCAR.new_format_5.4.4.gz"))
+        expected = reference.get_projection_on_elements(
+            Structure.from_file(os.path.join(FIXTURES_DIR, "POSCAR.AlN"))
         )
-        procar, Spin = self._procar(3)
-        proj = procar.get_projection_on_elements(crystal)
+        from matsimpy.electronic_structure import Spin
 
-        for band in range(2):
-            assert dict(proj[Spin.up][band][0]) == {"Fe": 3 * (1 + 3), "O": 3 * 2}
+        got = procar.get_projection_on_elements(aln)
+        for pmg_spin in expected:  # pymatgen's Spin is a different enum class
+            spin = Spin(pmg_spin.value)
+            for band in range(procar.nbands):
+                for kpoint in range(procar.nkpoints):
+                    assert dict(got[spin][band][kpoint]) == pytest.approx(
+                        dict(expected[pmg_spin][band][kpoint])
+                    )
 
-    def test_rejects_structure_with_wrong_atom_count(self):
-        from matsimpy.core import Crystal, Lattice
+    def test_rejects_structure_with_wrong_atom_count(self, aln):
+        from matsimpy.calculator.vasp.outputs import Procar
 
-        procar, _ = self._procar(3)
-        with pytest.raises(ValueError, match="2 atoms but the PROCAR has 3 ions"):
-            procar.get_projection_on_elements(
-                Crystal(["Fe", "O"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(4))
-            )
+        procar = Procar(os.path.join(FIXTURES_DIR, "PROCAR.simple"))  # 3 ions
+        with pytest.raises(ValueError, match="4 atoms but the PROCAR has 3 ions"):
+            procar.get_projection_on_elements(aln)
 
 
 class TestOutcarOnDemandReaders:

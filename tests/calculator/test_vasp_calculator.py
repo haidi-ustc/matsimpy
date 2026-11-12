@@ -59,11 +59,15 @@ class TestVaspCalculator:
 
     def test_write_input_writes_a_parseable_incar(self, tmp_path):
         """Every INCAR written by 0.9.0 was " =  [tag, value]" lines (unreadable)."""
-        from matsimpy.calculator.vasp import VaspCalculator
-        from matsimpy.calculator.vasp.inputs import Incar
+        import os
 
+        from matsimpy.calculator.vasp import VaspCalculator
+        from matsimpy.calculator.vasp.inputs import Incar, Poscar
+
+        fixtures = os.path.join(os.path.dirname(__file__), "fixtures", "vasp")
+        structure = Poscar.from_file(os.path.join(fixtures, "POSCAR"), check_for_potcar=False).structure
         calc = VaspCalculator(directory=str(tmp_path), copy_potcar=False)
-        calc.write_input(Crystal(["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]], Lattice.cubic(5.43)))
+        calc.write_input(structure)
         lines = (tmp_path / "INCAR").read_text().splitlines()
         assert "ENCUT = 400.0" in lines
         assert dict(Incar.from_file(tmp_path / "INCAR")) == dict(Incar(calc.parameters["incar"]))
