@@ -4489,13 +4489,17 @@ class Procar(MSONable):
             raise ValueError("nbands cannot be None.")
         if self.nions is None:
             raise ValueError("nions cannot be None.")
+        if len(structure) != self.nions:
+            raise ValueError(
+                f"structure has {len(structure)} atoms but the PROCAR has {self.nions} ions"
+            )
 
         elem_proj: dict[Spin, list] = {}
         for spin in self.data:
             elem_proj[spin] = [[defaultdict(float) for _ in range(self.nkpoints)] for _ in range(self.nbands)]
 
         for iat in range(self.nions):
-            name = structure.species[iat].symbol
+            name = structure.species[iat]  # canonical element symbol (str)
             for spin, data in self.data.items():
                 for kpoint, band in itertools.product(range(self.nkpoints), range(self.nbands)):
                     elem_proj[spin][band][kpoint][name] += np.sum(data[kpoint, band, iat, :])

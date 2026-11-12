@@ -285,3 +285,43 @@ class TestVasprun:
         assert ms_vr.final_energy == pytest.approx(pmg_vr.final_energy, abs=1e-5)
         # Compare number of ionic steps
         assert len(ms_vr.ionic_steps) == len(pmg_vr.ionic_steps)
+
+
+class TestProcarProjectionOnElements:
+    """Procar.get_projection_on_elements had no coverage and crashed with
+    AttributeError: species are plain symbol strings, not Element objects."""
+
+    @staticmethod
+    def _procar(nions):
+        from matsimpy.calculator.vasp.outputs import Procar
+        from matsimpy.electronic_structure.core import Spin
+
+        procar = Procar.__new__(Procar)
+        procar.nkpoints, procar.nbands, procar.nions = 1, 2, nions
+        # data[kpoint, band, ion, orbital]; ion i carries weight i + 1 per orbital
+        data = np.zeros((1, 2, nions, 3))
+        for ion in range(nions):
+            data[:, :, ion, :] = ion + 1
+        procar.data = {Spin.up: data}
+        return procar, Spin
+
+    def test_sums_projections_per_element_symbol(self):
+        from matsimpy.core import Crystal, Lattice
+
+        crystal = Crystal(
+            ["Fe", "O", "Fe"], [[0, 0, 0], [0.5, 0.5, 0.5], [0.5, 0, 0]], Lattice.cubic(4)
+        )
+        procar, Spin = self._procar(3)
+        proj = procar.get_projection_on_elements(crystal)
+
+        for band in range(2):
+            assert dict(proj[Spin.up][band][0]) == {"Fe": 3 * (1 + 3), "O": 3 * 2}
+
+    def test_rejects_structure_with_wrong_atom_count(self):
+        from matsimpy.core import Crystal, Lattice
+
+        procar, _ = self._procar(3)
+        with pytest.raises(ValueError, match="2 atoms but the PROCAR has 3 ions"):
+            procar.get_projection_on_elements(
+                Crystal(["Fe", "O"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(4))
+            )
