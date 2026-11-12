@@ -7,7 +7,7 @@
 [![Status](https://img.shields.io/badge/status-Beta-brightgreen)](https://gitee.com/haidi-hfut/MatSimPy)
 [![Tests](https://img.shields.io/badge/tests-core%20suite-brightgreen)](tests/)
 
-**Version**: v0.9.0 (incompatible with 0.8.x — see [MIGRATION_0.9.md](MIGRATION_0.9.md))
+**Version**: v0.10.0 (see [CHANGELOG.md](CHANGELOG.md) and [MIGRATION_0.10.md](MIGRATION_0.10.md))
 
 ## Table of Contents
 
@@ -24,10 +24,11 @@
 ## Features
 
 - **Core**: `Crystal` (periodic + lattice), `Molecule` (non-periodic), `Lattice` (14 Bravais types), `Composition`, `Site`, `Element` (118 elements). Immutable-return — `add_atom`, `remove_atom`, `substitute`, `sort_atoms` return new objects
-- **Builders** (7 domains, 27 functions): `from_prototype` (9 prototypes: fcc/bcc/hcp/diamond/rocksalt/perovskite/zincblende/sc/CsCl), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. Registered via `BuilderRegistry`
+- **Builders** (7 domains, 27 functions): `from_prototype` (9 prototypes: fcc/bcc/hcp/sc/diamond/rocksalt/zincblende/wurtzite/perovskite), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. Registered via `BuilderRegistry`
 - **Transformations** (5 categories, 26 functions): `translate`, `rotate`, `apply_strain`, `make_supercell`, `substitute`, `move_atoms`, `scale_lattice`, etc. Registered via `TransformationRegistry` with `TransformationSpec` metadata. `TransformationPlan` for reproducible pipelines
 - **Analysis** (6 modules): `BondAnalyzer` (bonds/angles/dihedrals/orders), `StructureAnalyzer` (COM/inertia/density), `TopologyAnalyzer` (connectivity/rings/paths), graph/neighbor functions, `AtomSelection` (9 selectors)
 - **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()`, third-party conversion, and LaTeX table helpers
+- **Symmetry**: space groups, conventional/primitive cells, high-symmetry k-paths for 3D and 2D (layer) crystals, and AFLOW-style prototype identifiers (`AB_cF8_225_a_b`) with a `PrototypeDatabase`
 - **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
 - **Extensibility**: Plugin entry points for registries, including IO formats
 - **AI REPL**: Optional LLM function calling via DeepSeek models. Built-in MatSimPy skills expose core, builders, transformations, analysis, IO, storage, calculators, and symmetry tools. Use `matsimpy-ai -c "build fcc Cu"` for single-shot mode
@@ -497,6 +498,49 @@ print(f"Primitive: {len(crystal)} atoms")         # 2 atoms
 print(f"Conventional: {len(conventional)} atoms") # 8 atoms
 ```
 
+High-symmetry k-paths follow `pbc`. A crystal with one non-periodic axis (a
+monolayer in a slab cell) gets the path of its 2D Bravais lattice (`mp`, `op`,
+`oc`, `tp` or `hp`), with no k-points along the vacuum axis. Fewer than two
+periodic axes raise `ValueError`.
+
+```python
+from matsimpy.core import Crystal, Lattice
+from matsimpy.symmetry import HighSymmKpath
+
+graphene = Crystal(['C', 'C'], [[1/3, 2/3, 0.5], [2/3, 1/3, 0.5]],
+                   Lattice.hexagonal(2.46, 20.0), pbc=[True, True, False])
+kpath = HighSymmKpath(graphene)
+print(kpath.bravais)               # hp
+print(kpath.kpath['path'])         # [['\\Gamma', 'M', 'K', '\\Gamma']]
+print(kpath.kpath['kpoints']['K']) # K at (1/3, 1/3, 0)
+```
+
+Prototype identifiers name the structure type in the style of AFLOW labels:
+anonymized formula, Pearson symbol of the conventional cell, space-group number
+and canonical Wyckoff letters. They do not depend on the cell, origin, axis
+order, atom order or elements. By default the symmetry tolerance is chosen per
+crystal (`symprec=None`, 1/100 of the shortest interatomic distance, halved
+until consistent).
+
+```python
+from matsimpy.builders.bulk import from_prototype
+from matsimpy.symmetry import PrototypeDatabase, get_prototype, get_prototype_info
+
+nacl = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
+print(get_prototype(nacl))         # AB_cF8_225_a_b
+info = get_prototype_info(nacl)    # frozen PrototypeInfo
+print(info.pearson_symbol, info.space_group_symbol, info.symprec)
+
+# a read-only map from identifier to structure names (JSON load/save)
+database = PrototypeDatabase().with_structures([('NaCl.vasp', nacl)])
+print(database['AB_cF8_225_a_b'])  # ('NaCl.vasp',)
+```
+
+`matsimpy.builders.bulk.build_prototype_database(files)` builds a database from
+structure files, and `structures_from_prototype(database, prototype,
+structures_dir, element_substitutions)` makes new crystals from a prototype's
+template by element substitution.
+
 ### Data storage
 
 ```python
@@ -661,8 +705,8 @@ audited version. Approval rechecks the reviewed content hash and current live
 `FunctionDef` bindings. Evolved skills cannot install dependencies, execute
 bundled scripts, edit MatSimPy source, or exceed their allowed-tool set.
 
-See the [AI Agent user guide](docs/user_guide/ai_agent.rst) for the complete API,
-command, migration, security, restart/retry, and approval reference.
+See the `matsimpy.ai` module docstrings for the complete API, command,
+migration, security, restart/retry, and approval reference.
 
 ## Core Conventions
 
@@ -695,7 +739,7 @@ matsimpy/
 │   └── protocols.py   # StructureLike, CrystalLike, MoleculeLike
 │
 ├── builders/          # Structure builders
-│   ├── bulk/          # Bulk crystal structures (prototypes, symmetry)
+│   ├── bulk/          # Bulk crystals: prototypes, prototype databases, random crystals
 │   ├── surface/       # Surface slabs and adsorbates
 │   ├── alloy/         # Alloy generation (random, ordered, intermetallic, Heusler)
 │   ├── molecule/      # Molecular structure builders
@@ -753,7 +797,7 @@ matsimpy/
 │
 ├── calculator/        # Energy/force calculators
 ├── config/            # Global configuration (ConfigManager)
-├── symmetry/          # Symmetry analysis (spglib)
+├── symmetry/          # Space groups, k-paths (3D and 2D), prototype identifiers (spglib)
 ├── ai/                # Optional AI REPL and skill runtime
 ├── exceptions.py      # MatSimPyError, FormatError, StructureTypeError, etc.
 ├── plugins.py         # Plugin discovery via entry points
@@ -800,38 +844,29 @@ python examples/builders_bulk.py
 
 ## Testing
 
-The project includes comprehensive tests:
-
 ```bash
-# Run all tests
-pytest
+# Run all tests (single worker; the suite takes about 90 s)
+pytest -q -p no:xdist
 
-# Run with coverage
-pytest --cov=matsimpy --cov-report=html
+# Run specific packages
+pytest tests/core -q
+pytest tests/calculator -q
+pytest tests/symmetry -q
 
-# Run specific modules
-pytest tests/test_core*.py -v              # Core modules
-pytest tests/test_graph*.py -v             # Graph analysis
-pytest tests/test_io_latex.py -v           # LaTeX export
-pytest tests/test_composite*.py -v         # High-throughput tools
-
-# Performance and quality
-pytest --tb=no -q                          # Quick run
-pytest tests/ -v --durations=10            # Show slowest tests
+# Show the slowest tests
+pytest -q -p no:xdist --durations=10
 ```
 
-Current status in CI/local runs varies by optional extras; core suite is green.
+Tests that compare against pymatgen or ASE are skipped when those optional
+packages are not installed. VASP test data are unmodified pymatgen test files;
+their sources are listed in `tests/calculator/fixtures/vasp/PROVENANCE.md`.
 
 ## Documentation
 
-- **Sphinx Documentation**: See `docs/` directory for comprehensive Sphinx documentation
-  - Build with: ``cd docs && make html``
-  - View at: ``docs/_build/html/index.html``
-- **AI Documentation**: See `AIdocs/` directory for AI-related documentation and session summaries
-  - [November 2025 Quality Enhancement](AIdocs/SESSION_SUMMARY_2025_11.md) - Complete details of recent improvements
-- **Examples**: See `examples/` directory for comprehensive usage examples
-- **API Reference**: See module docstrings and `examples/` for detailed usage
-- **Project Structure**: See above for module organization
+- **Changes and upgrades**: [CHANGELOG.md](CHANGELOG.md) and [MIGRATION_0.10.md](MIGRATION_0.10.md)
+- **Examples**: the `examples/` directory
+- **API reference**: module docstrings; `docs/conf.py` configures a Sphinx autodoc build
+- **Third-party code**: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ## Contributing
 
@@ -853,4 +888,4 @@ MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen)
 
 ---
 
-**Note**: v0.8.0 — optional AI REPL with LLM function calling, shared agent runtime, task traces, agent memory, and approval-gated draft skills.
+**Note**: v0.10.0 — 2D k-paths, AFLOW-style prototype identifiers, and VASP I/O fixes; see [CHANGELOG.md](CHANGELOG.md).

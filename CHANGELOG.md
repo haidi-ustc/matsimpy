@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 — 2026-11-12
+
+New features and bug fixes; no API is removed. Changes that can affect existing code are
+listed in [MIGRATION_0.10.md](MIGRATION_0.10.md).
 
 ### Added
 - `HighSymmKpath` supports two-dimensional crystals (`pbc` with exactly one `False`
@@ -138,11 +141,22 @@
 - `test_crystal_from_file_poscar` looked for a file that does not exist and silently
   passed. It now reads a real POSCAR and checks it.
 - Removed `tests/POSCAR-cart.vasp` and `tests/POSCAR-frac.vasp`. No test used them.
+- Removed tests that repeated other tests (INCAR parsing and round trip, KPOINTS and POSCAR
+  file reads), merged the 2D k-path checks, and parse each volumetric fixture once.
+  `test_core_integrity_091.py` is now `test_core_integrity.py`.
+
+### Documentation
+- `MIGRATION_0.10.md` lists the changes that can affect code written for 0.9.0.
+- Removed `MIGRATION_0.9.md` (the 0.8.x → 0.9.0 guide).
+- README: symmetry section with 2D k-path and prototype examples (run by the test suite),
+  corrected prototype list, test commands and documentation links (it pointed to
+  `AIdocs/` and `docs/user_guide/`, which do not exist).
+- `CLAUDE.md` describes the layout, layering, test command and test-data rules for
+  contributors and coding agents.
 
 ## 0.9.0 — 2026-11-12
 
-A deliberately **incompatible** refactor. Every removed or changed API, with its replacement, is
-listed in [MIGRATION_0.9.md](MIGRATION_0.9.md). Readers for files written by 0.8.x are kept.
+A deliberately **incompatible** refactor of 0.8.x. Readers for files written by 0.8.x are kept.
 
 ### Architecture
 - `matsimpy.core` no longer imports higher layers. `tests/architecture/test_layering.py` enforces

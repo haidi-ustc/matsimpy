@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED = [
     "CHANGELOG.md",
-    "MIGRATION_0.9.md",
+    "MIGRATION_0.10.md",
     "THIRD_PARTY_NOTICES.md",
     "tests/calculator/fixtures/vasp/PROVENANCE.md",
     "tests/calculator/fixtures/vasp/vasprun.xml",

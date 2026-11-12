@@ -1,4 +1,4 @@
-include README.md LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md MIGRATION_0.9.md
+include README.md LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md MIGRATION_0.10.md
 recursive-include matsimpy *.json *.json.bz2 *.yaml *.yml
 recursive-include matsimpy/calculator/lammps/templates *
 # Test assets and docs used by the test-suite (absent from <=0.8.1 sdists)
