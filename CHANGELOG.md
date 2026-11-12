@@ -31,10 +31,37 @@
   `FunctionExecutor.skill_state`. `matsimpy.ai.executor.get_active_executor()` is
   public.
 
-### Known issue
+- **VASP: every INCAR file was unreadable.** `calculator.utils.str_delimited` wrote
+  lines like ` =  ['ENCUT', 400.0]` instead of `ENCUT = 400.0`. This affected
+  `Incar.get_str`, `write_file` and `VaspCalculator.write_input`. VASP cannot parse such
+  a file, and `Incar.from_file` read it back as an empty INCAR.
+- VASP: the `Outcar` readers `read_pseudo_zval`, `read_igpar`, `read_lepsilon`,
+  `read_lepsilon_ionic`, `read_internal_strain_tensor` and `read_lcalcpol` always failed
+  with "could not be parsed". `micro_pyawk` expected a `{key: pattern}` dict, but its
+  callers pass pymatgen-style `(regex, predicate, action)` records. It moved to
+  `calculator.utils` and now takes those records.
+- VASP: `SETTINGS` was used but never defined, so `Poscar.from_file` (with default
+  arguments), `Potcar(symbols)` and `VaspInput.run_vasp` raised `NameError`. It is now a
+  read-only view of the `PMG_*` environment variables (`PMG_VASP_PSP_DIR`, ...).
+- VASP: reading data that a run does not contain now returns empty or `None`, as
+  current pymatgen does. Before, it raised: `IndexError` from `Outcar.read_elastic_tensor`,
+  `read_piezo_tensor` and the NMR readers, and `KeyError` from
+  `Vasprun.optical_absorption_coeff`.
+- `Magmom` is immutable. `moment` is a read-only array, attributes cannot be set, and
+  NaN/Inf values are rejected. Its serialized form is unchanged.
+- VASP: removed the local `get_el_sp` copy. POTCAR symbols in `Poscar.from_file` are
+  resolved with the core `normalize_species`. The old `map(get_el_sp, ...)` call was
+  never evaluated, so the names were never checked.
+
+### Known issues
 - The packaged POTCAR reference files (`vasp_potcar_stats.json` and both hash files)
-  are empty (`{}`), and have been since 0.8.0. POTCAR identification and validation have
-  no reference data until real statistics are added.
+  are empty (`{}`), and have been since 0.8.0. Because of this, `Potcar.from_file` and
+  `PotcarSingle` raise `KeyError` for any real POTCAR, and `Poscar.from_file` ignores a
+  POTCAR in the same directory.
+- `matsimpy.io.read` picks the format only from the file extension, so a file named
+  `POSCAR` or `CONTCAR` is not recognised. Its POSCAR reader (`matsimpy/io/vasp.py`) is
+  separate from `calculator.vasp.inputs.Poscar` and cannot read VASP 4 files, where
+  species names follow the coordinates.
 
 ### Tests
 - Restored `tests/calculator/fixtures` (VASP and Gaussian outputs), which the 0.8.5–0.9.0
@@ -44,6 +71,10 @@
   multi-step log and checks the final SCF energy in eV.
 - `tests/test_sdist_contents.py` builds the sdist and fails if the test fixtures or the
   VASP package data are missing from it.
+- VASP test data comes only from the pymatgen 2026.10.24 test files, unmodified. Sources
+  are listed in `tests/calculator/fixtures/vasp/PROVENANCE.md`. `KPOINTS` is now the
+  original file; the old copy had an extra trailing space. Tests that built VASP data by
+  hand now use real files.
 
 ## 0.9.0 — 2026-11-12
 
