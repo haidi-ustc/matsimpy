@@ -13,7 +13,7 @@ matsimpy/
   transformation, builders,      L3  pure functions on structures, structure builders,
   storage                            DataStorage
   calculator                     L4  LennardJones, VASP, Gaussian, LAMMPS, MatterSim
-  ai                             L5  optional LLM agent and skills
+  ai                             L5  optional LLM agent: tools, Skills, MCP (docs/ai.md)
 tests/                           mirrors the package; tests/calculator/fixtures holds real data
 ```
 
@@ -30,6 +30,10 @@ tests/                           mirrors the package; tests/calculator/fixtures 
 - **Stateless calculators.** A calculator takes the structure on every call and returns
   immutable results. It keeps no "last structure" and no mutable results.
 - **AI only in `matsimpy.ai`.** Lower layers never call an LLM.
+- **AI tools are marked, not wrapped.** To expose a library function to the agent,
+  decorate it with `@tool` from `matsimpy.utils.tooling` (no other import needed) and
+  give it type hints and a docstring with an `Args:` section; the schema is derived from
+  them. Do not write wrappers in `matsimpy.ai`.
 - **Functions, not methods, across layers.** I/O, symmetry and transformations are module
   functions (`matsimpy.io.read(path)`, `matsimpy.symmetry.get_symmetry_info(crystal)`),
   not methods on core classes.
@@ -63,8 +67,8 @@ python -m pytest -q -p no:xdist tests/symmetry
 
 - The version is set in `pyproject.toml` only. `matsimpy.__version__` reads it and the
   README `**Version**` line must match it (`tests/test_packaging_runtime_contracts.py`).
-- Every user-visible change goes into `CHANGELOG.md`. Changes that can break existing
-  code also go into the current `MIGRATION_*.md`.
+- Every user-visible change goes into `CHANGELOG.md`; changes that can break existing
+  code are listed there under "Breaking changes".
 - Third-party code adapted into MatSimPy needs an entry in `THIRD_PARTY_NOTICES.md`.
-  `tests/test_sdist_contents.py` checks that notices, migration notes and fixtures are
+  `tests/test_sdist_contents.py` checks that notices, the changelog and fixtures are
   in the sdist.
