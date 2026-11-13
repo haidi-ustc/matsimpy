@@ -126,3 +126,21 @@ def test_trajectory_reads_pre_090_frame_properties(si_crystal):
     restored = Trajectory.from_dict(d)
     assert [f.metadata["energy"] for f in restored] == [-1.0, -2.0]
     assert "frame_properties" not in Trajectory.from_structures([si_crystal]).as_dict()
+
+
+@pytest.mark.parametrize("change", [lambda c: c.remove_atom(0), lambda c: c.substitute(0, "Ge")])
+def test_frames_must_have_the_same_atoms(si_crystal, change):
+    with pytest.raises(ValueError, match="same atoms"):
+        Trajectory([si_crystal, change(si_crystal)])
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"time_step": float("nan")},
+    {"time_step": -1.0},
+    {"coords_are_displacement": True},  # needs base_positions
+    {"base_positions": [[0, 0, 0]]},
+    {"base_positions": [[0, 0, 0], [np.nan, 0, 0]]},
+])
+def test_invalid_scalars_and_base_positions_are_rejected(si_crystal, kwargs):
+    with pytest.raises(ValueError):
+        Trajectory([si_crystal], **kwargs)

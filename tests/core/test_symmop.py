@@ -1,4 +1,4 @@
-"""Regression tests for SymmOp matrix immutability."""
+"""Tests for SymmOp: construction and immutability."""
 
 import numpy as np
 import pytest
@@ -35,3 +35,24 @@ def test_translation_vector_is_read_only_snapshot():
 
     np.testing.assert_array_equal(op.translation_vector, [1.0, 2.0, 3.0])
     np.testing.assert_array_equal(op.operate(np.array([0.0, 0.0, 0.0])), [1.0, 2.0, 3.0])
+
+
+def test_from_origin_axis_angle_is_right_handed_in_degrees():
+    op = SymmOp.from_origin_axis_angle([0, 0, 0], [0, 0, 1], 90)
+    np.testing.assert_allclose(op.operate([1, 0, 0]), [0, 1, 0], atol=1e-12)
+    op_rad = SymmOp.from_origin_axis_angle([0, 0, 0], [0, 0, 1], np.pi / 2, angle_in_radians=True)
+    np.testing.assert_allclose(op_rad.affine_matrix, op.affine_matrix, atol=1e-12)
+
+
+def test_from_origin_axis_angle_matches_pymatgen():
+    pmg = pytest.importorskip("pymatgen.core.operations")
+    origin, axis, angle = [1.0, -2.0, 0.5], [0.3, -0.2, 0.9], 37.0
+    ours = SymmOp.from_origin_axis_angle(origin, axis, angle)
+    ref = pmg.SymmOp.from_origin_axis_angle(origin, axis, angle)
+    np.testing.assert_allclose(ours.affine_matrix, ref.affine_matrix, atol=1e-10)
+
+
+@pytest.mark.parametrize("origin, angle", [([0, 0], 90), ([0, 0, 0], float("nan"))])
+def test_from_origin_axis_angle_rejects_bad_input(origin, angle):
+    with pytest.raises(ValueError):
+        SymmOp.from_origin_axis_angle(origin, [0, 0, 1], angle)

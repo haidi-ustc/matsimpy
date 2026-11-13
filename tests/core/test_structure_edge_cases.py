@@ -1,6 +1,8 @@
 """Tests for Structure edge cases and error paths."""
 import unittest
 from matsimpy.core import Structure, Crystal, Molecule, Lattice
+import numpy as np
+import pytest
 
 
 class TestStructureValidationEdgeCases(unittest.TestCase):
@@ -152,6 +154,29 @@ class TestStructureNotImplementedEdgeCases(unittest.TestCase):
         # a broken implementation, which would violate the abstract class contract.
         # This is acceptable - the line exists for documentation/safety.
         self.assertTrue(hasattr(Structure, 'get_neighbor_list'))
+
+
+def _nacl():
+    return Crystal(["Na", "Cl"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(5.0))
+
+
+def test_indices_accept_numpy_ints_and_negative_values():
+    c = _nacl()
+    assert c[-1].specie == "Cl"
+    assert c[np.int64(0)].specie == "Na"
+    assert c.remove_atom(np.int64(0)).species == ("Cl",)
+
+
+@pytest.mark.parametrize("call", [
+    lambda c: c[True],
+    lambda c: c[1.0],
+    lambda c: c.remove_atom(True),
+    lambda c: c.remove_atom([1.0]),
+    lambda c: c.substitute(True, "K"),
+])
+def test_bool_and_float_indices_are_rejected(call):
+    with pytest.raises(TypeError):
+        call(_nacl())
 
 
 if __name__ == '__main__':

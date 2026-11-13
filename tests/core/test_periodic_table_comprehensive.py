@@ -2,6 +2,9 @@
 import unittest
 
 from matsimpy.core import Element
+import copy
+import pickle
+import pytest
 
 class TestElementComprehensive(unittest.TestCase):
     """Comprehensive tests for Element class."""
@@ -293,6 +296,20 @@ class TestElementComprehensive(unittest.TestCase):
             Element.get_elements_by_group(1, exclude=[1, 2, 3])  # Numbers not allowed
     
     
+
+
+def test_elements_compare_and_hash_by_symbol():
+    assert Element("Fe") == Element("Fe") != Element("O")
+    assert len({Element("Fe"), Element("Fe"), Element("O")}) == 2
+
+
+def test_cached_elements_are_immutable_and_survive_pickle_and_deepcopy():
+    cu = Element.get_element("Cu")
+    with pytest.raises(AttributeError):
+        cu.symbol = "Zn"
+    assert pickle.loads(pickle.dumps(cu)) == cu
+    assert copy.deepcopy(cu) == cu
+
 
 if __name__ == '__main__':
     unittest.main()

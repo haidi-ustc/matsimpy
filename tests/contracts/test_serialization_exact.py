@@ -125,3 +125,15 @@ def test_per_atom_metadata_ops_read_site_properties_a_bounded_number_of_times(op
     out = c.remove_atom([0]) if op == "remove_atom" else c.sort_atoms()
     assert calls["n"] <= 4
     assert len(out) in (n - 1, n)
+
+
+@pytest.mark.parametrize("cls", [Crystal, Molecule])
+def test_numpy_site_properties_survive_monty_json(cls):
+    props = [{"magmom": np.array([0, 0, 1.0])}, {"magmom": np.array([0, 0, -1.0])}]
+    if cls is Crystal:
+        s = Crystal(["Fe", "Fe"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(2.87), site_properties=props)
+    else:
+        s = Molecule(["Fe", "Fe"], [[0, 0, 0], [2, 0, 0]], site_properties=props)
+    back = cls.from_dict(json.loads(json.dumps(s.as_dict(), cls=MontyEncoder)))
+    assert isinstance(back.site_properties[1]["magmom"], np.ndarray)
+    np.testing.assert_array_equal(back.site_properties[1]["magmom"], [0, 0, -1.0])
