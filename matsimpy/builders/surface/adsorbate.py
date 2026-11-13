@@ -16,28 +16,30 @@ def add_adsorbate(
     adsorbate: Union[str, Crystal, Molecule],
     position: Tuple[float, float],
     height: float,
-    **kwargs,
 ) -> Crystal:
     """
     Add an adsorbate to a slab surface.
 
     Args:
         slab: Slab structure
-        adsorbate: Adsorbate species or structure
-        position: (x, y) position on surface (fractional)
-        height: Height above surface in Angstroms
-        **kwargs: Additional parameters
+        adsorbate: An element symbol, or a Molecule/Crystal whose Cartesian geometry
+            is kept as given (orient it so that it points along the surface normal)
+        position: Fractional (a, b) coordinates of the adsorption site
+        height: Height in Angstroms of the adsorbate's lowest atom above the
+            slab's highest atom, measured along the surface normal (a x b)
 
     Returns:
         Crystal: Slab with adsorbate
 
     Examples:
         >>> from matsimpy.builders.surface import generate_slab, add_adsorbate
-        >>> from matsimpy import Crystal, Lattice
-        >>> from matsimpy.builders.bulk import from_prototype
-        >>> bulk = from_prototype('diamond', 'Si', 5.43)  # Proper diamond structure
-        >>> slab = generate_slab(bulk, (1,1,1), 10, 15)
-        >>> with_ads = add_adsorbate(slab, 'O', (0.5, 0.5), 2.0)
+        >>> from matsimpy.core import Crystal, Lattice, Molecule
+        >>> cu = Crystal(['Cu'] * 4, [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+        ...              Lattice.cubic(3.61))
+        >>> slab = generate_slab(cu, (1, 1, 1), layers=4)
+        >>> with_o = add_adsorbate(slab, 'O', (1/3, 1/3), 1.2)
+        >>> co = Molecule(['C', 'O'], [[0, 0, 0], [0, 0, 1.13]])
+        >>> with_co = add_adsorbate(slab, co, (0, 0), 1.85)
     """
     if not isinstance(slab, Crystal):
         raise TypeError("slab must be a Crystal")
@@ -49,12 +51,13 @@ def add_adsorbate(
         raise ValueError(f"height must be non-negative, got {height}")
 
     slab_cart = slab.cart_positions.copy()
-    normal = slab.lattice.matrix[2].copy().astype(np.float64)
+    a_vec, b_vec, c_vec = slab.lattice.matrix
+    normal = np.cross(a_vec, b_vec)
     normal = normal / np.linalg.norm(normal)
+    if normal @ c_vec < 0:
+        normal = -normal
     projections = np.dot(slab_cart, normal)
     surface_proj = float(np.max(projections))
-    a_vec = slab.lattice.matrix[0]
-    b_vec = slab.lattice.matrix[1]
     in_plane = float(position[0]) * a_vec + float(position[1]) * b_vec
     in_plane_proj = np.dot(in_plane, normal)
     anchor = in_plane + normal * (surface_proj + float(height) - in_plane_proj)
@@ -70,9 +73,10 @@ def add_adsorbate(
             if isinstance(adsorbate, Crystal)
             else adsorbate.positions.copy()
         )
-        adsorbate_center_xy = np.mean(adsorbate_cart[:, :2], axis=0)
-        adsorbate_cart[:, 0] += in_plane[0] - adsorbate_center_xy[0]
-        adsorbate_cart[:, 1] += in_plane[1] - adsorbate_center_xy[1]
+        # centre the adsorbate over the site within the surface plane
+        center = adsorbate_cart.mean(axis=0)
+        shift = in_plane - center
+        adsorbate_cart += shift - (shift @ normal) * normal
         ads_proj = np.dot(adsorbate_cart, normal)
         ads_min_proj = float(np.min(ads_proj))
         adsorbate_cart += normal * (surface_proj + float(height) - ads_min_proj)

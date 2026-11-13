@@ -1,215 +1,180 @@
 """Tests for surface builders."""
-import unittest
 import numpy as np
-from matsimpy.core import Crystal, Molecule
-from matsimpy.builders.bulk import from_prototype
-from matsimpy.builders.surface import generate_slab, generate_symmetric_slab
-from matsimpy.builders.surface import add_adsorbate
+import pytest
+
+from matsimpy.builders.surface import add_adsorbate, generate_slab, generate_symmetric_slab
+from matsimpy.core import Crystal, Lattice, Molecule
+
+FCC = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
 
 
-def _sorted_rows(values, decimals=8):
-    rounded = np.round(np.asarray(values, dtype=float), decimals)
-    return rounded[np.lexsort(rounded.T[::-1])]
+def _cu():
+    return Crystal(['Cu'] * 4, FCC, Lattice.cubic(3.61))
 
 
-def _centered_cartesian_signature(positions):
-    centered = np.asarray(positions, dtype=float) - np.mean(positions, axis=0)
-    return _sorted_rows(centered)
+def _si():
+    positions = FCC + [[x + 0.25, y + 0.25, z + 0.25] for x, y, z in FCC]
+    return Crystal(['Si'] * 8, positions, Lattice.cubic(5.43))
 
 
-class TestSlabGeneration(unittest.TestCase):
-    """Tests for slab generation."""
-    
-    def setUp(self):
-        """Set up test bulk structures."""
-        # Use proper diamond structure (2 atoms in primitive cell)
-        from matsimpy.builders.bulk import from_prototype
-        self.si_bulk = from_prototype('diamond', 'Si', 5.43)
-        self.fcc_cu = from_prototype('fcc', 'Cu', 3.61)
-    
-    
+def _si_primitive():
+    a = 5.43 / 2
+    return Crystal(['Si', 'Si'], [[0, 0, 0], [0.25, 0.25, 0.25]], Lattice([[0, a, a], [a, 0, a], [a, a, 0]]))
 
-    def test_generate_slab_rejects_zero_miller_index(self):
-        """The zero Miller index is invalid."""
-        with self.assertRaises(ValueError):
-            generate_slab(self.si_bulk, (0, 0, 0), 10, 15)
 
-    def test_generate_slab_validates_sizes(self):
-        """Slab and vacuum sizes must be physically meaningful."""
-        with self.assertRaises(ValueError):
-            generate_slab(self.si_bulk, (1, 0, 0), 0, 15)
-        with self.assertRaises(ValueError):
-            generate_slab(self.si_bulk, (1, 0, 0), 10, -1)
-        with self.assertRaises(ValueError):
-            generate_slab(self.si_bulk, (1, 0, 0), 10, 15, layers=0)
-    
-    def test_generate_slab_with_layers(self):
-        """Test slab generation with specific number of layers."""
-        slab = generate_slab(
-            self.si_bulk, (1, 0, 0), 
-            min_slab_size=10, min_vacuum_size=15,
-            layers=5
-        )
-        
-        self.assertGreater(len(slab.species), 0)
-        self.assertEqual(len(slab.species), len(self.si_bulk.species) * 5)
-        self.assertEqual(slab.pbc, (True, True, False))
-    
-    
-    
-    def test_generate_symmetric_slab(self):
-        """Test symmetric slab generation."""
-        slab = generate_symmetric_slab(self.si_bulk, (1, 1, 0), 15, 10)
-        
-        self.assertGreater(len(slab.species), 0)
-        self.assertIsInstance(slab, Crystal)
-    
-    def test_slab_volume_increase(self):
-        """Test that slab has larger volume than bulk (due to vacuum)."""
-        slab = generate_slab(self.si_bulk, (0, 0, 1), min_slab_size=10, min_vacuum_size=15)
-        
-        self.assertGreater(slab.volume, self.si_bulk.volume)
+def _nearest(crystal):
+    cart = crystal.cart_positions
+    shifts = [range(-1, 2) if p else [0] for p in crystal.pbc]
+    images = np.array([[i, j, k] for i in shifts[0] for j in shifts[1] for k in shifts[2]]) @ crystal.lattice.matrix
+    d = np.linalg.norm(cart[:, None, None] - cart[None, :, None] - images[None, None], axis=-1).min(axis=-1)
+    np.fill_diagonal(d, np.inf)
+    return d
 
-    def test_slab_miller_orientation_matches_reference_invariants(self):
-        """Miller-index slab basis follows crystallographic reference invariants."""
-        from pymatgen.core import Structure
-        from pymatgen.core.surface import SlabGenerator
 
-        bulk = from_prototype('sc', 'Cu', 3.0)
-        original_positions = bulk.positions.copy()
-        hkl = np.array([1, 1, 1])
-        slab = generate_slab(bulk, tuple(hkl), min_slab_size=6, min_vacuum_size=8)
+def _pymatgen_slab(bulk, hkl, layers):
+    pytest.importorskip("pymatgen")
+    from pymatgen.core import Lattice as PL, Structure
+    from pymatgen.core.surface import SlabGenerator
 
-        reference_structure = Structure(
-            bulk.lattice.matrix,
-            list(bulk.species),
-            bulk.frac_positions,
-        )
-        reference_slab = SlabGenerator(
-            reference_structure,
-            tuple(hkl),
-            6,
-            8,
-            center_slab=True,
-            primitive=False,
-        ).get_slab()
+    structure = Structure(PL(bulk.lattice.matrix), list(bulk.species), bulk.frac_positions)
+    return SlabGenerator(structure, hkl, layers, 10, in_unit_planes=True, primitive=True).get_slabs()[0]
 
-        self.assertGreater(len(slab), 0)
-        self.assertGreater(len(reference_slab), 0)
-        self.assertEqual(slab.pbc, (True, True, False))
-        self.assertGreaterEqual(np.linalg.norm(slab.lattice.matrix[2]), 14.0)
-        np.testing.assert_array_almost_equal(bulk.positions, original_positions)
 
-        reciprocal_normal = np.linalg.solve(
-            bulk.lattice.matrix,
-            hkl.astype(float),
-        )
-        reciprocal_normal /= np.linalg.norm(reciprocal_normal)
-        for vector in slab.lattice.matrix[:2]:
-            self.assertAlmostEqual(np.dot(vector, reciprocal_normal), 0.0, places=6)
-        self.assertAlmostEqual(
-            abs(np.dot(
-                slab.lattice.matrix[2] / np.linalg.norm(slab.lattice.matrix[2]),
-                reciprocal_normal,
-            )),
-            1.0,
-            places=6,
-        )
-        np.testing.assert_allclose(
-            np.diff(sorted(np.unique(np.round(slab.cart_positions @ reciprocal_normal, 8)))),
-            np.diff(sorted(np.unique(np.round(reference_slab.cart_coords @ reciprocal_normal, 8)))),
-            rtol=1e-6,
-            atol=1e-6,
-        )
+class TestGenerateSlab:
+    @pytest.mark.parametrize("bulk,hkl", [
+        (_cu, (1, 0, 0)), (_cu, (1, 1, 0)), (_cu, (1, 1, 1)), (_cu, (2, 1, 0)),
+        (_si, (1, 0, 0)), (_si, (1, 1, 1)), (_si, (2, 2, 1)),
+    ])
+    def test_surface_cell_matches_pymatgen(self, bulk, hkl):
+        """The old builder's cells were up to 26 times too large and sometimes left-handed."""
+        bulk = bulk()
+        slab = generate_slab(bulk, hkl, layers=4, min_vacuum_size=10)
+        reference = _pymatgen_slab(bulk, hkl, 4)
+        matrix = slab.lattice.matrix
+        area = np.linalg.norm(np.cross(matrix[0], matrix[1]))
+        assert np.isclose(area, reference.surface_area)
+        # each layer is one primitive cell, of volume area * d_hkl
+        primitive_atoms = len(bulk) * area * slab.metadata["d_spacing"] / bulk.volume
+        assert len(slab) == pytest.approx(4 * primitive_atoms)
+        assert np.linalg.det(matrix) > 0
+        assert np.allclose(matrix[2, :2], 0) and np.allclose(matrix[:2, 2], 0)
+        assert slab.pbc == (True, True, False)
 
-    def test_slab_001_coordinates_match_pymatgen_reference(self):
-        """Simple cubic (001) slab coordinates should match reference geometry."""
-        from pymatgen.core import Structure
-        from pymatgen.core.surface import SlabGenerator
+    @pytest.mark.parametrize("hkl", [(1, 0, 0), (1, 1, 0), (1, 1, 1), (3, 1, 1)])
+    def test_bulk_bonds_are_kept(self, hkl):
+        slab = generate_slab(_si(), hkl, min_slab_size=8)
+        assert np.isclose(_nearest(slab).min(), 5.43 * np.sqrt(3) / 4)
 
-        bulk = from_prototype('sc', 'Cu', 3.0)
-        hkl = (0, 0, 1)
-        slab = generate_slab(bulk, hkl, min_slab_size=6, min_vacuum_size=8)
-        reference_slab = SlabGenerator(
-            Structure(
-                bulk.lattice.matrix,
-                list(bulk.species),
-                bulk.frac_positions,
-            ),
-            hkl,
-            6,
-            8,
-            center_slab=True,
-            primitive=False,
-        ).get_slab()
+    def test_layers_and_spacing(self):
+        slab = generate_slab(_cu(), (1, 1, 1), layers=5)
+        assert len(slab) == 5
+        assert np.isclose(slab.metadata["d_spacing"], 3.61 / np.sqrt(3))
+        z = np.sort(slab.cart_positions[:, 2])
+        assert np.allclose(np.diff(z), 3.61 / np.sqrt(3))
 
-        self.assertEqual(len(slab), len(reference_slab))
-        np.testing.assert_allclose(
-            _centered_cartesian_signature(slab.cart_positions),
-            _centered_cartesian_signature(reference_slab.cart_coords),
-            rtol=1e-6,
-            atol=1e-6,
-        )
+    def test_miller_index_is_reduced(self):
+        """(2, 2, 2) used to give a different, wrong slab from (1, 1, 1)."""
+        a = generate_slab(_cu(), (1, 1, 1), layers=4)
+        b = generate_slab(_cu(), (2, 2, 2), layers=4)
+        assert len(a) == len(b)
+        assert np.allclose(a.lattice.matrix, b.lattice.matrix)
 
-class TestAdsorbate(unittest.TestCase):
-    """Tests for adsorbate placement."""
-    
-    def setUp(self):
-        """Set up test slab."""
-        # Use proper diamond structure (2 atoms in primitive cell)
-        from matsimpy.builders.bulk import from_prototype
-        bulk = from_prototype('diamond', 'Si', 5.43)
-        self.slab = generate_slab(bulk, (1, 0, 0), min_slab_size=10, min_vacuum_size=15)
-    
-    
-    
-    
+    def test_conventional_and_primitive_bulk_give_the_same_surface(self):
+        conventional = generate_slab(_si(), (1, 1, 1), layers=3)
+        # (111) of the conventional cell is (111) of this primitive cell too
+        primitive = generate_slab(_si_primitive(), (1, 1, 1), layers=3)
+        assert len(conventional) == len(primitive) == 6
+        assert np.isclose(conventional.lattice.a, primitive.lattice.a)
 
-    def test_add_adsorbate_molecule(self):
-        """Test adding a molecular adsorbate."""
-        adsorbate = Molecule(['C', 'O'], [[0, 0, 0], [1.2, 0, 0]])
-        original_positions = self.slab.positions.copy()
-        slab_cart = self.slab.cart_positions.copy()
-        normal = self.slab.lattice.matrix[2] / np.linalg.norm(self.slab.lattice.matrix[2])
-        projections = np.dot(slab_cart, normal)
-        surface_proj = float(np.max(projections))
+    def test_si111_is_cut_between_bilayers(self):
+        slab = generate_slab(_si(), (1, 1, 1), layers=2)
+        z = np.sort(slab.cart_positions[:, 2])
+        gaps = np.round(np.diff(z), 4)
+        # bilayers of 0.78 A, separated by 2.35 A bonds; the surface bonds are the short ones
+        assert gaps[0] == gaps[-1] == round(5.43 * np.sqrt(3) / 12, 4)
 
-        with_ads = add_adsorbate(self.slab, adsorbate, (0.5, 0.5), height=2.0)
+    def test_slab_size_and_vacuum(self):
+        slab = generate_slab(_cu(), (1, 0, 0), min_slab_size=10, min_vacuum_size=12)
+        z = slab.cart_positions[:, 2]
+        assert slab.metadata["layers"] * slab.metadata["d_spacing"] >= 10
+        assert slab.lattice.c - np.ptp(z) >= 12
+        assert np.isclose(z.min(), slab.lattice.c - z.max())  # centred
 
-        self.assertIsInstance(with_ads, Crystal)
-        self.assertEqual(len(with_ads.species), len(self.slab.species) + 2)
-        self.assertEqual(with_ads.species[-2:], ('C', 'O'))
-        ads_cart = with_ads.cart_positions[-2:, :]
-        ads_proj = np.dot(ads_cart, normal)
-        ads_cart = with_ads.cart_positions[-2:, :]
-        ads_proj = np.dot(ads_cart, normal)
-        self.assertAlmostEqual(
-            np.min(ads_proj),
-            surface_proj + 2.0,
-            places=3,
-        )
-        np.testing.assert_array_almost_equal(self.slab.positions, original_positions)
+    def test_site_properties_are_kept(self):
+        bulk = Crystal(['Fe', 'Fe'], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(2.87),
+                       site_properties=[{"magmom": 2.2}, {"magmom": -2.2}])
+        slab = generate_slab(bulk, (0, 0, 1), layers=4)
+        # the antiferromagnetic order makes the lattice simple cubic: d = a, 2 atoms per layer
+        assert np.isclose(slab.metadata["d_spacing"], 2.87)
+        assert len(slab) == 8
+        assert sorted(p["magmom"] for p in slab.site_properties) == [-2.2] * 4 + [2.2] * 4
 
-    def test_add_adsorbate_invalid_height(self):
-        with self.assertRaises(ValueError):
-            add_adsorbate(self.slab, 'O', (0.5, 0.5), height=-1.0)
-        with self.assertRaises(ValueError):
-            add_adsorbate(self.slab, 'O', (0.5, 0.5), height=float('nan'))
-        with self.assertRaises(ValueError):
-            add_adsorbate(self.slab, 'O', (0.5, 0.5), height=float('inf'))
+    def test_invalid_inputs(self):
+        with pytest.raises(ValueError, match="0, 0, 0"):
+            generate_slab(_cu(), (0, 0, 0), 10)
+        with pytest.raises(ValueError, match="exactly one"):
+            generate_slab(_cu(), (1, 0, 0))
+        with pytest.raises(ValueError, match="exactly one"):
+            generate_slab(_cu(), (1, 0, 0), 10, layers=3)
+        with pytest.raises(ValueError, match="min_slab_size"):
+            generate_slab(_cu(), (1, 0, 0), 0)
+        with pytest.raises(ValueError, match="min_vacuum_size"):
+            generate_slab(_cu(), (1, 0, 0), 10, -1)
+        with pytest.raises(ValueError, match="layers"):
+            generate_slab(_cu(), (1, 0, 0), layers=0)
+        with pytest.raises(ValueError, match="three integers"):
+            generate_slab(_cu(), (1.5, 0, 0), 10)
+        with pytest.raises(TypeError):
+            generate_slab(_cu(), (1, 0, 0), 10, shift=0.2)
 
-    def test_add_adsorbate_non_001_slab(self):
-        bulk = from_prototype('diamond', 'Si', 5.43)
-        slab = generate_slab(bulk, (1, 1, 1), min_slab_size=8, min_vacuum_size=10)
-        slab_cart = slab.cart_positions.copy()
-        normal = slab.lattice.matrix[2] / np.linalg.norm(slab.lattice.matrix[2])
-        projections = np.dot(slab_cart, normal)
-        surface_proj = float(np.max(projections))
 
-        with_ads = add_adsorbate(slab, 'H', (0.5, 0.5), height=2.5)
-        ads_cart = with_ads.cart_positions
-        ads_proj = np.dot(ads_cart[-1], normal)
-        self.assertAlmostEqual(ads_proj - surface_proj, 2.5, places=6)
+class TestSymmetricSlab:
+    @pytest.mark.parametrize("bulk,hkl", [(_si, (1, 1, 1)), (_si, (1, 0, 0)), (_cu, (1, 1, 0))])
+    def test_top_and_bottom_are_equivalent(self, bulk, hkl):
+        """The old function returned an ordinary slab and called it symmetric."""
+        slab = generate_symmetric_slab(bulk(), hkl, layers=3)
+        z = slab.cart_positions[:, 2]
+        flipped = np.sort(z.max() + z.min() - z)
+        assert np.allclose(np.sort(z), flipped, atol=1e-6)
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_polar_surface_raises(self):
+        gaas = Crystal(['Ga'] * 4 + ['As'] * 4,
+                       FCC + [[x + 0.25, y + 0.25, z + 0.25] for x, y, z in FCC], Lattice.cubic(5.65))
+        with pytest.raises(ValueError, match="symmetric"):
+            generate_symmetric_slab(gaas, (1, 1, 1), layers=3)
+
+
+class TestAdsorbate:
+    def setup_method(self):
+        self.slab = generate_slab(_cu(), (1, 1, 1), layers=4, min_vacuum_size=15)
+
+    def test_add_atom(self):
+        top = self.slab.cart_positions[:, 2].max()
+        with_ads = add_adsorbate(self.slab, 'O', (1 / 3, 1 / 3), height=1.2)
+        assert len(with_ads) == len(self.slab) + 1
+        assert np.isclose(with_ads.cart_positions[-1, 2], top + 1.2)
+        np.testing.assert_allclose(self.slab.cart_positions, with_ads.cart_positions[:-1])
+
+    def test_add_molecule(self):
+        co = Molecule(['C', 'O'], [[5, 5, 0], [5, 5, 1.13]])
+        top = self.slab.cart_positions[:, 2].max()
+        with_ads = add_adsorbate(self.slab, co, (0.5, 0.5), height=1.85)
+        cart = with_ads.cart_positions[-2:]
+        assert with_ads.species[-2:] == ('C', 'O')
+        assert np.isclose(cart[:, 2].min(), top + 1.85)
+        site = 0.5 * self.slab.lattice.matrix[0] + 0.5 * self.slab.lattice.matrix[1]
+        assert np.allclose(cart[:, :2].mean(axis=0), site[:2])
+
+    def test_tilted_c_vector_uses_the_true_normal(self):
+        """The old code measured heights along c and centred molecules in xy."""
+        tilted = Crystal(self.slab.species, self.slab.cart_positions.tolist(),
+                         Lattice([self.slab.lattice.matrix[0], self.slab.lattice.matrix[1], [2.0, 1.0, 20.0]]),
+                         coords_are_cartesian=True, pbc=(True, True, False))
+        top = tilted.cart_positions[:, 2].max()
+        with_ads = add_adsorbate(tilted, 'H', (0.5, 0.5), height=1.5)
+        assert np.isclose(with_ads.cart_positions[-1, 2], top + 1.5)
+
+    def test_invalid_height(self):
+        for height in (-1.0, float('nan'), float('inf')):
+            with pytest.raises(ValueError):
+                add_adsorbate(self.slab, 'O', (0.5, 0.5), height=height)

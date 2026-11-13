@@ -7,8 +7,11 @@ This example demonstrates:
 - Working with different surface orientations
 """
 
+import numpy as np
+
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.builders.surface import generate_slab, add_adsorbate
+from matsimpy.builders.surface import add_adsorbate, generate_slab, generate_symmetric_slab
+from matsimpy.symmetry import SpacegroupAnalyzer
 from matsimpy.transformation.structural import make_supercell
 
 print("=" * 70)
@@ -21,30 +24,39 @@ print("=" * 70)
 print("\n1. Creating Surface Slabs")
 print("-" * 70)
 
-# Start with bulk FCC Cu
-fcc_cu = from_prototype('fcc', 'Cu', 3.61)
-print(f"Bulk FCC Cu: {fcc_cu.formula}, {len(fcc_cu)} atoms")
+# Start with bulk FCC Cu. Miller indices refer to the cell you pass in, so use
+# the conventional cubic cell for the usual (hkl).
+fcc_cu = SpacegroupAnalyzer(from_prototype('fcc', 'Cu', 3.61)).get_conventional_standard_structure()
+print(f"Bulk FCC Cu (conventional cell): {fcc_cu.formula}, {len(fcc_cu)} atoms")
 
 # Create (111) surface slab
 slab_111 = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=10.0, min_vacuum_size=15.0)
 print(f"\n(111) surface slab:")
 print(f"  Formula: {slab_111.formula}")
 print(f"  Number of atoms: {len(slab_111)}")
-print(f"  Lattice c (thickness): {slab_111.lattice.c:.2f} Å")
+print(f"  Layers: {slab_111.metadata['layers']} x d(111) = {slab_111.metadata['d_spacing']:.3f} Å")
+print(f"  Lattice c (slab + vacuum): {slab_111.lattice.c:.2f} Å")
 
 # Create (100) surface slab
 slab_100 = generate_slab(fcc_cu, (1, 0, 0), min_slab_size=10.0, min_vacuum_size=15.0)
 print(f"\n(100) surface slab:")
 print(f"  Formula: {slab_100.formula}")
 print(f"  Number of atoms: {len(slab_100)}")
-print(f"  Lattice c (thickness): {slab_100.lattice.c:.2f} Å")
+print(f"  Lattice c (slab + vacuum): {slab_100.lattice.c:.2f} Å")
 
 # Create (110) surface slab
 slab_110 = generate_slab(fcc_cu, (1, 1, 0), min_slab_size=10.0, min_vacuum_size=15.0)
 print(f"\n(110) surface slab:")
 print(f"  Formula: {slab_110.formula}")
 print(f"  Number of atoms: {len(slab_110)}")
-print(f"  Lattice c (thickness): {slab_110.lattice.c:.2f} Å")
+print(f"  Lattice c (slab + vacuum): {slab_110.lattice.c:.2f} Å")
+
+# A given number of layers, and a slab whose two surfaces are equivalent
+four_layers = generate_slab(fcc_cu, (1, 1, 1), layers=4)
+print(f"\n(111) with 4 layers: {len(four_layers)} atoms")
+si = SpacegroupAnalyzer(from_prototype('diamond', 'Si', 5.43)).get_conventional_standard_structure()
+symmetric = generate_symmetric_slab(si, (1, 1, 1), min_slab_size=10.0)
+print(f"Symmetric Si(111) slab: {symmetric.formula}, {symmetric.metadata['layers']} layers")
 
 # ============================================================================
 # Example 2: Adding Adsorbates
@@ -56,8 +68,8 @@ print("-" * 70)
 slab = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=8.0, min_vacuum_size=10.0)
 print(f"Initial slab: {slab.formula}, {len(slab)} atoms")
 
-# Add oxygen atom as adsorbate
-slab_with_o = add_adsorbate(slab, 'O', position=(0.5, 0.5), height=2.0)
+# Add an oxygen atom on a hollow site (fractional (1/3, 1/3) of the (111) cell)
+slab_with_o = add_adsorbate(slab, 'O', position=(1 / 3, 1 / 3), height=1.2)
 print(f"\nAfter adding O adsorbate:")
 print(f"  Formula: {slab_with_o.formula}")
 print(f"  Number of atoms: {len(slab_with_o)}")
@@ -83,7 +95,8 @@ print("-" * 45)
 
 for miller in orientations:
     slab = generate_slab(fcc_cu, miller, min_slab_size=8.0, min_vacuum_size=10.0)
-    surface_area = slab.lattice.a * slab.lattice.b
+    a, b = slab.lattice.matrix[:2]
+    surface_area = np.linalg.norm(np.cross(a, b))
     print(f"{str(miller):<15} {len(slab):<8} {surface_area:<18.2f}")
 
 # ============================================================================
