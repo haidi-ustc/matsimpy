@@ -54,6 +54,40 @@ python -m pytest -q -p no:xdist tests/symmetry
 - README Python blocks are run by `tests/test_readme_examples.py`; mark a block that
   needs files with ` ```python notest `.
 
+### Writing tests
+
+- **Put a test where its code lives.** `tests/<package>/` mirrors `matsimpy/<package>/`.
+  Each module or subpackage has one file, `test_<module>.py`; for example,
+  `matsimpy/transformation/lattice/` is tested in `tests/transformation/test_lattice.py`.
+  Cross-cutting contracts go in `tests/contracts/`.
+- **Never name a test file after a date, version, release, review or "regressions"**
+  (no `test_core_review_2026_11.py`, `test_regressions_082.py`). A regression test goes
+  into the topic file of the code it covers.
+- **Read the existing tests first.** Before adding a test, read the tests for that
+  function. Then do one of these:
+  - extend or parametrize an existing test;
+  - replace an existing test that is weaker;
+  - add a new test only for behaviour nothing else checks.
+
+  Delete tests the new one makes redundant. Two tests must not assert the same thing.
+  Return-a-new-object checks belong in `tests/core/test_immutability.py` and are not
+  repeated elsewhere.
+- **One behaviour per test.** The name states the behaviour
+  (`test_wrap_leaves_non_periodic_axes_alone`). Use `pytest.mark.parametrize` for input
+  variants instead of copies of a test.
+- **Use pytest, not unittest.** Write plain pytest functions with fixtures and
+  `tmp_path`. Do not add `unittest.TestCase` classes, `tempfile` blocks or
+  `if __name__ == "__main__"` guards. When you edit an old unittest file, convert it.
+- **Assert values.** Check positions, species and numbers, not only types or lengths.
+  A test must never pass by catching the error it should expose: no `try/except`
+  around the code under test. A test must still exercise its path after the code
+  changes. For example, a distance-matrix test needs data that uses the distance matrix.
+- **Add an oracle only if it tells you something new.** Compare with pymatgen or ASE
+  when they are an independent reference. Do not recompute MatSimPy's own formula
+  with numpy and call that an oracle.
+- **Read structures from fixtures.** Read crystals from the real files in
+  `tests/calculator/fixtures` instead of hand-writing them, whenever the format allows.
+
 ## Test data
 
 - **VASP test data comes only from the pymatgen 2026.10.24 test files**, copied
