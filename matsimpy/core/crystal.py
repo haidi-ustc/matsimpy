@@ -425,7 +425,6 @@ class Crystal(Structure):
             "lattice": self.lattice.as_dict(),
             "species": list(self.species),
             "positions": self.frac_positions.tolist(),
-            "site_properties": list(self.site_properties),
         }
         # Crystal keeps fractional and Cartesian arrays.  When the Cartesian one is
         # not bit-identical to frac @ matrix (e.g. coords_are_cartesian=True input),
@@ -433,6 +432,7 @@ class Crystal(Structure):
         # the extra key and fall back to the 0.8.3 behaviour.
         if not np.array_equal(self._cart, np.dot(self._coords, self.lattice.matrix)):
             d["cart_positions"] = self._cart.tolist()
+        d.update(self._site_properties_dict())
         d.update(self._metadata_dict())
         return d
 
@@ -485,7 +485,7 @@ class Crystal(Structure):
                 else Lattice.from_dict(lattice_data)
             )
         lattice = validate_lattice(lattice)
-        site_properties = d.get("site_properties", [])
+        site_properties = cls._site_properties_from_dict(d)
         coords_are_cartesian = d.get("coords_are_cartesian", False)
         pbc = validate_pbc(d.get("pbc"))
         crystal = cls(
@@ -503,6 +503,18 @@ class Crystal(Structure):
         cart = np.array(cart, dtype=np.float64)
         if not np.all(np.isfinite(cart)):
             raise ValueError("cart_positions must be finite")
+        if cart.shape != crystal._cart.shape:
+            raise ValueError(
+                f"cart_positions has shape {cart.shape}, expected {crystal._cart.shape}"
+            )
+        # cart_positions only carries the last bits lost in the frac -> cart round
+        # trip; a real disagreement means the dict was edited inconsistently.
+        if not np.allclose(cart, crystal._cart, rtol=0.0, atol=1e-8):
+            raise ValueError(
+                "cart_positions is inconsistent with the fractional positions and "
+                "lattice (max deviation "
+                f"{np.max(np.abs(cart - crystal._cart)):.3g} Å)"
+            )
         return crystal._replace(_cart_positions=cart)
 
     @property
@@ -650,7 +662,7 @@ class Crystal(Structure):
     def __getitem__(self, item):
         if isinstance(item, slice):
             return self.sites[item]
-        return self._site_snapshot(item)
+        return self._site_snapshot(self._site_index(item))
 
     def _convert_to_cartesian(self) -> np.ndarray:
         """
@@ -688,9 +700,8 @@ class Crystal(Structure):
         """
         Wrap all fractional coordinates to the unit cell [0, 1) range.
 
-        Wraps all fractional coordinates to the standard unit cell range [0, 1)
-        using modulo operation. This ensures that coordinates outside the unit
-        cell are mapped back into the primary unit cell.
+        Wraps fractional coordinates into [0, 1) along the periodic axes; along
+        non-periodic axes (e.g. the vacuum direction of a slab) they are kept.
 
         Returns:
             Crystal: New Crystal with wrapped coordinates.
@@ -708,7 +719,9 @@ class Crystal(Structure):
             >>> wrapped.frac_positions[0].tolist()
             [0.1, 0.5, 0.5]
         """
-        new_frac = self.frac_positions % 1.0
+        new_frac = np.array(self.frac_positions, dtype=np.float64)
+        periodic = np.array(self.pbc, dtype=bool)
+        new_frac[:, periodic] = np.mod(new_frac[:, periodic], 1.0)
         return self.__class__._construct(
             species=tuple(self.species),
             positions=new_frac,
@@ -734,6 +747,7 @@ class Crystal(Structure):
         pbc_mask = np.array(self.pbc, dtype=bool)
         if not np.any(pbc_mask):
             return self.cart_positions.copy()
+        base = self._wrapped_cart_positions()
 
         image_ranges = self._get_periodic_image_ranges(cutoff)
 
@@ -776,11 +790,22 @@ class Crystal(Structure):
         # shifts: (n_images, 3)
         # Result: (n_images, n_atoms, 3) -> reshape to (n_images * n_atoms, 3)
         image_positions = (
-            self.cart_positions[np.newaxis, :, :] + shifts[:, np.newaxis, :]
+            base[np.newaxis, :, :] + shifts[:, np.newaxis, :]
         ).reshape(-1, 3)
 
         # Stack original positions with image positions
-        return np.vstack([self.cart_positions, image_positions])
+        return np.vstack([base, image_positions])
+
+    def _wrapped_cart_positions(self) -> np.ndarray:
+        """Cartesian positions with fractional coordinates wrapped into [0, 1) on periodic axes.
+
+        The periodic images used for neighbour searches are built around these, so
+        atoms stored far outside the cell still find their neighbours.
+        """
+        frac = np.array(self.frac_positions, dtype=np.float64)
+        periodic = np.array(self.pbc, dtype=bool)
+        frac[:, periodic] = np.mod(frac[:, periodic], 1.0)
+        return frac @ self.lattice.matrix
 
     def _get_periodic_image_ranges(
         self, cutoff: float
@@ -821,7 +846,12 @@ class Crystal(Structure):
 
         Returns:
             Dict[int, List[Tuple[int, float]]]: Dictionary mapping atom index to
-            list of (neighbor_index, distance) tuples. Distances are in Angstroms.
+            list of (neighbor_index, distance) tuples, sorted by neighbour index.
+            Each neighbouring atom appears once, at the distance of its nearest
+            periodic image (so this is a bonding graph, not a coordination count:
+            an atom whose periodic images are within the cutoff lists itself once,
+            and several images of the same atom count once). Atoms at exactly
+            ``cutoff`` are included. Distances are in Angstroms.
             - If atom_index is provided: dict contains only that entry {atom_index: [(neighbor, dist), ...]}
             - If atom_index is None: dict contains entries for all atoms
 
@@ -902,7 +932,7 @@ class Crystal(Structure):
             neighbors = [
                 (i, float(distances[i]))
                 for i in range(n_atoms)
-                if i != atom_index and distances[i] < cutoff
+                if i != atom_index and distances[i] <= cutoff
             ]
             return {atom_index: neighbors}
 
@@ -912,8 +942,9 @@ class Crystal(Structure):
         atoms_to_query = [atom_index] if atom_index is not None else range(n_atoms)
 
         cache = self._neighbor_cache  # single local reference; safe under GIL
+        query_positions = self._wrapped_cart_positions() if use_pbc else self.cart_positions
         for i in atoms_to_query:
-            pos = self.cart_positions[i]
+            pos = query_positions[i]
             indices = cache.tree.query_ball_point(pos, cutoff)
             neighbors_by_index: Dict[int, float] = {}
             for idx in indices:

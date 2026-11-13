@@ -46,7 +46,7 @@ from .lattice import Lattice
 from .composition import Composition
 from .periodic_table import Element
 from ..utils.dict_utils import copy_properties
-from ._validation import _MISSING, _validate_metadata, normalize_species, resolve_indices, validate_site_properties
+from ._validation import _MISSING, _validate_metadata, normalize_species, reject_bool_coordinates, resolve_indices, validate_site_properties
 from matsimpy.constants import POSITION_TOL, LATTICE_TOL
 
 if TYPE_CHECKING:
@@ -380,6 +380,7 @@ class Structure(ABC, MSONable):
             >>> positions = [0, 0, 0]  # Will raise ValueError
         """
         # Convert to numpy array
+        reject_bool_coordinates(positions)
         try:
             positions_array = np.array(positions, dtype=np.float64)
         except (ValueError, TypeError) as e:
@@ -485,8 +486,7 @@ class Structure(ABC, MSONable):
         }
         if self.lattice is not None:
             d["lattice"] = self.lattice.as_dict()
-        if self._site_properties:
-            d["site_properties"] = list(self.site_properties)
+        d.update(self._site_properties_dict())
         d.update(self._metadata_dict())
         return d
 
@@ -499,6 +499,17 @@ class Structure(ABC, MSONable):
     @staticmethod
     def _metadata_from_dict(d: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
         raw = d.get("metadata")
+        return None if raw is None else MontyDecoder().process_decoded(raw)
+
+    def _site_properties_dict(self) -> Dict[str, Any]:
+        """``{"site_properties": ...}`` encoded with MontyEncoder (ndarrays survive JSON)."""
+        if not self._site_properties:
+            return {}
+        return {"site_properties": json.loads(json.dumps(list(self._site_properties), cls=MontyEncoder))}
+
+    @staticmethod
+    def _site_properties_from_dict(d: Mapping[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        raw = d.get("site_properties")
         return None if raw is None else MontyDecoder().process_decoded(raw)
 
     @classmethod
@@ -729,6 +740,10 @@ class Structure(ABC, MSONable):
             Uses numpy.allclose() for numerical tolerance to handle
             floating-point precision issues. Lattices are compared if both
             structures have them.
+            Periodic boundary conditions are compared.  Site properties and
+            metadata are *not* compared: equality is geometric (like pymatgen's
+            ``Structure.__eq__``).  Compare ``site_properties``/``metadata``
+            explicitly when they matter.
 
         Example:
             >>> crystal1 = Crystal(['Na', 'Cl'], [[0,0,0], [0.5,0.5,0.5]], Lattice.cubic(5.64))
@@ -861,6 +876,7 @@ class Structure(ABC, MSONable):
 
     def _add_atoms(self, species, position, site_properties, cartesian: bool) -> "Structure":
         species_list = [species] if isinstance(species, str) else list(species)
+        reject_bool_coordinates(position)
         try:
             new = np.array(position, dtype=np.float64)
         except (TypeError, ValueError) as exc:
@@ -932,7 +948,12 @@ class Structure(ABC, MSONable):
         if self.lattice is not None and pbc.any():
             frac = diff @ self.lattice.inv_matrix
             frac[..., pbc] -= np.round(frac[..., pbc])
-            diff = frac @ self.lattice.matrix
+            # rounding alone is not the minimum image in skewed cells: try the
+            # neighbouring images along the periodic axes as well
+            steps = [(-1, 0, 1) if periodic else (0,) for periodic in pbc]
+            shifts = np.array([[i, j, k] for i in steps[0] for j in steps[1] for k in steps[2]], dtype=float)
+            images = (frac[..., None, :] + shifts) @ self.lattice.matrix
+            return np.linalg.norm(images, axis=-1).min(axis=-1)
         return np.linalg.norm(diff, axis=-1)
 
     def _check_new_atom_distances(self, native: np.ndarray, cart: np.ndarray) -> None:
@@ -986,14 +1007,8 @@ class Structure(ABC, MSONable):
             must override ``_take_per_atom``.
         """
         index = resolve_indices(self, index)
-        if isinstance(index, int):
-            index = [index]
-
         n = len(self.species)
-        indices_to_remove = sorted(set(index), reverse=True)
-        for idx in indices_to_remove:
-            if not (0 <= idx < n):
-                raise IndexError(f"Atom index {idx} out of range [0, {n - 1}]")
+        indices_to_remove = sorted(set(self._validate_atom_indices(index)), reverse=True)
 
         removed = set(indices_to_remove)
         kept_indices = [i for i in range(n) if i not in removed]
@@ -1017,22 +1032,42 @@ class Structure(ABC, MSONable):
     # Species editing
     # ------------------------------------------------------------------
 
+    def _site_index(self, item: Any) -> int:
+        """Normalize a single ``structure[item]`` index (negative allowed, bools rejected)."""
+        if isinstance(item, (bool, np.bool_)) or not isinstance(item, (int, np.integer)):
+            raise TypeError(
+                f"{type(self).__name__} indices must be integers or slices, got {type(item).__name__}"
+            )
+        n = len(self._species)
+        idx = int(item)
+        if not -n <= idx < n:
+            raise IndexError(f"Atom index {idx} out of range for {n} atoms")
+        return idx % n
+
     def _validate_atom_indices(
         self,
         indices: Union[int, np.integer, List[int], Tuple[int, ...]],
     ) -> List[int]:
         """Normalize atom indices and reject negative or out-of-range values."""
+        if isinstance(indices, (bool, np.bool_)):
+            raise TypeError("Atom index must be an integer, got bool")
         if isinstance(indices, (int, np.integer)):
             normalized = [int(indices)]
         else:
+            if isinstance(indices, (str, bytes)) or np.ndim(indices) != 1:
+                raise TypeError(
+                    f"Atom indices must be an integer or a 1-D sequence of integers, got {indices!r}"
+                )
             normalized = [
-                int(idx) if isinstance(idx, np.integer) else idx
+                int(idx)
+                if isinstance(idx, np.integer) and not isinstance(idx, np.bool_)
+                else idx
                 for idx in list(indices)
             ]
 
         n_atoms = len(self.species)
         for idx in normalized:
-            if not isinstance(idx, int):
+            if isinstance(idx, bool) or not isinstance(idx, int):
                 raise TypeError(
                     f"Atom index must be an integer, got {type(idx).__name__}"
                 )

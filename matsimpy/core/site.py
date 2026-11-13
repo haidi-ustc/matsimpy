@@ -38,10 +38,15 @@ def _validate_position(position: Union[List[float], np.ndarray]) -> np.ndarray:
     if isinstance(position, np.ndarray):
         if position.shape != (3,):
             raise ValueError(f"Position array must have shape (3,), got {position.shape}")
+        if position.dtype == bool or not np.issubdtype(position.dtype, np.number):
+            raise TypeError(f"Position array must be numeric, got dtype {position.dtype}")
     elif isinstance(position, (list, tuple)):
         if len(position) != 3:
             raise ValueError("Position must have exactly three elements.")
-        if not all(isinstance(c, (int, float, np.integer, np.floating)) for c in position):
+        if not all(
+            isinstance(c, (int, float, np.integer, np.floating)) and not isinstance(c, (bool, np.bool_))
+            for c in position
+        ):
             raise TypeError("Position elements must be integers or floats.")
     else:
         raise TypeError("Position must be a list or numpy array.")

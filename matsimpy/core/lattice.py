@@ -38,6 +38,15 @@ from monty.json import MSONable
 from matsimpy.constants import LATTICE_TOL
 
 
+def _as_real(value: Any, name: str) -> float:
+    """Return *value* as a float; reject bools and non-numeric input."""
+    if isinstance(value, (bool, np.bool_)) or not isinstance(
+        value, (int, float, np.integer, np.floating)
+    ):
+        raise TypeError(f"{name} must be a real number, got {value!r}")
+    return float(value)
+
+
 def _check_lengths(*lengths: float) -> None:
     """Raise ``ValueError`` unless every lattice length is finite and positive.
 
@@ -130,6 +139,14 @@ class Lattice(MSONable):
             >>> lat = Lattice([3, 4, 5])  # orthorhombic with a=3, b=4, c=5
         """
         # Handle different input formats
+        if isinstance(lattice_vectors, (bool, np.bool_)):
+            raise TypeError("lattice_vectors must be numeric, got a bool")
+        if isinstance(lattice_vectors, (list, np.ndarray)):
+            raw = np.asarray(lattice_vectors, dtype=object)
+            if any(isinstance(v, (bool, np.bool_)) for v in np.ravel(raw)) or (
+                isinstance(lattice_vectors, np.ndarray) and lattice_vectors.dtype == bool
+            ):
+                raise TypeError("lattice_vectors must be numeric, got bools")
         if isinstance(lattice_vectors, (int, float, np.integer, np.floating)):
             # Single number -> cubic lattice
             a = float(lattice_vectors)
@@ -174,6 +191,15 @@ class Lattice(MSONable):
         inv = np.linalg.inv(self._matrix)
         inv.flags.writeable = False
         self._inv_matrix: np.ndarray = inv
+        self._frozen = True
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if self.__dict__.get("_frozen", False):
+            raise AttributeError(f"Lattice is immutable; cannot set {name!r}")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(f"Lattice is immutable; cannot delete {name!r}")
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
         """Restore from pickle/deepcopy and re-freeze arrays.
@@ -189,7 +215,8 @@ class Lattice(MSONable):
         if "_inv_matrix" not in self.__dict__:
             inv = np.linalg.inv(self._matrix)
             inv.flags.writeable = False
-            self._inv_matrix = inv
+            self.__dict__["_inv_matrix"] = inv
+        self.__dict__["_frozen"] = True
 
     def _validate_lattice_vectors(self) -> None:
         """
@@ -561,6 +588,10 @@ class Lattice(MSONable):
             >>> lat.gamma
             120.0
         """
+        a, b, c = (_as_real(v, n) for v, n in ((a, "a"), (b, "b"), (c, "c")))
+        alpha, beta, gamma = (
+            _as_real(v, n) for v, n in ((alpha, "alpha"), (beta, "beta"), (gamma, "gamma"))
+        )
         _check_lengths(a, b, c)
 
         for angle_name, angle in [("alpha", alpha), ("beta", beta), ("gamma", gamma)]:

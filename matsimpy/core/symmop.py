@@ -94,34 +94,46 @@ class SymmOp:
         origin: NDArray[np.float64],
         axis: NDArray[np.float64],
         angle: float,
+        angle_in_radians: bool = False,
     ) -> "SymmOp":
         """Create a SymmOp from a rotation about an axis through a point.
+
+        The rotation is right-handed: counter-clockwise when looking down the
+        axis towards ``origin`` (as in pymatgen).
 
         Args:
             origin: Point the rotation axis passes through (3D vector).
             axis: Direction vector of the rotation axis (3D vector).
-            angle: Rotation angle in radians.
+            angle: Rotation angle, in degrees unless ``angle_in_radians``.
+            angle_in_radians: Whether ``angle`` is in radians.
 
         Returns:
             SymmOp representing the rotation about the axis through the origin.
+
+        Examples:
+            >>> SymmOp.from_origin_axis_angle([0, 0, 0], [0, 0, 1], 90).operate([1, 0, 0]).round(12)
+            array([0., 1., 0.])
         """
         origin = np.array(origin, dtype=np.float64)
         axis = np.array(axis, dtype=np.float64)
+        if origin.shape != (3,) or axis.shape != (3,):
+            raise ValueError("origin and axis must be 3D vectors")
+        if not (np.all(np.isfinite(origin)) and np.all(np.isfinite(axis)) and np.isfinite(angle)):
+            raise ValueError("origin, axis and angle must be finite")
 
         # Normalize the axis
         norm = np.linalg.norm(axis)
         if norm < 1e-12:
             raise ValueError("Axis vector has zero length")
-        axis = axis / norm
+        u, v, w = axis / norm
+        theta = float(angle) if angle_in_radians else np.radians(float(angle))
+        cos, sin = np.cos(theta), np.sin(theta)
 
-        a = np.cos(angle / 2)
-        b, c, d = -axis * np.sin(angle / 2)
-
-        # Rotation matrix from quaternion
+        # Rodrigues' rotation formula (right-handed)
         rot = np.array([
-            [a*a + b*b - c*c - d*d, 2*(b*c - a*d), 2*(b*d + a*c)],
-            [2*(b*c + a*d), a*a + c*c - b*b - d*d, 2*(c*d - a*b)],
-            [2*(b*d - a*c), 2*(c*d + a*b), a*a + d*d - b*b - c*c],
+            [cos + u * u * (1 - cos), u * v * (1 - cos) - w * sin, u * w * (1 - cos) + v * sin],
+            [u * v * (1 - cos) + w * sin, cos + v * v * (1 - cos), v * w * (1 - cos) - u * sin],
+            [u * w * (1 - cos) - v * sin, v * w * (1 - cos) + u * sin, cos + w * w * (1 - cos)],
         ])
 
         # Translation: origin - R * origin

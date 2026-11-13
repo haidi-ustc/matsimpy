@@ -156,32 +156,49 @@ class Element:
         # Handle dummy/placeholder elements (e.g. "X" for unknown atom) before
         # checking the real periodic table, so they don't raise ValueError.
         if symbol in DUMMY_ELEMENTS:
-            self.symbol = symbol
-            self._data = {}
-            self._atomic_no = 0
-            self._atomic_mass = 0.0
-            self._name = "Dummy"
-            self._X = None
+            object.__setattr__(self, "symbol", symbol)
+            object.__setattr__(self, "_data", {})
+            object.__setattr__(self, "_atomic_no", 0)
+            object.__setattr__(self, "_atomic_mass", 0.0)
+            object.__setattr__(self, "_name", "Dummy")
+            object.__setattr__(self, "_X", None)
             return
 
         if symbol not in _ELEMENTS_SET:
             raise ValueError(f"{symbol} not found in periodic table")
 
-        self.symbol = symbol
-        self._data = _pdt[symbol]
+        object.__setattr__(self, "symbol", symbol)
+        object.__setattr__(self, "_data", _pdt[symbol])
 
         # Cache frequently accessed properties at initialization
         # This avoids repeated dict lookups and improves performance by ~30-50%
-        self._atomic_no: int = self._data["Atomic no"]
-        self._atomic_mass: float = self._data["Atomic mass"]
-        self._name: Optional[str] = self._data.get("Name") or self._data.get("name")
-        self._X: Optional[float] = self._data.get("X") or self._data.get("x")
+        object.__setattr__(self, "_atomic_no", self._data["Atomic no"])
+        object.__setattr__(self, "_atomic_mass", self._data["Atomic mass"])
+        object.__setattr__(self, "_name", self._data.get("Name") or self._data.get("name"))
+        object.__setattr__(self, "_X", self._data.get("X") or self._data.get("x"))
 
     def __str__(self):
         return self.symbol
 
     def __repr__(self):
         return f"Element : {self.symbol}"
+
+    def __setattr__(self, name, value):
+        raise AttributeError("Element is immutable")
+
+    def __delattr__(self, name):
+        raise AttributeError("Element is immutable")
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Element):
+            return NotImplemented
+        return self.symbol == other.symbol
+
+    def __hash__(self) -> int:
+        return hash(("Element", self.symbol))
+
+    def __reduce__(self):
+        return (Element, (self.symbol,))
 
     def __lt__(self, other: "Element") -> bool:
         """

@@ -32,6 +32,27 @@ class Trajectory(MSONable):
             lattice = copied[0].lattice
             if any(frame.lattice != lattice for frame in copied[1:]):
                 raise ValueError("constant_lattice=True requires identical lattices")
+        if copied:
+            species0 = tuple(copied[0].species)
+            for k, frame in enumerate(copied[1:], start=1):
+                if tuple(frame.species) != species0:
+                    raise ValueError(
+                        f"Trajectory frame {k} has species {frame.formula} "
+                        f"({len(frame)} atoms); all frames must have the same atoms "
+                        f"in the same order as frame 0 ({copied[0].formula}, {len(species0)} atoms)"
+                    )
+        for name, value in (("charge", charge), ("spin", spin),
+                            ("spin_multiplicity", spin_multiplicity), ("time_step", time_step)):
+            if value is not None and (
+                isinstance(value, (bool, np.bool_))
+                or not isinstance(value, (int, float, np.integer, np.floating))
+                or not np.isfinite(value)
+            ):
+                raise ValueError(f"{name} must be a finite number or None, got {value!r}")
+        if time_step is not None and time_step <= 0:
+            raise ValueError(f"time_step must be positive, got {time_step}")
+        if coords_are_displacement and base_positions is None:
+            raise ValueError("coords_are_displacement=True requires base_positions")
         self._frames: Tuple[Crystal, ...] = copied
         self.constant_lattice = bool(constant_lattice)
         self.charge = charge
@@ -43,6 +64,13 @@ class Trajectory(MSONable):
             self._base_positions = None
         else:
             self._base_positions = np.array(base_positions, dtype=float, copy=True)
+            n_atoms = len(copied[0]) if copied else self._base_positions.shape[0]
+            if self._base_positions.shape != (n_atoms, 3):
+                raise ValueError(
+                    f"base_positions must have shape ({n_atoms}, 3), got {self._base_positions.shape}"
+                )
+            if not np.all(np.isfinite(self._base_positions)):
+                raise ValueError("base_positions must be finite")
             self._base_positions.flags.writeable = False
         self._frozen = True
 

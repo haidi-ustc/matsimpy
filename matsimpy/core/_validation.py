@@ -65,6 +65,10 @@ def validate_pbc(pbc: Optional[Sequence[Any]]) -> Tuple[bool, bool, bool]:
     """Validate and normalize periodic-boundary flags."""
     if pbc is None:
         return (True, True, True)
+    if isinstance(pbc, np.ndarray):
+        if pbc.dtype != bool or pbc.shape != (3,):
+            raise ValueError("PBC must be a sequence of 3 booleans.")
+        pbc = pbc.tolist()
     if isinstance(pbc, (str, bytes)) or not isinstance(pbc, Sequence):
         raise ValueError("PBC must be a sequence of 3 booleans.")
 
@@ -131,6 +135,27 @@ def resolve_indices(structure: Any, indices: Any) -> Any:
     return indices
 
 
+def reject_bool_coordinates(values: Any, what: str = "Positions") -> None:
+    """Raise ``TypeError`` if *values* contains booleans.
+
+    ``np.array([True, 0, 0], dtype=float)`` silently gives ``[1., 0., 0.]``,
+    which hides a caller bug (e.g. a mask passed where coordinates belong).
+    """
+    if isinstance(values, np.ndarray):
+        if values.dtype == bool:
+            raise TypeError(f"{what} must be numeric, got a boolean array")
+        if values.dtype != object:
+            return
+    if isinstance(values, (bool, np.bool_)):
+        raise TypeError(f"{what} must be numeric, got bool")
+    try:
+        flat = np.ravel(np.asarray(values, dtype=object))
+    except (TypeError, ValueError):
+        return  # ragged input: the numeric conversion that follows reports it
+    if any(isinstance(v, (bool, np.bool_)) for v in flat):
+        raise TypeError(f"{what} must be numeric, got bool")
+
+
 def validate_cutoff(cutoff, *, allow_zero=True):
     """Validate a neighbor-list cutoff radius.
 
@@ -145,7 +170,7 @@ def validate_cutoff(cutoff, *, allow_zero=True):
         ValueError: If cutoff is negative, NaN, or infinite.
         TypeError: If cutoff is not numeric.
     """
-    if not isinstance(cutoff, (int, float, np.integer, np.floating)):
+    if isinstance(cutoff, (bool, np.bool_)) or not isinstance(cutoff, (int, float, np.integer, np.floating)):
         raise TypeError(f"cutoff must be a number, got {type(cutoff).__name__}")
     value = float(cutoff)
     if np.isnan(value):

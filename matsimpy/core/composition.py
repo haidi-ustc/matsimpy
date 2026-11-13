@@ -24,12 +24,14 @@ Example:
 import re
 import json
 import math
+import numbers
 import string
 import functools
 import types
 from collections import Counter
 from fractions import Fraction
 from typing import Optional, Dict, List, Tuple, Any, Mapping
+import numpy as np
 from monty.json import MSONable
 from .periodic_table import Element, ELEMENTS, DUMMY_ELEMENTS
 from ._validation import normalize_species
@@ -88,7 +90,7 @@ class Composition(MSONable):
         # Parse and validate formula, tracking element order
         self._composition, self._element_order = self._parse_formula(formula)
         self._sort_by = sort_by
-        self.formula = self._chemical_formula(sort_by=sort_by)
+        self._formula = self._chemical_formula(sort_by=sort_by)
 
         # Cache for mass calculation
         self._cached_mass: Optional[float] = None
@@ -105,6 +107,8 @@ class Composition(MSONable):
         order = []
         for raw_symbol, raw_amount in amounts.items():
             symbol = normalize_species(str(raw_symbol), allow_dummy=True)
+            if isinstance(raw_amount, (bool, np.bool_)) or not isinstance(raw_amount, numbers.Real):
+                raise TypeError(f"Composition amount for {symbol} must be a number, got {raw_amount!r}")
             amount = float(raw_amount)
             if not math.isfinite(amount) or amount <= 0:
                 raise ValueError("Composition amounts must be finite and positive")
@@ -114,9 +118,14 @@ class Composition(MSONable):
         obj._composition = normalized
         obj._element_order = order
         obj._sort_by = sort_by
-        obj.formula = obj._chemical_formula(sort_by=sort_by)
+        obj._formula = obj._chemical_formula(sort_by=sort_by)
         obj._cached_mass = None
         return obj
+
+    @property
+    def formula(self) -> str:
+        """Normalized chemical formula string (read-only)."""
+        return self._formula
 
     @property
     def composition(self) -> Mapping[str, int]:
@@ -301,6 +310,8 @@ class Composition(MSONable):
                     raise ValueError(f"Mismatched grouping at position {i} in '{formula}'")
                 group_stack.pop()
                 group_counts = stack.pop()
+                if not group_counts:
+                    raise ValueError(f"Empty group at position {i} in '{formula}'")
                 i += 1
                 multiplier, i = parse_int_at(i)
                 for sym, cnt in group_counts.items():
@@ -342,7 +353,13 @@ class Composition(MSONable):
             2
             >>> c['C']
             0
+
+        Raises:
+            KeyError: If *element* is not an element symbol (e.g. ``'h'``), so a
+                typo is not silently reported as an absent element.
         """
+        if element not in self._composition and element not in ELEMENTS and element not in DUMMY_ELEMENTS:
+            raise KeyError(f"{element!r} is not an element symbol")
         return self._composition[element]
 
     def get(self, element: str, default: int = 0) -> int:
@@ -388,22 +405,10 @@ class Composition(MSONable):
             element: integer_counts[index] // gcd
             for index, element in enumerate(self._composition)
         }
-        if denominator == 1 and gcd <= 1:
-            return self.formula
-        # Build formula preserving current element ordering
-        seen = set()
-        parts = []
-        for element in self._element_order:
-            if element in self._composition and element not in seen:
-                reduced_count = reduced[element]
-                parts.append(f"{element}{reduced_count if reduced_count > 1 else ''}")
-                seen.add(element)
-        for element in self._composition:
-            if element not in seen:
-                reduced_count = reduced[element]
-                parts.append(f"{element}{reduced_count if reduced_count > 1 else ''}")
-                seen.add(element)
-        return "".join(parts)
+        # same element order as ``formula`` (including its sort_by)
+        ordered = [e for e in self._element_order if e in reduced]
+        ordered += [e for e in reduced if e not in ordered]
+        return Composition.from_mapping({e: reduced[e] for e in ordered}, sort_by=self._sort_by).formula
 
     @property
     def anonymous_formula(self) -> str:
@@ -439,8 +444,7 @@ class Composition(MSONable):
         # Build formula in sorted (atomic number) order
         parts = []
         for element, count in sorted_elements:
-            label = labels[element]
-            parts.append(f"{label}{count if count > 1 else ''}")
+            parts.append(f"{labels[element]}{self._format_amount(count)}")
         return "".join(parts)
 
     def __str__(self) -> str:
@@ -538,36 +542,19 @@ class Composition(MSONable):
             >>> c3.composition
             Counter({'H': 2, 'O': 3, 'C': 1})
             >>> c3.formula
-            'CH2O3'
+            'H2O3C'
         """
         if not isinstance(other, Composition):
             return NotImplemented
 
-        # Combine the Counters
-        combined = Counter(self.composition)
-        combined.update(other.composition)
-
-        # Build formula string from combined composition
-        # Preserve order: first from self, then new elements from other
-        seen = set()
-        formula_parts = []
-
-        # Add elements from self first
-        for element, count in self.composition.items():
-            new_count = combined[element]
-            formula_parts.append(f'{element}{new_count if new_count > 1 else ""}')
-            seen.add(element)
-
-        # Add elements from other that aren't in self
-        for element, count in other.composition.items():
-            if element not in seen:
-                new_count = combined[element]
-                formula_parts.append(f'{element}{new_count if new_count > 1 else ""}')
-
-        formula_str = "".join(formula_parts)
-
-        # Create new Composition from the combined formula
-        return Composition(formula_str, sort_by=None)
+        # Combine the counts, keeping the order: elements of self, then new ones of other
+        combined: Dict[str, float] = {}
+        for composition in (self, other):
+            order = [e for e in composition._element_order if e in composition._composition]
+            order += [e for e in composition._composition if e not in order]
+            for element in order:
+                combined[element] = combined.get(element, 0) + composition._composition[element]
+        return Composition.from_mapping(combined, sort_by=None)
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -831,6 +818,6 @@ class Composition(MSONable):
         parts: List[str] = []
         for element, count in sorted_elements:
             parts.append(element)
-            if count > 1:
-                parts.append(subscript(count))
+            if count != 1:
+                parts.append(subscript(self._format_amount(count)))
         return joiner.join(parts)

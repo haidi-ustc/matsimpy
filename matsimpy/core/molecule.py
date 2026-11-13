@@ -239,7 +239,7 @@ class Molecule(Structure):
         """
         if isinstance(item, slice):
             return self.sites[item]
-        return self._site_snapshot(item)
+        return self._site_snapshot(self._site_index(item))
 
     # ======================================================================
     # Geometry & transformations (immutable)
@@ -289,7 +289,13 @@ class Molecule(Structure):
             >>> translated.positions[0]
             array([1., 0., 0.])
         """
-        new_positions = self.positions + np.array(vector)
+        vec = np.asarray(vector)
+        if vec.shape != (3,) or vec.dtype == bool or not np.issubdtype(vec.dtype, np.number):
+            raise ValueError(f"vector must be 3 numbers, got {vector!r}")
+        vec = vec.astype(np.float64)
+        if not np.all(np.isfinite(vec)):
+            raise ValueError(f"vector must be finite, got {vector!r}")
+        new_positions = self.positions + vec
         return self.__class__._construct(
             species=tuple(self.species),
             positions=new_positions,
@@ -371,8 +377,7 @@ class Molecule(Structure):
             "species": self.species,
             "positions": self.positions.tolist(),
         }
-        if self._site_properties:
-            d["site_properties"] = list(self.site_properties)
+        d.update(self._site_properties_dict())
         d.update(self._metadata_dict())
         return d
 
@@ -411,7 +416,7 @@ class Molecule(Structure):
         """
         species = d["species"]
         positions = d["positions"]
-        site_properties = d.get("site_properties", [])
+        site_properties = cls._site_properties_from_dict(d)
         return cls(species, positions, site_properties=site_properties, metadata=cls._metadata_from_dict(d))
 
     # ======================================================================
@@ -446,6 +451,11 @@ class Molecule(Structure):
 
         if len(self.positions) == 0:
             raise ValueError("Cannot convert empty molecule to crystal")
+        if isinstance(vacuum, bool) or not isinstance(vacuum, (int, float, np.integer, np.floating)):
+            raise TypeError(f"vacuum must be a number, got {type(vacuum).__name__}")
+        vacuum = float(vacuum)
+        if not np.isfinite(vacuum) or vacuum < 0:
+            raise ValueError(f"vacuum must be finite and non-negative, got {vacuum}")
 
         # Calculate bounding box of the molecule
         positions = np.array(self.positions)
@@ -482,6 +492,7 @@ class Molecule(Structure):
             Lattice(lattice_vectors),
             coords_are_cartesian=True,
             pbc=[False, False, False],  # Molecules are non-periodic
+            site_properties=list(self.site_properties) or None,
         )
 
         return crystal
@@ -642,8 +653,8 @@ class Molecule(Structure):
             - Memory complexity: O(n²) for distance matrix
             - For n > 1000 atoms, consider using spatial trees
         """
-        if cutoff < 0:
-            raise ValueError(f"Cutoff must be non-negative, got {cutoff}")
+        from ._validation import validate_cutoff
+        cutoff = validate_cutoff(cutoff)
 
         if len(self.positions) == 0:
             return []
@@ -661,7 +672,7 @@ class Molecule(Structure):
         neighbor_lists = []
         for i in range(len(positions)):
             # Use boolean mask for efficient filtering
-            mask = distance_matrix[i] < cutoff
+            mask = distance_matrix[i] <= cutoff
             neighbors = np.where(mask)[0].tolist()
             neighbor_lists.append(neighbors)
 
