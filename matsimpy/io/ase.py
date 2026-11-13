@@ -40,7 +40,12 @@ def read_ASE(filename: str) -> Crystal:
         raise FileNotFoundError(f"ASE file not found: {filename}")
 
     with open(filepath, "r") as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        raw = [line.rstrip("\n") for line in f.readlines()]
+    # Line 2 is the comment/properties line and may be blank; keep it, and
+    # drop only trailing blank lines.
+    while raw and not raw[-1].strip():
+        raw.pop()
+    lines = [line.strip() for line in raw]
 
     if len(lines) < 2:
         raise ValueError("ASE file must have at least 2 lines")
@@ -87,6 +92,17 @@ def read_ASE(filename: str) -> Crystal:
                 lattice_matrix = np.array(cell_values).reshape(3, 3)
                 lattice = Lattice(lattice_matrix)
 
+    pbc = None
+    if lattice is not None:
+        import re
+        match = re.search(r'pbc="([^"]+)"', properties_line, re.IGNORECASE)
+        if match:
+            flags = match.group(1).split()
+            truth = {"t": True, "true": True, "1": True, "f": False, "false": False, "0": False}
+            if len(flags) != 3 or any(f.lower() not in truth for f in flags):
+                raise ValueError(f"Invalid pbc in ASE file: {match.group(1)!r}")
+            pbc = [truth[f.lower()] for f in flags]
+
     # Read atomic coordinates - strict: every declared atom line must parse
     species = []
     positions = []
@@ -119,7 +135,7 @@ def read_ASE(filename: str) -> Crystal:
 
     # If we have lattice, return Crystal; otherwise return Molecule
     if lattice is not None:
-        return Crystal(species, positions, lattice, coords_are_cartesian=True)
+        return Crystal(species, positions, lattice, coords_are_cartesian=True, pbc=pbc)
     else:
         return Molecule(species, positions)
 
@@ -149,6 +165,9 @@ def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:
             structure.formula if hasattr(structure, "formula") else "MatSimPy Structure"
         )
 
+    if "\n" in title or "\r" in title:
+        raise ValueError("title must be a single line")
+
     filepath = Path(filename)
 
     with open(filepath, "w") as f:
@@ -162,7 +181,8 @@ def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:
             lattice_str = " ".join(
                 [f"{v:.10f}" for row in lattice.matrix for v in row]
             )
-            f.write(f'Lattice="{lattice_str}" Properties=species:S:1:pos:R:3 {title}\n')
+            pbc_str = " ".join("T" if p else "F" for p in structure.pbc)
+            f.write(f'Lattice="{lattice_str}" Properties=species:S:1:pos:R:3 pbc="{pbc_str}" {title}\n')
             # Use cartesian positions
             positions = structure.cart_positions
         else:
@@ -174,8 +194,33 @@ def write_ASE(structure, filename: str, title: Optional[str] = None) -> None:
             f.write(f"{specie:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}\n")
 
 
+def _site_property_arrays(structure) -> dict:
+    """Per-atom site properties as numeric arrays (one row per atom)."""
+    props = structure.site_properties
+    if not props:
+        return {}
+    keys = sorted({k for p in props for k in p})
+    arrays = {}
+    for key in keys:
+        if any(key not in p for p in props):
+            raise ValueError(f"Site property {key!r} is missing on some atoms; cannot convert to ASE")
+        try:
+            arr = np.array([p[key] for p in props], dtype=np.float64)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Site property {key!r} is not numeric and cannot be stored on ASE Atoms"
+            ) from None
+        arrays[key] = arr
+    return arrays
+
+
 def to_ase(structure):
-    """Convert a MatSimPy Crystal or Molecule to an ASE Atoms object."""
+    """Convert a MatSimPy Crystal or Molecule to an ASE Atoms object.
+
+    Site properties are carried over: ``magmom`` becomes the initial magnetic
+    moments, ``charge`` the initial charges, and any other numeric property an
+    entry of ``atoms.arrays``.  Non-numeric properties raise ``ValueError``.
+    """
     from ..core import Crystal, Molecule
 
     if not isinstance(structure, (Crystal, Molecule)):
@@ -189,20 +234,40 @@ def to_ase(structure):
         ) from exc
 
     symbols = list(structure.species)
+    arrays = _site_property_arrays(structure)
 
     if isinstance(structure, Crystal):
-        return Atoms(
+        atoms = Atoms(
             symbols=symbols,
             positions=structure.cart_positions.tolist(),
             cell=structure.lattice.matrix,
             pbc=structure.pbc,
         )
+    else:
+        atoms = Atoms(symbols=symbols, positions=structure.positions.tolist())
 
-    return Atoms(symbols=symbols, positions=structure.positions.tolist())
+    if "magmom" in arrays:
+        atoms.set_initial_magnetic_moments(arrays.pop("magmom"))
+    if "charge" in arrays:
+        atoms.set_initial_charges(arrays.pop("charge"))
+    for key, arr in arrays.items():
+        if key in atoms.arrays:
+            raise ValueError(f"Site property {key!r} clashes with an ASE per-atom array")
+        atoms.set_array(key, arr)
+    return atoms
+
+
+_ASE_RESERVED_ARRAYS = {"numbers", "positions", "initial_magmoms", "initial_charges"}
 
 
 def from_ase(ase_atoms):
-    """Convert an ASE Atoms object to a MatSimPy Crystal or Molecule."""
+    """Convert an ASE Atoms object to a MatSimPy Crystal or Molecule.
+
+    Non-zero initial magnetic moments become the site property ``magmom``,
+    non-zero initial charges ``charge``, and other per-atom arrays (except
+    momenta, masses and tags-like internals listed by ASE) site properties of
+    the same name.
+    """
     from ..core import Crystal, Molecule, Lattice
 
     try:
@@ -220,6 +285,21 @@ def from_ase(ase_atoms):
     cell = ase_atoms.get_cell()
     pbc = ase_atoms.get_pbc()
 
+    columns = {}
+    if ase_atoms.has("initial_magmoms") and np.any(ase_atoms.get_initial_magnetic_moments()):
+        columns["magmom"] = ase_atoms.get_initial_magnetic_moments()
+    if ase_atoms.has("initial_charges") and np.any(ase_atoms.get_initial_charges()):
+        columns["charge"] = ase_atoms.get_initial_charges()
+    for key, arr in ase_atoms.arrays.items():
+        if key not in _ASE_RESERVED_ARRAYS and key not in columns:
+            columns[key] = arr
+    site_properties = None
+    if columns:
+        site_properties = [
+            {key: (arr[i].tolist() if np.ndim(arr[i]) else arr[i].item()) for key, arr in columns.items()}
+            for i in range(len(symbols))
+        ]
+
     if cell is not None and cell.any() and any(pbc):
         return Crystal(
             symbols,
@@ -227,9 +307,10 @@ def from_ase(ase_atoms):
             Lattice(cell.array),
             coords_are_cartesian=True,
             pbc=list(pbc),
+            site_properties=site_properties,
         )
 
-    return Molecule(symbols, positions)
+    return Molecule(symbols, positions, site_properties=site_properties)
 
 
 __all__ = ["read_ASE", "write_ASE", "to_ase", "from_ase"]

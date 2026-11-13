@@ -148,7 +148,10 @@ class VolumetricData(MSONable):
         if nbins <= 0:
             raise ValueError("nbins must be positive")
         radii = np.linspace(radius / nbins, radius, nbins)
-        field = self.data.get("diff", self.data["total"])
+        if "diff" not in self.data:
+            # not spin-polarized: the spin density is zero by definition (as in pymatgen)
+            return np.column_stack((radii, np.zeros(nbins)))
+        field = self.data["diff"]
         distances = self._distances_from_site(ind)
         integral = np.array([field[distances <= value + 1e-12].sum() for value in radii])
         integral /= self.ngridpts

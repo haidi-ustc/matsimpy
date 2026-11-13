@@ -126,6 +126,8 @@ class FormatRegistry:
         the handlers' ``filename_patterns`` (e.g. ``POSCAR``, ``CONTCAR.relax``).
         """
         path = Path(filename)
+        if path.suffix.lower() in _COMPRESSION_SUFFIXES:
+            path = path.with_suffix("")  # detect "Si.cif.gz" as CIF, "POSCAR.gz" as POSCAR
         handler = self._by_extension.get(path.suffix.lower())
         if handler is not None:
             return handler
@@ -184,6 +186,18 @@ class FormatRegistry:
                 f"Format {handler.name!r} does not support reading."
             )
 
+        if filepath.suffix.lower() in _COMPRESSION_SUFFIXES:
+            # Readers take plain-text paths: decompress to a temporary file
+            # with the same base name (so readers that look at it still work).
+            import tempfile
+            from monty.io import zopen
+
+            with tempfile.TemporaryDirectory() as tmp:
+                plain = Path(tmp) / filepath.with_suffix("").name
+                with zopen(filepath, "rb") as src, open(plain, "wb") as dst:
+                    dst.write(src.read())
+                return handler.reader(str(plain), **kwargs)
+
         return handler.reader(filename, **kwargs)
 
     # ------------------------------------------------------------------
@@ -225,6 +239,11 @@ class FormatRegistry:
             raise ValueError(
                 f"Format {handler.name!r} does not support writing."
             )
+        if Path(filename).suffix.lower() in _COMPRESSION_SUFFIXES:
+            raise ValueError(
+                f"Writing compressed files is not supported: {filename}; write the plain "
+                "file and compress it afterwards"
+            )
 
         # Type compatibility check
         if isinstance(structure, Crystal) and not handler.supports_crystal:
@@ -251,6 +270,8 @@ class FormatRegistry:
             h.name for h in self._by_name.values() if h.writer is not None
         )
 
+
+_COMPRESSION_SUFFIXES = (".gz", ".bz2", ".xz", ".lzma")
 
 # Module-level singleton
 registry = FormatRegistry()

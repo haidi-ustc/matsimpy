@@ -49,9 +49,10 @@ def crystals_to_latex_table(
         caption: Table caption.
         label: LaTeX label for referencing.
         include_columns: List of columns to include. If None, uses default:
-                        ['ID', 'Formula', 'Space Group', 'Lattice'].
-                        Available: 'ID', 'Formula', 'Space Group', 'Lattice',
-                        'Volume', 'Density', 'Atoms'.
+                        ['ID', 'Formula', 'Lattice', 'Atoms'].
+                        Available: 'ID', 'Formula', 'Lattice', 'Volume',
+                        'Density', 'Atoms'.  Other columns (e.g. a space group
+                        from ``matsimpy.symmetry``) need a custom formatter.
         custom_formatters: Dictionary mapping column names to custom formatting functions.
                           Each function takes (crystal, index) and returns string.
         use_mhchem: If True, use \\ce{} from mhchem package for formulas.
@@ -81,7 +82,7 @@ def crystals_to_latex_table(
 
     # Default columns
     if include_columns is None:
-        include_columns = ["ID", "Formula", "Space Group", "Lattice"]
+        include_columns = ["ID", "Formula", "Lattice", "Atoms"]
 
     # Start table
     num_cols = len(include_columns)
@@ -144,8 +145,9 @@ def molecules_to_latex_table(
         caption: Table caption.
         label: LaTeX label for referencing.
         include_columns: List of columns to include. If None, uses default:
-                        ['ID', 'Formula', 'Point Group', 'Atoms'].
-                        Available: 'ID', 'Formula', 'Point Group', 'Atoms',
+                        ['ID', 'Formula', 'Atoms', 'Mass'].
+                        Other columns (e.g. a point group) need a custom
+                        formatter.  Available: 'ID', 'Formula', 'Atoms',
                         'Mass', 'COM'.
         custom_formatters: Dictionary mapping column names to custom formatting functions.
                           Each function takes (molecule, index) and returns string.
@@ -176,7 +178,7 @@ def molecules_to_latex_table(
 
     # Default columns
     if include_columns is None:
-        include_columns = ["ID", "Formula", "Point Group", "Atoms"]
+        include_columns = ["ID", "Formula", "Atoms", "Mass"]
 
     # Start table
     num_cols = len(include_columns)
@@ -245,13 +247,6 @@ def _format_crystal_column(
         else:
             return crystal.composition.to_latex()
 
-    elif column == "Space Group":
-        # Try to get space group if available
-        if hasattr(crystal, "space_group"):
-            return str(crystal.space_group)
-        else:
-            return "N/A"
-
     elif column == "Lattice":
         # Format lattice parameters
         lat = crystal.lattice
@@ -261,17 +256,16 @@ def _format_crystal_column(
         return f"{crystal.volume:.2f}"
 
     elif column == "Density":
-        try:
-            density = crystal.density
-            return f"{density:.3f}"
-        except:
-            return "N/A"
+        return f"{crystal.density:.3f}"
 
     elif column == "Atoms":
         return str(len(crystal))
 
     else:
-        return "N/A"
+        raise ValueError(
+            f"Unknown crystal table column {column!r}; available: ID, Formula, Lattice, "
+            "Volume, Density, Atoms (use custom_formatters for others, e.g. a space group)"
+        )
 
 
 def _format_molecule_column(
@@ -299,13 +293,6 @@ def _format_molecule_column(
         else:
             return molecule.composition.to_latex()
 
-    elif column == "Point Group":
-        # Try to get point group if available
-        if hasattr(molecule, "point_group"):
-            return str(molecule.point_group)
-        else:
-            return "N/A"
-
     elif column == "Atoms":
         return str(len(molecule))
 
@@ -318,7 +305,10 @@ def _format_molecule_column(
         return f"({com[0]:.2f}, {com[1]:.2f}, {com[2]:.2f})"
 
     else:
-        return "N/A"
+        raise ValueError(
+            f"Unknown molecule table column {column!r}; available: ID, Formula, Atoms, "
+            "Mass, COM (use custom_formatters for others, e.g. a point group)"
+        )
 
 
 @tool

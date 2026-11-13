@@ -64,6 +64,11 @@ def read_XYZ(filename: str) -> Molecule:
 
     # Read title (line 1; may be blank)
     title = lines[1]
+    if "lattice=" in title.lower():
+        raise ValueError(
+            "This is an extended XYZ file with a unit cell (Lattice=...); read_XYZ "
+            "returns molecules only. Read it with read(path, format='ase') to get a Crystal."
+        )
 
     # Read atom coordinates (lines 2 onwards)
     species = []
@@ -104,6 +109,8 @@ def write_XYZ(molecule: Molecule, filename: str, title: Optional[str] = None) ->
 
     if title is None:
         title = molecule.formula
+    if "\n" in title or "\r" in title:
+        raise ValueError("XYZ title must be a single line")
 
     filepath = Path(filename)
 
@@ -156,6 +163,10 @@ def read_XYZ_multiframe(filename: str, strict: bool = True) -> List[Molecule]:
         try:
             n_atoms = int(lines[i])
         except ValueError:
+            if strict:
+                raise ValueError(
+                    f"Expected an atom count at line {i + 1} of multi-frame XYZ, got {lines[i]!r}"
+                ) from None
             i += 1
             continue
 

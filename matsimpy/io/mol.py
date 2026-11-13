@@ -56,28 +56,20 @@ def read_MOL(filename: str) -> Molecule:
         raise ValueError("MOL file missing counts line")
 
     counts_line = lines[3]
-    # MOL counts line can have various formats
-    # Try to extract first two numbers (atoms and bonds)
-    counts = counts_line.split()
-
-    if len(counts) < 1:
-        raise ValueError("Invalid counts line in MOL file")
-
+    if "V3000" in counts_line:
+        raise ValueError("V3000 MOL files are not supported")
+    # V2000 counts are fixed-width (aaabbb...): "96150" is 96 atoms, 150 bonds,
+    # so the columns must be read before trying whitespace splitting.
     try:
-        # Try to get atom count from first number
-        n_atoms = int(counts[0])
-        # Bond count is optional, default to 0
-        n_bonds = int(counts[1]) if len(counts) > 1 else 0
+        n_atoms = int(counts_line[0:3])
+        n_bonds = int(counts_line[3:6]) if counts_line[3:6].strip() else 0
     except ValueError:
-        # Try parsing from fixed-width format
+        counts = counts_line.split()
         try:
-            if len(counts_line) >= 6:
-                n_atoms = int(counts_line[0:3].strip())
-                n_bonds = int(counts_line[3:6].strip()) if len(counts_line) >= 6 else 0
-            else:
-                raise ValueError(f"Invalid atom/bond counts in MOL file: {counts_line}")
-        except ValueError:
-            raise ValueError(f"Invalid atom/bond counts in MOL file: {counts_line}")
+            n_atoms = int(counts[0])
+            n_bonds = int(counts[1]) if len(counts) > 1 else 0
+        except (ValueError, IndexError):
+            raise ValueError(f"Invalid atom/bond counts in MOL file: {counts_line}") from None
 
     if n_atoms <= 0:
         raise ValueError(f"Invalid number of atoms: {n_atoms}")
@@ -147,6 +139,12 @@ def write_MOL(molecule: Molecule, filename: str, title: Optional[str] = None) ->
 
     if title is None:
         title = molecule.formula
+    if "\n" in title or "\r" in title:
+        raise ValueError("MOL title must be a single line")
+    if len(molecule) > 999:
+        raise ValueError(
+            f"MOL V2000 files hold at most 999 atoms, got {len(molecule)}; use XYZ or PDB"
+        )
 
     filepath = Path(filename)
 

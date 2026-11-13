@@ -27,6 +27,9 @@ inputs or outputs by hand, and do not edit these copies.
 | POSCAR_fcc | inputs/POSCAR_fcc |
 | nmr/cs/basic/hydromagnesite/POSCAR | fixtures/nmr/cs/basic/hydromagnesite/POSCAR |
 | POSCAR_C2 | inputs/POSCAR_C2 |
+| CONTCAR.MD | outputs/CONTCAR.MD (MD run: velocity and predictor-corrector blocks) |
+| CONTCAR.MD.npt | outputs/CONTCAR.MD.npt (NPT MD run: lattice-velocity block, then velocities) |
+| lobster_env/POSCAR.gz | `test-files/analysis/lobster_env/POSCAR.gz` (gzip-compressed POSCAR) |
 | POSCAR_symbols_natoms_multilines | inputs/POSCAR_symbols_natoms_multilines |
 | KPOINTS_auto, KPOINTS_gamma, KPOINTS_band, KPOINTS_cartesian, KPOINTS_explicit, KPOINTS_explicit_tet | inputs/ (same names) |
 | CHGCAR.nospin.gz, CHGCAR.spin.gz, CHGCAR.NiO_SOC.gz | outputs/ (same names) |

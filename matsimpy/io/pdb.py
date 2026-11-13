@@ -13,6 +13,41 @@ import numpy as np
 from ..core import Molecule, Crystal, Lattice
 
 
+def _pdb_element(line: str) -> str:
+    """Element of an ATOM/HETATM record.
+
+    Uses the element columns 77-78 when present, otherwise the atom name
+    (columns 13-16): by PDB convention a two-letter element starts in column
+    13 (``"FE  "``) and a one-letter element in column 14 (``" CA "`` is a
+    C-alpha carbon, not calcium).
+    """
+    from ..core.periodic_table import ELEMENTS
+
+    def normalize(symbol: str) -> Optional[str]:
+        symbol = symbol.strip()
+        if not symbol:
+            return None
+        symbol = symbol[0].upper() + symbol[1:].lower()
+        return symbol if symbol in ELEMENTS else None
+
+    if len(line) >= 78:
+        element = normalize(re.sub(r"[^A-Za-z]", "", line[76:78]))
+        if element:
+            return element
+        if line[76:78].strip():
+            raise ValueError(f"Unknown element {line[76:78]!r} in PDB line: {line.strip()}")
+    name = line[12:16]
+    candidates = []
+    if name[:1].isalpha():
+        candidates.append(name[0:2])
+    candidates.append(name[1:2] if name[:1] in (" ", "") or name[:1].isdigit() else name[0:1])
+    for candidate in candidates:
+        element = normalize(re.sub(r"[^A-Za-z]", "", candidate))
+        if element:
+            return element
+    raise ValueError(f"Cannot determine the element of PDB atom {name.strip()!r}: {line.strip()}")
+
+
 def read_PDB(filename: str, as_crystal: bool = False) -> Union[Molecule, Crystal]:
     """
     Read a PDB format file.
@@ -38,6 +73,13 @@ def read_PDB(filename: str, as_crystal: bool = False) -> Union[Molecule, Crystal
     with open(filepath, "r") as f:
         lines = f.readlines()
 
+    n_models = sum(1 for line in lines if line.startswith("MODEL "))
+    if n_models > 1:
+        raise ValueError(
+            f"PDB file contains {n_models} MODEL records; read_PDB reads a single "
+            "structure (use ASE or split the models into separate files)"
+        )
+
     # Parse CRYST1 record if present (for crystal structures)
     lattice = None
     for line in lines:
@@ -50,10 +92,11 @@ def read_PDB(filename: str, as_crystal: bool = False) -> Union[Molecule, Crystal
                 alpha = float(line[33:40])
                 beta = float(line[40:47])
                 gamma = float(line[47:54])
-                lattice = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
-                break
             except (ValueError, IndexError):
-                pass
+                raise ValueError(f"Malformed PDB CRYST1 record: {line.rstrip()!r}") from None
+            if (a, b, c) != (1.0, 1.0, 1.0):  # 1 1 1 marks "no unit cell" in the PDB format
+                lattice = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
+            break
 
     # Parse ATOM and HETATM records
     species = []
@@ -62,34 +105,13 @@ def read_PDB(filename: str, as_crystal: bool = False) -> Union[Molecule, Crystal
     for line in lines:
         if line.startswith(("ATOM  ", "HETATM")):
             try:
-                # Extract element (columns 76-77, or infer from atom name)
-                atom_name = line[12:16].strip()
-                # Try to get element from columns 76-77
-                if len(line) > 77:
-                    element = line[76:78].strip()
-                else:
-                    cleaned = atom_name.strip()
-                    base = re.sub(r'[0-9+\-]', '', cleaned)
-                    if len(base) >= 2:
-                        two_letter = base[:2].upper()
-                        if two_letter[0].isalpha() and two_letter[1].islower():
-                            element = two_letter
-                        else:
-                            element = base[0].upper() if base and base[0].isalpha() else "X"
-                    elif base and base[0].isalpha():
-                        element = base[0].upper()
-                    else:
-                        element = "X"
-
-                # Extract coordinates
                 x = float(line[30:38])
                 y = float(line[38:46])
                 z = float(line[46:54])
-
-                species.append(element)
-                positions.append([x, y, z])
-            except (ValueError, IndexError) as e:
-                raise ValueError(f"Malformed PDB ATOM/HETATM line: {line.strip()}")
+            except (ValueError, IndexError):
+                raise ValueError(f"Malformed PDB ATOM/HETATM line: {line.strip()}") from None
+            species.append(_pdb_element(line))
+            positions.append([x, y, z])
 
     if not species:
         raise ValueError("No valid ATOM or HETATM records found in PDB file")
@@ -134,6 +156,7 @@ def write_PDB(
 
     with open(filepath, "w") as f:
         # Write header
+        title = " ".join(str(title).split())  # one line: newlines would corrupt the file
         f.write(f"HEADER    {title[:40]:<40s}\n")
         f.write("REMARK   1 Generated by MatSimPy\n")
 
@@ -149,22 +172,27 @@ def write_PDB(
                     structure.lattice.gamma,
                 )
             )
-            # Use fractional positions converted to cartesian
-            positions = structure.cart_positions
+            # CRYST1 implies the standard PDB orientation (a along x, b in the
+            # xy plane); write coordinates in that frame so readers that
+            # rebuild the cell from CRYST1 get the right fractional coordinates.
+            lat = structure.lattice
+            standard = Lattice.from_parameters(lat.a, lat.b, lat.c, lat.alpha, lat.beta, lat.gamma)
+            positions = structure.frac_positions @ standard.matrix
         else:
             positions = structure.positions
 
         # Write ATOM records
         for i, (specie, pos) in enumerate(zip(structure.species, positions)):
             atom_num = i + 1
-            atom_name = f"{specie:>2s}"
+            # PDB alignment: two-letter elements start in column 13
+            atom_name = f"{specie:<4s}" if len(specie) == 2 else f" {specie:<3s}"
             res_name = "UNK"
             res_num = 1
             chain = "A"
 
             # Format: ATOM  serial  name alt res chain resseq x y z occ temp element
             f.write(
-                "ATOM  {:5d} {:>4s}{:1s}{:3s} {:1s}{:4d}    {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}\n".format(
+                "ATOM  {:5d} {:4s}{:1s}{:3s} {:1s}{:4d}    {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}\n".format(
                     atom_num,
                     atom_name,
                     " ",  # alt location
@@ -176,7 +204,7 @@ def write_PDB(
                     pos[2],
                     1.0,  # occupancy
                     0.0,  # temp factor
-                    specie,
+                    specie.upper(),
                 )
             )
 

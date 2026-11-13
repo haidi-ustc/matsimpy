@@ -99,6 +99,11 @@ def read_XSF(filename: str) -> Crystal:
 
         try:
             specie = parts[0]
+            if specie.isdigit():
+                # XSF allows atomic numbers instead of symbols
+                from ..core.periodic_table import Element
+
+                specie = Element.from_Z(int(specie)).symbol
             x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
             species.append(specie)
             positions.append([x, y, z])

@@ -38,8 +38,13 @@ def to_json(
     if not hasattr(structure, "as_dict"):
         raise TypeError(f"Object {type(structure)} does not support JSON serialization")
 
+    from monty.json import MontyEncoder
+
     data = structure.as_dict()
-    json_str = json.dumps(data, indent=indent, default=str)
+    # MontyEncoder keeps numpy arrays/scalars as values (decoded by from_dict);
+    # anything else that is not JSON serializable raises TypeError instead of
+    # being silently turned into a string.
+    json_str = json.dumps(data, indent=indent, cls=MontyEncoder)
 
     if filename is not None:
         filepath = Path(filename)
@@ -89,14 +94,21 @@ def from_json(
     class_name = data.get("@class", "")
     module_name = data.get("@module", "")
 
-    if "Crystal" in class_name:
-        return Crystal.from_dict(data)
-    elif "Molecule" in class_name:
-        return Molecule.from_dict(data)
-    elif "Structure" in class_name:
-        return Structure.from_dict(data)
-    else:
-        raise ValueError(f"Unknown structure type in JSON: {class_name}")
+    if not isinstance(data, dict):
+        raise ValueError("JSON does not contain a serialized structure (expected an object)")
+    if module_name.startswith("pymatgen"):
+        raise ValueError(
+            f"This is a pymatgen {class_name} JSON, not a MatSimPy one. Load it with "
+            "pymatgen (e.g. Structure.from_file) and convert with "
+            "matsimpy.io.from_pymatgen."
+        )
+    if module_name and not module_name.startswith("matsimpy"):
+        raise ValueError(f"Unknown JSON object {module_name}.{class_name}")
+
+    classes = {"Crystal": Crystal, "Molecule": Molecule, "Structure": Structure}
+    if class_name not in classes:
+        raise ValueError(f"Unknown structure type in JSON: {class_name!r}")
+    return classes[class_name].from_dict(data)
 
 
 __all__ = ["to_json", "from_json"]
