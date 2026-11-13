@@ -236,17 +236,51 @@ class TestPoscar:
         assert len(poscar.structure) == 53
         assert poscar.structure.composition.reduced_formula == "Fe35Cr16Ni2"
 
-    def test_selective_dynamics_roundtrip(self):
-        """No pymatgen test file has selective dynamics, so the flags are set via
-        the API on a real structure, written by the library and parsed back."""
+    @pytest.mark.parametrize("as_array", [False, True])
+    def test_selective_dynamics_and_velocities_round_trip(self, as_array):
         from matsimpy.calculator.vasp.inputs import Poscar
 
         structure = Poscar.from_file(_fixture("POSCAR.AlN"), check_for_potcar=False).structure
-        flags = [[True, True, True], [False, False, False], [True, False, True], [False, True, False]]
-        text = Poscar(structure, selective_dynamics=flags).get_str()
-        assert "Selective dynamics" in text
-        parsed = Poscar.from_str(text)
-        assert [list(x) for x in parsed.selective_dynamics] == flags
+        sd = [[True, True, True], [False, False, False], [True, False, True], [False, True, False]]
+        vel = [[0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, 0.0, 0.1], [0.0, 0.0, 0.0]]
+        if as_array:
+            sd, vel = np.array(sd), np.array(vel)
+        text = Poscar(structure, selective_dynamics=sd, velocities=vel).get_str()
+        assert "Selective dynamics" in text and " T F T " in text
+        back = Poscar.from_str(text)
+        assert np.array_equal(np.asarray(back.selective_dynamics), np.asarray(sd))
+        np.testing.assert_allclose(np.asarray(back.velocities, dtype=float), np.asarray(vel, dtype=float))
+
+    def test_per_site_data_is_read_from_site_properties(self, c2_structure):
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        slab = c2_structure.with_site_properties([
+            {"selective_dynamics": [False, False, False], "magmom": 0.5},
+            {"selective_dynamics": [True, True, True], "magmom": -0.5},
+        ])
+        assert "Selective dynamics" in Poscar(slab).get_str()
+        p = Poscar(slab, velocities=[[0.1, 0, 0], [0, 0.1, 0]])
+        assert [d["magmom"] for d in p.structure.site_properties] == [0.5, -0.5]
+
+    def test_per_site_arrays_follow_the_sorted_structure(self):
+        from matsimpy.calculator.vasp.inputs import Poscar
+        from matsimpy.core import Crystal, Lattice
+
+        c = Crystal(["O", "Si"], [[0.5, 0.5, 0.5], [0, 0, 0]], Lattice.cubic(4.0))
+        p = Poscar(c, selective_dynamics=[[False, False, False], [True, True, True]], sort_structure=True)
+        by_species = dict(zip(p.structure.species, np.asarray(p.selective_dynamics).tolist()))
+        assert by_species == {"O": [False, False, False], "Si": [True, True, True]}
+
+    def test_set_temperature_replaces_selective_dynamics_with_velocities(self, c2_structure):
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        p = Poscar(c2_structure, selective_dynamics=[[True, False, True], [True, True, True]])
+        original = p.structure
+        p.set_temperature(300)
+        assert "Selective dynamics" not in p.get_str()
+        assert np.asarray(p.velocities).shape == (2, 3)
+        assert all("velocities" in d for d in p.structure.site_properties)
+        assert original.site_properties[0].get("velocities") is None  # input untouched
 
     def test_from_str_empty_raises(self):
         from matsimpy.calculator.vasp.inputs import Poscar

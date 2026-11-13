@@ -129,3 +129,33 @@ def test_file_calculator_roundtrips_its_configuration(tmp_path):
     calc = DummyFileCalculator(directory=tmp_path / "x", scale=3.0)
     clone = DummyFileCalculator.from_dict(calc.as_dict())
     assert clone.directory == calc.directory and clone.parameters == calc.parameters
+
+
+def test_compute_cache_is_least_recently_used(crystal):
+    calc = MockCalculator()
+    calc.cache_size = 2
+    a, b, c = (crystal.set_pbc(p) for p in ([True] * 3, [True, True, False], [True, False, False]))
+    r = calc.compute(a)
+    calc.compute(b)
+    assert calc.compute(a) is r and calc.calls == 2  # hit
+    calc.compute(c)                                   # evicts b
+    calc.compute(b)
+    assert calc.calls == 4
+    calc.set_parameters(sigma=2.0)                    # a parameter change clears the cache
+    assert calc.compute(a) is not r and calc.calls == 5
+
+
+def test_results_as_dict_returns_independent_copies(crystal):
+    calc = MockCalculator()
+    d = calc.compute(crystal).as_dict()
+    d["forces"][0, 0] = 1e9
+    d["energy"] = 0.0
+    assert calc.compute(crystal).forces[0, 0] != 1e9
+    assert calc.get_potential_energy(crystal) != 0.0
+
+
+def test_structures_do_not_carry_calculators(crystal):
+    for name in ("calc", "get_potential_energy", "get_forces", "get_stress"):
+        assert not hasattr(crystal, name)
+    with pytest.raises(AttributeError, match="calc.get_potential_energy"):
+        crystal.calc = MockCalculator()  # fails loudly instead of adding an attribute

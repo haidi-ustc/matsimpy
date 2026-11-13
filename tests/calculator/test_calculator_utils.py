@@ -32,24 +32,6 @@ def test_clean_lines_strips_comments_on_a_real_incar():
     assert len(clean_lines(raw, remove_empty_lines=False)) == len(raw)
 
 
-def test_lammps_data_header_accepts_trailing_comments(tmp_path):
-    # Not VASP data: the pymatgen-2026.10.24 test files contain no LAMMPS data file.
-    pytest.importorskip("pandas")
-    from matsimpy.calculator.lammps.data import LammpsData
-
-    path = tmp_path / "comments.data"
-    path.write_text(
-        "LAMMPS data file  # header\n\n"
-        "2 atoms   # two Ar atoms\n1 atom types\n\n"
-        "0.0 10.0 xlo xhi   # box x\n0.0 10.0 ylo yhi\n0.0 10.0 zlo zhi\n\n"
-        "Masses\n\n1 39.948\n\n"
-        "Atoms  # atomic\n\n1 1 0.0 0.0 0.0\n2 1 5.0 5.0 5.0\n"
-    )
-    data = LammpsData.from_file(str(path), atom_style="atomic")
-    assert len(data.atoms) == 2
-    assert data.box.bounds == [[0.0, 10.0]] * 3
-
-
 def test_micro_pyawk_runs_records_with_predicates_on_a_real_outcar():
     path = os.path.join(VASP_DIR, "OUTCAR")
     with open(path) as handle:

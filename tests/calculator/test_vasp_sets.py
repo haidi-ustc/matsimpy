@@ -3,6 +3,8 @@
 Uses matsimpy structures and imports.
 """
 
+import warnings
+
 import pytest
 from matsimpy.core import Crystal, Lattice
 
@@ -44,7 +46,19 @@ class TestInputSetDoesNotMutateCaller:
         from matsimpy.core import Molecule
 
         mol = Molecule(["O", "H"], [[0, 0, 0], [1, 0, 0]], site_properties=[{"magmom": 1}, {}])
-        out = get_valid_magmom_struct(mol)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            out = get_valid_magmom_struct(mol)
         assert mol.site_properties == ({"magmom": 1}, {})
         assert [s.properties["magmom"] for s in out.sites] == [1.0, 1.0]
         assert isinstance(out.site_properties[0]["magmom"], float)
+        with pytest.raises(TypeError):
+            get_valid_magmom_struct(mol, inplace=False)  # the in-place mode is gone
+
+    def test_recommended_lreal_depends_on_the_number_of_atoms(self):
+        from matsimpy.calculator.vasp.sets import _get_recommended_lreal
+        from matsimpy.transformation import make_supercell
+
+        si = Crystal(["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]], Lattice.cubic(5.43))
+        assert _get_recommended_lreal(si) is False
+        assert _get_recommended_lreal(make_supercell(si, [3, 3, 3])) == "Auto"
