@@ -23,7 +23,7 @@
 ## Features
 
 - 🧱 **Core structures** — `Crystal` (periodic + lattice), `Molecule` (non-periodic), `Lattice` (14 Bravais types), `Composition`, `Site`, `Element` (118 elements). Immutable: `add_atom`, `remove_atom`, `substitute` and `sort_atoms` return new objects
-- 🏗️ **Builders** (7 domains, 27 functions) — `from_prototype` (9 prototypes: fcc/bcc/hcp/sc/diamond/rocksalt/zincblende/wurtzite/perovskite), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. via `BuilderRegistry`
+- 🏗️ **Builders** (7 domains, 29 functions) — `from_prototype` (9 prototypes: fcc/bcc/hcp/sc/diamond/rocksalt/zincblende/wurtzite/perovskite), `generate_slab` (primitive surface cells, any hkl), `generate_random_alloy`, `build_heusler`, `build_nanotube` (rolls any 2D sheet: hexagonal, square, rectangular), commensurate twisted bilayers and multilayers, `create_vacancy`, `add_adsorbate`, etc. via `BuilderRegistry`
 - 🔁 **Transformations** (5 categories, 26 functions) — `translate`, `rotate`, `apply_strain`, `make_supercell`, `substitute`, `move_atoms`, `scale_lattice`, etc. via `TransformationRegistry` with `TransformationSpec` metadata, and `TransformationPlan` for reproducible pipelines
 - 🔬 **Analysis** (6 modules) — `BondAnalyzer` (bonds/angles/dihedrals/orders), `StructureAnalyzer` (COM/inertia/density), `TopologyAnalyzer` (connectivity/rings/paths), graph/neighbor functions, `AtomSelection` (9 selectors)
 - 💾 **IO** (9 formats) — VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE, auto-detected through a table-driven `FormatRegistry`; `read()`/`write()`, third-party conversion and LaTeX table helpers
@@ -206,19 +206,25 @@ save_latex_table(crystals, 'structures.tex')
 ```python
 from matsimpy.builders import (
     from_prototype, generate_slab,
-    build_tetrahedral, build_carbon_nanotube,
+    build_tetrahedral, build_carbon_nanotube, build_nanotube,
+    build_magic_angle_twisted, build_full_heusler,
     create_vacancy, create_interstitial, add_adsorbate,
     generate_random_alloy, create_simple_interface,
 )
+from matsimpy.core import Crystal, Lattice
+from matsimpy.symmetry import SpacegroupAnalyzer
 
-# Build bulk structures from prototypes
+# Build bulk structures from prototypes (primitive cells)
 fcc_cu = from_prototype('fcc', 'Cu', 3.61)
 bcc_fe = from_prototype('bcc', 'Fe', 2.87)
 diamond_c = from_prototype('diamond', 'C', 3.57)
+mg = from_prototype('hcp', 'Mg', 3.21, c=5.21)
+co2mnsi = build_full_heusler('Co', 'Mn', 'Si', 5.65)  # L2_1, Fm-3m
 
-# Create surface slabs with adsorbates
-slab = generate_slab(fcc_cu, (1, 1, 1), min_slab_size=10.0, min_vacuum_size=15.0)
-with_ads = add_adsorbate(slab, 'O', (0.5, 0.5), 2.0)
+# Surface slabs: Miller indices refer to the cell given, so use the conventional one
+cu_conventional = SpacegroupAnalyzer(fcc_cu).get_conventional_standard_structure()
+slab = generate_slab(cu_conventional, (1, 1, 1), min_slab_size=10.0, min_vacuum_size=15.0)
+with_ads = add_adsorbate(slab, 'O', (1 / 3, 1 / 3), 1.2)
 
 # Generate supercell
 from matsimpy.transformation import make_supercell
@@ -234,8 +240,15 @@ with_interstitial = create_interstitial(fcc_cu, 'H', [0.5, 0.5, 0.5])
 # Generate alloys
 alloy = generate_random_alloy(supercell, ['Ni'], 'Cu', [0.25])
 
-# Build nanotubes
+# Build nanotubes: carbon, or rolled from any 2D sheet (thick sheets become coaxial shells)
 cnt = build_carbon_nanotube(10, 0)
+mos2 = Crystal(['Mo', 'S', 'S'], [[1/3, 2/3, 0.5], [2/3, 1/3, 0.578], [2/3, 1/3, 0.422]],
+               Lattice.hexagonal(3.16, 20.0))
+mos2_tube = build_nanotube(mos2, (10, 10))
+
+# Twisted bilayer graphene at an exactly commensurate angle ((1, 2): 21.79 degrees)
+graphene = Crystal(['C', 'C'], [[0, 0, 0.5], [1/3, 2/3, 0.5]], Lattice.hexagonal(2.46, 15.0))
+tblg = build_magic_angle_twisted(graphene, 1, 2)
 
 # Create interfaces
 interface = create_simple_interface(fcc_cu, bcc_fe)

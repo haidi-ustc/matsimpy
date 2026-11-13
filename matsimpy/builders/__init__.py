@@ -7,12 +7,15 @@ with matsimpy.transformation.
 
 Categories:
     bulk/         — from_prototype(), random_crystal()
-    surface/      — generate_slab(), add_adsorbate()
-    alloy/        — generate_random_alloy(), build_heusler(), etc.
-    molecule/     — build_linear(), build_bent(), build_tetrahedral(), build_from_smiles()
+    surface/      — generate_slab(), generate_symmetric_slab(), add_adsorbate()
+    alloy/        — generate_random_alloy(), generate_intermetallic(), build_heusler(), etc.
+    molecule/     — build_linear(), build_bent(), build_trigonal_planar(), build_tetrahedral(),
+                    build_from_smiles()
     defects/      — create_vacancy(), create_interstitial(), etc.
     interface/    — create_simple_interface()
-    nanostructure/ — build_nanotube(), build_carbon_nanotube(), build_twisted_bilayer(), etc.
+    nanostructure/ — build_nanotube() (any 2D sheet), build_carbon_nanotube(),
+                     build_twisted_bilayer(), build_twisted_multilayer(),
+                     build_magic_angle_twisted(), commensurate_twist_angles()
 
 Usage::
 
@@ -23,7 +26,7 @@ Usage::
 
 # Curated top-level API — constructors
 from .bulk import from_prototype
-from .surface import generate_slab, add_adsorbate
+from .surface import generate_slab, generate_symmetric_slab, add_adsorbate
 from .alloy import (
     generate_random_alloy,
     generate_ordered_alloy,
@@ -32,10 +35,12 @@ from .alloy import (
     build_full_heusler,
     build_half_heusler,
     build_inverse_heusler,
+    build_quaternary_heusler,
 )
 from .molecule import (
     build_linear,
     build_bent,
+    build_trigonal_planar,
     build_tetrahedral,
 )
 from .defects import (
@@ -53,6 +58,7 @@ from .nanostructure import (
     build_twisted_bilayer,
     build_magic_angle_twisted,
     build_twisted_multilayer,
+    commensurate_twist_angles,
 )
 
 # Optional dependencies
@@ -85,6 +91,7 @@ from . import nanostructure
 __all__ = [
     "from_prototype",
     "generate_slab",
+    "generate_symmetric_slab",
     "add_adsorbate",
     "generate_random_alloy",
     "generate_ordered_alloy",
@@ -93,8 +100,10 @@ __all__ = [
     "build_full_heusler",
     "build_half_heusler",
     "build_inverse_heusler",
+    "build_quaternary_heusler",
     "build_linear",
     "build_bent",
+    "build_trigonal_planar",
     "build_tetrahedral",
     "create_vacancy",
     "create_interstitial",
@@ -108,6 +117,7 @@ __all__ = [
     "build_twisted_bilayer",
     "build_magic_angle_twisted",
     "build_twisted_multilayer",
+    "commensurate_twist_angles",
     "registry",
     "BuilderSpec",
     "BuilderRegistry",

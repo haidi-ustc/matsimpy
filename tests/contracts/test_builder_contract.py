@@ -51,9 +51,22 @@ _VALID_KWARG_OVERRIDES = {
     },
     "create_interstitial": {"positions": [0.25, 0.25, 0.25]},
     "create_antisite": {"index1": 0, "index2": 1},
+    "create_frenkel": {"interstitial_position": [0.25, 0.25, 0.25]},
+    # one formula unit of the 2-atom fixture would be every atom
+    "create_schottky": {"structure": Crystal(
+        ['Na'] * 4 + ['Cl'] * 4,
+        [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
+         [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5], [0.5, 0.5, 0.5]],
+        Lattice.cubic(5.64))},
+    "generate_slab": {"layers": 2},
+    "generate_symmetric_slab": {"layers": 2, "miller_index": [1, 1, 0]},  # CsCl-type (111) is polar
     "build_from_smiles": {"smiles": "O"},
+    # the NaCl fixture is a square sheet (Cl 2.8 A above Na): roll it wide enough,
+    # and twist it by a commensurate square-lattice angle
+    "build_nanotube": {"chirality": [6, 6]},
+    "build_twisted_bilayer": {"twist_angle": 36.869898},
     "build_magic_angle_twisted": {"n": 2, "m": 1},
-    "build_twisted_multilayer": {"num_layers": 2},
+    "build_twisted_multilayer": {"num_layers": 2, "twist_angles": 36.869898},
 }
 
 

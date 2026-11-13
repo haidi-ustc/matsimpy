@@ -36,11 +36,12 @@ def register_all():
                         {"type": "array", "items": {"type": "number"}, "minItems": 1},
                     ],
                     "description": (
-                        "Conventional prototype lattice parameter(s) in Angstrom. "
-                        "The builder may return primitive cell vectors with different lengths; "
-                        "anisotropic prototypes accept a list."
+                        "Conventional prototype lattice parameter in Angstrom (a); "
+                        "hcp and wurtzite also accept [a, c]. "
+                        "The builder may return primitive cell vectors with different lengths."
                     ),
                 },
+                "c": {"type": "number", "description": "c for hcp and wurtzite (default: ideal c/a)"},
             },
             "required": ["prototype", "species", "lattice_constant"],
         },
@@ -69,23 +70,37 @@ def register_all():
         pass
 
     # --- surface ---
-    from .surface.slab import generate_slab
+    from .surface.slab import generate_slab, generate_symmetric_slab
+    slab_properties = {
+        "bulk": {},
+        "miller_index": {
+            "type": "array", "items": {"type": "integer"},
+            "minItems": 3, "maxItems": 3,
+        },
+        "min_slab_size": {"type": "number", "description": "Angstrom; give this or layers"},
+        "min_vacuum_size": {"type": "number", "default": 15.0},
+        "layers": {"type": "integer", "minimum": 1, "description": "give this or min_slab_size"},
+        "primitive": {"type": "boolean", "default": True},
+        "symprec": {"type": "number", "default": 1e-3},
+    }
     registry.register(BuilderSpec(
         name="generate_slab", category="surface", callable=generate_slab,
         description="Create surface slab with vacuum from bulk crystal",
         output_type=Crystal,
         parameter_schema={
             "type": "object",
-            "properties": {
-                "bulk": {},
-                "miller_index": {
-                    "type": "array", "items": {"type": "integer"},
-                    "minItems": 3, "maxItems": 3,
-                },
-                "min_slab_size": {"type": "number"},
-                "min_vacuum_size": {"type": "number"},
-            },
-            "required": ["bulk", "miller_index", "min_slab_size", "min_vacuum_size"],
+            "properties": {**slab_properties, "center_slab": {"type": "boolean", "default": True}},
+            "required": ["bulk", "miller_index"],
+        },
+    ))
+    registry.register(BuilderSpec(
+        name="generate_symmetric_slab", category="surface", callable=generate_symmetric_slab,
+        description="Create stoichiometric slab with equivalent top and bottom surfaces",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": slab_properties,
+            "required": ["bulk", "miller_index"],
         },
     ))
 
@@ -114,6 +129,7 @@ def register_all():
     from .alloy.ordered import generate_ordered_alloy, generate_intermetallic
     from .alloy.heusler import (
         build_heusler, build_full_heusler, build_half_heusler, build_inverse_heusler,
+        build_quaternary_heusler,
     )
 
     registry.register(BuilderSpec(
@@ -161,12 +177,12 @@ def register_all():
                 "elements": {"type": "array", "items": {"type": "string"}},
                 "composition": {"type": "string"},
                 "lattice_constant": {"type": "number"},
+                "c": {"type": "number", "description": "L1_0 only"},
             },
             "required": ["structure_type", "elements", "composition", "lattice_constant"],
         },
     ))
     for fn, name in [
-        (build_heusler, "build_heusler"),
         (build_full_heusler, "build_full_heusler"),
         (build_half_heusler, "build_half_heusler"),
         (build_inverse_heusler, "build_inverse_heusler"),
@@ -186,6 +202,38 @@ def register_all():
                 "required": ["X", "Y", "Z", "lattice_constant"],
             },
         ))
+    registry.register(BuilderSpec(
+        name="build_heusler", category="alloy", callable=build_heusler,
+        description="Generate full, half or inverse Heusler structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "X": {"type": "string"},
+                "Y": {"type": "string"},
+                "Z": {"type": "string"},
+                "lattice_constant": {"type": "number"},
+                "heusler_type": {"type": "string", "enum": ["full", "half", "inverse"], "default": "full"},
+            },
+            "required": ["X", "Y", "Z", "lattice_constant"],
+        },
+    ))
+    registry.register(BuilderSpec(
+        name="build_quaternary_heusler", category="alloy", callable=build_quaternary_heusler,
+        description="Generate quaternary (LiMgPdSn-type) Heusler structure",
+        output_type=Crystal,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "X": {"type": "string"},
+                "X2": {"type": "string"},
+                "Y": {"type": "string"},
+                "Z": {"type": "string"},
+                "lattice_constant": {"type": "number"},
+            },
+            "required": ["X", "X2", "Y", "Z", "lattice_constant"],
+        },
+    ))
 
     # --- defects ---
     from .defects.point import (
@@ -256,9 +304,10 @@ def register_all():
             "properties": {
                 "structure": {},
                 "index": {"type": "integer"},
-                "interstitial_position": {"type": "array", "items": {"type": "number"}},
+                "interstitial_position": {"type": "array", "items": {"type": "number"},
+                                          "minItems": 3, "maxItems": 3},
             },
-            "required": ["structure", "index"],
+            "required": ["structure", "index", "interstitial_position"],
         },
     ))
     registry.register(BuilderSpec(
@@ -275,7 +324,7 @@ def register_all():
                         {"type": "array", "items": {"type": "integer"}},
                     ],
                 },
-                "num_vacancies": {"type": "integer", "default": 2},
+                "seed": {"type": "integer"},
             },
             "required": ["structure"],
         },
@@ -314,7 +363,7 @@ def register_all():
 
     # --- molecule ---
     from .molecule.geometry import (
-        build_linear, build_bent, build_tetrahedral,
+        build_linear, build_bent, build_tetrahedral, build_trigonal_planar,
     )
 
     registry.register(BuilderSpec(
@@ -342,6 +391,20 @@ def register_all():
                 "angles": {"type": "array", "items": {"type": "number"}, "minItems": 1},
             },
             "required": ["species", "bond_lengths", "angles"],
+        },
+    ))
+    registry.register(BuilderSpec(
+        name="build_trigonal_planar", category="molecule", callable=build_trigonal_planar,
+        description="Build trigonal planar molecule geometry",
+        output_type=Molecule,
+        parameter_schema={
+            "type": "object",
+            "properties": {
+                "central_atom": {"type": "string"},
+                "peripheral_atoms": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+                "bond_length": {"type": "number"},
+            },
+            "required": ["central_atom", "peripheral_atoms", "bond_length"],
         },
     ))
     registry.register(BuilderSpec(
@@ -395,6 +458,10 @@ def register_all():
                     "type": "array", "items": {"type": "integer"},
                     "minItems": 2, "maxItems": 2,
                 },
+                "length": {"type": "number"},
+                "periodic": {"type": "boolean", "default": True},
+                "vacuum": {"type": "number", "default": 10.0},
+                "max_atoms": {"type": "integer", "default": 20000},
             },
             "required": ["base_2d", "chirality"],
         },
@@ -410,6 +477,9 @@ def register_all():
                 "n": {"type": "integer"},
                 "m": {"type": "integer"},
                 "bond_length": {"type": "number", "default": 1.42},
+                "length": {"type": "number"},
+                "periodic": {"type": "boolean", "default": True},
+                "vacuum": {"type": "number", "default": 10.0},
             },
             "required": ["n", "m"],
         },
@@ -424,6 +494,12 @@ def register_all():
             "properties": {
                 "layer": {},
                 "twist_angle": {"type": "number"},
+                "layer_spacing": {"type": "number", "default": 3.35},
+                "top_layer": {},
+                "vacuum": {"type": "number", "default": 15.0},
+                "max_strain": {"type": "number", "default": 1e-4},
+                "angle_tolerance": {"type": "number", "default": 0.01},
+                "max_atoms": {"type": "integer", "default": 20000},
             },
             "required": ["layer", "twist_angle"],
         },
@@ -437,8 +513,11 @@ def register_all():
             "type": "object",
             "properties": {
                 "layer": {},
-                "n": {"type": "integer"},
-                "m": {"type": "integer"},
+                "n": {"type": "integer", "minimum": 1},
+                "m": {"type": "integer", "minimum": 1},
+                "layer_spacing": {"type": "number", "default": 3.35},
+                "vacuum": {"type": "number", "default": 15.0},
+                "max_atoms": {"type": "integer", "default": 50000},
             },
             "required": ["layer", "n", "m"],
         },
@@ -452,8 +531,15 @@ def register_all():
             "type": "object",
             "properties": {
                 "layer": {},
-                "num_layers": {"type": "integer"},
-                "twist_angles": {"type": "array", "items": {"type": "number"}},
+                "num_layers": {"type": "integer", "minimum": 2},
+                "twist_angles": {
+                    "oneOf": [{"type": "number"}, {"type": "array", "items": {"type": "number"}}],
+                },
+                "layer_spacing": {"type": "number", "default": 3.35},
+                "vacuum": {"type": "number", "default": 15.0},
+                "max_strain": {"type": "number", "default": 1e-4},
+                "angle_tolerance": {"type": "number", "default": 0.01},
+                "max_atoms": {"type": "integer", "default": 20000},
             },
             "required": ["layer", "num_layers", "twist_angles"],
         },

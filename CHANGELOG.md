@@ -1,5 +1,104 @@
 # Changelog
 
+## Unreleased
+
+A review of every builder. Several produced wrong structures; those are fixed, and the
+nanotube and twisted-layer builders are rewritten on new, general algorithms.
+
+### Breaking changes
+- Builders no longer accept and silently ignore unknown keyword arguments (`**kwargs`);
+  a misspelled option now raises `TypeError`. `random_crystal` still passes extra
+  keywords on to PyXtal.
+- `generate_slab(bulk, miller_index, min_slab_size=None, min_vacuum_size=15.0,
+  layers=None, center_slab=True, primitive=True, symprec=1e-3)`: give exactly one of
+  `min_slab_size` and `layers`. Slabs now use the smallest surface cell, so they
+  usually have fewer atoms than before (see Fixed). `generate_symmetric_slab` takes
+  the same arguments.
+- Twisted builders: `build_twisted_bilayer(layer, twist_angle, layer_spacing=3.35,
+  top_layer=None, vacuum=15.0, max_strain=1e-4, angle_tolerance=0.01, max_atoms=20000)`
+  and `build_twisted_multilayer(layer, num_layers, twist_angles, ...)` build commensurate
+  supercells and raise `ValueError` (listing nearby commensurate angles) when no
+  supercell fits; `center` and the c-length default spacing are gone.
+  `build_magic_angle_twisted(layer, n, m, layer_spacing=3.35, vacuum=15.0,
+  max_atoms=50000)` uses the exact commensurate angle (see Fixed).
+- `build_nanotube(base_2d, chirality, length=None, periodic=True, vacuum=10.0,
+  max_atoms=20000)` and `build_carbon_nanotube(n, m, bond_length=1.42, length=None,
+  periodic=True, vacuum=10.0)`: `length` is a minimum length in Angstrom (default one
+  period) and the tube axis is at the centre of the cell; `center` is gone.
+- `from_prototype(prototype, species, lattice_constant, c=None)`: a formula must match
+  the prototype's composition (`'MgO2'` on rocksalt raises instead of giving MgO);
+  hexagonal prototypes take `a`, `[a, c]` or `c=`, the others exactly one constant.
+- `from_space_group` and `from_crystal_system` take `symprec`, `angle_tolerance` and
+  `validate_sg` as named arguments; `from_crystal_system` requires exactly the lattice
+  parameters of the crystal system (no invented c/a) and a space group of that system.
+  An unknown crystal system raises `ValueError` instead of becoming cubic, also in
+  `list_space_groups_by_system`.
+- `generate_intermetallic` checks `composition` against the structure type and takes
+  `c` for L1_0 as an argument. L1_0 returns the 4-atom face-centred tetragonal cell.
+- Heusler builders return the conventional cubic cell: 16 atoms (12 for half-Heusler).
+  `build_inverse_heusler_quaternary` is replaced by `build_quaternary_heusler(X, X2,
+  Y, Z, lattice_constant)`.
+- `create_frenkel` requires `interstitial_position`. `create_schottky(structure,
+  indices=None, seed=None)` removes one formula unit by default; `num_vacancies` is
+  gone, and explicit indices must be whole formula units. `create_antisite` rejects
+  two atoms of the same species. `create_interstitial` and `create_frenkel` reject
+  positions closer than 0.5 A to an atom.
+
+### Added
+- `build_nanotube` rolls any 2D sheet whose chiral direction has a perpendicular lattice
+  vector: hexagonal sheets in a 60 or 120 degree basis, square and rectangular sheets
+  for every chirality, oblique sheets for commensurate directions. Atoms keep their
+  height above the sheet's mid-plane, so MoS2 becomes three coaxial shells.
+  `nanotube_translation` returns the translation vector.
+- Twisted layers: commensurate (coincidence-lattice) supercells for any layers with a
+  and b in the xy-plane, heterobilayers via `top_layer` with strain up to `max_strain`,
+  and `commensurate_twist_angles(layer, max_atoms=2000, max_angle=60)`, which lists the
+  exact angles and supercell sizes. Results record the realized angles, strain and
+  supercell matrices in `metadata`, and a `layer` site property.
+- `generate_symmetric_slab` really returns a slab whose top and bottom surfaces are
+  equivalent by symmetry, or raises for polar surfaces.
+- `build_quaternary_heusler` (LiMgPdSn type). `build_trigonal_planar` and
+  `generate_symmetric_slab` are registered builders and AI tools.
+- Space group symbols are looked up in spglib's database (`'P2_1/c'`, `'P21/c'` and
+  full symbols work).
+
+### Fixed
+- `generate_slab` built surface cells 2 to 26 times larger than the primitive surface
+  cell, left-handed cells for some planes, did not reduce the Miller index ((2, 2, 2)
+  gave a different slab from (1, 1, 1)) and did not put the normal along z. It now uses
+  the bulk's full translation lattice (so a conventional cell gives the primitive
+  surface cell, as in pymatgen), puts a along x and the normal along z, keeps site
+  properties and cuts in the widest gap between atomic planes.
+- `generate_symmetric_slab` returned an ordinary slab.
+- `add_adsorbate` measured heights along c and centred molecules in xy; it now uses
+  the surface normal a x b.
+- `build_nanotube` dropped atoms of thick sheets (MoS2 (10, 10) gave Mo20S20 with every
+  atom on one radius) and found a wrong tube axis in a 120-degree basis.
+- `build_twisted_bilayer` rotated the top layer inside the unrotated cell, so the
+  bilayer was not periodic; the default spacing was the input cell's c length;
+  `build_magic_angle_twisted` used 360/(n^2+nm+m^2) instead of the commensurate angle
+  (51.4 instead of 21.79 degrees for (1, 2)); multilayers mixed fractional and
+  Cartesian coordinates.
+- Heusler builders gave wrong structures: full Heusler had the inverse ordering
+  (F-43m), half-Heusler three atoms in a cubic cell (R3m), inverse Heusler a Cmmm
+  structure and the quaternary builder I-4m2. They now give Fm-3m and F-43m.
+- `generate_intermetallic('L1_0')` put the 2-atom primitive positions in a cell with the
+  conventional a, so Fe-Pt was 3.31 instead of 2.72 A; `composition` was ignored.
+- `build_bent` chains of four or more atoms always turned the same way and folded onto
+  themselves; they are now all-trans zigzags. NaN bond lengths and angles are rejected,
+  and `build_tetrahedral` and `build_trigonal_planar` validate the bond length.
+- `create_schottky` removed random, unseeded atoms (often two of one species);
+  `create_frenkel` displaced the atom by a random, unseeded amount by default;
+  `create_interstitial` wrapped positions along non-periodic axes;
+  `create_substitution` rejected numpy integer indices.
+- `generate_random_alloy` rejected concentrations summing to 1 within rounding and
+  accepted NaN.
+- `from_space_group` rejected numpy integers and accepted `True` as space group 1.
+- `Lattice.cubic`, `tetragonal`, `orthorhombic`, `hexagonal` and `from_parameters`
+  accepted negative and non-finite lengths (`Lattice.cubic(-3)` had determinant -27).
+- `random_crystal` no longer falls back to reading PyXtal internals, and reports
+  mismatched `species`/`num_ions`.
+
 ## 0.11.0 — 2026-11-12
 
 The AI module (`matsimpy.ai`) is rewritten around three extension points: tools derived
