@@ -1,17 +1,66 @@
 """
-Nanotube structure builders.
+Nanotubes rolled from any 2D sheet.
 
-Generate nanotube structures by rolling up any 2D material sheet
-into cylindrical structures. Works with graphene, transition metal
-dichalcogenides (MoS2, WS2, etc.), hexagonal boron nitride (hBN),
-and any other 2D crystal structure.
+The chiral vector C = n*a1 + m*a2 of the sheet becomes the tube circumference and
+the shortest lattice vector T perpendicular to C becomes the tube axis. T is found
+from the sheet's metric, so the same code handles hexagonal (60 or 120 degree basis),
+square, rectangular and oblique lattices; graphene, h-BN, MoS2, phosphorene and so on.
+Atoms keep their height above the sheet's mid-plane, so a three-layer sheet such as
+MoS2 becomes three coaxial shells.
 """
 
-from matsimpy.utils.tooling import tool
-from typing import List, Tuple, Optional, Union
-from math import sqrt, gcd, atan2, sin, cos, pi
+from fractions import Fraction
+from math import pi
+from typing import Optional, Tuple
+
 import numpy as np
+
+from matsimpy.utils.tooling import tool
+
 from ...core import Crystal, Lattice
+from ._sheet import sheet_from_layer, tile
+
+__all__ = ["build_nanotube", "build_carbon_nanotube", "nanotube_translation"]
+
+
+def nanotube_translation(sheet_lattice: np.ndarray, n: int, m: int, max_index: int = 1000) -> Tuple[int, int]:
+    """The shortest lattice vector T = t1*a1 + t2*a2 perpendicular to C = n*a1 + m*a2.
+
+    Args:
+        sheet_lattice: 2x2 array whose columns are a1 and a2.
+        n, m: Chiral indices.
+        max_index: Largest |t1| or |t2| searched.
+
+    Returns:
+        (t1, t2), oriented so that C x T points along +z.
+
+    Raises:
+        ValueError: If no such vector exists with indices up to ``max_index``; then the
+            sheet has no translational period along the tube axis (e.g. a rectangular
+            lattice whose a/b ratio is irrational, rolled along a diagonal).
+    """
+    metric = sheet_lattice.T @ sheet_lattice
+    p, q = metric @ np.array([n, m], dtype=float)  # T . C = t1 * p + t2 * q
+    scale = float(np.sqrt(metric[0, 0] * metric[1, 1]))
+    if abs(q) < 1e-12 * scale:
+        t1, t2 = 0, 1
+    elif abs(p) < 1e-12 * scale:
+        t1, t2 = 1, 0
+    else:
+        ratio = Fraction(-p / q).limit_denominator(max_index)  # t2 / t1
+        t1, t2 = ratio.denominator, ratio.numerator
+    chiral = sheet_lattice @ np.array([n, m], dtype=float)
+    translation = sheet_lattice @ np.array([t1, t2], dtype=float)
+    cosine = float(chiral @ translation) / (np.linalg.norm(chiral) * np.linalg.norm(translation))
+    if abs(cosine) > 1e-9 or max(abs(t1), abs(t2)) > max_index:
+        raise ValueError(
+            f"The sheet has no lattice vector perpendicular to the chiral vector ({n}, {m}) "
+            f"with indices up to {max_index}, so the tube would not be periodic. "
+            "Roll it along a lattice direction whose perpendicular is also a lattice direction."
+        )
+    if chiral[0] * translation[1] - chiral[1] * translation[0] < 0:
+        t1, t2 = -t1, -t2
+    return t1, t2
 
 
 @tool
@@ -20,272 +69,92 @@ def build_nanotube(
     chirality: Tuple[int, int],
     length: Optional[float] = None,
     periodic: bool = True,
-    center: bool = True,
-    **kwargs,
+    vacuum: float = 10.0,
+    max_atoms: int = 20000,
 ) -> Crystal:
     """
-    Build a nanotube by rolling up any 2D crystal structure.
+    Roll a 2D sheet into a nanotube.
 
-    This is a general function that works with any 2D material. The chirality
-    indices (n, m) determine the nanotube's diameter and wrapping direction.
+    Works for any 2D lattice whose chiral direction has a perpendicular lattice
+    vector: hexagonal (graphene, h-BN, MoS2), square and rectangular (phosphorene)
+    lattices for all chiralities, oblique lattices for commensurate directions.
+    The chiral vector n*a1 + m*a2 is the circumference; the indices refer to the
+    sheet's own a and b (for graphene in a 60-degree basis, (n, n) is armchair and
+    (n, 0) zigzag; (n, m) and (m, n) are mirror images). Atoms at height h above the sheet's mid-plane end up at radius
+    R + h, so thick sheets become coaxial shells. The tube axis is z, centred in
+    the cell.
 
     Args:
-        base_2d: 2D crystal structure to roll up (any 2D material)
-                 Must have lattice vectors in the xy-plane
-        chirality: Chirality indices (n, m) for the nanotube.
-                  The chiral vector C = n*a1 + m*a2 determines the wrapping
-        length: Length of nanotube in Angstroms (if None, uses one unit cell)
-        periodic: If True, nanotube is periodic along the axis
-        center: If True, center the nanotube at origin (default: True)
-        **kwargs: Additional parameters
+        base_2d: The sheet: a crystal whose a and b vectors lie in the xy-plane.
+        chirality: Chiral indices (n, m), not both zero.
+        length: Minimum tube length in Angstroms; rounded up to whole periods
+            (default: one period).
+        periodic: Periodic along the axis (True) or a finite tube with vacuum at
+            both ends (False).
+        vacuum: Vacuum around the tube in Angstroms (and at the ends of a finite tube).
+        max_atoms: Refuse to build tubes with more atoms than this.
 
     Returns:
-        Crystal: Nanotube structure
+        Crystal: The nanotube, periodic only along z when ``periodic``. Its metadata
+        holds the chirality, radius (of the mid-plane) and translation indices.
 
     Examples:
         >>> from matsimpy.builders.nanostructure import build_nanotube
         >>> from matsimpy.core import Crystal, Lattice
-        >>>
-        >>> # Example 1: Carbon nanotube from graphene
-        >>> graphene = create_graphene_sheet()  # Helper function
-        >>> cnt = build_nanotube(graphene, (10, 10))
-        >>>
-        >>> # Example 2: MoS2 nanotube
-        >>> # Create MoS2 2D structure (simplified)
-        >>> mos2_lattice = Lattice(np.array([
-        ...     [3.16, 0, 0],
-        ...     [1.58, 2.74, 0],
-        ...     [0, 0, 10.0]
-        ... ]))
-        >>> mos2_2d = Crystal(['Mo', 'S', 'S'],
-        ...                   [[0, 0, 0], [1.58, 0.91, 0], [1.58, 1.83, 0]],
-        ...                   mos2_lattice)
-        >>> mos2_nanotube = build_nanotube(mos2_2d, (10, 10))
-        >>>
-        >>> # Example 3: Hexagonal boron nitride nanotube
-        >>> hbn_lattice = Lattice(np.array([
-        ...     [2.50, 0, 0],
-        ...     [1.25, 2.17, 0],
-        ...     [0, 0, 10.0]
-        ... ]))
-        >>> hbn_2d = Crystal(['B', 'N'], [[0, 0, 0], [0.83, 0.48, 0]], hbn_lattice)
-        >>> hbn_nanotube = build_nanotube(hbn_2d, (10, 0))  # Zigzag BN nanotube
+        >>> hbn = Crystal(['B', 'N'], [[1/3, 2/3, 0.5], [2/3, 1/3, 0.5]],
+        ...               Lattice.hexagonal(2.50, 15.0))
+        >>> bnnt = build_nanotube(hbn, (8, 0))
+        >>> square = Crystal(['Cu'], [[0, 0, 0.5]], Lattice.tetragonal(2.55, 15.0))
+        >>> tube = build_nanotube(square, (10, 0))
     """
-    n, m = chirality
-
-    if n < 0 or m < 0:
-        raise ValueError("Chirality indices must be non-negative")
+    sheet = sheet_from_layer(base_2d, "base_2d")
+    n, m = (int(value) for value in chirality)
+    if (n, m) != tuple(chirality):
+        raise ValueError(f"chirality must be integers, got {chirality}")
     if n == 0 and m == 0:
         raise ValueError("Chirality indices cannot both be zero")
+    if length is not None and not (np.isfinite(length) and length > 0):
+        raise ValueError(f"length must be positive, got {length}")
+    if not (np.isfinite(vacuum) and vacuum >= 0):
+        raise ValueError(f"vacuum must be non-negative, got {vacuum}")
 
-    # Extract 2D lattice vectors from the base structure
-    lattice_2d = base_2d.lattice
-    a1_3d = lattice_2d.matrix[0]
-    a2_3d = lattice_2d.matrix[1]
-
-    # Work with 2D projections (xy plane)
-    a1 = a1_3d[:2]
-    a2 = a2_3d[:2]
-
-    # Compute the chiral vector: C = n*a1 + m*a2
-    # This vector wraps around the tube circumference
-    chiral_vec = n * a1 + m * a2
-    circumference = np.linalg.norm(chiral_vec)
+    t1, t2 = nanotube_translation(sheet.lattice, n, m)
+    supercell = np.array([[n, t1], [m, t2]])
+    chiral = sheet.lattice @ supercell[:, 0]
+    translation = sheet.lattice @ supercell[:, 1]
+    circumference = float(np.linalg.norm(chiral))
+    period = float(np.linalg.norm(translation))
     radius = circumference / (2 * pi)
+    periods = 1 if length is None else max(1, int(np.ceil(length / period - 1e-9)))
+    count = abs(int(round(np.linalg.det(supercell)))) * len(sheet.species) * periods
+    if count > max_atoms:
+        raise ValueError(f"The ({n}, {m}) tube has {count} atoms, more than max_atoms={max_atoms}")
 
-    # Find the translational vector T perpendicular to C
-    # T defines the repeat unit along the tube axis
-    # For general 2D lattices, we find T = t1*a1 + t2*a2 such that T·C = 0
-    translation_vec, t1, t2 = _find_translation_vector(a1, a2, n, m)
-    tube_period = np.linalg.norm(translation_vec)
-
-    # Determine how many unit cells to generate
-    if length is None:
-        axial_length = tube_period
-        num_periods = 1
-    else:
-        num_periods = max(1, int(np.ceil(length / tube_period)))
-        axial_length = num_periods * tube_period
-
-    # Create a coordinate system for the nanotube
-    # x_hat: along chiral direction (circumference)
-    # y_hat: along translation direction (axis)
-    x_hat = chiral_vec / circumference
-    y_hat = translation_vec / tube_period
-
-    # Compute the transformation matrix: 2D sheet coords -> (circumferential, axial)
-    transform = np.column_stack([x_hat, y_hat])
-
-    # Generate the nanotube by tiling and wrapping the 2D structure
-    species_list = []
-    positions_list = []
-
-    # Determine how many 2D unit cells we need to cover the nanotube unit cell
-    # The nanotube unit cell in 2D sheet coords is the parallelogram defined by C and T
-    sheet_area = abs(a1[0] * a2[1] - a1[1] * a2[0])
-    nanotube_area = abs(chiral_vec[0] * translation_vec[1] - chiral_vec[1] * translation_vec[0])
-    num_unit_cells = int(np.round(nanotube_area / sheet_area))
-
-    # Generate atoms by tiling the 2D structure
-    # We need to tile enough to cover the nanotube unit cell plus some margin
-    max_range = max(abs(n), abs(m), abs(t1), abs(t2)) + 3
-
-    seen_positions = set()
-    tolerance = 1e-6
-
-    for i in range(-max_range, max_range + 1):
-        for j in range(-max_range, max_range + 1):
-            # Offset for this unit cell replica
-            cell_offset_2d = i * a1 + j * a2
-
-            # Process each atom in the base unit cell
-            for species, frac_pos in zip(base_2d.species, base_2d.frac_positions):
-                # Convert fractional to Cartesian in 2D
-                atom_pos_2d = cell_offset_2d + frac_pos[0] * a1 + frac_pos[1] * a2
-
-                # Transform to (circumferential, axial) coordinates
-                circ_axial = transform.T @ atom_pos_2d
-                u = circ_axial[0] / circumference  # Fraction around circumference
-                v = circ_axial[1] / tube_period  # Fraction along axis
-
-                # Wrap to fundamental domain [0, 1) × [0, 1)
-                u = u % 1.0
-                v = v % 1.0
-                if np.isclose(u, 1.0, atol=tolerance):
-                    u = 0.0
-                if np.isclose(v, 1.0, atol=tolerance):
-                    v = 0.0
-
-                # Check for duplicates using rounded coordinates
-                pos_key = (round(u, 9), round(v, 9))
-                if pos_key in seen_positions:
-                    continue
-                seen_positions.add(pos_key)
-
-                # Convert to cylindrical coordinates
-                theta = 2 * pi * u
-                z_base = v * tube_period
-
-                # Create 3D position on cylinder surface
-                x = radius * cos(theta)
-                y = radius * sin(theta)
-
-                # Replicate along the axis for the requested length
-                for period_idx in range(num_periods):
-                    z = z_base + period_idx * tube_period
-                    positions_list.append([x, y, z])
-                    species_list.append(species)
-
-    # Create the nanotube lattice
-    if periodic:
-        cell_c = axial_length
-    else:
-        cell_c = axial_length + 10.0  # Add vacuum for non-periodic
-
-    # Box size should contain the nanotube with some margin
-    box_size = 2 * radius + 10.0
-
-    try:
-        nanotube_lattice = Lattice.orthorhombic(a=box_size, b=box_size, c=cell_c)
-    except AttributeError:
-        lattice_vecs = np.array([[box_size, 0, 0], [0, box_size, 0], [0, 0, cell_c]])
-        nanotube_lattice = Lattice(lattice_vecs)
-
-    # Create the Crystal object
-    nanotube = Crystal(
-        species_list,
-        positions_list,
-        nanotube_lattice,
-        coords_are_cartesian=True,
-        pbc=(False, False, periodic),
+    index, frac = tile(sheet, supercell)
+    heights = sheet.height[index] - (sheet.height.max() + sheet.height.min()) / 2
+    if radius + heights.min() <= 0:
+        raise ValueError(f"The ({n}, {m}) tube is too narrow for a sheet of this thickness")
+    theta = 2 * pi * frac[:, 0]
+    r = radius + heights
+    outer = float(r.max())
+    box = 2 * outer + vacuum
+    axial = periods * period
+    cell_c = axial if periodic else axial + vacuum
+    z0 = 0.0 if periodic else vacuum / 2
+    positions = np.concatenate([
+        np.column_stack([box / 2 + r * np.cos(theta), box / 2 + r * np.sin(theta),
+                         z0 + (frac[:, 1] + k) * period])
+        for k in range(periods)
+    ])
+    species = [sheet.species[i] for i in index] * periods
+    properties = None
+    if sheet.site_properties:
+        properties = [dict(sheet.site_properties[i]) for i in index] * periods
+    return Crystal(
+        species, positions.tolist(), Lattice.orthorhombic(box, box, cell_c),
+        coords_are_cartesian=True, pbc=(False, False, periodic), site_properties=properties,
+        metadata={"chirality": [n, m], "radius": radius, "translation": [t1, t2]},
     )
-
-    # Center the structure if requested
-    if center:
-        positions_array = np.array(positions_list)
-        center_xy = np.mean(positions_array[:, :2], axis=0)
-        center_z = np.mean(positions_array[:, 2])
-
-        shift = [-center_xy[0], -center_xy[1], -center_z]
-
-        from ...transformation.geometric import translate
-
-        nanotube = translate(nanotube, shift)
-
-    return nanotube
-
-
-def _find_translation_vector(
-    a1: np.ndarray, a2: np.ndarray, n: int, m: int
-) -> Tuple[np.ndarray, int, int]:
-    """
-    Find the translational vector T perpendicular to the chiral vector C.
-
-    The translation vector T = t1*a1 + t2*a2 must satisfy:
-    1. T · C = 0 (perpendicular to chiral vector)
-    2. T should be the smallest such vector (defines minimal unit cell)
-
-    Args:
-        a1, a2: 2D lattice vectors
-        n, m: Chirality indices
-
-    Returns:
-        Tuple of (T vector, t1 coefficient, t2 coefficient)
-    """
-    # Chiral vector
-    C = n * a1 + m * a2
-
-    # For hexagonal lattices, there's a known formula
-    # Check if this is approximately hexagonal
-    cos_angle = np.dot(a1, a2) / (np.linalg.norm(a1) * np.linalg.norm(a2))
-    is_hexagonal = abs(cos_angle - 0.5) < 0.15  # cos(60°) = 0.5
-
-    if is_hexagonal and abs(np.linalg.norm(a1) - np.linalg.norm(a2)) < 0.1:
-        # Use specialized formula for hexagonal lattices
-        d = gcd(n, m)
-        if d == 0:
-            d = 1
-
-        # Determine symmetry
-        if (n - m) % (3 * d) == 0:
-            dR = 3 * d
-        else:
-            dR = d
-
-        t1 = (2 * m + n) // dR
-        t2 = -(2 * n + m) // dR
-    else:
-        # General approach: find smallest T perpendicular to C
-        # We search for integer coefficients t1, t2 that minimize |T|
-        # subject to T · C = 0
-
-        # T · C = 0 means: (t1*a1 + t2*a2) · (n*a1 + m*a2) = 0
-        # Expanding: t1*n*(a1·a1) + t1*m*(a1·a2) + t2*n*(a2·a1) + t2*m*(a2·a2) = 0
-        # Simplifying: t1*n*|a1|² + (t1*m + t2*n)*(a1·a2) + t2*m*|a2|² = 0
-
-        # For a first approximation, use the perpendicular in 2D space
-        # If C = (Cx, Cy), then perpendicular is (-Cy, Cx)
-        perp = np.array([-C[1], C[0]])
-
-        # Express perpendicular in terms of a1, a2
-        # Solve: t1*a1 + t2*a2 ≈ perp
-        A = np.column_stack([a1, a2])
-        try:
-            coeffs = np.linalg.solve(A, perp)
-            t1 = round(coeffs[0])
-            t2 = round(coeffs[1])
-
-            # Ensure we have a non-zero vector
-            if t1 == 0 and t2 == 0:
-                t1 = -m if m != 0 else 1
-                t2 = n
-        except np.linalg.LinAlgError:
-            # Fallback for singular matrices
-            t1 = -m if m != 0 else 1
-            t2 = n
-
-    T = t1 * a1 + t2 * a2
-    return T, t1, t2
 
 
 @tool
@@ -295,79 +164,38 @@ def build_carbon_nanotube(
     bond_length: float = 1.42,
     length: Optional[float] = None,
     periodic: bool = True,
-    center: bool = True,
-    **kwargs,
+    vacuum: float = 10.0,
 ) -> Crystal:
     """
     Build a carbon nanotube from chirality indices.
 
-    This is a convenience function specifically for carbon nanotubes.
-    It creates a graphene sheet and rolls it into a nanotube using the
-    general build_nanotube() function.
-
-    For other materials, use build_nanotube() directly with your 2D structure.
+    Graphene is used in the usual 60-degree basis: (n, n) is armchair, (n, 0) zigzag.
 
     Args:
         n: First chirality index
         m: Second chirality index
         bond_length: C-C bond length in Angstroms (default: 1.42)
-        length: Length of nanotube in Angstroms (if None, uses one unit cell)
-        periodic: If True, nanotube is periodic along the axis
-        center: If True, center the nanotube at origin (default: True)
-        **kwargs: Additional parameters
+        length: Minimum tube length in Angstroms (default: one period)
+        periodic: Periodic along the axis, or a finite tube with vacuum at the ends
+        vacuum: Vacuum around the tube in Angstroms
 
     Returns:
-        Crystal: Carbon nanotube structure
+        Crystal: Carbon nanotube along z
 
     Examples:
         >>> from matsimpy.builders.nanostructure import build_carbon_nanotube
-        >>>
-        >>> # Armchair (5, 5) nanotube
         >>> armchair = build_carbon_nanotube(5, 5)
-        >>>
-        >>> # Zigzag (10, 0) nanotube
         >>> zigzag = build_carbon_nanotube(10, 0)
-        >>>
-        >>> # Chiral (7, 3) nanotube
         >>> chiral = build_carbon_nanotube(7, 3)
     """
-    graphene = _create_graphene_sheet(bond_length)
-    return build_nanotube(
-        graphene, (n, m), length=length, periodic=periodic, center=center, **kwargs
-    )
+    if not (np.isfinite(bond_length) and bond_length > 0):
+        raise ValueError(f"bond_length must be positive, got {bond_length}")
+    return build_nanotube(_create_graphene_sheet(bond_length), (n, m), length=length,
+                          periodic=periodic, vacuum=vacuum)
 
 
 def _create_graphene_sheet(bond_length: float = 1.42) -> Crystal:
-    """
-    Create a graphene sheet structure.
-
-    Args:
-        bond_length: C-C bond length in Angstroms
-
-    Returns:
-        Crystal: Graphene sheet structure with proper hexagonal unit cell
-    """
-    # Graphene lattice parameter
-    a = sqrt(3.0) * bond_length
-
-    # Hexagonal lattice vectors
-    a1 = np.array([a, 0.0, 0.0])
-    a2 = np.array([0.5 * a, 0.5 * sqrt(3) * a, 0.0])
-    a3 = np.array([0.0, 0.0, 10.0])  # Vacuum in z direction
-
-    lattice = Lattice(np.array([a1, a2, a3]))
-
-    # Two carbon atoms per unit cell (A and B sublattices)
-    species = ["C", "C"]
-
-    # Positions in fractional coordinates
-    # These are the standard positions for graphene's hexagonal unit cell
-    positions = [
-        [0.0, 0.0, 0.0],  # A sublattice
-        [1.0 / 3.0, 1.0 / 3.0, 0.0],  # B sublattice
-    ]
-
-    return Crystal(species, positions, lattice)
-
-
-__all__ = ["build_nanotube", "build_carbon_nanotube"]
+    """Graphene in a 60-degree basis (a1 = a x, a2 = a (1/2, sqrt(3)/2)), sheet at z = 0."""
+    a = np.sqrt(3.0) * bond_length
+    lattice = Lattice([[a, 0.0, 0.0], [0.5 * a, 0.5 * np.sqrt(3) * a, 0.0], [0.0, 0.0, 10.0]])
+    return Crystal(["C", "C"], [[0.0, 0.0, 0.0], [1 / 3, 1 / 3, 0.0]], lattice)
