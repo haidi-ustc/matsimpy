@@ -59,7 +59,9 @@ python -m pytest -q -p no:xdist tests/symmetry
 - **Put a test where its code lives.** `tests/<package>/` mirrors `matsimpy/<package>/`.
   Each module or subpackage has one file, `test_<module>.py`; for example,
   `matsimpy/transformation/lattice/` is tested in `tests/transformation/test_lattice.py`.
-  Cross-cutting contracts go in `tests/contracts/`.
+  Cross-cutting contracts go in `tests/contracts/`. Every test folder has an
+  `__init__.py`, so the same file name can appear in two folders
+  (`tests/core/test_lattice.py` and `tests/transformation/test_lattice.py`).
 - **Never name a test file after a date, version, release, review or "regressions"**
   (no `test_core_review_2026_11.py`, `test_regressions_082.py`). A regression test goes
   into the topic file of the code it covers.
