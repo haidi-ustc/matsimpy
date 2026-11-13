@@ -82,6 +82,22 @@ class TestBentMolecule(unittest.TestCase):
             )
             self.assertAlmostEqual(angle, expected, places=6)
 
+    def test_build_bent_chain_is_a_trans_zigzag(self):
+        """Chains always turned the same way: a 6-atom 90-degree chain closed into a square."""
+        mol = build_bent(['C'] * 6, [1.5] * 5, [90.0] * 4)
+        distances = np.linalg.norm(mol.positions[:, None] - mol.positions[None], axis=-1)
+        np.fill_diagonal(distances, np.inf)
+        self.assertAlmostEqual(distances.min(), 1.5, places=6)
+        # every 1-4 distance is the trans one, sqrt(5) * 1.5 for 90-degree angles
+        for i in range(3):
+            self.assertAlmostEqual(distances[i, i + 3], np.sqrt(5) * 1.5, places=6)
+
+    def test_build_bent_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [float('nan'), 0.96], [104.5])
+        with self.assertRaises(ValueError):
+            build_bent(['O', 'H', 'H'], [0.96, 0.96], [float('nan')])
+
     def test_build_bent_uses_plane_normal(self):
         """Test that plane_normal orients the generated molecule plane."""
         mol = build_bent(['O', 'H', 'H'], [1.0, 1.0], [90.0], plane_normal=[0, 1, 0])
@@ -145,6 +161,14 @@ class TestTetrahedral(unittest.TestCase):
         """Test with wrong number of peripheral atoms."""
         with self.assertRaises(ValueError):
             build_tetrahedral('C', ['H', 'H', 'H'], 1.09)  # Only 3 H
+
+    def test_bond_length_is_validated(self):
+        """A negative bond length used to mirror the molecule silently."""
+        for bad in (-1.09, 0.0, float('nan')):
+            with self.assertRaises(ValueError):
+                build_tetrahedral('C', ['H'] * 4, bad)
+            with self.assertRaises(ValueError):
+                build_trigonal_planar('B', ['F'] * 3, bad)
 
 
 try:

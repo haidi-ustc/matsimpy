@@ -64,12 +64,18 @@ def build_bent(
     plane_normal: Sequence[float] = (0, 0, 1),
 ) -> Molecule:
     """
-    Build bent molecule (e.g., H2O, bent triatomic).
+    Build a bent molecule (e.g. H2O) or a planar zigzag chain.
+
+    With three atoms, species[0] is the central atom bonded to the other two.
+    With more atoms, the molecule is a chain species[0]-species[1]-...: an
+    all-trans zigzag in the plane.
 
     Args:
         species: List of atomic species
-        bond_lengths: List of bond lengths
-        angles: List of bond angles in degrees
+        bond_lengths: Bond lengths: central atom to each neighbour for three atoms,
+            otherwise atom i to atom i+1 along the chain
+        angles: Bond angles in degrees: the one angle at the central atom, or the
+            angle at each inner atom of the chain
         plane_normal: Normal vector to molecular plane
 
     Returns:
@@ -86,9 +92,9 @@ def build_bent(
         raise ValueError(f"Need {len(species)-1} bond lengths for {len(species)} atoms")
     if len(angles) != len(species) - 2:
         raise ValueError(f"Need {len(species)-2} bond angles for {len(species)} atoms")
-    if any(length <= 0 for length in bond_lengths):
-        raise ValueError("bond lengths must be positive")
-    if any(angle <= 0 or angle >= 180 for angle in angles):
+    if any(not np.isfinite(length) or length <= 0 for length in bond_lengths):
+        raise ValueError("bond lengths must be positive and finite")
+    if any(not np.isfinite(angle) or angle <= 0 or angle >= 180 for angle in angles):
         raise ValueError("bond angles must be between 0 and 180 degrees")
 
     plane_normal_array = np.array(plane_normal, dtype=np.float64)
@@ -110,15 +116,16 @@ def build_bent(
         y = bond_lengths[1] * np.sin(angle_rad)
         positions.append(np.array([x, y, 0.0]))
     else:
-        # Chain-like bent molecule using internal coordinates:
+        # Planar zigzag (all-trans) chain from internal coordinates:
         # bond_lengths[i] is the distance i -> i+1 and angles[i] is the
-        # angle at atom i+1 between atoms i, i+1, and i+2.
+        # angle at atom i+1 between atoms i, i+1, and i+2. The chain turns
+        # alternately left and right, so it never folds back on itself.
         positions = [np.array([0.0, 0.0, 0.0])]
         positions.append(np.array([bond_lengths[0], 0.0, 0.0]))
 
         direction = np.array([1.0, 0.0])
-        for length, angle in zip(bond_lengths[1:], angles):
-            turn = np.pi - np.radians(angle)
+        for index, (length, angle) in enumerate(zip(bond_lengths[1:], angles)):
+            turn = (np.pi - np.radians(angle)) * (1 if index % 2 == 0 else -1)
             rotation = np.array(
                 [
                     [np.cos(turn), -np.sin(turn)],
@@ -163,6 +170,12 @@ def _orient_plane(positions: np.ndarray, plane_normal: np.ndarray) -> np.ndarray
     return positions @ rotation.T
 
 
+def _check_bond_length(bond_length) -> None:
+    if isinstance(bond_length, bool) or not np.isfinite(bond_length) or bond_length <= 0:
+        raise ValueError(f"bond_length must be positive and finite, got {bond_length}")
+
+
+@tool
 def build_trigonal_planar(
     central_atom: str, peripheral_atoms: List[str], bond_length: float
 ) -> Molecule:
@@ -183,8 +196,9 @@ def build_trigonal_planar(
     """
     if len(peripheral_atoms) != 3:
         raise ValueError("Trigonal planar requires exactly 3 peripheral atoms")
+    _check_bond_length(bond_length)
 
-    species = [central_atom] + peripheral_atoms
+    species = [central_atom] + list(peripheral_atoms)
     positions = [np.array([0.0, 0.0, 0.0])]  # Central atom
 
     # Three atoms at 120° angles
@@ -218,8 +232,9 @@ def build_tetrahedral(
     """
     if len(peripheral_atoms) != 4:
         raise ValueError("Tetrahedral requires exactly 4 peripheral atoms")
+    _check_bond_length(bond_length)
 
-    species = [central_atom] + peripheral_atoms
+    species = [central_atom] + list(peripheral_atoms)
     positions = [np.array([0.0, 0.0, 0.0])]  # Central atom
 
     # Tetrahedral vertices

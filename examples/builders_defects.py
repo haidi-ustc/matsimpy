@@ -105,17 +105,14 @@ print(f"  Atoms: {len(frenkel)} (same number, one displaced)")
 print("\n\n5. Schottky Defects")
 print("-" * 70)
 
-# For binary compound, create Schottky pair (vacancy pair)
+# A Schottky defect removes whole formula units, keeping the crystal neutral
 rocksalt = from_prototype('rocksalt', 'NaCl', 5.64)
 rocksalt_super = make_supercell(rocksalt, [2, 2, 2])
 
-try:
-    schottky = create_schottky(rocksalt_super, ['Na', 'Cl'])
-    print(f"Schottky defect (NaCl):")
-    print(f"  Formula: {schottky.formula}")
-    print(f"  Atoms: {len(schottky)} (removed 2)")
-except Exception as e:
-    print(f"Schottky defect creation: {e}")
+schottky = create_schottky(rocksalt_super, seed=0)  # one Na and one Cl, chosen at random
+print(f"Schottky defect (NaCl):")
+print(f"  Formula: {schottky.formula}")
+print(f"  Atoms: {len(schottky)} (removed one NaCl unit)")
 
 # ============================================================================
 # Example 6: Antisite Defects
@@ -124,13 +121,12 @@ print("\n\n6. Antisite Defects")
 print("-" * 70)
 
 # Antisite: swap two atoms of different species
-try:
-    antisite = create_antisite(rocksalt_super, 0, 4)  # Swap Na and Cl
-    print(f"Antisite defect (Na ↔ Cl):")
-    print(f"  Formula: {antisite.formula}")
-    print(f"  Atoms: {len(antisite)} (swapped 2)")
-except Exception as e:
-    print(f"Antisite defect creation: {e}")
+na = rocksalt_super.species.index('Na')
+cl = rocksalt_super.species.index('Cl')
+antisite = create_antisite(rocksalt_super, na, cl)
+print(f"Antisite defect (Na {na} <-> Cl {cl}):")
+print(f"  Formula: {antisite.formula}")
+print(f"  Atoms: {len(antisite)} (swapped 2)")
 
 # ============================================================================
 # Example 7: Combining Defects

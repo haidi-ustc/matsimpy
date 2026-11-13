@@ -71,6 +71,20 @@ class TestInterstitial(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_interstitial(self.fcc, ['H', 'H'], [[0.5, 0.5, 0.5]])
 
+    def test_create_interstitial_wraps_only_periodic_axes(self):
+        """Positions in the vacuum of a slab used to be wrapped back into the slab."""
+        from matsimpy.core import Lattice
+
+        slab = Crystal(['Cu'], [[0, 0, 0.5]], Lattice.tetragonal(2.55, 20.0), pbc=(True, True, False))
+        above = create_interstitial(slab, 'H', [1.5, 0.5, 0.6])
+        np.testing.assert_allclose(above.frac_positions[-1], [0.5, 0.5, 0.6])
+        outside = create_interstitial(slab, 'H', [0.5, 0.5, 1.2])
+        self.assertAlmostEqual(outside.frac_positions[-1][2], 1.2)
+
+    def test_create_interstitial_rejects_overlap(self):
+        with self.assertRaisesRegex(ValueError, "from an existing atom"):
+            create_interstitial(self.fcc, 'H', [1.0, 0.0, 0.01])
+
 class TestSubstitution(unittest.TestCase):
     """Tests for create_substitution function."""
     
@@ -90,6 +104,11 @@ class TestSubstitution(unittest.TestCase):
         """Test creating substitution with invalid index."""
         with self.assertRaises(IndexError):
             create_substitution(self.fcc, 1000, 'Ni')
+
+    def test_create_substitution_accepts_numpy_index(self):
+        """A numpy integer index (e.g. from np.where) used to raise TypeError."""
+        doped = create_substitution(self.fcc, np.int64(1), 'Ge')
+        self.assertEqual(doped.species[1], 'Ge')
 
 class TestFrenkel(unittest.TestCase):
     """Tests for create_frenkel function."""
@@ -116,7 +135,14 @@ class TestFrenkel(unittest.TestCase):
     def test_create_frenkel_invalid_index(self):
         """Test creating Frenkel defect with invalid index."""
         with self.assertRaises(IndexError):
-            create_frenkel(self.nacl, 1000)
+            create_frenkel(self.nacl, 1000, [0.25, 0.25, 0.25])
+
+    def test_create_frenkel_requires_a_free_site(self):
+        """The old default moved the atom by a random, unseeded 0.1 fractional step."""
+        with self.assertRaises(TypeError):
+            create_frenkel(self.nacl, 0)
+        with self.assertRaisesRegex(ValueError, "from an existing atom"):
+            create_frenkel(self.nacl, 0, [0.5, 0.5, 0.52])
 
 class TestSchottky(unittest.TestCase):
     """Tests for create_schottky function."""
@@ -127,15 +153,28 @@ class TestSchottky(unittest.TestCase):
     
     
     
-    def test_create_schottky_mismatch(self):
-        """Test creating Schottky defect with mismatched indices."""
-        with self.assertRaises(ValueError):
-            create_schottky(self.nacl, indices=[0, 1], num_vacancies=3)
-    
-    def test_create_schottky_too_many(self):
-        """Test creating Schottky defect with too many vacancies."""
-        with self.assertRaises(ValueError):
-            create_schottky(self.nacl, num_vacancies=10000)
+    def test_create_schottky_removes_a_formula_unit(self):
+        """The old default removed two random atoms, often both Na or both Cl."""
+        from matsimpy.transformation.structural import make_supercell
+
+        cell = make_supercell(self.nacl, [2, 2, 2])
+        for seed in range(5):
+            defect = create_schottky(cell, seed=seed)
+            self.assertEqual(defect.species.count('Na'), 7)
+            self.assertEqual(defect.species.count('Cl'), 7)
+        self.assertEqual(create_schottky(cell, seed=3).frac_positions.tolist(),
+                         create_schottky(cell, seed=3).frac_positions.tolist())
+
+    def test_create_schottky_rejects_non_stoichiometric_indices(self):
+        na = [i for i, s in enumerate(self.nacl.species) if s == 'Na']
+        with self.assertRaisesRegex(ValueError, "formula units"):
+            create_schottky(self.nacl, indices=na[:1])
+        with self.assertRaisesRegex(ValueError, "every atom"):
+            create_schottky(self.nacl, indices=list(range(len(self.nacl))))
+
+    def test_create_schottky_rejects_unknown_keyword(self):
+        with self.assertRaises(TypeError):
+            create_schottky(self.nacl, num_vacancies=2)
 
 class TestAntisite(unittest.TestCase):
     """Tests for create_antisite function."""
@@ -162,6 +201,15 @@ class TestAntisite(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_antisite(self.gan, 0, 0)
     
+    def test_create_antisite_rejects_same_species(self):
+        """Swapping two Ga atoms used to return an unchanged crystal as an 'antisite'."""
+        from matsimpy.transformation.structural import make_supercell
+
+        cell = make_supercell(self.gan, [2, 1, 1])
+        ga = [i for i, s in enumerate(cell.species) if s == 'Ga']
+        with self.assertRaisesRegex(ValueError, "different species"):
+            create_antisite(cell, ga[0], ga[1])
+
     def test_create_antisite_invalid_index(self):
         """Test creating antisite defect with invalid index."""
         with self.assertRaises(IndexError):
