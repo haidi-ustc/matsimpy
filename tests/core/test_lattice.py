@@ -66,10 +66,8 @@ def test_from_parameters_returns_float64_for_numpy_scalars():
     assert Lattice.from_parameters(np.float32(3), 3, 3, 90, 90, 120).matrix.dtype == np.float64
 
 
-def test_attributes_cannot_be_reassigned_but_copies_work():
+def test_copies_compare_equal():
     lat = Lattice.cubic(3.0)
-    with pytest.raises(AttributeError):
-        lat._matrix = np.eye(3)
     assert copy.deepcopy(lat) == lat
     assert pickle.loads(pickle.dumps(lat)) == lat
 

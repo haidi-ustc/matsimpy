@@ -1,233 +1,150 @@
-"""Tests for immutable Structure/Crystal/Molecule behavior.
+"""Immutability of structures, lattices and sites.
 
-All mutation methods must return new objects without modifying the original.
+Every "mutation" returns a new object and leaves the input untouched; attributes cannot
+be reassigned and arrays cannot be made writable, also after pickle and deepcopy.
 """
-import unittest
+
+import copy
+import pickle
+
 import numpy as np
-from matsimpy.core import Crystal, Molecule, Lattice
+import pytest
+
+from matsimpy.core import Crystal, Lattice, Molecule
+from matsimpy.core.site import CrystalSite
 from matsimpy.transformation import make_supercell, perturb_positions
 
-
-class TestImmutabilityCrystal(unittest.TestCase):
-    """Crystal mutation methods return new objects, original unchanged."""
-
-    def setUp(self):
-        self.crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-
-    def test_add_atom_returns_new_object(self):
-        original_species = self.crystal.species
-        original_len = len(self.crystal)
-        result = self.crystal.add_atom("H", [0.1, 0.0, 0.0])
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(len(self.crystal), original_len)
-        self.assertEqual(self.crystal.species, original_species)
-        self.assertEqual(len(result), original_len + 1)
-        self.assertIn("H", result.species)
-
-    def test_remove_atom_returns_new_object(self):
-        original_species = self.crystal.species
-        original_len = len(self.crystal)
-        result = self.crystal.remove_atom(0)
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(len(self.crystal), original_len)
-        self.assertEqual(self.crystal.species, original_species)
-        self.assertEqual(len(result), original_len - 1)
-
-    def test_substitute_returns_new_object(self):
-        original_species = self.crystal.species
-        result = self.crystal.substitute(0, "K")
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(self.crystal.species, original_species)
-        self.assertIn("K", result.species)
-        self.assertNotIn("Na", result.species)
-
-    def test_substitute_all_returns_new_object(self):
-        original_species = self.crystal.species
-        result = self.crystal.substitute_all("Na", "K")
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(self.crystal.species, original_species)
-        self.assertIn("K", result.species)
-        self.assertNotIn("Na", result.species)
-
-    def test_sort_atoms_returns_new_object(self):
-        original_species = self.crystal.species
-        result = self.crystal.sort_atoms("alphabet")
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(self.crystal.species, original_species)
-
-    def test_make_supercell_returns_new_object(self):
-        original_len = len(self.crystal)
-        result = make_supercell(self.crystal, [2, 2, 2])
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(len(self.crystal), original_len)
-        self.assertEqual(len(result), original_len * 8)
-
-    def test_perturb_returns_new_object(self):
-        original_positions = self.crystal.positions.copy()
-        result = perturb_positions(self.crystal, 0.1, seed=42)
-        self.assertIsNot(result, self.crystal)
-        self.assertTrue(np.allclose(self.crystal.positions, original_positions))
-        self.assertFalse(np.allclose(original_positions, result.positions))
-
-    def test_wrap_returns_new_object(self):
-        species = ["Fe", "O"]
-        positions = [[1.5, 2.3, 0.5], [0.2, 0.2, 0.2]]
-        lattice = Lattice.cubic(10.0)
-        crystal = Crystal(species, positions, lattice)
-        original_frac = crystal.frac_positions.copy()
-        result = crystal.wrap()
-        self.assertIsNot(result, crystal)
-        self.assertTrue(np.allclose(crystal.frac_positions, original_frac))
-
-    def test_chained_mutations(self):
-        result = (
-            self.crystal
-            .add_atom("H", [0.1, 0.0, 0.0])
-            .substitute(0, "K")
-            .sort_atoms("element")
-        )
-        self.assertIsNot(result, self.crystal)
-        self.assertEqual(len(result), 3)
-        self.assertEqual(len(self.crystal), 2)
+CLONES = [copy.deepcopy, lambda o: pickle.loads(pickle.dumps(o))]
 
 
-class TestImmutabilityMolecule(unittest.TestCase):
-    """Molecule mutation methods return new objects, original unchanged."""
-
-    def setUp(self):
-        self.mol = Molecule(
-            ["O", "H", "H"],
-            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
-        )
-
-    def test_add_atom_returns_new_object(self):
-        original_len = len(self.mol)
-        result = self.mol.add_atom("H", [2.0, 0.0, 0.0])
-        self.assertIsNot(result, self.mol)
-        self.assertEqual(len(self.mol), original_len)
-        self.assertEqual(len(result), original_len + 1)
-
-    def test_remove_atom_returns_new_object(self):
-        original_len = len(self.mol)
-        result = self.mol.remove_atom(0)
-        self.assertIsNot(result, self.mol)
-        self.assertEqual(len(self.mol), original_len)
-        self.assertEqual(len(result), original_len - 1)
-
-    def test_substitute_returns_new_object(self):
-        original_species = self.mol.species
-        result = self.mol.substitute(0, "N")
-        self.assertIsNot(result, self.mol)
-        self.assertEqual(self.mol.species, original_species)
-        self.assertEqual(result.species[0], "N")
-
-    def test_translate_returns_new_object(self):
-        original_positions = self.mol.positions.copy()
-        result = self.mol.translate([1.0, 0.0, 0.0])
-        self.assertIsNot(result, self.mol)
-        self.assertTrue(np.allclose(self.mol.positions, original_positions))
-        self.assertTrue(np.allclose(result.positions, original_positions + [1.0, 0.0, 0.0]))
-
-    def test_rotate_returns_new_object(self):
-        original_positions = self.mol.positions.copy()
-        result = self.mol.rotate(90, [0, 0, 1])
-        self.assertIsNot(result, self.mol)
-        self.assertTrue(np.allclose(self.mol.positions, original_positions))
-        self.assertFalse(np.allclose(original_positions, result.positions))
-
-    def test_perturb_returns_new_object(self):
-        original_positions = self.mol.positions.copy()
-        result = perturb_positions(self.mol, 0.1, seed=42)
-        self.assertIsNot(result, self.mol)
-        self.assertTrue(np.allclose(self.mol.positions, original_positions))
-
-    def test_to_crystal_returns_new_crystal(self):
-        result = self.mol.to_crystal()
-        self.assertIsInstance(result, Crystal)
-        self.assertIsNot(result, self.mol)
-        self.assertEqual(len(result), 3)
-
-    def test_chained_mutations(self):
-        result = (
-            self.mol
-            .add_atom("C", [1.5, 0.0, 0.0])
-            .translate([1.0, 0.0, 0.0])
-            .substitute(0, "N")
-        )
-        self.assertIsNot(result, self.mol)
-        self.assertEqual(len(result), 4)
-        self.assertEqual(len(self.mol), 3)
+def _nacl():
+    return Crystal(["Na", "Cl"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]], Lattice.cubic(5.64),
+                   site_properties=[{"m": 1.0}, {"m": 2.0}])
 
 
-class TestImmutabilityCache(unittest.TestCase):
-    """Caches are computed once and never invalidated."""
-
-    def test_formula_cache_never_changes(self):
-        crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-        formula1 = crystal.formula
-        # Even after getting a mutated copy, original formula is unchanged
-        _ = crystal.add_atom("H", [0.1, 0.0, 0.0])
-        formula2 = crystal.formula
-        self.assertEqual(formula1, formula2)
-
-    def test_composition_cache_never_changes(self):
-        crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-        comp1 = crystal.composition
-        _ = crystal.add_atom("H", [0.1, 0.0, 0.0])
-        comp2 = crystal.composition
-        self.assertIs(comp1, comp2)
+def _water():
+    return Molecule(["O", "H", "H"], [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+                    site_properties=[{"m": 1.0}, {"m": 2.0}, {"m": 3.0}])
 
 
-class TestNoPositionsSetter(unittest.TestCase):
-    """positions property is read-only."""
-
-    def test_positions_setter_raises_attribute_error(self):
-        crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-        with self.assertRaises(AttributeError):
-            crystal.positions = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
-
-    def test_internal_positions_array_is_read_only(self):
-        crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-        molecule = Molecule(["H"], [[0.0, 0.0, 0.0]])
-
-        with self.assertRaises(ValueError):
-            crystal._coords[0, 0] = 0.25
-        with self.assertRaises(ValueError):
-            molecule._coords[0, 0] = 0.25
+# --------------------------------------------------------------------------
+# Operations return new objects
+# --------------------------------------------------------------------------
 
 
-class TestNoSpeciesSetter(unittest.TestCase):
-    """species property is read-only."""
+@pytest.mark.parametrize("make, op", [
+    (_nacl, lambda s: s.add_atom("H", [0.1, 0.0, 0.0])),
+    (_nacl, lambda s: s.remove_atom(0)),
+    (_nacl, lambda s: s.substitute(0, "K")),
+    (_nacl, lambda s: s.substitute_all("Na", "K")),
+    (_nacl, lambda s: s.sort_atoms("alphabet")),
+    (_nacl, lambda s: s.wrap()),
+    (_nacl, lambda s: s.set_pbc([True, True, False])),
+    (_nacl, lambda s: s.with_site_properties([{"m": 5.0}, {"m": 6.0}])),
+    (_nacl, lambda s: make_supercell(s, [2, 2, 2])),
+    (_nacl, lambda s: perturb_positions(s, 0.1, seed=42)),
+    (_nacl, lambda s: s.add_atom("H", [0.1, 0.0, 0.0]).substitute(0, "K").sort_atoms("element")),
+    (_water, lambda s: s.add_atom("H", [2.0, 0.0, 0.0])),
+    (_water, lambda s: s.remove_atom(0)),
+    (_water, lambda s: s.substitute(0, "N")),
+    (_water, lambda s: s.translate([1.0, 0.0, 0.0])),
+    (_water, lambda s: s.rotate(90, [0, 0, 1])),
+    (_water, lambda s: s.to_crystal()),
+    (_water, lambda s: perturb_positions(s, 0.1, seed=42)),
+])
+def test_operations_return_a_new_object_and_leave_the_input_unchanged(make, op):
+    s = make()
+    before = (s.species, s.positions.copy(), s.site_properties, getattr(s, "pbc", None))
+    out = op(s)
+    assert out is not s
+    assert s.species == before[0]
+    assert np.array_equal(s.positions, before[1])
+    assert s.site_properties == before[2]
+    assert getattr(s, "pbc", None) == before[3]
 
-    def test_species_setter_raises_attribute_error(self):
-        crystal = Crystal(
-            ["Na", "Cl"],
-            [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-            Lattice.cubic(5.64),
-        )
-        with self.assertRaises(AttributeError):
-            crystal.species = ["K", "Br"]
+
+def test_cached_formula_and_composition_never_change():
+    c = _nacl()
+    formula, composition = c.formula, c.composition
+    c.add_atom("H", [0.1, 0.0, 0.0])
+    assert c.formula == formula
+    assert c.composition is composition
 
 
-if __name__ == "__main__":
-    unittest.main()
+# --------------------------------------------------------------------------
+# Attributes cannot be reassigned
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("make, attr, value", [
+    (_nacl, "positions", [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+    (_nacl, "species", ["K", "Br"]),
+    (_nacl, "lattice", Lattice.cubic(8.0)),
+    (_nacl, "pbc", (True, True, False)),
+    (_nacl, "site_properties", [{"m": 9.0}, {"m": 9.0}]),
+    (_water, "site_properties", [{"m": 9.0}] * 3),
+    (lambda: Lattice.cubic(4.0), "matrix", np.eye(3)),
+    (lambda: Lattice.cubic(4.0), "_matrix", np.eye(3)),
+])
+def test_attributes_cannot_be_reassigned(make, attr, value):
+    with pytest.raises(AttributeError):
+        setattr(make(), attr, value)
+
+
+def test_lattice_has_no_duplicate_vector_alias():
+    assert not hasattr(Lattice.cubic(4.0), "lattice_vectors")
+
+
+# --------------------------------------------------------------------------
+# Arrays cannot be made writable
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("make", [_nacl, _water])
+def test_internal_coordinates_are_read_only(make):
+    with pytest.raises(ValueError):
+        make()._coords[0, 0] = 0.25
+
+
+@pytest.mark.parametrize("clone", [lambda o: o] + CLONES, ids=["original", "deepcopy", "pickle"])
+def test_lattice_arrays_stay_frozen(clone):
+    lat = clone(Lattice.cubic(4.0))
+    for arr in (lat.matrix, lat.inv_matrix):
+        with pytest.raises(ValueError):
+            arr.flags.writeable = True
+    assert np.array_equal(lat.matrix @ lat.inv_matrix, np.eye(3))
+
+
+@pytest.mark.parametrize("clone", [lambda o: o] + CLONES, ids=["original", "deepcopy", "pickle"])
+def test_crystal_arrays_stay_frozen(clone):
+    c = clone(_nacl())
+    for arr in (c.positions, c.frac_positions, c.cart_positions):
+        with pytest.raises(ValueError):
+            arr.flags.writeable = True
+
+
+# --------------------------------------------------------------------------
+# Sites
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("attr", ["lattice", "specie", "position", "properties", "anything"])
+def test_crystal_site_is_frozen(attr):
+    site = CrystalSite([0.5, 0.5, 0.5], "Fe", Lattice.cubic(2.0))
+    with pytest.raises(AttributeError):
+        setattr(site, attr, None)
+    for arr in (site.position, site.frac_position, site.cart_position):
+        with pytest.raises(ValueError):
+            arr[0] = 9.0
+    assert np.array_equal(site.position, site.cart_position)  # position is always Cartesian
+
+
+@pytest.mark.parametrize("clone", CLONES, ids=["deepcopy", "pickle"])
+def test_crystal_site_clone_is_equal_and_frozen(clone):
+    site = CrystalSite([0.5, 0.25, 0.0], "Fe", Lattice.cubic(2.0), {"m": [1]})
+    other = clone(site)
+    assert other == site and other is not site
+    with pytest.raises(AttributeError):
+        other.specie = "O"
+    with pytest.raises(ValueError):
+        other.frac_position.flags.writeable = True

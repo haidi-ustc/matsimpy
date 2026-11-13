@@ -38,9 +38,23 @@ def test_neighbor_list_finds_neighbours_of_atoms_stored_outside_the_cell():
     assert nl == c.wrap().get_neighbor_list(2.5)
 
 
+def test_neighbor_search_in_a_very_skewed_cell_finds_close_images():
+    # the reciprocal height bounds the image search, not the lattice vector length
+    c = Crystal(["H", "H"], [[0, 0, 0], [0, 0.5, 0]], Lattice([[10, 0, 0], [99.99, 0.01, 0], [0, 0, 10]]))
+    distances = dict(c.get_neighbor_list(0.02, atom_index=0, use_pbc=True)[0])
+    assert distances[1] == pytest.approx(np.hypot(0.005, 0.005))
+
+
 def test_single_atom_neighbor_list_includes_the_cutoff_distance():
     c = Crystal(["Cu", "Cu"], [[0, 0, 0], [0.5, 0, 0]], Lattice.cubic(3.0), pbc=[False] * 3)
     assert c.get_neighbor_list(1.5, atom_index=0, use_pbc=False) == {0: [(1, 1.5)]}
+
+
+def test_add_atom_checks_distances_through_periodic_boundaries_only():
+    c = Crystal(["Si"], [[0.01, 0.5, 0.5]], Lattice.cubic(5.0))
+    with pytest.raises(ValueError, match="too close"):
+        c.add_atom("Si", [0.99, 0.5, 0.5])  # 0.1 Å apart through the boundary
+    assert len(c.set_pbc([False, True, True]).add_atom("Si", [0.99, 0.5, 0.5])) == 2  # 4.9 Å apart
 
 
 def test_add_atom_uses_the_true_minimum_image_in_a_skewed_cell():
@@ -57,6 +71,21 @@ def test_from_dict_rejects_cart_positions_that_disagree_with_frac_positions():
         Crystal.from_dict(d)
 
 
-def test_pbc_accepts_a_numpy_bool_array():
-    c = Crystal(["H"], [[0, 0, 0]], Lattice.cubic(5.0), pbc=np.array([True, True, False]))
+@pytest.mark.parametrize("pbc", [np.array([True, True, False]), [np.bool_(True), np.bool_(True), np.bool_(False)]])
+def test_pbc_accepts_numpy_bools(pbc):
+    c = Crystal(["H"], [[0, 0, 0]], Lattice.cubic(5.0), pbc=pbc)
     assert c.pbc == (True, True, False)
+    assert c.set_pbc(pbc).pbc == (True, True, False)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: Crystal(["Si"], [[0, 0, 0]], None),
+    lambda: Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5), pbc=[True, False]),
+    lambda: Crystal(["Si"], [[0, 0, 0]], Lattice.cubic(5)).set_pbc([True, False]),
+    lambda: Crystal.from_dict({"species": ["Si"], "positions": [[0, 0, 0]], "lattice": None, "pbc": [True] * 3}),
+    lambda: Crystal.from_dict({"species": ["Si"], "positions": [[0, 0, 0]],
+                               "lattice": Lattice.cubic(5).as_dict(), "pbc": [True, "yes", True]}),
+])
+def test_invalid_lattice_or_pbc_raise(make):
+    with pytest.raises(ValueError):
+        make()

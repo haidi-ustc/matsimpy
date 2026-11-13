@@ -144,3 +144,23 @@ def test_frames_must_have_the_same_atoms(si_crystal, change):
 def test_invalid_scalars_and_base_positions_are_rejected(si_crystal, kwargs):
     with pytest.raises(ValueError):
         Trajectory([si_crystal], **kwargs)
+
+
+def test_trajectory_is_immutable(si_crystal):
+    traj = Trajectory([si_crystal.with_metadata(e={"v": 1}), si_crystal.with_metadata(e={"v": 2})],
+                      base_positions=[[0, 0, 0], [1, 1, 1]])
+    traj[0].metadata["e"]["v"] = 99
+    assert traj[0].metadata["e"]["v"] == 1
+    with pytest.raises(ValueError):
+        traj.base_positions[0, 0] = 5.0
+    with pytest.raises(AttributeError):
+        traj.constant_lattice = True
+    assert all(f is not g for f, g in zip(list(traj), traj._frames))  # iteration yields copies
+
+
+def test_trajectory_stays_frozen_after_pickle(si_crystal):
+    import pickle
+
+    traj = Trajectory([si_crystal], base_positions=[[0, 0, 0], [1, 1, 1]])
+    with pytest.raises(ValueError):
+        pickle.loads(pickle.dumps(traj)).base_positions.flags.writeable = True

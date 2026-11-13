@@ -56,3 +56,14 @@ def test_from_origin_axis_angle_matches_pymatgen():
 def test_from_origin_axis_angle_rejects_bad_input(origin, angle):
     with pytest.raises(ValueError):
         SymmOp.from_origin_axis_angle(origin, [0, 0, 1], angle)
+
+
+def test_operate_multi_matches_operate():
+    rotation = SymmOp.from_origin_axis_angle([0, 0, 0], [1, 1, 0], 37.0).rotation_matrix
+    op = SymmOp.from_rotation_and_translation(rotation, [0.1, -0.2, 0.3])
+    pts = np.random.default_rng(1).random((5, 3))
+    np.testing.assert_allclose(op.operate_multi(pts), [op.operate(p) for p in pts], atol=1e-14, rtol=0)
+
+
+def test_translation_defaults_to_zero():
+    assert np.array_equal(SymmOp.from_rotation_and_translation(np.eye(3)).translation_vector, np.zeros(3))
