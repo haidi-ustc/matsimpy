@@ -1,6 +1,6 @@
 # MatSimPy
 
-**MatSimPy (Materials Simulation in Python)** is a Python library for building, transforming, analyzing, and storing crystal/molecular structures with a clean, ASE-like workflow.
+**MatSimPy (Materials Simulation in Python)** is a Python library for building, transforming, analyzing and storing crystal and molecular structures. Structures are immutable and every change returns a new object, so building workflows, transforms and analysis steps compose cleanly into reproducible scripts.
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
