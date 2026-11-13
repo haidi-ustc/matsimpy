@@ -1,17 +1,55 @@
 """
 Heusler alloy structure builders.
 
-Generate Heusler alloy structures:
-- Full Heusler (X₂YZ): L2₁ structure (Fm-3m, No. 225)
-- Half-Heusler (XYZ): C1b structure (F-43m, No. 216)
-- Inverse Heusler (X₂YZ): XA structure (I-4m2, No. 119)
+All Heusler structures are four interpenetrating fcc sublattices along the cube
+diagonal of the conventional cubic cell, at the Wyckoff positions of F-43m:
 
-Heusler alloys are intermetallic compounds with specific crystal structures
-that exhibit interesting magnetic and electronic properties.
+    4a (0, 0, 0)   4c (1/4, 1/4, 1/4)   4b (1/2, 1/2, 1/2)   4d (3/4, 3/4, 3/4)
+
+- Full Heusler X2YZ (L2_1, Cu2MnAl type, Fm-3m No. 225): X on 4c and 4d, Y on 4a, Z on 4b.
+- Half-Heusler XYZ (C1_b, MgAgAs type, F-43m No. 216): X on 4c, Y on 4a, Z on 4b, 4d empty.
+- Inverse Heusler X2YZ (XA, Hg2CuTi type, F-43m No. 216): X on 4a and 4c, Y on 4b, Z on 4d.
+- Quaternary Heusler XX'YZ (Y type, LiMgPdSn type, F-43m No. 216): X on 4c, X' on 4d,
+  Y on 4b, Z on 4a.
+
+The builders return the conventional cubic cell (16 atoms, 12 for half-Heusler).
 """
 
+from typing import Dict, Optional
+
+import numpy as np
+
 from matsimpy.utils.tooling import tool
+
 from ...core import Crystal, Lattice
+
+__all__ = [
+    "build_heusler",
+    "build_full_heusler",
+    "build_half_heusler",
+    "build_inverse_heusler",
+    "build_inverse_heusler_quaternary",
+    "build_quaternary_heusler",
+]
+
+_SITES = {"4a": 0.0, "4c": 0.25, "4b": 0.5, "4d": 0.75}
+_FCC = np.array([[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]])
+
+
+def _heusler(occupation: Dict[str, Optional[str]], lattice_constant: float) -> Crystal:
+    if isinstance(lattice_constant, bool) or not np.isfinite(lattice_constant) or lattice_constant <= 0:
+        raise ValueError(f"lattice_constant must be positive, got {lattice_constant}")
+    species, positions = [], []
+    for site, element in occupation.items():
+        if element is None:
+            continue
+        if not isinstance(element, str) or not element:
+            raise ValueError(f"element symbols must be non-empty strings, got {element!r}")
+        offset = _SITES[site]
+        for translation in _FCC:
+            species.append(element)
+            positions.append(((translation + offset) % 1.0).tolist())
+    return Crystal(species, positions, Lattice.cubic(lattice_constant))
 
 
 @tool
@@ -21,358 +59,128 @@ def build_heusler(
     Z: str,
     lattice_constant: float,
     heusler_type: str = "full",
-    **kwargs,
 ) -> Crystal:
     """
-    Build a Heusler alloy structure.
+    Build a Heusler alloy in its conventional cubic cell.
 
     Args:
-        X: First element symbol (occupies different sites based on type)
-        Y: Second element symbol
-        Z: Third element symbol
-        lattice_constant: Lattice constant in Angstroms
-        heusler_type: Type of Heusler alloy ('full', 'half', 'inverse')
-                    - 'full': Full Heusler X₂YZ (L2₁ structure, Fm-3m, No. 225)
-                    - 'half': Half-Heusler XYZ (C1b structure, F-43m, No. 216)
-                    - 'inverse': Inverse Heusler X₂YZ (XA structure, I-4m2, No. 119)
-        **kwargs: Additional parameters
+        X: The doubled element of X2YZ (the first element of XYZ for half-Heusler)
+        Y: Second element
+        Z: Third (main-group) element
+        lattice_constant: Cubic lattice constant in Angstroms
+        heusler_type: 'full' (X2YZ, L2_1, Fm-3m), 'half' (XYZ, C1_b, F-43m) or
+            'inverse' (X2YZ, XA / Hg2CuTi type, F-43m)
 
     Returns:
-        Crystal: Heusler alloy structure
+        Crystal: 16 atoms (12 for half-Heusler)
 
     Examples:
         >>> from matsimpy.builders.alloy.heusler import build_heusler
-        >>> # Full Heusler: X=Mn, Y=Fe, Z=I
-        >>> full = build_heusler('Mn', 'Fe', 'I', 6.0, 'full')
-        >>> # Half-Heusler: X=Fe, Y=Mn, Z=I
-        >>> half = build_heusler('Fe', 'Mn', 'I', 6.0, 'half')
-        >>> # Inverse Heusler: X=Mn, Y=Cr, Z=Fe, I=I (quaternary)
-        >>> inverse = build_heusler('Mn', 'Cr', 'Fe', 6.0, 'inverse')
+        >>> build_heusler('Cu', 'Mn', 'Al', 5.95, 'full').formula
+        'Cu8Mn4Al4'
+        >>> build_heusler('Ni', 'Mn', 'Sb', 5.92, 'half').formula
+        'Ni4Mn4Sb4'
+        >>> build_heusler('Mn', 'Co', 'Al', 5.80, 'inverse').formula
+        'Mn8Co4Al4'
     """
-    heusler_type = heusler_type.lower()
-
-    if heusler_type == "full":
-        return _build_full_heusler(X, Y, Z, lattice_constant)
-    elif heusler_type == "half":
-        return _build_half_heusler(X, Y, Z, lattice_constant)
-    elif heusler_type == "inverse":
-        return _build_inverse_heusler(X, Y, Z, lattice_constant)
-    else:
-        raise ValueError(
-            f"Unknown Heusler type '{heusler_type}'. "
-            f"Must be 'full', 'half', or 'inverse'"
-        )
-
-
-def _build_full_heusler(X: str, Y: str, Z: str, a: float) -> Crystal:
-    """
-    Build full Heusler alloy (X₂YZ) with L2₁ structure.
-
-    Space group: Fm-3m (No. 225)
-    Conventional cell (FCC, 16 atoms total):
-    - X atoms at 4a: (0.0, 0.0, 0.0) + FCC = 4 atoms
-    - X atoms at 4d: (0.75, 0.75, 0.75) + FCC = 4 atoms (total 8 X)
-    - Y atoms at 4c: (0.25, 0.25, 0.25) + FCC = 4 atoms
-    - Z atoms at 4b: (0.5, 0.5, 0.5) + FCC = 4 atoms
-
-    Based on template: X=Mn, Y=Fe, Z=I
-    Note: In L2₁ structure, X₂ means X occupies both 4a and 4d sites.
-    """
-    species = []
-    positions = []
-    
-    # X atoms at 4a sites (0, 0, 0) - first set of X atoms
-    for x, y, z in [
-        (0.0, 0.0, 0.0),  # Base position
-        (0.0, 0.5, 0.5),  # + FCC translation
-        (0.5, 0.0, 0.5),  # + FCC translation
-        (0.5, 0.5, 0.0),  # + FCC translation
-    ]:
-        species.append(X)
-        positions.append([x, y, z])
-    
-    # X atoms at 4d sites (0.75, 0.75, 0.75) - second set of X atoms
-    for x, y, z in [
-        (0.75, 0.75, 0.75), (0.75, 0.25, 0.25),
-        (0.25, 0.75, 0.25), (0.25, 0.25, 0.75),
-    ]:
-        species.append(X)
-        positions.append([x, y, z])
-    
-    # Y atoms at 4c sites (1/4, 1/4, 1/4)
-    for x, y, z in [
-        (0.25, 0.25, 0.25), (0.25, 0.75, 0.75),
-        (0.75, 0.25, 0.75), (0.75, 0.75, 0.25),
-    ]:
-        species.append(Y)
-        positions.append([x, y, z])
-    
-    # Z atoms at 4b sites (1/2, 1/2, 1/2)
-    for x, y, z in [
-        (0.5, 0.5, 0.5),  # Base position
-        (0.5, 0.0, 0.0),  # + FCC translation
-        (0.0, 0.5, 0.0),  # + FCC translation
-        (0.0, 0.0, 0.5),  # + FCC translation
-    ]:
-        species.append(Z)
-        positions.append([x, y, z])
-    
-    lattice = Lattice.cubic(a)
-    return Crystal(species, positions, lattice)
-
-
-def _build_half_heusler(X: str, Y: str, Z: str, a: float) -> Crystal:
-    """
-    Build half-Heusler alloy (XYZ) with C1b structure.
-    
-    Space group: F-43m (No. 216)
-    Primitive cell (3 atoms total):
-    - X atoms at 4a: (0.0, 0.0, 0.0) - 1 atom in primitive
-    - Z atoms at 4b: (0.5, 0.5, 0.5) - 1 atom in primitive
-    - Y atoms at 4c: (0.25, 0.25, 0.25) - 1 atom in primitive
-    
-    Based on template: X=Fe, Y=Mn, Z=I
-    Note: Returns primitive cell with 3 atoms, not conventional cell.
-    """
-    species = []
-    positions = []
-    
-    # X atoms at 4a sites (0, 0, 0) - 1 atom in primitive cell
-    species.append(X)
-    positions.append([0.0, 0.0, 0.0])
-    
-    # Y atoms at 4c sites (1/4, 1/4, 1/4) - 1 atom in primitive cell
-    species.append(Y)
-    positions.append([0.25, 0.25, 0.25])
-    
-    # Z atoms at 4b sites (1/2, 1/2, 1/2) - 1 atom in primitive cell
-    species.append(Z)
-    positions.append([0.5, 0.5, 0.5])
-    
-    lattice = Lattice.cubic(a)
-    return Crystal(species, positions, lattice)
-
-
-def _build_inverse_heusler(X: str, Y: str, Z: str, a: float) -> Crystal:
-    """
-    Build inverse Heusler alloy (X₂YZ) with XA structure.
-    
-    Space group: I-4m2 (No. 119)
-    Body-centered tetragonal lattice (I lattice)
-    Conventional cell (16 atoms total):
-    - X atoms at 2a: (0.0, 0.0, 0.0) + I translations = 2 atoms
-    - X atoms at 2b: (0.0, 0.0, 0.5) + I translations = 2 atoms (total 4 X in primitive)
-    - Y atoms at 2c: (0.0, 0.5, 0.25) + I translations = 2 atoms
-    - Z atoms at 2d: (0.0, 0.5, 0.75) + I translations = 2 atoms
-    
-    To get conventional cell (16 atoms), create 2×2×2 supercell of primitive (8 atoms).
-    Based on template: X=Mn, Y=Cr, Z=Fe
-    """
-    species = []
-    positions = []
-    
-    # For inverse Heusler X₂YZ:
-    # X at 2a and 2b (same element, X₂)
-    # Y at 2c
-    # Z at 2d
-    
-    # Create conventional cell directly with 16 atoms
-    # X atoms at 2a sites (0, 0, 0) - 4 atoms in conventional cell
-    for x, y, z in [
-        (0.0, 0.0, 0.0), (0.5, 0.5, 0.5),  # Body centering
-        (0.5, 0.0, 0.0), (0.0, 0.5, 0.5),  # Additional translations
-    ]:
-        species.append(X)
-        positions.append([x, y, z])
-    
-    # X atoms at 2b sites (0, 0, 0.5) - 4 atoms in conventional cell
-    for x, y, z in [
-        (0.0, 0.0, 0.5), (0.5, 0.5, 0.0),  # Body centering
-        (0.5, 0.0, 0.5), (0.0, 0.5, 0.0),  # Additional translations
-    ]:
-        species.append(X)
-        positions.append([x, y, z])
-    
-    # Y atoms at 2c sites (0, 0.5, 0.25) - 4 atoms in conventional cell
-    for x, y, z in [
-        (0.0, 0.5, 0.25), (0.5, 0.0, 0.75),  # Body centering
-        (0.5, 0.5, 0.25), (0.0, 0.0, 0.75),  # Additional translations
-    ]:
-        species.append(Y)
-        positions.append([x, y, z])
-    
-    # Z atoms at 2d sites (0, 0.5, 0.75) - 4 atoms in conventional cell
-    for x, y, z in [
-        (0.0, 0.5, 0.75), (0.5, 0.0, 0.25),  # Body centering
-        (0.5, 0.5, 0.75), (0.0, 0.0, 0.25),  # Additional translations
-    ]:
-        species.append(Z)
-        positions.append([x, y, z])
-    
-    # Create body-centered tetragonal lattice
-    # For I-4m2, it's actually body-centered tetragonal
-    # But template shows a=b=c, so it's actually cubic in this case
-    lattice = Lattice.cubic(a)
-    
-    return Crystal(species, positions, lattice)
-
-
-def build_inverse_heusler_quaternary(
-    X1: str,
-    X2: str, 
-    Y: str,
-    Z: str,
-    lattice_constant: float,
-    **kwargs,
-) -> Crystal:
-    """
-    Build quaternary inverse Heusler alloy (X1X2YZ) with XA structure.
-    
-    Space group: I-4m2 (No. 119)
-    For cases like the template: X1=Mn, X2=I, Y=Cr, Z=Fe
-    
-    Args:
-        X1: First element at 2a sites (0, 0, 0)
-        X2: Second element at 2b sites (0, 0, 0.5)  
-        Y: Third element at 2c sites (0, 0.5, 0.25)
-        Z: Fourth element at 2d sites (0, 0.5, 0.75)
-        lattice_constant: Lattice constant in Angstroms
-        **kwargs: Additional parameters
-    
-    Returns:
-        Crystal: Quaternary inverse Heusler structure
-    """
-    species = []
-    positions = []
-    
-    # X1 atoms at 2a sites (0, 0, 0)
-    for x, y, z in [
-        (0.0, 0.0, 0.0),
-        (0.5, 0.5, 0.5),  # Body centering
-    ]:
-        species.append(X1)
-        positions.append([x, y, z])
-    
-    # X2 atoms at 2b sites (0, 0, 0.5)
-    for x, y, z in [
-        (0.0, 0.0, 0.5),
-        (0.5, 0.5, 0.0),  # Body centering
-    ]:
-        species.append(X2)
-        positions.append([x, y, z])
-    
-    # Y atoms at 2c sites (0, 0.5, 0.25)
-    for x, y, z in [
-        (0.0, 0.5, 0.25),
-        (0.5, 0.0, 0.75),  # Body centering
-    ]:
-        species.append(Y)
-        positions.append([x, y, z])
-    
-    # Z atoms at 2d sites (0, 0.5, 0.75)
-    for x, y, z in [
-        (0.0, 0.5, 0.75),
-        (0.5, 0.0, 0.25),  # Body centering
-    ]:
-        species.append(Z)
-        positions.append([x, y, z])
-    
-    lattice = Lattice.cubic(lattice_constant)
-    return Crystal(species, positions, lattice)
+    builders = {"full": build_full_heusler, "half": build_half_heusler, "inverse": build_inverse_heusler}
+    kind = heusler_type.lower() if isinstance(heusler_type, str) else heusler_type
+    if kind not in builders:
+        raise ValueError(f"Unknown Heusler type '{heusler_type}'. Must be 'full', 'half', or 'inverse'")
+    return builders[kind](X, Y, Z, lattice_constant)
 
 
 @tool
-def build_full_heusler(
-    X: str,
-    Y: str,
-    Z: str,
-    lattice_constant: float,
-    **kwargs,
-) -> Crystal:
+def build_full_heusler(X: str, Y: str, Z: str, lattice_constant: float) -> Crystal:
     """
-    Convenience function for building full Heusler alloy.
+    Full Heusler X2YZ: L2_1 (Cu2MnAl type), space group Fm-3m (No. 225).
 
     Args:
-        X: First element (at 4a sites)
-        Y: Second element (at 8c sites)
-        Z: Third element (at 4b sites)
-        lattice_constant: Lattice constant in Angstroms
-        **kwargs: Additional parameters
+        X: Element on 4c and 4d (1/4 and 3/4 along the cube diagonal), the "2" of X2YZ
+        Y: Element on 4a (0, 0, 0)
+        Z: Element on 4b (1/2, 1/2, 1/2)
+        lattice_constant: Cubic lattice constant in Angstroms
 
     Returns:
-        Crystal: Full Heusler structure (X₂YZ)
+        Crystal: Conventional cell with 16 atoms
 
     Examples:
         >>> from matsimpy.builders.alloy.heusler import build_full_heusler
-        >>> # Based on template: Mn₂FeI
-        >>> full = build_full_heusler('Mn', 'Fe', 'I', 6.0)
+        >>> build_full_heusler('Co', 'Mn', 'Si', 5.65).formula
+        'Co8Mn4Si4'
     """
-    return _build_full_heusler(X, Y, Z, lattice_constant)
+    return _heusler({"4c": X, "4d": X, "4a": Y, "4b": Z}, lattice_constant)
 
 
 @tool
-def build_half_heusler(
-    X: str,
-    Y: str,
-    Z: str,
-    lattice_constant: float,
-    **kwargs,
-) -> Crystal:
+def build_half_heusler(X: str, Y: str, Z: str, lattice_constant: float) -> Crystal:
     """
-    Convenience function for building half-Heusler alloy.
+    Half-Heusler XYZ: C1_b (MgAgAs type), space group F-43m (No. 216).
 
     Args:
-        X: First element (at 4a sites)
-        Y: Second element (at 4c sites)
-        Z: Third element (at 4b sites)
-        lattice_constant: Lattice constant in Angstroms
-        **kwargs: Additional parameters
+        X: Element on 4c (1/4, 1/4, 1/4), tetrahedrally coordinated by Y and Z
+        Y: Element on 4a (0, 0, 0)
+        Z: Element on 4b (1/2, 1/2, 1/2); Y and Z form a rocksalt lattice
+        lattice_constant: Cubic lattice constant in Angstroms
 
     Returns:
-        Crystal: Half-Heusler structure (XYZ)
+        Crystal: Conventional cell with 12 atoms (4d is empty)
 
     Examples:
         >>> from matsimpy.builders.alloy.heusler import build_half_heusler
-        >>> # Based on template: FeMnI
-        >>> half = build_half_heusler('Fe', 'Mn', 'I', 6.0)
+        >>> build_half_heusler('Ni', 'Mn', 'Sb', 5.92).formula
+        'Ni4Mn4Sb4'
     """
-    return _build_half_heusler(X, Y, Z, lattice_constant)
+    return _heusler({"4c": X, "4a": Y, "4b": Z}, lattice_constant)
 
 
 @tool
-def build_inverse_heusler(
-    X: str,
-    Y: str,
-    Z: str,
-    lattice_constant: float,
-    **kwargs,
-) -> Crystal:
+def build_inverse_heusler(X: str, Y: str, Z: str, lattice_constant: float) -> Crystal:
     """
-    Convenience function for building ternary inverse Heusler alloy.
+    Inverse Heusler X2YZ: XA (Hg2CuTi type), space group F-43m (No. 216).
+
+    Unlike the full Heusler, the two X sites are nearest neighbours.
 
     Args:
-        X: First element (at both 2a and 2b sites, X₂)
-        Y: Second element (at 2c sites)
-        Z: Third element (at 2d sites)
-        lattice_constant: Lattice constant in Angstroms
-        **kwargs: Additional parameters
+        X: Element on 4a (0, 0, 0) and 4c (1/4, 1/4, 1/4)
+        Y: Element on 4b (1/2, 1/2, 1/2)
+        Z: Element on 4d (3/4, 3/4, 3/4)
+        lattice_constant: Cubic lattice constant in Angstroms
 
     Returns:
-        Crystal: Inverse Heusler structure (X₂YZ)
+        Crystal: Conventional cell with 16 atoms
 
     Examples:
         >>> from matsimpy.builders.alloy.heusler import build_inverse_heusler
-        >>> # Based on common inverse Heuslers: Mn₂CoAl
-        >>> inverse = build_inverse_heusler('Mn', 'Co', 'Al', 6.0)
+        >>> build_inverse_heusler('Mn', 'Co', 'Al', 5.80).formula
+        'Mn8Co4Al4'
     """
-    return _build_inverse_heusler(X, Y, Z, lattice_constant)
+    return _heusler({"4a": X, "4c": X, "4b": Y, "4d": Z}, lattice_constant)
 
 
+@tool
+def build_quaternary_heusler(X: str, X2: str, Y: str, Z: str, lattice_constant: float) -> Crystal:
+    """
+    Quaternary Heusler XX'YZ: Y type (LiMgPdSn type), space group F-43m (No. 216).
 
-__all__ = [
-    "build_heusler",
-    "build_full_heusler",
-    "build_half_heusler",
-    "build_inverse_heusler",
-    "build_inverse_heusler_quaternary",
-]
+    Args:
+        X: Element on 4c (1/4, 1/4, 1/4)
+        X2: Element X' on 4d (3/4, 3/4, 3/4)
+        Y: Element on 4b (1/2, 1/2, 1/2)
+        Z: Element on 4a (0, 0, 0)
+        lattice_constant: Cubic lattice constant in Angstroms
+
+    Returns:
+        Crystal: Conventional cell with 16 atoms
+
+    Examples:
+        >>> from matsimpy.builders.alloy.heusler import build_quaternary_heusler
+        >>> build_quaternary_heusler('Co', 'Fe', 'Mn', 'Si', 5.66).formula
+        'Co4Fe4Mn4Si4'
+    """
+    return _heusler({"4c": X, "4d": X2, "4b": Y, "4a": Z}, lattice_constant)
+
+
+def build_inverse_heusler_quaternary(X1: str, X2: str, Y: str, Z: str, lattice_constant: float) -> Crystal:
+    """Deprecated name of :func:`build_quaternary_heusler`, with X1 = X."""
+    return build_quaternary_heusler(X1, X2, Y, Z, lattice_constant)

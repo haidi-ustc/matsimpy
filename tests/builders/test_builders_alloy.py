@@ -46,6 +46,15 @@ class TestRandomAlloy(unittest.TestCase):
         with self.assertRaises(ValueError):
             generate_random_alloy(self.base, [], 'Al')
     
+    def test_generate_random_alloy_concentration_edge_cases(self):
+        """0.1 + 0.2 + 0.7 sums to 1.0000000000000002 and was rejected; NaN gave a cryptic error."""
+        alloy = generate_random_alloy(self.base, ['Cu', 'Mg', 'Zn'], 'Al', [0.1, 0.2, 0.7], seed=1)
+        self.assertNotIn('Al', alloy.species)
+        with self.assertRaisesRegex(ValueError, "finite"):
+            generate_random_alloy(self.base, ['Cu'], 'Al', [float('nan')])
+        with self.assertRaises(TypeError):
+            generate_random_alloy(self.base, ['Cu'], 'Al', [0.5], ordered=True)
+
     def test_generate_random_alloy_no_sites(self):
         """Test with species not in structure."""
         with self.assertRaises(ValueError):
@@ -100,11 +109,37 @@ class TestIntermetallic(unittest.TestCase):
             generate_intermetallic(['Fe', 'Pt'], 'AB', 'DO3', 3.85)
 
     def test_generate_intermetallic_l10(self):
-        fept = generate_intermetallic(['Fe', 'Pt'], 'AB', 'L1_0', 3.85)
-        self.assertEqual(len(fept.species), 2)
-        self.assertIn('Fe', fept.species)
-        self.assertIn('Pt', fept.species)
+        """L1_0 is the face-centred tetragonal CuAu cell; the old 2-atom cell put Fe-Pt at 3.31 A."""
+        import numpy as np
+        import spglib
+
+        fept = generate_intermetallic(['Fe', 'Pt'], 'AB', 'L1_0', 3.85, c=3.71)
+        self.assertEqual(fept.formula, 'Fe2Pt2')
         self.assertAlmostEqual(fept.lattice.a, 3.85, places=5)
+        self.assertAlmostEqual(fept.lattice.c, 3.71, places=5)
+        cart = fept.cart_positions
+        fe, pt = cart[np.array(fept.species) == 'Fe'], cart[np.array(fept.species) == 'Pt']
+        nearest = np.linalg.norm(fe[:, None] - pt[None], axis=-1).min()
+        self.assertAlmostEqual(nearest, np.hypot(3.85 / 2, 3.71 / 2), places=6)
+        cell = (fept.lattice.matrix, fept.frac_positions, [26, 26, 78, 78])
+        self.assertEqual(spglib.get_symmetry_dataset(cell).number, 123)  # P4/mmm
+        default = generate_intermetallic(['Fe', 'Pt'], 'AB', 'L1_0', 3.85)
+        self.assertAlmostEqual(default.lattice.c, 0.974 * 3.85, places=6)
+
+    def test_generate_intermetallic_checks_composition(self):
+        """The composition argument used to be ignored."""
+        with self.assertRaisesRegex(ValueError, "composition 'A3B'"):
+            generate_intermetallic(['Ni', 'Al'], 'AB', 'L1_2', 3.56)
+        with self.assertRaisesRegex(ValueError, "composition 'AB'"):
+            generate_intermetallic(['Fe', 'Al'], 'A3B', 'B2', 2.9)
+
+    def test_generate_intermetallic_rejects_bad_parameters(self):
+        with self.assertRaisesRegex(ValueError, "lattice_constant"):
+            generate_intermetallic(['Fe', 'Al'], 'AB', 'B2', -2.9)
+        with self.assertRaisesRegex(ValueError, "only to L1_0"):
+            generate_intermetallic(['Fe', 'Al'], 'AB', 'B2', 2.9, c=3.0)
+        with self.assertRaises(TypeError):
+            generate_intermetallic(['Fe', 'Pt'], 'AB', 'L1_0', 3.85, ratio=0.9)
 
     def test_generate_intermetallic_wrong_element_count_raises(self):
         with self.assertRaises(ValueError):

@@ -18,7 +18,6 @@ def generate_random_alloy(
     site_species: str,
     concentrations: Optional[List[float]] = None,
     seed: Optional[int] = None,
-    **kwargs,
 ) -> Crystal:
     """
     Generate random alloy by substituting atoms.
@@ -30,7 +29,6 @@ def generate_random_alloy(
         concentrations: Fractions of site_species to replace with each substitution_species.
                        Can sum to <=1.0 (remainder stays as site_species)
         seed: Random seed for reproducibility
-        **kwargs: Additional parameters
 
     Returns:
         Crystal: Random alloy structure
@@ -59,10 +57,10 @@ def generate_random_alloy(
             "Number of concentrations must match number of substitution species"
         )
 
-    if any(conc < 0 for conc in concentrations):
-        raise ValueError("Concentrations must be non-negative")
+    if any(not np.isfinite(conc) or conc < 0 for conc in concentrations):
+        raise ValueError(f"Concentrations must be finite and non-negative, got {list(concentrations)}")
 
-    if sum(concentrations) > 1.0:
+    if sum(concentrations) > 1.0 + 1e-9:
         raise ValueError(f"Concentrations cannot exceed 1.0, got {sum(concentrations)}")
 
     # Find all sites with the target species
