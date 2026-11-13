@@ -1,110 +1,59 @@
-"""Tests for PDB IO module."""
-import unittest
-import tempfile
-from pathlib import Path
+"""Tests for matsimpy.io PDB reading and writing."""
 
-from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.io import read_PDB, write_PDB
+import os
 
-class TestPDBIo(unittest.TestCase):
-    """Tests for PDB format IO."""
-    
-    def setUp(self):
-        """Set up test structures."""
-        self.molecule = Molecule(['C', 'O', 'O'], [[0, 0, 0], [1.2, 0, 0], [-1.2, 0, 0]])
-        self.lattice = Lattice.cubic(10.0)
-        self.crystal = Crystal(['Si', 'O'], [[0, 0, 0], [0.5, 0.5, 0.5]], self.lattice)
-    
-    
-    def test_write_read_PDB_crystal(self):
-        """Test writing and reading PDB file for crystal."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pdb') as f:
-            temp_file = f.name
-        
-        try:
-            # Write
-            write_PDB(self.crystal, temp_file, title="Test Crystal")
-            
-            # Verify file exists
-            self.assertTrue(Path(temp_file).exists())
-            
-            # Verify file has CRYST1 record
-            with open(temp_file, 'r') as f:
-                content = f.read()
-                self.assertIn('CRYST1', content)
-                self.assertIn('ATOM', content)
-            
-            # Read as crystal (may fail if format issues, but write should work)
-            try:
-                crystal2 = read_PDB(temp_file, as_crystal=True)
-                self.assertIsInstance(crystal2, Crystal)
-                self.assertEqual(len(crystal2), 2)
-            except ValueError:
-                # If read fails, at least verify write worked
-                pass
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_read_PDB_file_not_found(self):
-        """Test reading non-existent PDB file."""
-        with self.assertRaises(FileNotFoundError):
-            read_PDB('nonexistent.pdb')
-    
-    def test_read_PDB_invalid_format(self):
-        """Test reading invalid PDB format."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pdb') as f:
-            f.write("Invalid\n")
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                read_PDB(temp_file)
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_write_PDB_invalid_input(self):
-        """Test writing invalid input."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pdb') as f:
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                write_PDB("not a structure", temp_file)
-        finally:
-            Path(temp_file).unlink()
-    
-    
-    
-    def test_PDB_roundtrip_molecule(self):
-        """Test complete roundtrip for PDB molecule.
-        
-        Note: Currently write_PDB and read_PDB may have format incompatibility
-        in element extraction. This test verifies write works correctly.
-        """
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pdb') as f:
-            temp_file = f.name
-        
-        try:
-            # Write
-            write_PDB(self.molecule, temp_file)
-            
-            # Verify file was written correctly
-            self.assertTrue(Path(temp_file).exists())
-            with open(temp_file, 'r') as f:
-                content = f.read()
-                self.assertIn('ATOM', content)
-                self.assertIn('END', content)
-            
-            # Try to read (may fail due to format issues)
-            try:
-                molecule2 = read_PDB(temp_file)
-                self.assertEqual(len(molecule2), len(self.molecule))
-            except ValueError:
-                # If read fails, at least verify write worked
-                pass
-        finally:
-            Path(temp_file).unlink()
+import numpy as np
+import pytest
 
-if __name__ == '__main__':
-    unittest.main()
+from matsimpy.core import Crystal, Molecule
+from matsimpy.io import read_PDB, read_POSCAR, write_PDB
 
+VASP_DIR = os.path.join(os.path.dirname(__file__), "..", "calculator", "fixtures", "vasp")
+
+
+@pytest.mark.parametrize("name", ["POSCAR_fcc", "POSCAR_Al12O18"])
+def test_crystal_round_trip_in_the_standard_orientation(tmp_path, name):
+    c = read_POSCAR(os.path.join(VASP_DIR, name))
+    write_PDB(c, tmp_path / "x.pdb")
+    assert "CRYST1" in (tmp_path / "x.pdb").read_text()
+    back = read_PDB(tmp_path / "x.pdb", as_crystal=True)
+    assert isinstance(back, Crystal)
+    assert back.species == c.species
+    d = back.frac_positions - c.frac_positions
+    assert np.abs(d - np.round(d)).max() < 1e-3
+
+
+def test_molecule_round_trip(tmp_path):
+    m = Molecule(["C", "O", "O"], [[0, 0, 0], [1.2, 0, 0], [-1.2, 0, 0]])
+    write_PDB(m, tmp_path / "m.pdb")
+    back = read_PDB(tmp_path / "m.pdb")
+    assert back.species == m.species
+    np.testing.assert_allclose(back.positions, m.positions, atol=1e-3)
+
+
+def test_element_from_atom_name_follows_the_column_convention(tmp_path):
+    (tmp_path / "n.pdb").write_text(
+        "ATOM      1 FE   UNK A   1       0.000   0.000   0.000  1.00  0.00\n"
+        "ATOM      2 CL   UNK A   1       2.000   0.000   0.000  1.00  0.00\n"
+        "ATOM      3  CA  UNK A   1       0.000   2.000   0.000  1.00  0.00\n"  # alpha carbon
+        "ATOM      4  C1  UNK A   1       0.000   0.000   2.000  1.00  0.00            \n"
+        "END\n"
+    )
+    assert read_PDB(tmp_path / "n.pdb").species == ("Fe", "Cl", "C", "C")
+
+
+def test_several_models_raise(tmp_path):
+    atom = "ATOM      1  C   UNK A   1       0.000   0.000   0.000  1.00  0.00           C\n"
+    (tmp_path / "m.pdb").write_text("MODEL 1\n" + atom + "ENDMDL\nMODEL 2\n" + atom + "ENDMDL\nEND\n")
+    with pytest.raises(ValueError, match="MODEL"):
+        read_PDB(tmp_path / "m.pdb")
+
+
+def test_errors(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        read_PDB(tmp_path / "missing.pdb")
+    (tmp_path / "bad.pdb").write_text("Invalid\n")
+    with pytest.raises(ValueError):
+        read_PDB(tmp_path / "bad.pdb")
+    with pytest.raises(ValueError):
+        write_PDB("not a structure", tmp_path / "x.pdb")

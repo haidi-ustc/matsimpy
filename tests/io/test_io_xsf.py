@@ -1,73 +1,38 @@
-"""Tests for XSF IO module."""
-import unittest
-import tempfile
+"""Tests for matsimpy.io XSF reading and writing."""
+
+import os
+
 import numpy as np
-from pathlib import Path
+import pytest
 
-
-from matsimpy.core import Crystal
 from matsimpy.builders.bulk import from_prototype
-from matsimpy.io import read_XSF, write_XSF
+from matsimpy.core import Crystal
+from matsimpy.io import read_POSCAR, read_XSF, to_ase, write_XSF
 
-class TestXSFIo(unittest.TestCase):
-    """Tests for XSF format IO."""
-    
-    def setUp(self):
-        """Set up test structures."""
-        self.crystal = from_prototype('diamond', 'Si', 5.43)
-    
-    
-    def test_read_XSF_file_not_found(self):
-        """Test reading non-existent XSF file."""
-        with self.assertRaises(FileNotFoundError):
-            read_XSF('nonexistent.xsf')
-    
-    def test_read_XSF_invalid_format(self):
-        """Test reading invalid XSF format."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xsf') as f:
-            f.write("Invalid\n")
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                read_XSF(temp_file)
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_write_XSF_invalid_input(self):
-        """Test writing invalid input."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xsf') as f:
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                write_XSF("not a crystal", temp_file)
-        finally:
-            Path(temp_file).unlink()
-    
-    
-    
-    def test_XSF_roundtrip(self):
-        """Test complete write→read roundtrip asserting Cartesian positions match."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xsf') as f:
-            temp_file = f.name
-
-        try:
-            write_XSF(self.crystal, temp_file)
-            crystal2 = read_XSF(temp_file)
-
-            self.assertIsInstance(crystal2, Crystal)
-            self.assertEqual(len(crystal2), len(self.crystal))
-            self.assertEqual(crystal2.species, self.crystal.species)
-            np.testing.assert_array_almost_equal(
-                crystal2.cart_positions,
-                self.crystal.cart_positions,
-                decimal=6,
-            )
-        finally:
-            Path(temp_file).unlink()
+VASP_DIR = os.path.join(os.path.dirname(__file__), "..", "calculator", "fixtures", "vasp")
 
 
-if __name__ == '__main__':
-    unittest.main()
+def test_round_trip(tmp_path):
+    crystal = from_prototype("diamond", "Si", 5.43)
+    write_XSF(crystal, tmp_path / "x.xsf")
+    back = read_XSF(tmp_path / "x.xsf")
+    assert isinstance(back, Crystal)
+    assert back.species == crystal.species
+    np.testing.assert_allclose(back.cart_positions, crystal.cart_positions, atol=1e-6)
 
+
+def test_reads_atomic_numbers_as_written_by_ase(tmp_path):
+    ase_io = pytest.importorskip("ase.io")
+    c = read_POSCAR(os.path.join(VASP_DIR, "POSCAR_MnO"))
+    ase_io.write(tmp_path / "x.xsf", to_ase(c))
+    assert read_XSF(tmp_path / "x.xsf").species == c.species
+
+
+def test_errors(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        read_XSF(tmp_path / "missing.xsf")
+    (tmp_path / "bad.xsf").write_text("Invalid\n")
+    with pytest.raises(ValueError):
+        read_XSF(tmp_path / "bad.xsf")
+    with pytest.raises(ValueError):
+        write_XSF("not a crystal", tmp_path / "x.xsf")

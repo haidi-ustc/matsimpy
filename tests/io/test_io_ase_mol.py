@@ -1,157 +1,90 @@
-"""Tests for ASE and MOL IO modules."""
-import unittest
-import tempfile
-from pathlib import Path
+"""Tests for the ASE extended-XYZ text format and the MDL MOL format."""
 
-from matsimpy.core import Crystal, Molecule, Lattice
-from matsimpy.io import read_ASE, write_ASE, read_MOL, write_MOL
+import os
 
-class TestASEIo(unittest.TestCase):
-    """Tests for ASE format IO."""
-    
-    def setUp(self):
-        """Set up test structures."""
-        self.species = ['Si', 'O', 'O']
-        self.positions = [[0, 0, 0], [2.5, 2.5, 2.5], [5, 5, 5]]
-        self.lattice = Lattice.cubic(10.0)
-        self.crystal = Crystal(self.species, self.positions, self.lattice, coords_are_cartesian=True)
-    
-    def test_write_read_ASE(self):
-        """Test writing and reading ASE file."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ase') as f:
-            temp_file = f.name
-        
-        try:
-            # Write
-            write_ASE(self.crystal, temp_file, title="Test Structure")
-            
-            # Verify file exists
-            self.assertTrue(Path(temp_file).exists())
-            
-            # Read
-            crystal2 = read_ASE(temp_file)
-            
-            # Verify structure
-            self.assertEqual(len(crystal2), 3)
-            self.assertEqual(crystal2.species, ('Si', 'O', 'O'))
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_read_ASE_file_not_found(self):
-        """Test reading non-existent ASE file."""
-        with self.assertRaises(FileNotFoundError):
-            read_ASE('nonexistent.ase')
-    
-    def test_read_ASE_no_lattice(self):
-        """Test reading ASE file without lattice info."""
-        ase_content = """3
-No lattice info
-Si 0.0 0.0 0.0
-O 2.5 2.5 2.5
-O 5.0 5.0 5.0
-"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ase') as f:
-            f.write(ase_content)
-            temp_file = f.name
-        
-        try:
-            result = read_ASE(temp_file)
-            self.assertIsInstance(result, Molecule)
-            self.assertEqual(len(result), 3)
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_write_ASE_invalid_input(self):
-        """Test writing invalid input."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ase') as f:
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                write_ASE("not a structure", temp_file)
-        finally:
-            Path(temp_file).unlink()
+import numpy as np
+import pytest
 
-class TestMOLIo(unittest.TestCase):
-    """Tests for MOL format IO."""
-    
-    def setUp(self):
-        """Set up test molecules."""
-        self.species = ['C', 'O', 'O']
-        self.positions = [[0, 0, 0], [1.2, 0, 0], [-1.2, 0, 0]]
-        self.molecule = Molecule(self.species, self.positions)
-    
-    def test_write_read_MOL(self):
-        """Test writing and reading MOL file."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.mol') as f:
-            temp_file = f.name
-        
-        try:
-            # Write
-            write_MOL(self.molecule, temp_file, title="CO2")
-            
-            # Verify file exists
-            self.assertTrue(Path(temp_file).exists())
-            
-            # Read
-            molecule2 = read_MOL(temp_file)
-            
-            # Verify structure
-            self.assertEqual(len(molecule2), 3)
-            self.assertEqual(molecule2.species, ('C', 'O', 'O'))
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_read_MOL_file_not_found(self):
-        """Test reading non-existent MOL file."""
-        with self.assertRaises(FileNotFoundError):
-            read_MOL('nonexistent.mol')
-    
-    def test_read_MOL_invalid_format(self):
-        """Test reading invalid MOL format."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.mol') as f:
-            f.write("Invalid\n")
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                read_MOL(temp_file)
-        finally:
-            Path(temp_file).unlink()
-    
-    def test_write_MOL_invalid_input(self):
-        """Test writing invalid input."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.mol') as f:
-            temp_file = f.name
-        
-        try:
-            with self.assertRaises(ValueError):
-                write_MOL("not a molecule", temp_file)
-        finally:
-            Path(temp_file).unlink()
-    
+from matsimpy.core import Molecule
+from matsimpy.io import read_ASE, read_MOL, read_POSCAR, write_ASE, write_MOL
 
-    def test_read_MOL_missing_element_raises(self):
-        """Atom line with no parseable element must raise ValueError, not silently default to C."""
-        # Atom line with empty element field and no space-separated fallback
-        mol_content = (
-            "bad element\n"
-            "  MatSimPy\n"
-            "\n"
-            "  1  0  0  0  0  0  0  0  0  0  1 V2000\n"
-            "    0.0000    0.0000    0.0000     0  0\n"
-            "M  END\n"
-        )
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.mol') as f:
-            f.write(mol_content)
-            temp_file = f.name
+VASP_DIR = os.path.join(os.path.dirname(__file__), "..", "calculator", "fixtures", "vasp")
 
-        try:
-            with self.assertRaises(ValueError):
-                read_MOL(temp_file)
-        finally:
-            Path(temp_file).unlink()
 
-if __name__ == '__main__':
-    unittest.main()
+@pytest.fixture
+def co2():
+    return Molecule(["C", "O", "O"], [[0, 0, 0], [1.2, 0, 0], [-1.2, 0, 0]])
 
+
+# --------------------------------------------------------------------------
+# ASE format
+# --------------------------------------------------------------------------
+
+
+def test_ase_round_trip_keeps_partial_pbc(tmp_path):
+    c = read_POSCAR(os.path.join(VASP_DIR, "POSCAR_MnO")).set_pbc([True, True, False])
+    write_ASE(c, tmp_path / "s.ase", title="MnO slab")
+    back = read_ASE(tmp_path / "s.ase")
+    assert back.species == c.species
+    assert back.pbc == (True, True, False)
+    np.testing.assert_allclose(back.lattice.matrix, c.lattice.matrix)
+
+
+def test_ase_molecule_with_a_blank_title(tmp_path, co2):
+    write_ASE(co2, tmp_path / "m.ase", title="")
+    assert read_ASE(tmp_path / "m.ase").species == co2.species
+
+
+def test_ase_file_without_a_lattice_is_a_molecule(tmp_path):
+    (tmp_path / "m.ase").write_text("3\nNo lattice info\nSi 0.0 0.0 0.0\nO 2.5 2.5 2.5\nO 5.0 5.0 5.0\n")
+    assert isinstance(read_ASE(tmp_path / "m.ase"), Molecule)
+
+
+def test_ase_errors(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        read_ASE(tmp_path / "missing.ase")
+    with pytest.raises(ValueError):
+        write_ASE("not a structure", tmp_path / "x.ase")
+
+
+# --------------------------------------------------------------------------
+# MOL format
+# --------------------------------------------------------------------------
+
+
+def test_mol_round_trip(tmp_path, co2):
+    write_MOL(co2, tmp_path / "x.mol", title="CO2")
+    back = read_MOL(tmp_path / "x.mol")
+    assert back.species == co2.species
+    np.testing.assert_allclose(back.positions, co2.positions, atol=1e-4)
+
+
+def test_mol_counts_line_is_read_by_column(tmp_path):
+    # "  2150": 2 atoms and 150 bonds run together in the fixed-width fields
+    lines = ["title", "", "", "  2150  0  0  0  0  0  0  0  0999 V2000",
+             "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+             "    1.5000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", "M  END"]
+    (tmp_path / "x.mol").write_text("\n".join(lines) + "\n")
+    assert len(read_MOL(tmp_path / "x.mol")) == 2
+
+
+def test_mol_atom_line_without_an_element_raises(tmp_path):
+    (tmp_path / "x.mol").write_text(
+        "bad element\n  MatSimPy\n\n  1  0  0  0  0  0  0  0  0  0  1 V2000\n"
+        "    0.0000    0.0000    0.0000     0  0\nM  END\n"
+    )
+    with pytest.raises(ValueError):
+        read_MOL(tmp_path / "x.mol")
+
+
+def test_mol_errors(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        read_MOL(tmp_path / "missing.mol")
+    (tmp_path / "bad.mol").write_text("Invalid\n")
+    with pytest.raises(ValueError):
+        read_MOL(tmp_path / "bad.mol")
+    with pytest.raises(ValueError):
+        write_MOL("not a molecule", tmp_path / "x.mol")
+    big = Molecule(["H"] * 1000, [[i * 1.0, 0, 0] for i in range(1000)])
+    with pytest.raises(ValueError, match="999"):
+        write_MOL(big, tmp_path / "big.mol")

@@ -46,7 +46,7 @@ def test_chgcar_native_arithmetic_and_serialization():
     # and survives JSON serialization
     cached = Chgcar(
         chgcar.structure,
-        {"total": total},
+        {"total": total, "diff": total},
         distance_matrix=np.full((1, *chgcar.dim), 99.0),
     )
     assert cached.get_integrated_diff(0, 1.0)[-1, 1] == 0

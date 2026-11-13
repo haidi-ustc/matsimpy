@@ -10,6 +10,7 @@ from matsimpy.io import (
     structures_to_latex_table,
     save_latex_table,
 )
+import pytest
 
 class TestCrystalsToLatexTable(unittest.TestCase):
     """Test crystals_to_latex_table function."""
@@ -205,6 +206,23 @@ class TestMhchemSupport(unittest.TestCase):
         latex = structures_to_latex_table(structures, separate_by_type=False, use_mhchem=True)
         
         self.assertIn(r'\ce{', latex)
+
+
+def test_unknown_columns_raise_and_no_placeholder_values_are_written():
+    crystals = [Crystal(["Si"], [[0, 0, 0]], Lattice(5.43))]
+    assert "N/A" not in crystals_to_latex_table(crystals)
+    with pytest.raises(ValueError, match="Unknown crystal table column"):
+        crystals_to_latex_table(crystals, include_columns=["ID", "Space Group"])
+
+
+def test_custom_formatter_can_add_a_column():
+    table = crystals_to_latex_table(
+        [Crystal(["Si"], [[0, 0, 0]], Lattice(5.43))],
+        include_columns=["ID", "Space Group"],
+        custom_formatters={"Space Group": lambda crystal, i: "Fd-3m"},
+    )
+    assert "Fd-3m" in table
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -65,8 +65,10 @@ def test_minimum_image_distances_match_brute_force_for_skew_lattice():
 
 
 def test_supplied_distance_matrix_is_used_and_validated(si_crystal):
-    distances = np.full((1, 2, 2, 2), 99.0)
-    volume = VolumetricData(si_crystal, {"total": np.ones((2, 2, 2))}, distance_matrix=distances)
+    data = {"total": np.ones((2, 2, 2)), "diff": np.ones((2, 2, 2))}
+    assert VolumetricData(si_crystal, data).get_integrated_diff(0, 1.0)[-1, 1] > 0
+    # every grid point 99 Å from the site: nothing inside the radius
+    volume = VolumetricData(si_crystal, data, distance_matrix=np.full((1, 2, 2, 2), 99.0))
     assert volume.get_integrated_diff(0, 1.0)[-1, 1] == 0
     assert volume._distances_from_site(0) is volume._distances_from_site(0)
 
@@ -81,7 +83,8 @@ def test_supplied_distance_matrix_is_used_and_validated(si_crystal):
 def test_cached_distance_matrix_json_roundtrip_preserves_sparse_cache():
     crystal = Crystal(["Si", "Ge"], [[0, 0, 0], [0.5, 0.5, 0.5]], Lattice.cubic(2))
     distances = {1: np.full((2, 2, 2), 99.0)}
-    volume = VolumetricData(crystal, {"total": np.ones((2, 2, 2))}, distance_matrix=distances)
+    data = {"total": np.ones((2, 2, 2)), "diff": np.ones((2, 2, 2))}
+    volume = VolumetricData(crystal, data, distance_matrix=distances)
 
     serialized = json.loads(json.dumps(volume.as_dict()))
     assert serialized["distance_matrix"] == {"1": distances[1].tolist()}
@@ -99,3 +102,8 @@ def test_cached_distance_matrix_json_keys_are_validated(invalid_key):
 
     with pytest.raises(ValueError, match="invalid site index"):
         MontyDecoder().process_decoded(json.loads(json.dumps(payload)))
+
+
+def test_integrated_diff_is_zero_without_spin_data(si_crystal):
+    volume = VolumetricData(si_crystal, {"total": np.ones((2, 2, 2))})
+    np.testing.assert_allclose(volume.get_integrated_diff(0, 1.0, nbins=2), [[0.5, 0.0], [1.0, 0.0]])
