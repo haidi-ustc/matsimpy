@@ -8,6 +8,7 @@ from matsimpy.transformation.composite import BatchProcessor
 from matsimpy.transformation import make_supercell
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
+import pytest
 
 class TestBatchProcessor(unittest.TestCase):
     """Test cases for BatchProcessor."""
@@ -100,6 +101,71 @@ class TestBatchProcessor(unittest.TestCase):
         self.assertIn("4", repr_str)  # n_workers
         self.assertIn("skip", repr_str)  # error_handling
     
+
+
+class _SideEffectThenFail:
+    def __init__(self, marker):
+        self.marker = marker
+
+    def __call__(self, structure):
+        text = self.marker.read_text() if self.marker.exists() else ""
+        self.marker.write_text(text + "x")
+        raise ValueError("boom")
+
+
+def test_process_stream_is_lazy_for_sequential_processors():
+    molecule = Molecule(["He"], [[0, 0, 0]])
+
+    def source():
+        yield molecule
+        raise AssertionError("stream was advanced beyond the first item")
+
+    stream = BatchProcessor([lambda s: s.copy()], n_workers=1, progress=False).process_stream(source())
+    assert next(stream).success
+    with pytest.raises(AssertionError, match="advanced beyond"):
+        next(stream)
+
+
+def test_parallel_raise_mode_does_not_retry_a_failed_transform(tmp_path):
+    marker = tmp_path / "calls.txt"
+    processor = BatchProcessor([_SideEffectThenFail(marker)], n_workers=2, progress=False, error_handling="raise")
+    with pytest.raises(RuntimeError, match="Transformation failed"):
+        processor.process([Molecule(["He"], [[0, 0, 0]])])
+    assert marker.read_text() == "x"
+
+
+class _PoolThatDiesAfterOneResult:
+    """Reads two items ahead like a real pool, returns one result, then fails."""
+
+    def __init__(self, *args):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def imap(self, func, items):
+        first, _ = next(items), next(items)
+        yield func(first)
+        raise OSError("worker died")
+
+
+def test_process_stream_fallback_resumes_after_the_last_result(monkeypatch):
+    import multiprocessing
+
+    class _Context:
+        Pool = _PoolThatDiesAfterOneResult
+
+    monkeypatch.setattr(multiprocessing, "get_context", lambda method: _Context())
+    molecules = (Molecule(["He"], [[float(i), 0, 0]]) for i in range(4))  # one-shot iterator
+    processor = BatchProcessor([lambda s: s], n_workers=2, progress=False)
+    with pytest.warns(UserWarning, match="Falling back"):
+        results = list(processor.process_stream(molecules))
+    assert [r.index for r in results] == [0, 1, 2, 3]
+    assert [r.structure.positions[0, 0] for r in results] == [0, 1, 2, 3]
+
 
 if __name__ == '__main__':
     unittest.main()

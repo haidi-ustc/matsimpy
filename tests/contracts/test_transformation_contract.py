@@ -8,6 +8,8 @@ import pytest
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.transformation.registry import TransformationRegistry, registry
 from matsimpy.transformation.spec import TransformationSpec
+import inspect
+import numpy as np
 
 
 @pytest.fixture
@@ -237,3 +239,24 @@ def test_split_atom_registry_rejects_more_species_than_positions():
             species=["H", "H", "H"],
             positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]],
         )
+
+
+@pytest.mark.parametrize("spec", all_specs, ids=spec_ids)
+def test_schema_properties_match_the_function_signature(spec):
+    params = list(inspect.signature(spec.callable).parameters)[1:]
+    assert set((spec.parameter_schema or {}).get("properties", {})) == set(params)
+
+
+@pytest.mark.parametrize("name, flag, value", [
+    ("merge_atoms", "preserves_composition", False),
+    ("split_atom", "preserves_composition", False),
+    ("standardize_cell", "preserves_site_properties", False),
+])
+def test_spec_flags_describe_the_function(name, flag, value):
+    assert getattr(registry.get(name), flag) is value
+
+
+def test_registry_accepts_numpy_arrays_for_array_parameters(water):
+    out = registry.apply("substitute", water, indices=np.array([1, 2]), new_species=["F", "F"])
+    assert out.species == ("O", "F", "F")
+    assert registry.apply("translate", water, vector=np.array([1.0, 0, 0])).positions[0, 0] == 1.0

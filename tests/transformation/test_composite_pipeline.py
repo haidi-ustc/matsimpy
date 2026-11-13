@@ -9,6 +9,10 @@ from matsimpy.transformation.composite import TransformationPipeline
 from matsimpy.transformation import translate, rotate, make_supercell
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
+import json
+import numpy as np
+import pytest
+from matsimpy.transformation import chain, apply_transformations
 
 class TestTransformationPipeline(unittest.TestCase):
     """Test cases for TransformationPipeline."""
@@ -119,6 +123,45 @@ class TestTransformationPipeline(unittest.TestCase):
         pipeline = TransformationPipeline()
         with self.assertRaises(TypeError):
             pipeline.add_step("not_a_function", arg1=1)
+
+
+def test_save_round_trips_numpy_kwargs(tmp_path):
+    pipeline = TransformationPipeline("array_kwargs")
+    pipeline.add_step(translate, vector=np.array([0.0, 0.0, 1.0]))
+    pipeline.save(tmp_path / "p.json")
+    kwargs = TransformationPipeline.load(tmp_path / "p.json").steps[0]["kwargs"]
+    assert isinstance(kwargs["vector"], np.ndarray)
+    np.testing.assert_allclose(kwargs["vector"], [0, 0, 1])
+
+
+def test_save_rejects_opaque_kwargs(tmp_path):
+    pipeline = TransformationPipeline("opaque")
+    pipeline.add_step(translate, vector=[0, 0, 0], opaque=object())
+    with pytest.raises(TypeError):
+        pipeline.save(tmp_path / "p.json")
+
+
+def test_save_rejects_functions_that_cannot_be_imported_by_name(tmp_path):
+    pipeline = TransformationPipeline("p")
+    pipeline.add_step(lambda s: s)
+    with pytest.raises(ValueError, match="cannot be saved"):
+        pipeline.save(tmp_path / "p.json")
+    assert not (tmp_path / "p.json").exists()
+
+
+def test_save_stores_the_function_name(tmp_path):
+    pipeline = TransformationPipeline("ok").add_step(translate, vector=[1.0, 0.0, 0.0])
+    pipeline.save(tmp_path / "ok.json")
+    assert json.loads((tmp_path / "ok.json").read_text())["steps"][0]["func_name"] == "translate"
+
+
+def test_chain_and_apply_transformations_apply_functions_in_order():
+    molecule = Molecule(["C", "O"], [[0, 0, 0], [1.2, 0, 0]])
+    shift = lambda s: translate(s, [1, 0, 0])  # noqa: E731
+    turn = lambda s: rotate(s, 90, [0, 0, 1], center=[0, 0, 0])  # noqa: E731
+    np.testing.assert_allclose(chain(molecule, [shift, turn]).positions, [[0, 1, 0], [0, 2.2, 0]], atol=1e-12)
+    np.testing.assert_allclose(apply_transformations(molecule, shift).positions[0], [1, 0, 0])
+
 
 if __name__ == '__main__':
     unittest.main()

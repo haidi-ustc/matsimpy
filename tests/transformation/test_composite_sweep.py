@@ -7,6 +7,9 @@ from matsimpy.transformation.composite import ParameterSweep
 from matsimpy.transformation import apply_strain, make_supercell, translate
 from matsimpy.builders.bulk import from_prototype
 from matsimpy.core import Molecule
+import numpy as np
+from matsimpy.core import Crystal, Lattice
+from matsimpy.transformation import move_atoms
 
 
 def identity_with_kwargs(structure, **kwargs):
@@ -265,6 +268,23 @@ class TestParameterSweep(unittest.TestCase):
             len(sweep)
         _structure, params = next(iter(sweep))
         self.assertEqual(params['identity']['label'], 'first')
+
+
+def test_custom_mode_applies_steps_in_declared_order():
+    sweep = ParameterSweep(
+        Crystal(["Cu"], [[0, 0, 0]], Lattice.cubic(3.0)),
+        {
+            "supercell": {"func": make_supercell, "params": {"scaling_matrix": [[2, 1, 1]]}},
+            "move": {"func": move_atoms, "params": {"indices": [1], "displacement": [[0.1, 0, 0]]}},
+        },
+        mode="custom",
+        # listed in the other order: atom 1 only exists after the supercell step
+        custom_combinations=[{"move": {"indices": 1, "displacement": [0.1, 0, 0]},
+                              "supercell": {"scaling_matrix": [2, 1, 1]}}],
+    )
+    ((structure, _),) = list(sweep)
+    np.testing.assert_allclose(structure.cart_positions[1], [3.1, 0, 0], atol=1e-12)
+
 
 if __name__ == '__main__':
     unittest.main()
