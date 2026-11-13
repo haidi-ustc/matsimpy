@@ -119,6 +119,17 @@ class ParameterSweep:
         ):
             raise ValueError("custom_combinations must contain at least one combination")
 
+        if self.mode == "zip":
+            lengths = {
+                f"{name}.{param}": len(values)
+                for name, config in self.transformations.items()
+                for param, values in config["params"].items()
+            }
+            if len(set(lengths.values())) > 1:
+                raise ValueError(
+                    f"mode='zip' needs parameter lists of equal length, got {lengths}"
+                )
+
         self._length = self._compute_length()
 
     def _validate_transformations(self) -> None:
@@ -199,12 +210,11 @@ class ParameterSweep:
                 config = self.transformations[name]
                 param_dict = config["params"]
 
-                # For each parameter, take value at idx (or last if shorter)
-                param_combo = {}
-                for param_name, param_values in param_dict.items():
-                    param_combo[param_name] = param_values[
-                        min(idx, len(param_values) - 1)
-                    ]
+                # All parameter lists have the same length (checked in __init__)
+                param_combo = {
+                    param_name: param_values[idx]
+                    for param_name, param_values in param_dict.items()
+                }
                 combo_dict[name] = param_combo
 
             yield combo_dict
@@ -289,8 +299,10 @@ class ParameterSweep:
             # Start with base structure
             structure = self.base_structure.copy()
 
-            # Apply transformations in order
-            for transform_name, param_combo in combo.items():
+            # Apply transformations in the order they were declared (a custom
+            # combination dict may list them in any order)
+            for transform_name in self.transformations:
+                param_combo = combo[transform_name]
                 config = self.transformations[transform_name]
                 func = config["func"]
 

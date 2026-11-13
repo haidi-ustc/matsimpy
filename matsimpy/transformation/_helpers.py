@@ -69,4 +69,19 @@ def rebuild_structure(
     )
 
 
-from ..utils.validation import validate_vector3, validate_positive_scalar, validate_integer_matrix3
+from ..utils.validation import validate_vector3, validate_positive_scalar, validate_integer_matrix3, validate_matrix3
+
+
+def validate_indices(structure: Structure, indices, *, name: str = "indices") -> list[int]:
+    """Return *indices* as a list of in-range, non-negative ints without duplicates.
+
+    Accepts an int, a sequence of ints or an AtomSelection; numpy integers are
+    allowed, bools and floats are rejected (``TypeError``), out-of-range
+    indices raise ``IndexError`` and duplicates raise ``ValueError``.
+    """
+    from ..core._validation import resolve_indices
+
+    normalized = structure._validate_atom_indices(resolve_indices(structure, indices))
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(f"{name} contains duplicates: {list(normalized)}")
+    return normalized

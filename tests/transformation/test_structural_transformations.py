@@ -28,11 +28,11 @@ class TestMolecularStructuralTransformations(unittest.TestCase):
         mol1 = Molecule(['C'], [[0, 0, 0]])
         mol2 = Molecule(['O'], [[1, 0, 0]])
 
-        merged = merge_molecules(mol1, mol2, 0, 0)
+        merged = merge_molecules(mol1, mol2, 0, 0, bond_length=1.2)
 
         self.assertIsInstance(merged, Molecule)
         self.assertEqual(merged.species, ('C', 'O'))
-        np.testing.assert_array_almost_equal(merged.positions[1], mol1.positions[0])
+        np.testing.assert_array_almost_equal(merged.positions[1], [1.2, 0, 0])
 
 
 if __name__ == '__main__':

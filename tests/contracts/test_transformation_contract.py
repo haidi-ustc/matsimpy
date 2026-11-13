@@ -46,6 +46,9 @@ _VALID_KWARG_OVERRIDES = {
     "transform_lattice": {"transformation_matrix": _IDENTITY_MATRIX},
     "make_supercell": {"scaling_matrix": [1, 1, 1]},
     "fragment_molecule": {"break_indices": [[0, 1]]},
+    "merge_molecules": {"bond_length": 1.5},
+    "swap_atoms": {"index1": 0, "index2": 1},
+    "merge_atoms": {"index1": 0, "index2": 1},
 }
 
 
@@ -80,6 +83,13 @@ def _minimal_kwargs(spec):
         else:
             kwargs[name] = _value_from_schema(prop)
     kwargs.update(_VALID_KWARG_OVERRIDES.get(spec.name, {}))
+    return kwargs
+
+
+def _for_structure(spec, kwargs, structure):
+    """Adjust kwargs that depend on the structure (species that must be present)."""
+    if spec.name == "substitute_all":
+        return {**kwargs, "old_species": structure.species[0]}
     return kwargs
 
 
@@ -121,7 +131,7 @@ class TestTransformationContract:
             structures.append(water)
 
         for structure in structures:
-            result = spec.callable(structure, **kwargs)
+            result = spec.callable(structure, **_for_structure(spec, kwargs, structure))
             assert id(result) != id(structure)
             assert isinstance(result, spec.output_type)
             if len(spec.applicable_types) > 1:
@@ -143,7 +153,7 @@ class TestTransformationContract:
             structures.append(water)
 
         for structure in structures:
-            result = registry.apply(spec.name, structure, **kwargs)
+            result = registry.apply(spec.name, structure, **_for_structure(spec, kwargs, structure))
             assert isinstance(result, spec.output_type)
             if len(spec.applicable_types) > 1:
                 assert isinstance(result, type(structure))
@@ -219,7 +229,7 @@ def test_split_atom_registry_accepts_species_list():
 def test_split_atom_registry_rejects_more_species_than_positions():
     molecule = Molecule(["O"], [[0.0, 0.0, 0.0]])
 
-    with pytest.raises(ValueError, match="species.*at most 2"):
+    with pytest.raises(ValueError, match="same length"):
         registry.apply(
             "split_atom",
             molecule,

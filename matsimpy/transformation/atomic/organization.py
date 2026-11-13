@@ -14,6 +14,7 @@ from .._helpers import (
     copy_site_properties,
     rebuild_structure,
     site_properties_for_indices,
+    validate_indices,
     validate_positive_scalar,
     validate_vector3,
 )
@@ -175,8 +176,10 @@ def perturb_positions(
 
     Args:
         structure: Crystal or Molecule structure
-        amplitude: Maximum perturbation amplitude (Angstroms)
-        indices: Atom indices to perturb (default: all atoms)
+        amplitude: Standard deviation (Angstroms) of the Gaussian noise added
+            to each Cartesian component (not a hard maximum)
+        indices: Atom indices to perturb (default: all atoms); duplicates are
+            rejected
         seed: Random seed for reproducibility
 
     Returns:
@@ -184,16 +187,17 @@ def perturb_positions(
 
     Examples:
         >>> from matsimpy.transformation.atomic import perturb_positions
-        >>> # Perturb all atoms by up to 0.1 Angstrom
+        >>> # Gaussian noise with a 0.1 Angstrom standard deviation
         >>> perturbed = perturb_positions(structure, 0.1)
         >>> # Perturb specific atoms
         >>> perturbed = perturb_positions(structure, 0.1, indices=[0, 1, 2])
     """
     amplitude = validate_positive_scalar("amplitude", amplitude)
 
-    indices = resolve_indices(structure, indices)  # AtomSelection accepted
     if indices is None:
         indices = list(range(len(structure.species)))
+    else:
+        indices = validate_indices(structure, indices)  # AtomSelection accepted
 
     # Generate random perturbations (Cartesian) without mutating NumPy global RNG state.
     rng = np.random.default_rng(seed)

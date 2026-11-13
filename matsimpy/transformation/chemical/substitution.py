@@ -52,25 +52,16 @@ def substitute(
         >>> sel = AtomSelection(crystal).by_species('Si')
         >>> new_crystal = substitute(crystal, sel, 'Ge')
         >>> # Using dict mapping
-        >>> new_crystal = substitute(crystal, [0, 1, 2], {'Si': 'Ge', 'O': 'S'})
+        >>> new_crystal = substitute(crystal, [0, 1], {'Si': 'Ge'})
     """
     _validate_structure(structure)
 
-    # Handle AtomSelection object
-    from ...analysis.selection import AtomSelection
+    from .._helpers import validate_indices
 
-    if isinstance(indices, AtomSelection):
-        if indices.structure is not structure:
-            raise ValueError(
-                "AtomSelection must be created from the structure being modified"
-            )
-        indices = indices.indices
+    single = isinstance(indices, (int, np.integer)) and not isinstance(indices, (bool, np.bool_))
+    indices = validate_indices(structure, indices)  # AtomSelection, numpy ints; no bools/duplicates
 
-    # Handle dict-based species mapping
     if isinstance(new_species, dict):
-        # Convert dict to list based on current species at selected indices
-        if isinstance(indices, int):
-            indices = [indices]
         new_species_list = []
         for idx in indices:
             old_spec = structure.species[idx]
@@ -80,20 +71,10 @@ def substitute(
                 )
             new_species_list.append(new_species[old_spec])
         new_species = new_species_list
-
-    # Normalize inputs
-    if isinstance(indices, int):
-        indices = [indices]
-        if isinstance(new_species, str):
-            new_species = [new_species]
-        elif isinstance(new_species, list):
-            new_species = [new_species[0]]  # Take first if list
     elif isinstance(new_species, str):
-        # Multiple indices, single species
         new_species = [new_species] * len(indices)
-    elif isinstance(new_species, list):
-        # Both are lists
-        pass
+    elif isinstance(new_species, (list, tuple)):
+        new_species = list(new_species)
     else:
         raise TypeError(
             f"new_species must be str, List[str], or Dict[str, str], got {type(new_species)}"
@@ -103,14 +84,8 @@ def substitute(
         raise ValueError(
             f"Number of indices ({len(indices)}) must match "
             f"number of species ({len(new_species)})"
+            + (" (a single index takes a single species)" if single else "")
         )
-
-    # Validate indices
-    for idx in indices:
-        if not (0 <= idx < len(structure)):
-            raise IndexError(
-                f"Atom index {idx} is out of range [0, {len(structure)-1}]"
-            )
 
     # Perform substitutions
     species_list = list(structure.species)
@@ -167,8 +142,9 @@ def substitute_all(
     indices = [i for i, spec in enumerate(structure.species) if spec == old_species]
 
     if not indices:
-        # No substitution needed, return copy
-        return structure.copy()
+        raise ValueError(
+            f"Species {old_species!r} not found in structure ({structure.formula})"
+        )
 
     # Substitute all at once
     return substitute(structure, indices, [new_species] * len(indices))

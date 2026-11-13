@@ -12,6 +12,8 @@ from .._helpers import (
     copy_site_properties,
     rebuild_structure,
     site_properties_for_indices,
+    validate_indices,
+    validate_vector3,
 )
 
 
@@ -30,7 +32,7 @@ def move_atoms(
 
     Args:
         structure: Crystal or Molecule structure
-        indices: Atom index or list of indices to move
+        indices: Atom index or list of distinct indices to move
         displacement: Displacement vector (3D)
         cartesian: If True, displacement is in Cartesian coordinates
 
@@ -48,18 +50,15 @@ def move_atoms(
         >>> mol = Molecule(['C', 'O'], [[0,0,0], [1.2,0,0]])
         >>> moved = move_atoms(mol, [0, 1], [0.1, 0.1, 0])
     """
-    # Ensure indices is a list
-    if isinstance(indices, int):
-        indices = [indices]
-
-    displacement = np.array(displacement, dtype=np.float64)
+    indices = validate_indices(structure, indices)  # rejects bools, floats, duplicates
+    displacement = validate_vector3("displacement", displacement)
+    if not isinstance(cartesian, (bool, np.bool_)):
+        raise TypeError("cartesian must be a bool")
 
     if isinstance(structure, Crystal):
         if cartesian:
             # Convert displacement to fractional
-            frac_displacement = np.dot(
-                displacement, np.linalg.inv(structure.lattice.matrix)
-            )
+            frac_displacement = displacement @ structure.lattice.inv_matrix
         else:
             frac_displacement = displacement
 
@@ -114,6 +113,8 @@ def swap_atoms(
         >>> from matsimpy.transformation.atomic import swap_atoms
         >>> swapped = swap_atoms(structure, 0, 1)
     """
+    index1, index2 = validate_indices(structure, [index1, index2], name="index1/index2")
+
     # Swap species
     species_list = list(structure.species)
     species_list[index1], species_list[index2] = (
@@ -166,7 +167,9 @@ def merge_atoms(
         index1: First atom index
         index2: Second atom index
         species: Species for merged atom (default: species of first atom)
-        position: Position for merged atom (default: midpoint)
+        position: Position for merged atom, fractional for a Crystal and
+            Cartesian for a Molecule (default: midpoint; for a Crystal the
+            midpoint of the nearest periodic images)
 
     Returns:
         Structure with merged atoms
@@ -179,6 +182,8 @@ def merge_atoms(
         >>> merged = merge_atoms(structure, 0, 1, species='C',
         ...                      position=[0.25, 0.25, 0.25])
     """
+    index1, index2 = validate_indices(structure, [index1, index2], name="index1/index2")
+
     # Determine merged species
     if species is None:
         species = structure.species[index1]
@@ -199,9 +204,14 @@ def merge_atoms(
 
     # Determine merged position in the same coordinate frame
     if position is None:
-        merged_position = (src_positions[index1] + src_positions[index2]) / 2.0
+        delta = src_positions[index2] - src_positions[index1]
+        if isinstance(structure, Crystal):
+            # midpoint of the minimum-image pair along periodic axes
+            periodic = np.array(structure.pbc, dtype=bool)
+            delta[periodic] -= np.round(delta[periodic])
+        merged_position = src_positions[index1] + delta / 2.0
     else:
-        merged_position = np.array(position, dtype=np.float64)
+        merged_position = validate_vector3("position", position)
 
     new_positions = [src_positions[i].tolist() for i in kept_indices]
 
@@ -257,8 +267,15 @@ def split_atom(
         >>> split = split_atom(structure, 0, ['H', 'H'],
         ...                    [[0, 0, 0], [0.1, 0, 0]])
     """
+    (index,) = validate_indices(structure, [index], name="index")
+    if isinstance(species, str):
+        raise TypeError("species must be a list of species symbols, one per new atom")
+    species = list(species)
+    positions = [validate_vector3(f"positions[{i}]", p).tolist() for i, p in enumerate(positions)]
     if len(species) != len(positions):
         raise ValueError("species and positions must have the same length")
+    if not species:
+        raise ValueError("split_atom needs at least one new atom")
 
     if isinstance(structure, Crystal):
         src_pos = structure.frac_positions

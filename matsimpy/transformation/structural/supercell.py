@@ -11,6 +11,7 @@ from typing import List, Union
 import numpy as np
 from ...core import Crystal, Lattice
 from .._helpers import validate_integer_matrix3
+from ...utils.validation import _reject_bools
 
 
 def _translation_representatives(
@@ -61,6 +62,10 @@ def make_supercell(
     - Simple: [a, b, c] - repeats a times in a, b times in b, c times in c
     - Matrix: [[a1, a2, a3], [b1, b2, b3], [c1, c2, c3]] - general transformation
 
+    Fractional coordinates are wrapped into [0, 1) along periodic axes only;
+    non-periodic axes (e.g. the vacuum axis of a slab) keep their coordinates
+    and cannot be repeated.
+
     Args:
         crystal: Unit cell to expand
         scaling_matrix: Scaling matrix for supercell generation
@@ -85,6 +90,7 @@ def make_supercell(
     if not isinstance(crystal, Crystal):
         raise TypeError("make_supercell requires a Crystal object")
 
+    _reject_bools("scaling_matrix", scaling_matrix)
     scaling_matrix = np.array(scaling_matrix, dtype=np.float64)
 
     # Handle simple [a, b, c] format
@@ -97,6 +103,22 @@ def make_supercell(
     scaling_matrix = validate_integer_matrix3(
         "scaling_matrix", scaling_matrix, positive_determinant=True
     )
+
+    # A non-periodic axis cannot be repeated or mixed with other axes: its
+    # fractional coordinate is not defined modulo 1 (e.g. a slab's vacuum axis).
+    periodic = np.array(crystal.pbc, dtype=bool)
+    for axis in np.flatnonzero(~periodic):
+        unit = np.eye(3, dtype=np.int64)[axis]
+        if not (np.array_equal(scaling_matrix[axis], unit) and np.array_equal(scaling_matrix[:, axis], unit)):
+            raise ValueError(
+                f"Cannot build a supercell along non-periodic axis {'abc'[axis]} "
+                f"(pbc={tuple(crystal.pbc)}); its row and column of scaling_matrix must be the identity"
+            )
+
+    def _wrap(frac: np.ndarray) -> np.ndarray:
+        frac = np.array(frac, dtype=np.float64)
+        frac[periodic] %= 1.0
+        return frac
 
     # Check if matrix is diagonal for simpler processing
     is_diagonal = np.allclose(scaling_matrix, np.diag(np.diag(scaling_matrix)))
@@ -131,8 +153,7 @@ def make_supercell(
                     ):
                         new_pos = pos + offset
                         # Scale by supercell dimensions and wrap to [0, 1)
-                        new_pos = new_pos / diag
-                        new_pos = new_pos % 1.0
+                        new_pos = _wrap(new_pos / diag)
 
                         new_species.append(spec)
                         new_positions.append(new_pos.tolist())
@@ -154,8 +175,7 @@ def make_supercell(
                 # Row-vector convention: r_cart = f_old @ L_old.
                 # With L_new = S @ L_old, the new fractional coordinate is
                 # (f_old + integer_translation) @ inv(S).
-                new_pos = (pos + translation) @ inv_scaling
-                new_pos = new_pos % 1.0
+                new_pos = _wrap((pos + translation) @ inv_scaling)
 
                 new_species.append(spec)
                 new_positions.append(new_pos.tolist())

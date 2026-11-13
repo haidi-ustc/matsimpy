@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import copy
 import numpy as np
 from ...core import Molecule
-from .._helpers import copy_site_properties
+from .._helpers import copy_site_properties, validate_indices, validate_positive_scalar
 
 
 def fragment_molecule(
@@ -42,7 +42,12 @@ def fragment_molecule(
         raise ValueError("cutoff must be positive")
 
     broken = set()
-    for atom1, atom2 in break_indices:
+    for pair in break_indices:
+        if len(pair) != 2:
+            raise ValueError(f"Each break_indices entry must be a pair of atom indices, got {pair!r}")
+        atom1, atom2 = pair
+        if any(isinstance(a, (bool, np.bool_)) or not isinstance(a, Integral) for a in (atom1, atom2)):
+            raise TypeError(f"break_indices must contain integer atom indices, got {pair!r}")
         if not (0 <= atom1 < n_atoms and 0 <= atom2 < n_atoms):
             raise IndexError("break_indices contain atom index outside molecule")
         if atom1 == atom2:
@@ -50,6 +55,16 @@ def fragment_molecule(
         broken.add(tuple(sorted((atom1, atom2))))
 
     neighbors = molecule.get_neighbor_list(cutoff=cutoff)
+    bonded = {
+        tuple(sorted((atom, neighbor)))
+        for atom, atom_neighbors in neighbors.items()
+        for neighbor, _distance in atom_neighbors
+    }
+    not_bonded = sorted(broken - bonded)
+    if not_bonded:
+        raise ValueError(
+            f"Cannot break {not_bonded}: these atoms are not bonded within cutoff={cutoff} Å"
+        )
     graph: Dict[int, set[int]] = {i: set() for i in range(n_atoms)}
     for atom, atom_neighbors in neighbors.items():
         for neighbor, _distance in atom_neighbors:
@@ -128,7 +143,7 @@ def align_molecules(
         ("indices2", indices2, molecule2),
     ):
         for index in indices:
-            if not isinstance(index, Integral):
+            if isinstance(index, (bool, np.bool_)) or not isinstance(index, Integral):
                 raise TypeError(f"{name} must contain integer atom indices")
             if index < 0 or index >= len(molecule):
                 raise IndexError(f"{name} contains atom index outside molecule")
@@ -156,8 +171,9 @@ def align_molecules(
         Vt[-1, :] *= -1
         R = np.dot(Vt.T, U.T)
 
-    # Apply transformation to molecule2
-    aligned_coords = np.dot(molecule2.positions - center2, R) + center1
+    # R maps column vectors of molecule2 onto molecule1 (R p2 ~ p1); positions
+    # are rows, so apply R.T on the right.
+    aligned_coords = (molecule2.positions - center2) @ R.T + center1
 
     return Molecule(
         list(molecule2.species),
@@ -268,32 +284,63 @@ def merge_molecules(
     bond_atom1: int,
     bond_atom2: int,
     remove_atoms: Optional[List[int]] = None,
+    bond_length: Optional[float] = None,
 ) -> Molecule:
     """
-    Merge two molecules by forming a bond.
+    Merge two molecules by joining ``bond_atom2`` of molecule2 to ``bond_atom1``.
+
+    molecule2 is translated rigidly (not rotated).
+
+    * ``bond_length=None`` (default): ``bond_atom2`` is placed exactly on
+      ``bond_atom1``.  Use this to graft a fragment onto an attachment site and
+      remove one of the two coincident atoms with ``remove_atoms``.
+    * ``bond_length=d``: ``bond_atom2`` is placed ``d`` Å from ``bond_atom1``,
+      pointing away from the centroid of molecule1 (along +x when molecule1
+      is a single atom or the bond atom is at its centroid).
 
     Args:
         molecule1: First molecule
         molecule2: Second molecule
         bond_atom1: Atom in molecule1 to bond
         bond_atom2: Atom in molecule2 to bond
-        remove_atoms: Atoms to remove after merging (e.g., hydrogens)
+        remove_atoms: Atoms to remove after merging, as indices into the merged
+            molecule (molecule1's atoms first, then molecule2's)
+        bond_length: Distance between the bonded atoms in Angstroms, or None to
+            superpose them
 
     Returns:
         Merged molecule
 
+    Raises:
+        ValueError: If two atoms of the result are closer than 0.5 Å (for
+            example the superposed bond atoms when neither is removed).
+
     Examples:
+        >>> from matsimpy.core import Molecule
         >>> from matsimpy.transformation.structural import merge_molecules
-        >>> # Merge at specific atoms
-        >>> merged = merge_molecules(mol1, mol2, 5, 0)
+        >>> c = Molecule(['C'], [[0, 0, 0]])
+        >>> o = Molecule(['O'], [[5, 5, 5]])
+        >>> merge_molecules(c, o, 0, 0, bond_length=1.2).positions[1]
+        array([1.2, 0. , 0. ])
     """
-    # Align molecule2 so bond_atom2 is near bond_atom1
+    if not isinstance(molecule1, Molecule) or not isinstance(molecule2, Molecule):
+        raise TypeError("merge_molecules requires two Molecule objects")
+    bond_atom1 = validate_indices(molecule1, bond_atom1, name="bond_atom1")[0]
+    bond_atom2 = validate_indices(molecule2, bond_atom2, name="bond_atom2")[0]
+
     bond_pos1 = molecule1.positions[bond_atom1]
     bond_pos2 = molecule2.positions[bond_atom2]
+    target = bond_pos1
+    if bond_length is not None:
+        bond_length = validate_positive_scalar("bond_length", bond_length)
+        if bond_length == 0:
+            raise ValueError("bond_length must be positive")
+        direction = bond_pos1 - molecule1.positions.mean(axis=0)
+        norm = np.linalg.norm(direction)
+        direction = direction / norm if norm > 1e-8 else np.array([1.0, 0.0, 0.0])
+        target = bond_pos1 + bond_length * direction
 
-    # Translate molecule2
-    offset = bond_pos1 - bond_pos2
-    new_positions2 = molecule2.positions + offset
+    new_positions2 = molecule2.positions + (target - bond_pos2)
 
     # Combine
     all_species = list(molecule1.species) + list(molecule2.species)
@@ -315,14 +362,34 @@ def merge_molecules(
 
     # Remove specified atoms
     if remove_atoms is not None:
-        mask = np.ones(len(all_species), dtype=bool)
-        mask[remove_atoms] = False
+        n_total = len(all_species)
+        remove = []
+        for index in ([remove_atoms] if isinstance(remove_atoms, Integral) else list(remove_atoms)):
+            if isinstance(index, (bool, np.bool_)) or not isinstance(index, Integral):
+                raise TypeError("remove_atoms must contain integer atom indices")
+            if not 0 <= index < n_total:
+                raise IndexError(f"remove_atoms index {index} out of range [0, {n_total - 1}]")
+            remove.append(int(index))
+        mask = np.ones(n_total, dtype=bool)
+        mask[remove] = False
         all_species = [s for i, s in enumerate(all_species) if mask[i]]
         all_positions = all_positions[mask]
         if all_site_properties is not None:
             all_site_properties = [
                 prop for i, prop in enumerate(all_site_properties) if mask[i]
             ]
+
+    if len(all_positions) > 1:
+        from scipy.spatial.distance import pdist, squareform
+
+        dist = squareform(pdist(all_positions))
+        np.fill_diagonal(dist, np.inf)
+        if dist.min() < 0.5:
+            i, j = np.unravel_index(np.argmin(dist), dist.shape)
+            raise ValueError(
+                f"Merged atoms {min(i, j)} and {max(i, j)} are {dist.min():.3f} Å apart; "
+                "remove one of them with remove_atoms or give a bond_length"
+            )
 
     return Molecule(
         all_species,

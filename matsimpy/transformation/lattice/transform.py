@@ -7,6 +7,7 @@ import copy
 from typing import Dict, List, Optional, Union
 import numpy as np
 from ...core import Crystal, Lattice
+from ...utils.validation import validate_matrix3
 
 
 @tool
@@ -16,47 +17,54 @@ def rotate_lattice(
     rotate_atoms: bool = True,
 ) -> Crystal:
     """
-    Rotate lattice (and optionally atoms).
+    Rigidly rotate the lattice (and by default the atoms) in Cartesian space.
+
+    Cartesian vectors map as ``x' = R x``, so the lattice rows become ``A @ R.T``.
 
     Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure
-        rotation_matrix: 3x3 rotation matrix
-        rotate_atoms: If True, also rotate atomic positions
+        rotation_matrix: 3x3 proper rotation matrix R (orthogonal, det +1)
+        rotate_atoms: If True (default), the atoms rotate with the lattice
+            (fractional coordinates unchanged).  If False, the atoms keep their
+            Cartesian positions and only the cell is rotated.
 
     Returns:
         New rotated crystal structure
 
+    Raises:
+        ValueError: If R is not a finite 3x3 proper rotation matrix.
+
     Examples:
         >>> from matsimpy.transformation.lattice import rotate_lattice
+        >>> from matsimpy.builders.bulk import from_prototype
         >>> import numpy as np
-        >>> # 45 degree rotation around z-axis
-        >>> angle = np.pi / 4
-        >>> R = [[np.cos(angle), -np.sin(angle), 0],
-        ...      [np.sin(angle), np.cos(angle), 0],
-        ...      [0, 0, 1]]
-        >>> rotated = rotate_lattice(crystal, R)
+        >>> crystal = from_prototype('sc', 'Po', 3.0)
+        >>> # 90 degree rotation around z: a -> +y
+        >>> R = [[0, -1, 0], [1, 0, 0], [0, 0, 1]]
+        >>> rotate_lattice(crystal, R).lattice.matrix[0].round(6) + 0.0
+        array([0., 3., 0.])
     """
-    rotation_matrix = np.array(rotation_matrix, dtype=np.float64)
-
-    # Rotate lattice vectors
-    new_lattice_vectors = np.dot(rotation_matrix, crystal.lattice.matrix)
-    new_lattice = Lattice(new_lattice_vectors)
-
-    if rotate_atoms:
-        # Rotate Cartesian positions
-        new_cart_positions = np.dot(crystal.cart_positions, rotation_matrix.T)
-        # Convert back to fractional
-        new_positions = np.dot(
-            new_cart_positions, np.linalg.inv(new_lattice_vectors)
+    if not isinstance(rotate_atoms, (bool, np.bool_)):
+        raise TypeError("rotate_atoms must be a bool")
+    rotation = validate_matrix3("rotation_matrix", rotation_matrix)
+    if not np.allclose(rotation @ rotation.T, np.eye(3), atol=1e-6):
+        raise ValueError("rotation_matrix must be orthogonal (R @ R.T = I)")
+    if np.linalg.det(rotation) <= 0:
+        raise ValueError(
+            "rotation_matrix must be a proper rotation (det +1); "
+            "a reflection would make the cell left-handed"
         )
-    else:
-        # Keep fractional positions unchanged
+
+    new_lattice = Lattice(crystal.lattice.matrix @ rotation.T)
+    if rotate_atoms:
         new_positions = crystal.frac_positions
+    else:
+        new_positions = crystal.cart_positions @ new_lattice.inv_matrix
 
     return Crystal(
-        list(crystal.species), new_positions.tolist(),
+        list(crystal.species), new_positions,
         lattice=new_lattice,
         coords_are_cartesian=False,
         pbc=list(crystal.pbc),
@@ -68,26 +76,34 @@ def rotate_lattice(
 def transform_lattice(
     crystal: Crystal,
     transformation_matrix: Union[List[List[float]], np.ndarray],
-    transform_positions: bool = False,
+    transform_positions: bool = True,
 ) -> Crystal:
     """
-    Apply general linear transformation to lattice.
+    Apply a general linear map (deformation gradient) to the lattice.
+
+    Same as :func:`apply_deformation`: Cartesian vectors map as ``x' = T x`` and
+    the lattice rows become ``A @ T.T``.  This is *not* a change of basis; to
+    build a supercell or a different cell of the same crystal use
+    ``make_supercell`` or ``standardize_cell(..., to_primitive=True)``.
 
     Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure
-        transformation_matrix: 3x3 transformation matrix
-        transform_positions: If True, transform atomic positions by same matrix
+        transformation_matrix: 3x3 matrix T with positive determinant
+        transform_positions: If True (default), the atoms move with the
+            lattice; if False they keep their Cartesian positions.
 
     Returns:
         New transformed crystal structure
 
     Examples:
         >>> from matsimpy.transformation.lattice import transform_lattice
-        >>> # Convert to primitive cell (for FCC to simple cubic, etc.)
-        >>> T = [[0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5]]
-        >>> primitive = transform_lattice(crystal, T)
+        >>> from matsimpy.builders.bulk import from_prototype
+        >>> crystal = from_prototype('sc', 'Po', 3.0)
+        >>> # stretch z by 10%
+        >>> round(float(transform_lattice(crystal, [[1, 0, 0], [0, 1, 0], [0, 0, 1.1]]).lattice.c), 3)
+        3.3
     """
     from .strain import apply_deformation
 
@@ -223,14 +239,24 @@ def standardize_cell(
     """
     Standardize crystal cell using spglib conventions.
 
+    ``to_primitive=False`` returns spglib's standardized conventional cell;
+    ``to_primitive=True`` returns the primitive cell found by spglib.
+
     Always returns a new crystal structure.
 
     Args:
-        crystal: Crystal structure
+        crystal: Fully periodic crystal structure
         to_primitive: If True, convert to primitive cell
 
     Returns:
         New standardized crystal structure
+
+    Raises:
+        ImportError: If spglib is not installed.
+        ValueError: If the crystal is not periodic along all three axes, if
+            spglib cannot standardize it, or if the crystal has site
+            properties and the new cell is not just a reordering of its atoms
+            (properties cannot be carried over reliably).
 
     Examples:
         >>> from matsimpy.transformation.lattice import standardize_cell
@@ -239,55 +265,46 @@ def standardize_cell(
     """
     try:
         import spglib
+    except ImportError as e:
+        raise ImportError(
+            "spglib is required for standardize_cell. "
+            "Install with: pip install spglib or pip install MatSimPy[analysis]"
+        ) from e
 
-        species_to_number, number_to_species = _spglib_number_maps(
-            list(crystal.species)
+    if not all(crystal.pbc):
+        raise ValueError(
+            f"standardize_cell needs a crystal periodic along all axes, got pbc={tuple(crystal.pbc)}; "
+            "spglib may reorder the axes, which would make the pbc flags meaningless"
         )
-        cell = (
-            crystal.lattice.matrix,
-            crystal.frac_positions,
-            [species_to_number[s] for s in crystal.species],
+
+    species_to_number, number_to_species = _spglib_number_maps(list(crystal.species))
+    cell = (
+        crystal.lattice.matrix,
+        crystal.frac_positions,
+        [species_to_number[s] for s in crystal.species],
+    )
+
+    result = spglib.find_primitive(cell) if to_primitive else spglib.standardize_cell(cell)
+    if result is None:
+        raise ValueError("spglib failed to standardize the cell (symmetry search failed)")
+
+    lattice, positions, numbers = result
+    new_lattice = Lattice(lattice)
+    species = [number_to_species[int(n)] for n in numbers]
+    site_properties = _map_site_properties(crystal, species, positions, new_lattice)
+    if crystal.site_properties and site_properties is None:
+        raise ValueError(
+            "standardize_cell changed the atoms of a crystal with site properties; "
+            "the properties cannot be carried over. Remove them first "
+            "(crystal.with_site_properties(None)) and reassign them afterwards."
         )
-
-        if to_primitive:
-            prim_cell = spglib.find_primitive(cell)
-            if prim_cell is not None:
-                lattice, positions, numbers = prim_cell
-                new_lattice = Lattice(lattice)
-                species = [number_to_species[int(n)] for n in numbers]
-                site_properties = _map_site_properties(
-                    crystal, species, positions, new_lattice
-                )
-                return Crystal(
-                    species, positions.tolist(),
-                    lattice=new_lattice,
-                    coords_are_cartesian=False,
-                    pbc=list(crystal.pbc),
-                    site_properties=site_properties,
-                )
-        else:
-            std_cell = spglib.standardize_cell(cell)
-            if std_cell is not None:
-                lattice, positions, numbers = std_cell
-                new_lattice = Lattice(lattice)
-                species = [number_to_species[int(n)] for n in numbers]
-                site_properties = _map_site_properties(
-                    crystal, species, positions, new_lattice
-                )
-                return Crystal(
-                    species, positions.tolist(),
-                    lattice=new_lattice,
-                    coords_are_cartesian=False,
-                    pbc=list(crystal.pbc),
-                    site_properties=site_properties,
-                )
-
-    except ImportError:
-        import warnings
-
-        warnings.warn("spglib not available, returning unchanged crystal")
-
-    return crystal.copy()
+    return Crystal(
+        species, positions,
+        lattice=new_lattice,
+        coords_are_cartesian=False,
+        pbc=[True, True, True],
+        site_properties=site_properties,
+    )
 
 
 __all__ = [

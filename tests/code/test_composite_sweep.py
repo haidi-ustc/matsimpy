@@ -40,18 +40,32 @@ class TestParameterSweep(unittest.TestCase):
                         'strain_matrix': [
                             [[0.00, 0, 0], [0, 0, 0], [0, 0, 0]],
                             [[0.01, 0, 0], [0, 0, 0], [0, 0, 0]],
+                            [[0.02, 0, 0], [0, 0, 0], [0, 0, 0]],
                         ]
                     }
                 }
             },
             mode='zip'
         )
-        
-        # Should have max(3, 2) = 3 combinations
+
         self.assertEqual(len(sweep), 3)
-        
+
         structures = list(sweep)
         self.assertEqual(len(structures), 3)
+
+    def test_zip_mode_rejects_unequal_lengths(self):
+        """zip mode used to pad the shorter list with its last value."""
+        with self.assertRaisesRegex(ValueError, "equal length"):
+            ParameterSweep(
+                base_structure=self.crystal,
+                transformations={
+                    'supercell': {'func': make_supercell,
+                                  'params': {'scaling_matrix': [[1, 1, 1], [2, 2, 2]]}},
+                    'strain': {'func': apply_strain,
+                               'params': {'strain_matrix': [[[0.0, 0, 0], [0, 0, 0], [0, 0, 0]]]}},
+                },
+                mode='zip',
+            )
     
     def test_multiple_parameters_per_transformation(self):
         """Test transformation with multiple parameters."""

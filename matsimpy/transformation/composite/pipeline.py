@@ -72,7 +72,7 @@ class TransformationPipeline:
         >>>
         >>> # Create pipeline
         >>> pipeline = TransformationPipeline("strain_study")
-        >>> pipeline.add_step(translate, displacement=[0, 0, 0])
+        >>> pipeline.add_step(translate, vector=[0, 0, 0])
         >>> pipeline.add_step(make_supercell, scaling_matrix=[2, 2, 2])
         >>>
         >>> # Apply to structure
@@ -107,7 +107,7 @@ class TransformationPipeline:
 
         Examples:
             >>> pipeline = TransformationPipeline()
-            >>> pipeline.add_step(translate, displacement=[1, 1, 1])
+            >>> pipeline.add_step(translate, vector=[1, 1, 1])
             >>> pipeline.add_step(rotate, angle=90, axis=[0, 0, 1])
         """
         if not callable(func):
@@ -218,8 +218,12 @@ class TransformationPipeline:
         Save pipeline to file.
 
         Note: This saves the pipeline structure (function names and arguments),
-        but not the actual function objects. Functions must be importable when
-        loading the pipeline.
+        but not the actual function objects. Every step function must be a
+        module-level function importable by name.
+
+        Raises:
+            ValueError: If a step function is a lambda, closure, partial or
+                otherwise not importable by module and name.
 
         Args:
             path: Path to save pipeline JSON file
@@ -227,6 +231,27 @@ class TransformationPipeline:
         Examples:
             >>> pipeline.save('my_pipeline.json')
         """
+        import importlib
+
+        # Every step must be re-importable by module + name, otherwise load()
+        # could not rebuild the pipeline: reject lambdas, closures, partials
+        # and other objects before writing anything.
+        for index, step in enumerate(self.steps):
+            func = step["func"]
+            func_name = getattr(func, "__name__", None)
+            func_module = getattr(func, "__module__", None)
+            resolved = None
+            if func_name and func_module and "<" not in getattr(func, "__qualname__", func_name):
+                try:
+                    resolved = getattr(importlib.import_module(func_module), func_name, None)
+                except ImportError:
+                    resolved = None
+            if resolved is not func:
+                raise ValueError(
+                    f"Step {index} ({func!r}) cannot be saved: only module-level functions "
+                    "that can be imported by name are supported (no lambdas, closures or partials)"
+                )
+
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 

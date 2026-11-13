@@ -10,6 +10,8 @@ from ...core import Crystal, Lattice
 
 def _validate_positive_finite_scalar(value: float, name: str) -> float:
     """Return value as float after validating positivity and finiteness."""
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise TypeError(f"{name} must be a number, got {value!r}")
     scalar = float(value)
     if not np.isfinite(scalar) or scalar <= 0:
         raise ValueError(f"{name} must be a finite positive value")
@@ -24,6 +26,10 @@ def _validate_scale_factor(
         scalar = _validate_positive_finite_scalar(scale_factor, "scale_factor")
         return np.eye(3) * scalar
 
+    if isinstance(scale_factor, (bool, np.bool_)) or any(
+        isinstance(v, (bool, np.bool_)) for v in np.ravel(np.asarray(scale_factor, dtype=object))
+    ):
+        raise TypeError("scale_factor must be numeric, got bool")
     factors = np.asarray(scale_factor, dtype=np.float64)
     if factors.shape != (3,):
         raise ValueError(
@@ -116,15 +122,22 @@ def optimize_lattice(
     preserve_angles: bool = True,
 ) -> Crystal:
     """
-    Optimize lattice parameters to match target density or volume.
+    Scale the lattice isotropically to a target density or volume.
+
+    Only isotropic scaling is performed (cell shape, angles and fractional
+    coordinates are kept); this is not a structural optimization.
 
     Always returns a new crystal structure.
 
     Args:
         crystal: Crystal structure
         target_density: Target density in g/cm^3
-        target_volume: Target volume in Angstrom^3
-        preserve_angles: If True, preserve lattice angles
+        target_volume: Target volume in Angstrom^3 (give exactly one target)
+        preserve_angles: Must be True; changing the cell shape is not supported
+
+    Raises:
+        ValueError: If neither or both targets are given, or preserve_angles
+            is False.
 
     Returns:
         New optimized crystal structure
@@ -136,6 +149,13 @@ def optimize_lattice(
     """
     if target_density is None and target_volume is None:
         raise ValueError("Must specify either target_density or target_volume")
+    if target_density is not None and target_volume is not None:
+        raise ValueError("Specify only one of target_density and target_volume")
+    if preserve_angles is not True:
+        raise ValueError(
+            "optimize_lattice only scales the cell isotropically; "
+            "preserve_angles=False is not supported"
+        )
 
     if target_density is not None:
         target_density = _validate_positive_finite_scalar(

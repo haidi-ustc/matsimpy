@@ -74,6 +74,7 @@ def register_all():
             "properties": {
                 "angle": {"type": "number", "description": "Rotation angle in degrees"},
                 "axis": _V3,
+                "center": _V3,
             },
             "required": ["angle", "axis"],
         },
@@ -91,6 +92,7 @@ def register_all():
             "properties": {
                 "angle": {"type": "number"},
                 "axis": _V3,
+                "point": _V3,
             },
             "required": ["angle", "axis"],
         },
@@ -106,7 +108,7 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"strain_matrix": _M3},
+            "properties": {"strain_matrix": {"oneOf": [_M3, _V3]}},
             "required": ["strain_matrix"],
         },
         version="1.0.0",
@@ -119,7 +121,10 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"deformation_matrix": _M3},
+            "properties": {
+                "deformation_matrix": _M3,
+                "deform_positions": {"type": "boolean", "default": True},
+            },
             "required": ["deformation_matrix"],
         },
         version="1.0.0",
@@ -132,7 +137,10 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"amplitude": {"type": "number", "default": 0.01}},
+            "properties": {
+                "amplitude": {"type": "number"},
+                "seed": {"type": "integer"},
+            },
             "required": ["amplitude"],
         },
         version="1.0.0",
@@ -169,7 +177,7 @@ def register_all():
     ))
     registry.register(TransformationSpec(
         name="optimize_lattice", category=_LATTICE, callable=optimize_lattice,
-        description="Optimize lattice angles while preserving volume",
+        description="Scale lattice isotropically to a target density or volume",
         applicable_types=_CRYSTAL, output_type=Crystal,
         preserves_composition=True, preserves_lattice=False,
         preserves_site_properties=True, preserves_pbc=True,
@@ -191,7 +199,10 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"rotation_matrix": _M3},
+            "properties": {
+                "rotation_matrix": _M3,
+                "rotate_atoms": {"type": "boolean", "default": True},
+            },
             "required": ["rotation_matrix"],
         },
         version="1.0.0",
@@ -204,7 +215,10 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"transformation_matrix": _M3},
+            "properties": {
+                "transformation_matrix": _M3,
+                "transform_positions": {"type": "boolean", "default": True},
+            },
             "required": ["transformation_matrix"],
         },
         version="1.0.0",
@@ -214,8 +228,11 @@ def register_all():
         description="Standardize unit cell to convention",
         applicable_types=_CRYSTAL, output_type=Crystal,
         preserves_composition=True, preserves_lattice=False,
-        preserves_site_properties=True, preserves_pbc=True,
-        parameter_schema={"type": "object", "properties": {}},
+        preserves_site_properties=False, preserves_pbc=True,
+        parameter_schema={
+            "type": "object",
+            "properties": {"to_primitive": {"type": "boolean", "default": False}},
+        },
         version="1.0.0",
     ))
 
@@ -236,6 +253,7 @@ def register_all():
                     ],
                 },
                 "displacement": _V3,
+                "cartesian": {"type": "boolean", "default": True},
             },
             "required": ["indices", "displacement"],
         },
@@ -261,13 +279,15 @@ def register_all():
         name="merge_atoms", category=_ATOMIC, callable=merge_atoms,
         description="Merge two atoms into one at their midpoint",
         applicable_types=_BOTH, output_type=_BOTH,
-        preserves_composition=True, preserves_lattice=True,
+        preserves_composition=False, preserves_lattice=True,
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
             "properties": {
                 "index1": {"type": "integer"},
                 "index2": {"type": "integer"},
+                "species": {"type": "string"},
+                "position": _V3,
             },
             "required": ["index1", "index2"],
         },
@@ -275,9 +295,9 @@ def register_all():
     ))
     registry.register(TransformationSpec(
         name="split_atom", category=_ATOMIC, callable=split_atom,
-        description="Split one atom into two at displaced positions",
+        description="Split one atom into several atoms at given positions",
         applicable_types=_BOTH, output_type=_BOTH,
-        preserves_composition=True, preserves_lattice=True,
+        preserves_composition=False, preserves_lattice=True,
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
@@ -286,12 +306,11 @@ def register_all():
                 "species": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "minItems": 2,
-                    "maxItems": 2,
+                    "minItems": 1,
                 },
                 "positions": {
                     "type": "array", "items": _V3,
-                    "minItems": 2, "maxItems": 2,
+                    "minItems": 1,
                 },
             },
             "required": ["index", "species", "positions"],
@@ -308,6 +327,7 @@ def register_all():
             "type": "object",
             "properties": {
                 "key": {"type": "string", "default": "species"},
+                "reverse": {"type": "boolean", "default": False},
             },
         },
         version="1.0.0",
@@ -318,7 +338,7 @@ def register_all():
         applicable_types=_BOTH, output_type=_BOTH,
         preserves_composition=True, preserves_lattice=True,
         preserves_site_properties=True, preserves_pbc=True,
-        parameter_schema={"type": "object", "properties": {}},
+        parameter_schema={"type": "object", "properties": {"center": _V3}},
         version="1.0.0",
     ))
     registry.register(TransformationSpec(
@@ -329,7 +349,11 @@ def register_all():
         preserves_site_properties=True, preserves_pbc=True,
         parameter_schema={
             "type": "object",
-            "properties": {"amplitude": {"type": "number", "default": 0.01}},
+            "properties": {
+                "amplitude": {"type": "number"},
+                "indices": {"type": "array", "items": {"type": "integer"}},
+                "seed": {"type": "integer"},
+            },
             "required": ["amplitude"],
         },
         version="1.0.0",
@@ -351,7 +375,13 @@ def register_all():
                         {"type": "array", "items": {"type": "integer"}},
                     ],
                 },
-                "new_species": {"type": "string"},
+                "new_species": {
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "array", "items": {"type": "string"}},
+                        {"type": "object"},
+                    ],
+                },
             },
             "required": ["indices", "new_species"],
         },
@@ -416,6 +446,7 @@ def register_all():
                         },
                         "minItems": 1,
                     },
+                    "cutoff": {"type": "number", "default": 1.8},
                 },
                 "required": ["break_indices"],
             },
@@ -450,6 +481,8 @@ def register_all():
                     "molecule2": {},
                     "bond_atom1": {"type": "integer"},
                     "bond_atom2": {"type": "integer"},
+                    "remove_atoms": {"type": "array", "items": {"type": "integer"}},
+                    "bond_length": {"type": "number"},
                 },
                 "required": ["molecule2", "bond_atom1", "bond_atom2"],
             },

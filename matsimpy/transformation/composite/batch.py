@@ -306,15 +306,26 @@ class BatchProcessor:
         if self.n_workers > 1:
             import multiprocessing
 
+            # The pool's feeder thread consumes the input ahead of the results,
+            # so remember every item taken; a fallback must resume after the
+            # last *yielded* result without re-reading a one-shot iterator.
+            source = iter(enumerate(structures))
+            taken: list = []
+
+            def recording():
+                for item in source:
+                    taken.append(item)
+                    yield item
+
+            yielded = 0
             ctx = multiprocessing.get_context("spawn")
             try:
                 with ctx.Pool(self.n_workers) as pool:
-                    for result in pool.imap(
-                        self._process_single, enumerate(structures)
-                    ):
+                    for result in pool.imap(self._process_single, recording()):
                         if not result.success and self.error_handling == "raise":
                             pool.terminate()
                             self._raise_failed_result(result)
+                        yielded += 1
                         yield result
             except Exception as e:
                 if self.error_handling == "raise":
@@ -324,12 +335,13 @@ class BatchProcessor:
 
                 warnings.warn(
                     f"Parallel stream processing failed: {e}. "
-                    "Falling back to sequential.",
+                    "Falling back to sequential for the remaining structures.",
                     UserWarning,
                 )
-                for item in enumerate(structures):
-                    result = self._process_single(item)
-                    yield result
+                import itertools
+
+                for item in itertools.chain(taken[yielded:], source):
+                    yield self._process_single(item)
         else:
             # Sequential processing - can yield immediately
             for item in enumerate(structures):

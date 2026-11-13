@@ -41,8 +41,11 @@ class TestLatticeStrain(unittest.TestCase):
         deformation = [[1.1, 0, 0], [0, 1, 0], [0, 0, 1]]
         deformed = apply_deformation(self.crystal, deformation, deform_positions=False)
         
-        # Fractional coordinates should be unchanged (Cartesian will differ due to new lattice)
-        np.testing.assert_array_almost_equal(deformed.frac_positions, self.crystal.frac_positions)
+        # The cell is deformed but the atoms keep their Cartesian positions
+        np.testing.assert_array_almost_equal(deformed.cart_positions, self.crystal.cart_positions)
+        np.testing.assert_array_almost_equal(
+            deformed.lattice.matrix, self.crystal.lattice.matrix @ np.array(deformation).T
+        )
 
 class TestLatticeScaling(unittest.TestCase):
     """Tests for scaling and volume operations."""

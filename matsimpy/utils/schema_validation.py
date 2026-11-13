@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from numbers import Real
+from numbers import Integral, Real
 from typing import Any
+
+import numpy as np
 
 
 def validate_kwargs(schema: dict | None, kwargs: dict[str, Any]) -> None:
@@ -41,13 +43,13 @@ def _validate_value(name: str, value: Any, schema: dict) -> None:
     if expected_type == "string":
         valid = isinstance(value, str)
     elif expected_type == "number":
-        valid = isinstance(value, Real) and not isinstance(value, bool)
+        valid = isinstance(value, Real) and not isinstance(value, (bool, np.bool_))
     elif expected_type == "integer":
-        valid = isinstance(value, int) and not isinstance(value, bool)
+        valid = isinstance(value, Integral) and not isinstance(value, (bool, np.bool_))
     elif expected_type == "boolean":
-        valid = isinstance(value, bool)
+        valid = isinstance(value, (bool, np.bool_))
     elif expected_type == "array":
-        valid = isinstance(value, list)
+        valid = isinstance(value, (list, tuple)) or (isinstance(value, np.ndarray) and value.ndim >= 1)
     elif expected_type == "object":
         valid = isinstance(value, dict)
     else:

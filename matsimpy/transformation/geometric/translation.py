@@ -90,8 +90,12 @@ def translate_to_origin(
         com = structure.get_center_of_mass()
         translation_vector = [-coord for coord in com]
     else:
-        # For crystals, use center of mass of positions
-        com = np.mean(structure.cart_positions, axis=0)
+        # Mass-weighted, like Molecule.get_center_of_mass().  Cartesian
+        # positions as stored (no unwrapping across periodic boundaries).
+        masses = np.array([e.atomic_mass for e in structure.elements], dtype=np.float64)
+        if masses.sum() <= 0:
+            raise ValueError("Cannot compute center of mass: all species have zero mass")
+        com = np.average(structure.cart_positions, weights=masses, axis=0)
         translation_vector = (-com).tolist()
 
     return translate(structure, translation_vector)
