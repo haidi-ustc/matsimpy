@@ -34,7 +34,7 @@ diamond_c = from_prototype('diamond', 'C', 3.57)
 print(f"Diamond C: {diamond_c.formula}, {len(diamond_c)} atoms, a={diamond_c.lattice.a:.2f} Å")
 
 # Hexagonal Close-Packed (HCP)
-hcp_mg = from_prototype('hcp', 'Mg', [3.21, 3.21, 5.21])  # [a, b, c] for hexagonal
+hcp_mg = from_prototype('hcp', 'Mg', 3.21, c=5.21)  # or [3.21, 5.21]; c defaults to the ideal sqrt(8/3) a
 print(f"HCP Mg: {hcp_mg.formula}, {len(hcp_mg)} atoms, a={hcp_mg.lattice.a:.2f} Å, c={hcp_mg.lattice.c:.2f} Å")
 
 # Rocksalt (NaCl structure) - using binary compound string
@@ -62,21 +62,21 @@ for proto in prototypes:
     try:
         # Try to create a simple example
         if proto == 'hcp':
-            struct = from_prototype(proto, 'Mg', [3.21, 3.21, 5.21])
+            struct = from_prototype(proto, 'Mg', [3.21, 5.21])
         elif proto in ['rocksalt', 'zincblende', 'wurtzite', 'perovskite']:
             if proto == 'rocksalt':
                 struct = from_prototype(proto, 'NaCl', 5.0)
             elif proto == 'zincblende':
                 struct = from_prototype(proto, 'ZnS', 5.4)
             elif proto == 'wurtzite':
-                struct = from_prototype(proto, ['Ga', 'N'], [3.19, 3.19, 5.19])
+                struct = from_prototype(proto, ['Ga', 'N'], [3.19, 5.19])
             else:  # perovskite
                 struct = from_prototype(proto, ['Ca', 'Ti', 'O'], 4.0)
         else:
             struct = from_prototype(proto, 'C', 3.0)
         print(f"  ✓ {proto:12s} - {struct.formula:10s} ({len(struct)} atoms)")
-    except Exception as e:
-        print(f"  ✗ {proto:12s} - Error: {str(e)[:40]}")
+    except ImportError as e:
+        print(f"  - {proto:12s} - skipped: {e}")
 
 # ============================================================================
 # Example 3: Random Crystal Generation (requires PyXtal)

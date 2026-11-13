@@ -139,7 +139,7 @@ def main():
         from_prototype('fcc', 'Cu', 3.61),
         from_prototype('bcc', 'Fe', 2.87),
         from_prototype('diamond', 'Si', 5.43),
-        from_prototype('hcp', 'Mg', [3.21, 3.21, 5.21])
+        from_prototype('hcp', 'Mg', [3.21, 5.21])
     ]
 
     # Define transformations to apply in sequence

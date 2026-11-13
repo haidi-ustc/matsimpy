@@ -183,9 +183,9 @@ class TestListSpaceGroupsBySystem(unittest.TestCase):
         self.assertEqual(tetragonal_sgs[-1], 142)
     
     def test_list_space_groups_by_system_invalid(self):
-        """Test listing with invalid crystal system."""
-        result = list_space_groups_by_system('Invalid')
-        self.assertEqual(result, [])
+        """An unknown crystal system used to return [] silently."""
+        with self.assertRaisesRegex(ValueError, "Unknown crystal system"):
+            list_space_groups_by_system('Invalid')
 
 class TestHelperFunctions(unittest.TestCase):
     """Tests for helper functions."""
@@ -197,12 +197,20 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(_get_space_group_number(225), 225)
         self.assertEqual(_get_space_group_number(1), 1)
         self.assertIsNone(_get_space_group_number(999))
-        
-        sg_num = _get_space_group_number('Fm-3m', use_data=True)
-        if sg_num:
-            self.assertIsInstance(sg_num, int)
-            self.assertGreaterEqual(sg_num, 1)
-            self.assertLessEqual(sg_num, 230)
+        self.assertEqual(_get_space_group_number('Fm-3m'), 225)
+
+    def test_get_space_group_number_types_and_symbols(self):
+        """numpy integers were rejected, True was group 1, and P2_1/c was unknown."""
+        import numpy as np
+        from matsimpy.builders.bulk.symmetry import _get_space_group_number
+
+        self.assertEqual(_get_space_group_number(np.int64(5)), 5)
+        self.assertIsNone(_get_space_group_number(True))
+        self.assertEqual(_get_space_group_number('P2_1/c'), 14)
+        self.assertEqual(_get_space_group_number('P21/c'), 14)
+        self.assertEqual(_get_space_group_number('P 1 21/c 1'), 14)
+        self.assertEqual(_get_space_group_number('P6_3/mmc'), 194)
+        self.assertIsNone(_get_space_group_number('bogus'))
     
     def test_get_default_space_group(self):
         """Test default space group for crystal systems."""
@@ -215,7 +223,8 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(_get_default_space_group('Orthorhombic'), 47)
         self.assertEqual(_get_default_space_group('Tetragonal'), 123)
         self.assertEqual(_get_default_space_group('Trigonal'), 166)
-        self.assertEqual(_get_default_space_group('Invalid'), 221)
+        with self.assertRaisesRegex(ValueError, "Unknown crystal system"):
+            _get_default_space_group('Invalid')
     
     def test_create_lattice_from_system(self):
         """Test lattice creation from crystal system."""
@@ -234,23 +243,32 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertAlmostEqual(lattice.a, 5.0)
         self.assertAlmostEqual(lattice.b, 6.0)
         self.assertAlmostEqual(lattice.c, 7.0)
-    
-    def test_validate_space_group(self):
-        """Test space group validation function."""
-        from matsimpy.builders.bulk.symmetry import _validate_space_group
-        
-        lattice = Lattice.cubic(5.43)
-        crystal = Crystal(
-            ['Si', 'Si'],
-            [[0, 0, 0], [0.25, 0.25, 0.25]],
-            lattice
-        )
-        
-        result = _validate_space_group(crystal, 227, 1e-5, -1.0)
-        self.assertIsInstance(result, bool)
-        
-        result2 = _validate_space_group(crystal, 1, 1e-5, -1.0)
-        self.assertIsInstance(result2, bool)
+
+    def test_create_lattice_requires_the_system_parameters(self):
+        """Unknown systems became cubic, and missing parameters were invented (c = 1.5 a)."""
+        from matsimpy.builders.bulk.symmetry import _create_lattice_from_system_by_name
+
+        with self.assertRaisesRegex(ValueError, "Unknown crystal system"):
+            _create_lattice_from_system_by_name('Cubicc', 5.0)
+        with self.assertRaisesRegex(ValueError, r"tetragonal lattice takes \[a, c\]"):
+            _create_lattice_from_system_by_name('Tetragonal', 4.0)
+        with self.assertRaisesRegex(ValueError, "orthorhombic"):
+            _create_lattice_from_system_by_name('Orthorhombic', [5.0, 6.0])
+        with self.assertRaisesRegex(ValueError, "monoclinic"):
+            _create_lattice_from_system_by_name('Monoclinic', [5.0, 6.0, 7.0])
+        lattice = _create_lattice_from_system_by_name('monoclinic', [5.0, 6.0, 7.0, 100.0])
+        self.assertAlmostEqual(lattice.beta, 100.0)
+
+    def test_from_crystal_system_rejects_space_group_of_another_system(self):
+        with self.assertRaisesRegex(ValueError, "Space group 194 is Hexagonal, not Cubic"):
+            from_crystal_system('Cubic', ['Si'], [[0, 0, 0]], 5.43, space_group=194)
+
+    def test_unknown_keyword_is_rejected(self):
+        """Misspelled options used to disappear into **kwargs."""
+        from matsimpy.builders.bulk.symmetry import from_space_group
+
+        with self.assertRaises(TypeError):
+            from_space_group(225, ['Cu'], [[0, 0, 0]], lattice_params=3.6, symprecc=1e-3)
 
 if __name__ == '__main__':
     unittest.main()

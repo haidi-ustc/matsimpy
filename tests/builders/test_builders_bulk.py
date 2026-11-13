@@ -137,6 +137,36 @@ class TestPrototypeProperties(unittest.TestCase):
         with self.assertRaises(ValueError):
             from_prototype('bcc', 'FeCr', 3.0)
 
+    def test_formula_must_match_the_prototype(self):
+        """Formulas were split into elements and their counts ignored (MgO2 made rocksalt MgO)."""
+        for prototype, formula, message in [
+            ('rocksalt', 'MgO2', 'expected MgO'),
+            ('perovskite', 'SrTiO2', 'SrTiO3'),
+            ('rocksalt', 'NaNa', 'repeats'),
+            ('rocksalt', 'Na0Cl', 'zero'),
+            ('rocksalt', 'nacl', 'formula'),
+        ]:
+            with self.subTest(formula=formula):
+                with self.assertRaisesRegex(ValueError, message):
+                    from_prototype(prototype, formula, 5.0)
+        self.assertEqual(from_prototype('perovskite', 'SrTiO3', 3.905).formula, 'SrTiO3')
+        self.assertEqual(from_prototype('Rocksalt', ['Mg', 'O'], 4.21).formula, 'MgO')
+
+    def test_lattice_parameters_are_validated(self):
+        """sc accepted [3.35, 9] and silently used 3.35; negative constants gave odd errors."""
+        with self.assertRaisesRegex(ValueError, "one lattice constant"):
+            from_prototype('sc', 'Po', [3.35, 9.0])
+        with self.assertRaisesRegex(ValueError, "positive"):
+            from_prototype('fcc', 'Cu', -3.61)
+        with self.assertRaisesRegex(ValueError, "only to hexagonal"):
+            from_prototype('fcc', 'Cu', 3.61, c=5.0)
+        with self.assertRaises(TypeError):
+            from_prototype('fcc', 'Cu', 3.61, covera=1.6)
+        mg = from_prototype('hcp', 'Mg', 3.21, c=5.21)
+        self.assertAlmostEqual(mg.lattice.c, 5.21)
+        ideal = from_prototype('hcp', 'Mg', 3.21)
+        self.assertAlmostEqual(ideal.lattice.c, 3.21 * np.sqrt(8 / 3))
+
 
 class TestRandomCrystal(unittest.TestCase):
     """Tests for PyXtal-backed random crystal generation boundaries."""
@@ -167,6 +197,19 @@ class TestRandomCrystal(unittest.TestCase):
         self.assertIsInstance(crystal, Crystal)
         self.assertEqual(crystal.species, ('Si',))
         self.assertAlmostEqual(crystal.lattice.a, 3.0)
+
+    def test_random_crystal_with_pyxtal(self):
+        pytest = __import__("pytest")
+        pytest.importorskip("pyxtal")
+        from matsimpy.symmetry import SpacegroupAnalyzer
+
+        crystal = random_crystal(3, 225, ['Na', 'Cl'], [4, 4])
+        self.assertEqual(sorted(crystal.species).count('Na'), 4)
+        self.assertEqual(SpacegroupAnalyzer(crystal, symprec=1e-3).get_space_group_symbol(), 'Fm-3m')
+
+    def test_random_crystal_validates_arguments(self):
+        with self.assertRaisesRegex(ValueError, "num_ions"):
+            random_crystal(3, 225, ['Na', 'Cl'], [4])
 
 if __name__ == '__main__':
     unittest.main()

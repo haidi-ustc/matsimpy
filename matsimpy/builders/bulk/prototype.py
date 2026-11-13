@@ -5,7 +5,7 @@ Generate crystals from common structural prototypes (FCC, BCC, diamond, etc.).
 """
 
 from matsimpy.utils.tooling import tool
-from typing import List, Optional, Union, Dict
+from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import math
 import re
@@ -81,37 +81,61 @@ CRYSTAL_PROTOTYPES = {
 }
 
 
-def _parse_compound_formula(formula: str) -> List[str]:
+def _parse_compound_formula(formula: str) -> List[Tuple[str, int]]:
+    """Split a formula such as ``'CaTiO3'`` into ``[('Ca', 1), ('Ti', 1), ('O', 3)]``.
+
+    Raises ``ValueError`` for anything that is not a sequence of element symbols
+    with optional counts (an element may appear only once).
     """
-    Parse a compound formula string into a list of element symbols.
-
-    For binary compounds like "SiC", extracts elements in order: ['Si', 'C']
-    For single elements like "Si", returns: ['Si']
-
-    Args:
-        formula: Chemical formula string (e.g., 'SiC', 'GaN', 'Si')
-
-    Returns:
-        List of element symbols in order
-
-    Examples:
-        >>> _parse_compound_formula('SiC')
-        ['Si', 'C']
-        >>> _parse_compound_formula('GaN')
-        ['Ga', 'N']
-        >>> _parse_compound_formula('Si')
-        ['Si']
-    """
-    # Pattern to match element symbols (capital letter followed by optional lowercase)
-    element_pattern = r"([A-Z][a-z]*)"
-    elements = re.findall(element_pattern, formula)
-
-    if not elements:
+    tokens = re.findall(r"([A-Z][a-z]*)(\d*)", formula)
+    if not tokens or "".join(symbol + count for symbol, count in tokens) != formula:
         raise ValueError(
-            f"Could not parse formula '{formula}'. Expected chemical formula like 'SiC' or 'GaN'."
+            f"Could not parse formula '{formula}'. Expected a formula such as 'Cu', 'SiC' or 'CaTiO3'."
         )
+    parsed = [(symbol, int(count) if count else 1) for symbol, count in tokens]
+    symbols = [symbol for symbol, _ in parsed]
+    if len(set(symbols)) != len(symbols):
+        raise ValueError(f"Formula '{formula}' repeats an element")
+    if any(count == 0 for _, count in parsed):
+        raise ValueError(f"Formula '{formula}' has a zero count")
+    return parsed
 
-    return elements
+
+def _reduced(counts: List[int]) -> List[int]:
+    divisor = 0
+    for count in counts:
+        divisor = math.gcd(divisor, count)
+    return [count // divisor for count in counts]
+
+
+def _lattice(prototype: str, lattice_type: str, lattice_constant, c: Optional[float]) -> Lattice:
+    values = list(lattice_constant) if isinstance(lattice_constant, (list, tuple, np.ndarray)) else [lattice_constant]
+    for value in values + ([] if c is None else [c]):
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError(f"Lattice constants must be finite and positive, got {value}")
+    if lattice_type == "hexagonal":
+        if len(values) not in (1, 2):
+            raise ValueError(f"Prototype '{prototype}' takes lattice_constant a or [a, c], got {values}")
+        if len(values) == 2 and c is not None:
+            raise ValueError("Give c either in lattice_constant or as c, not both")
+        a = values[0]
+        if len(values) == 2:
+            c = values[1]
+        elif c is None:
+            c = a * math.sqrt(8 / 3)  # ideal c/a
+        return Lattice.hexagonal(a, c)
+    if len(values) != 1:
+        raise ValueError(f"Prototype '{prototype}' takes one lattice constant, got {values}")
+    if c is not None:
+        raise ValueError(f"c applies only to hexagonal prototypes, not '{prototype}'")
+    a = values[0]
+    if lattice_type == "cubic":
+        return Lattice.cubic(a)
+    if prototype in ("fcc", "diamond", "zincblende", "rocksalt"):
+        # FCC primitive cell: a / sqrt(2), 60 degree angles
+        return Lattice.rhombohedral(a / math.sqrt(2), 60.0)
+    # BCC primitive cell: a * sqrt(3) / 2, arccos(-1/3) = 109.47 degree angles
+    return Lattice.rhombohedral(a * math.sqrt(3) / 2, math.degrees(math.acos(-1 / 3)))
 
 
 @tool
@@ -119,154 +143,79 @@ def from_prototype(
     prototype: str,
     species: Union[str, List[str]],
     lattice_constant: Union[float, List[float]],
-    **kwargs,
+    c: Optional[float] = None,
 ) -> Crystal:
     """
     Generate crystal from a prototype structure.
 
+    fcc, bcc, diamond, zincblende and rocksalt return the primitive cell;
+    lattice_constant is still the conventional cubic constant.
+
     Args:
-        prototype: Name of prototype ('fcc', 'bcc', 'diamond', 'rocksalt', etc.)
-        species: Element symbol(s) to substitute into prototype.
-                 Can be a single element string ('Si'), list (['Si', 'C']),
-                 or binary compound formula ('SiC' for uniform distribution).
-        lattice_constant: Lattice constant(s) in Angstroms
-        **kwargs: Additional parameters (e.g., c/a ratio for hexagonal)
+        prototype: Name of prototype: fcc, bcc, sc, diamond, zincblende, rocksalt,
+            wurtzite, hcp or perovskite (case-insensitive).
+        species: Element symbol(s) for the prototype's distinct sites, in order: a
+            symbol ('Cu'), a list (['Na', 'Cl']) or a formula ('NaCl', 'CaTiO3') whose
+            counts must match the prototype. 'diamond' with two elements ('SiC') gives
+            the zincblende arrangement.
+        lattice_constant: Conventional lattice constant a in Angstroms, or [a, c] for
+            hexagonal prototypes (hcp, wurtzite).
+        c: The c lattice constant of a hexagonal prototype; the default is the ideal
+            sqrt(8/3) * a.
 
     Returns:
         Crystal: Generated crystal structure
 
     Examples:
         >>> from matsimpy.builders.bulk import from_prototype
-        >>> # Generate FCC Cu
         >>> fcc_cu = from_prototype('fcc', 'Cu', 3.61)
-        >>> # Generate rocksalt NaCl (list)
         >>> nacl = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
-        >>> # Generate diamond SiC (binary compound formula)
-        >>> sic = from_prototype('diamond', 'SiC', 5.2)
-        >>> # Generate wurtzite GaN with c/a ratio
+        >>> sic = from_prototype('diamond', 'SiC', 4.36)
         >>> gan = from_prototype('wurtzite', ['Ga', 'N'], [3.19, 5.19])
+        >>> sto = from_prototype('perovskite', 'SrTiO3', 3.905)
     """
-    if prototype not in CRYSTAL_PROTOTYPES:
+    key = prototype.lower() if isinstance(prototype, str) else prototype
+    if key not in CRYSTAL_PROTOTYPES:
         raise ValueError(
             f"Unknown prototype '{prototype}'. "
             f"Available: {list(CRYSTAL_PROTOTYPES.keys())}"
         )
-
+    prototype = key
     template = CRYSTAL_PROTOTYPES[prototype]
-
-    # Parse species - support both list and compound formula strings
-    if isinstance(species, str):
-        # Check if it's a compound formula (multiple elements) or single element
-        parsed_elements = _parse_compound_formula(species)
-        if len(parsed_elements) > 1:
-            template_species = template["species"]
-            if len(template_species) == 1:
-                raise ValueError(
-                    f"Multi-element formula '{species}' cannot be represented "
-                    f"on a single-site prototype '{prototype}'. "
-                    f"Use alloy builders for solid solutions."
-                )
-            species = parsed_elements
-        else:
-            # Single element
-            species = [species]
-
-    # Substitute species into template
     template_species = template["species"]
-    # Preserve order when getting unique elements
-    unique_template = []
-    for s in template_species:
-        if s not in unique_template:
-            unique_template.append(s)
+    sites = list(dict.fromkeys(template_species))  # distinct template sites, in order
+    site_counts = [template_species.count(site) for site in sites]
 
-    if len(species) > 1 and len(unique_template) == 1 and len(template_species) == 1:
-        raise ValueError(
-            f"Multi-element input cannot be represented "
-            f"on a single-site prototype '{prototype}'. "
-            f"Use alloy builders for solid solutions."
-        )
-
-    # Validate species count
-    # Allow 2 species for single-template types (for uniform binary distribution)
-    if len(species) == 2 and len(unique_template) == 1:
-        # Binary compound with uniform distribution - will be handled later
-        pass
-    elif len(species) != len(unique_template):
-        raise ValueError(
-            f"Prototype '{prototype}' requires {len(unique_template)} species, "
-            f"but {len(species)} provided"
-        )
-
-    # Create lattice
-    lattice_type = template["lattice_type"]
-    if lattice_type == "cubic":
-        if isinstance(lattice_constant, (list, tuple)):
-            lattice_constant = lattice_constant[0]
-        lattice = Lattice.cubic(lattice_constant)
-
-    elif lattice_type == "hexagonal":
-        if isinstance(lattice_constant, (list, tuple)):
-            a, c = lattice_constant[0], lattice_constant[1]
-        else:
-            a = lattice_constant
-            c = kwargs.get("c", a * 1.633)  # Ideal c/a ratio
-        # Use convenience method for hexagonal lattice
-        lattice = Lattice.hexagonal(a, c)
-
-    elif lattice_type == "rhombohedral":
-        # For FCC-based structures (FCC, diamond, zincblende):
-        # Primitive cell is rhombohedral with a = a_cubic / sqrt(2), alpha = 60°
-        # For BCC primitive: a = a_cubic * sqrt(3) / 2, alpha = arccos(-1/3) ≈ 109.47°
-        # For rocksalt primitive: same as FCC
-        if isinstance(lattice_constant, (list, tuple)):
-            lattice_constant = lattice_constant[0]
-
-        if prototype in ["fcc", "diamond", "zincblende", "rocksalt"]:
-            # FCC primitive: b = a_cubic / 2, primitive a = sqrt(2) * b = a_cubic / sqrt(2)
-            # Angle between primitive vectors is 60°
-            a_prim = lattice_constant / math.sqrt(2)
-            alpha = 60.0
-        elif prototype == "bcc":
-            # BCC primitive: a = a_cubic * sqrt(3) / 2, alpha = arccos(-1/3) ≈ 109.47°
-            a_prim = lattice_constant * math.sqrt(3) / 2
-            alpha = math.acos(-1 / 3) * 180 / math.pi
-        else:
-            raise ValueError(f"Unknown rhombohedral prototype: {prototype}")
-
-        lattice = Lattice.rhombohedral(a_prim, alpha)
-
+    if isinstance(species, str):
+        parsed = _parse_compound_formula(species)
+        species = [symbol for symbol, _ in parsed]
+        counts = [count for _, count in parsed]
     else:
-        raise NotImplementedError(f"Lattice type '{lattice_type}' not yet implemented")
+        species = list(species)
+        counts = None
 
-    # Create structure with template species (placeholders)
+    # diamond with two elements: alternate them over the two sites (zincblende order)
+    alternate = len(sites) == 1 and len(template_species) == 2 and len(species) == 2
+    if alternate:
+        sites, site_counts = ["X", "Y"], [1, 1]
+    if len(species) != len(sites):
+        raise ValueError(
+            f"Prototype '{prototype}' requires {len(sites)} species, but {len(species)} provided"
+        )
+    if counts is not None and len(counts) > 1 and _reduced(counts) != _reduced(site_counts):
+        expected = "".join(f"{s}{n if n > 1 else ''}" for s, n in zip(species, _reduced(site_counts)))
+        raise ValueError(
+            f"Formula counts do not match prototype '{prototype}': expected {expected}"
+        )
+
+    lattice = _lattice(prototype, template["lattice_type"], lattice_constant, c)
+    if alternate:
+        placed = [species[i % 2] for i in range(len(template_species))]
+    else:
+        mapping = dict(zip(sites, species))
+        placed = [mapping[site] for site in template_species]
     crystal = Crystal(template_species, template["positions"], lattice)
-
-    # Use transformation module to substitute species
-    # For binary compounds with uniform distribution (e.g., diamond with "SiC")
-    if len(species) == 2 and len(unique_template) == 1:
-        # Distribute uniformly: alternate between the two elements
-        indices_to_substitute = []
-        new_species_list = []
-        for i, spec in enumerate(crystal.species):
-            # Alternate between first and second element
-            element_idx = i % len(species)
-            indices_to_substitute.append(i)
-            new_species_list.append(species[element_idx])
-        # Substitute all at once for efficiency
-        crystal = substitute(
-            crystal, indices_to_substitute, new_species_list
-        )
-    else:
-        # Use dict-based substitution for binary templates (X->species[0], Y->species[1])
-        substitution_map = {unique_template[i]: species[i] for i in range(len(species))}
-        crystal = substitute(
-            crystal, list(range(len(crystal))), substitution_map
-        )
-
-    # Formula and composition are now properties that automatically update
-    # when species change, so no manual update is needed
-
-    return crystal
+    return substitute(crystal, list(range(len(crystal))), placed)
 
 
 def list_prototypes() -> Dict[str, str]:
