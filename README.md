@@ -22,19 +22,16 @@
 
 ## Features
 
-- **Core**: `Crystal` (periodic + lattice), `Molecule` (non-periodic), `Lattice` (14 Bravais types), `Composition`, `Site`, `Element` (118 elements). Immutable-return — `add_atom`, `remove_atom`, `substitute`, `sort_atoms` return new objects
-- **Builders** (7 domains, 27 functions): `from_prototype` (9 prototypes: fcc/bcc/hcp/sc/diamond/rocksalt/zincblende/wurtzite/perovskite), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. Registered via `BuilderRegistry`
-- **Transformations** (5 categories, 26 functions): `translate`, `rotate`, `apply_strain`, `make_supercell`, `substitute`, `move_atoms`, `scale_lattice`, etc. Registered via `TransformationRegistry` with `TransformationSpec` metadata. `TransformationPlan` for reproducible pipelines
-- **Analysis** (6 modules): `BondAnalyzer` (bonds/angles/dihedrals/orders), `StructureAnalyzer` (COM/inertia/density), `TopologyAnalyzer` (connectivity/rings/paths), graph/neighbor functions, `AtomSelection` (9 selectors)
-- **IO** (9 formats): VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE — auto-detected, table-driven `FormatRegistry`. `read()`/`write()`, third-party conversion, and LaTeX table helpers
-- **Symmetry**: space groups, conventional/primitive cells, high-symmetry k-paths for 3D and 2D (layer) crystals, and AFLOW-style prototype identifiers (`AB_cF8_225_a_b`) with a `PrototypeDatabase`
-- **Storage**: `DataStorage` with `MemoryBackend` (testing) + `MaggmaBackend` (persistent). Content-addressed sha256 IDs. `DocumentEnvelope` schema
-- **Extensibility**: Plugin entry points for registries, including IO formats
-- **AI agent**: Optional LLM agent (DeepSeek or any OpenAI-compatible API) that calls MatSimPy functions marked with `@tool`; extensible with Agent Skills and MCP servers, and itself an MCP server. See [docs/ai.md](docs/ai.md)
-- **Calculators**: `LennardJones` (classical). ML (MatterSim), DFT file/workflow interfaces for VASP, Gaussian, and LAMMPS — optional
-- **Native VASP compatibility layer**: read and write VASP inputs and outputs without
-  installing pymatgen. Native DOS, band-structure, computed-entry, and trajectory
-  objects are returned by the VASP parsers.
+- 🧱 **Core structures** — `Crystal` (periodic + lattice), `Molecule` (non-periodic), `Lattice` (14 Bravais types), `Composition`, `Site`, `Element` (118 elements). Immutable: `add_atom`, `remove_atom`, `substitute` and `sort_atoms` return new objects
+- 🏗️ **Builders** (7 domains, 27 functions) — `from_prototype` (9 prototypes: fcc/bcc/hcp/sc/diamond/rocksalt/zincblende/wurtzite/perovskite), `generate_slab`, `generate_random_alloy`, `build_nanotube`, `create_vacancy`, `add_adsorbate`, `build_heusler`, etc. via `BuilderRegistry`
+- 🔁 **Transformations** (5 categories, 26 functions) — `translate`, `rotate`, `apply_strain`, `make_supercell`, `substitute`, `move_atoms`, `scale_lattice`, etc. via `TransformationRegistry` with `TransformationSpec` metadata, and `TransformationPlan` for reproducible pipelines
+- 🔬 **Analysis** (6 modules) — `BondAnalyzer` (bonds/angles/dihedrals/orders), `StructureAnalyzer` (COM/inertia/density), `TopologyAnalyzer` (connectivity/rings/paths), graph/neighbor functions, `AtomSelection` (9 selectors)
+- 💾 **IO** (9 formats) — VASP/CIF/XYZ/PDB/XSF/MOL/JSON/ASE, auto-detected through a table-driven `FormatRegistry`; `read()`/`write()`, third-party conversion and LaTeX table helpers
+- 🔷 **Symmetry** — space groups, conventional/primitive cells, high-symmetry k-paths for 3D and 2D (layer) crystals, and AFLOW-style prototype identifiers (`AB_cF8_225_a_b`) with a `PrototypeDatabase`
+- 🗄️ **Storage** — `DataStorage` with `MemoryBackend` (testing) and `MaggmaBackend` (persistent), content-addressed sha256 IDs and the `DocumentEnvelope` schema
+- 🧩 **Extensibility** — plugin entry points for registries, including IO formats
+- 🤖 **AI agent** — optional LLM agent (DeepSeek or any OpenAI-compatible API) that calls MatSimPy functions marked with `@tool`; extensible with Agent Skills and MCP servers, and itself an MCP server. See [docs/ai.md](docs/ai.md)
+- ⚡ **Calculators** — `LennardJones` (classical), ML (MatterSim) and DFT file/workflow interfaces for VASP, Gaussian and LAMMPS (optional)
 
 ## Installation
 
@@ -108,21 +105,6 @@ irreducible meshes and symmetry-standardized cells). `h5py` is needed only to
 read and rewrite VASP HDF5 data. The `parity` extra is for development and
 installs the pinned `pymatgen==2025.6.14` behavioral oracle; it is not a
 runtime fallback.
-
-### Native VASP output objects
-
-```python notest
-from matsimpy.calculator.vasp.outputs import Vasprun
-
-run = Vasprun("vasprun.xml")
-dos = run.complete_dos
-bands = run.get_band_structure()       # reads a neighboring KPOINTS when needed
-entry = run.get_computed_entry()       # ComputedStructureEntry by default
-trajectory = run.get_trajectory()      # ionic/MD structures and forces
-```
-
-These results use classes from `matsimpy.electronic_structure` and
-`matsimpy.core.trajectory`; no conversion through pymatgen occurs.
 
 ## Quick Start
 
@@ -511,7 +493,7 @@ graphene = Crystal(['C', 'C'], [[1/3, 2/3, 0.5], [2/3, 1/3, 0.5]],
 kpath = HighSymmKpath(graphene)
 print(kpath.bravais)               # hp
 print(kpath.kpath['path'])         # [['\\Gamma', 'M', 'K', '\\Gamma']]
-print(kpath.kpath['kpoints']['K']) # K at (1/3, 1/3, 0)
+print(kpath.kpath['kpoints']['K']) # fractional K point: (1/3, 1/3, 0)
 ```
 
 Prototype identifiers name the structure type in the style of AFLOW labels:
@@ -772,7 +754,3 @@ Repository: https://gitee.com/haidi-hfut/MatSimPy
 ## Acknowledgments
 
 MatSimPy is inspired by [pymatgen](https://github.com/materialsproject/pymatgen) and [ASE](https://wiki.fysik.dtu.dk/ase/) and aims to provide a modern, efficient alternative for materials simulation with comprehensive structure building capabilities.
-
----
-
-**Note**: v0.10.0 — 2D k-paths, AFLOW-style prototype identifiers, and VASP I/O fixes; see [CHANGELOG.md](CHANGELOG.md).
