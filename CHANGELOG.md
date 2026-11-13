@@ -4,6 +4,8 @@
 
 A review of every builder. Several produced wrong structures; those are fixed, and the
 nanotube and twisted-layer builders are rewritten on new, general algorithms.
+A second review covered `core`, `transformation` and `io`; its fixes are listed in the
+same sections below.
 
 ### Breaking changes
 - Builders no longer accept and silently ignore unknown keyword arguments (`**kwargs`);
@@ -43,6 +45,46 @@ nanotube and twisted-layer builders are rewritten on new, general algorithms.
   gone, and explicit indices must be whole formula units. `create_antisite` rejects
   two atoms of the same species. `create_interstitial` and `create_frenkel` reject
   positions closer than 0.5 A to an atom.
+
+- `SymmOp.from_origin_axis_angle(origin, axis, angle, angle_in_radians=False)` takes
+  degrees by default (as in pymatgen) and rotates right-handed; it used radians and
+  rotated the wrong way.
+- Lattice deformations use the row-vector convention: `apply_strain`,
+  `apply_deformation`, `transform_lattice` and `rotate_lattice` map lattice vectors by
+  `A @ F.T` (they used `F @ A`). `deform_positions=False` / `rotate_atoms=False` /
+  `transform_positions=False` now keep the atoms' Cartesian positions (they kept the
+  fractional ones, which made the flag a no-op); `transform_lattice` moves atoms with
+  the cell by default. `rotate_lattice` requires a proper rotation. `apply_strain`
+  takes a 3x3 tensor or three normal strains, and rejects other shapes and
+  non-positive `det(I + strain)`.
+- `Crystal.wrap()` and `make_supercell` no longer wrap non-periodic axes;
+  `make_supercell` raises when asked to repeat or mix a non-periodic axis.
+- `merge_molecules(..., bond_length=None)`: with the default the bond atoms are
+  superposed as before, but a result with atoms closer than 0.5 A raises; pass
+  `bond_length` to place the second molecule at a bond distance.
+- `substitute_all` raises when the species is absent (it returned a copy);
+  `substitute(c, i, [a, b])` raises instead of using the first species;
+  `standardize_cell` raises when spglib is missing or fails, for non-periodic
+  crystals and when site properties cannot be carried over (it returned a copy or
+  dropped them); `optimize_lattice` rejects both targets and `preserve_angles=False`.
+- `ParameterSweep(mode='zip')` requires parameter lists of equal length (it padded with
+  the last value). `TransformationPipeline.save` rejects lambdas, closures and partials.
+- Atom indices are validated: bools and floats raise `TypeError`, duplicate indices in
+  `move_atoms`, `swap_atoms`, `merge_atoms`, `perturb_positions` and `substitute` raise
+  `ValueError`. Bools are rejected as coordinates, lattice values, cutoffs and scale
+  factors.
+- `Element` objects are immutable and compare equal by symbol; `Lattice` attributes and
+  `Composition.formula` can no longer be assigned; `Composition['h']` (not an element)
+  raises `KeyError`.
+- `Trajectory` requires every frame to have the same atoms and validates `time_step`,
+  `base_positions` and the other scalars.
+- io: `read_XYZ` raises on extended XYZ with a cell (read it with `format='ase'`);
+  `read_CIF` raises for non-P1 space groups given only by name, CIF2/magnetic symmetry
+  operations, several structure blocks and missing cell angles; `read_PDB` raises for
+  several MODELs; LaTeX tables have no "Space Group"/"Point Group" columns (they were
+  always "N/A") and unknown columns raise; `from_json` rejects pymatgen JSON with a
+  clear message; titles with newlines raise in the POSCAR, XYZ, ASE and MOL writers;
+  `write_MOL` raises above 999 atoms.
 
 ### Added
 - `build_nanotube` rolls any 2D sheet whose chiral direction has a perpendicular lattice
@@ -98,6 +140,42 @@ nanotube and twisted-layer builders are rewritten on new, general algorithms.
   accepted negative and non-finite lengths (`Lattice.cubic(-3)` had determinant -27).
 - `random_crystal` no longer falls back to reading PyXtal internals, and reports
   mismatched `species`/`num_ions`.
+- core: neighbour lists missed neighbours of atoms stored outside the cell and the
+  single-atom query excluded the cutoff distance; minimum-image distances in skewed
+  cells (used by `add_atom`) were not minimal; `Composition` gave wrong
+  `reduced_formula` with `sort_by`, wrong HTML/LaTeX for fractional amounts, and
+  failed to add fractional compositions; `Fe()` and bool amounts were accepted;
+  numpy site properties did not survive JSON; `Crystal.from_dict` accepted
+  inconsistent Cartesian positions; `Molecule.to_crystal` dropped site properties and
+  accepted negative vacuum; `Molecule.get_all_neighbor_lists` excluded the cutoff and
+  accepted NaN; `Molecule.translate` broadcast short vectors; `c[True]` returned a
+  site with a wrong shape; `pbc` rejected numpy bool arrays.
+- transformation: `align_molecules` applied the transpose of the fitted rotation;
+  `merge_atoms` ignored periodic images for the midpoint; `translate_to_origin` used an
+  unweighted centre for crystals; `fragment_molecule` accepted a "bond" between
+  non-bonded atoms; `BatchProcessor.process_stream` re-read its input after a parallel
+  failure; custom `ParameterSweep` combinations were applied in dict order; registry
+  schemas lacked parameters, rejected numpy arrays/integers and lists for
+  `substitute`, and had wrong `preserves_*` flags; "perturb" amplitudes are standard
+  deviations (the docs said maximum).
+- io POSCAR: Cartesian coordinates ignored the scale factor; species/count lines over
+  several lines and POTCAR-style names (`Fe_pv`) failed; selective dynamics and
+  velocities (including NPT CONTCARs) are read and written as site properties;
+  `write_POSCAR` reordered atoms by species.
+- io CIF: a real tokenizer (comments, CIF quoting, `;` text fields) reads files that
+  failed before; type symbols with charges (`Fe3+`) work; malformed loops of unused
+  data are skipped.
+- io PDB: `write_PDB` wrote coordinates in the original frame instead of the CRYST1
+  orientation; element guessing turned `FE`/`CL` into F/C; malformed CRYST1 records
+  were ignored.
+- io other: `read_ASE` failed on a blank comment line and ignored `pbc`; `write_ASE`
+  did not write `pbc`; `to_ase`/`from_ase` and `to_pymatgen`/`from_pymatgen` dropped
+  site properties, magnetic moments, charges, pbc and oxidation states (disordered
+  pymatgen structures raise `ValueError`); `to_json` turned numpy values into strings;
+  `read_XSF` rejected atomic numbers; `read_MOL` misread counts lines with 100 or more
+  bonds; strict `read_XYZ_multiframe` skipped garbage lines;
+  `get_integrated_diff` integrated the total charge for non-spin data; compressed
+  files (`.gz`, `.bz2`, `.xz`) are read by `matsimpy.io.read`.
 
 ## 0.11.0 — 2026-11-12
 
