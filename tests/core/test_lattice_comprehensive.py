@@ -78,6 +78,20 @@ class TestLatticeValidation(unittest.TestCase):
         with self.assertRaises(ValueError):
             Lattice([[1, 0], [0, 1]])
 
+    def test_named_constructors_reject_bad_lengths(self):
+        """Lattice.cubic(-3) used to give a left-handed cell with det -27."""
+        cases = [
+            (Lattice.cubic, (-3.0,)),
+            (Lattice.tetragonal, (3.0, 0.0)),
+            (Lattice.orthorhombic, (3.0, 4.0, float("nan"))),
+            (Lattice.hexagonal, (-2.46, 10.0)),
+            (Lattice.from_parameters, (3.0, 3.0, float("inf"), 90, 90, 90)),
+        ]
+        for constructor, args in cases:
+            with self.subTest(constructor=constructor.__name__, args=args):
+                with self.assertRaisesRegex(ValueError, "must be positive"):
+                    constructor(*args)
+
 
 class TestLatticeRepr(unittest.TestCase):
 

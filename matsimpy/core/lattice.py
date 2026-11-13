@@ -38,6 +38,16 @@ from monty.json import MSONable
 from matsimpy.constants import LATTICE_TOL
 
 
+def _check_lengths(*lengths: float) -> None:
+    """Raise ``ValueError`` unless every lattice length is finite and positive.
+
+    A negative length would give a left-handed cell (negative determinant).
+    """
+    for length in lengths:
+        if not np.isfinite(length) or length <= 0:
+            raise ValueError(f"Lattice parameter must be positive, got {length}")
+
+
 class Lattice(MSONable):
     """
     Represents a crystal lattice with flexible input formats.
@@ -551,9 +561,7 @@ class Lattice(MSONable):
             >>> lat.gamma
             120.0
         """
-        for param in [a, b, c]:
-            if param <= 0:
-                raise ValueError(f"Lattice parameter must be positive, got {param}")
+        _check_lengths(a, b, c)
 
         for angle_name, angle in [("alpha", alpha), ("beta", beta), ("gamma", gamma)]:
             if not (0 < angle < 180):
@@ -614,6 +622,7 @@ class Lattice(MSONable):
             >>> lat.alpha, lat.beta, lat.gamma
             (90.0, 90.0, 90.0)
         """
+        _check_lengths(a)
         lattice_vectors = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]]
         return cls(lattice_vectors)
 
@@ -641,6 +650,7 @@ class Lattice(MSONable):
             >>> lat.alpha, lat.beta, lat.gamma
             (90.0, 90.0, 90.0)
         """
+        _check_lengths(a, c)
         lattice_vectors = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, c]]
         return cls(lattice_vectors)
 
@@ -669,6 +679,7 @@ class Lattice(MSONable):
             >>> lat.alpha, lat.beta, lat.gamma
             (90.0, 90.0, 90.0)
         """
+        _check_lengths(a, b, c)
         lattice_vectors = [[a, 0.0, 0.0], [0.0, b, 0.0], [0.0, 0.0, c]]
         return cls(lattice_vectors)
 
@@ -696,6 +707,7 @@ class Lattice(MSONable):
             >>> lat.alpha, lat.beta, lat.gamma
             (90.0, 90.0, 120.0)
         """
+        _check_lengths(a, c)
         # Standard hexagonal lattice vectors
         # a = b, alpha = beta = 90°, gamma = 120°
         lattice_vectors = [
