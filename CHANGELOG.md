@@ -103,6 +103,10 @@ same sections below.
   `generate_symmetric_slab` are registered builders and AI tools.
 - Space group symbols are looked up in spglib's database (`'P2_1/c'`, `'P21/c'` and
   full symbols work).
+- `Lattice.get_min_image_vectors(frac_vectors, pbc=(True, True, True), cutoff=None)`
+  returns the shortest Cartesian image of fractional displacements along the periodic
+  axes. It is exact in any cell, however skewed: it LLL-reduces the periodic vectors
+  and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
 - `generate_slab` built surface cells 2 to 26 times larger than the primitive surface
@@ -176,6 +180,18 @@ same sections below.
   bonds; strict `read_XYZ_multiframe` skipped garbage lines;
   `get_integrated_diff` integrated the total charge for non-spin data; compressed
   files (`.gz`, `.bz2`, `.xz`) are read by `matsimpy.io.read`.
+- Minimum-image distances were wrong in skewed cells. Rounding fractional coordinates
+  plus a +/-1 cell search misses the closest image when a lattice vector is much longer
+  than the plane spacing (in `[[4, 0, 0], [16, 0.4, 0], [0, 0, 4]]` the image of an atom
+  at fractional (0, 0.5, 0) is 0.2 Angstrom away, two cells over). `add_atom`,
+  `create_interstitial` and `create_frenkel` accepted atoms on top of existing ones;
+  `merge_atoms` and `periodic_distance` used a wrong image. All now use
+  `Lattice.get_min_image_vectors`.
+- `analysis.pair_distance` raised `AttributeError` for every `Crystal`.
+- Builder registry: the `add_adsorbate` schema accepted only an element symbol, though
+  the function also takes a `Molecule` or `Crystal`; the `generate_slab` and
+  `generate_symmetric_slab` schemas now state that exactly one of `layers` and
+  `min_slab_size` is required (registry schemas support an object-level `oneOf`).
 
 ## 0.11.0 — 2026-11-12
 
