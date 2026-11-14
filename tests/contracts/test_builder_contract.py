@@ -1,12 +1,16 @@
 """Contract tests for all registered builders.
 
 Parametrized over all BuilderSpecs in the registry.
-Tests: output_type correctness.
+Tests: registry.build accepts valid input and returns the declared output_type.
 """
 
+import re
+
+import numpy as np
 import pytest
 from matsimpy.core import Crystal, Molecule, Lattice
 from matsimpy.builders.registry import BuilderRegistry, BuilderSpec, registry
+from matsimpy.utils.schema_validation import validate_kwargs
 
 
 all_specs = registry.list_all()
@@ -129,33 +133,43 @@ def _value_from_schema(schema):
 
 
 @pytest.mark.parametrize("spec", all_specs, ids=spec_ids)
-class TestBuilderContract:
+def test_registry_build_returns_the_declared_type(spec):
+    """Going through registry.build also checks that the schema accepts valid input."""
+    for dep in spec.requires_optional or ():
+        pytest.importorskip(dep)
+    assert isinstance(registry.build(spec.name, **_minimal_kwargs(spec)), spec.output_type)
 
-    def test_returns_correct_type(self, spec):
-        """Builder returns the declared output_type."""
-        if spec.requires_optional:
-            for dep in spec.requires_optional:
-                try:
-                    __import__(dep)
-                except ImportError:
-                    pytest.skip(f"Optional dependency {dep} not installed")
 
-        kwargs = _minimal_kwargs(spec)
-        result = spec.callable(**kwargs)
-        assert isinstance(result, spec.output_type)
+@pytest.mark.parametrize("name", ["generate_slab", "generate_symmetric_slab"])
+@pytest.mark.parametrize("thickness", [{}, {"layers": 2, "min_slab_size": 5.0}])
+def test_slab_schemas_require_exactly_one_thickness(name, thickness):
+    # the schema itself states the contract; the builder function is not called
+    bulk = Crystal(["Cu"], [[0, 0, 0]], Lattice.cubic(4.0))
+    with pytest.raises(ValueError, match=re.escape("exactly one of: layers | min_slab_size")):
+        validate_kwargs(registry.get(name).parameter_schema, {"bulk": bulk, "miller_index": [0, 0, 1], **thickness})
 
-    def test_output_is_not_none(self, spec):
-        """Builder output is not None."""
-        if spec.requires_optional:
-            for dep in spec.requires_optional:
-                try:
-                    __import__(dep)
-                except ImportError:
-                    pytest.skip(f"Optional dependency {dep} not installed")
 
-        kwargs = _minimal_kwargs(spec)
-        result = spec.callable(**kwargs)
-        assert result is not None
+@pytest.mark.parametrize("name", ["generate_slab", "generate_symmetric_slab"])
+@pytest.mark.parametrize("thickness", [{"layers": 2}, {"min_slab_size": 5.0}])
+def test_slab_schemas_accept_either_thickness(name, thickness):
+    bulk = Crystal(["Cu"], [[0, 0, 0]], Lattice.cubic(4.0))
+    slab = registry.build(name, bulk=bulk, miller_index=[0, 0, 1], **thickness)
+    assert len(slab) == 2 and slab.pbc == (True, True, False)
+
+
+@pytest.mark.parametrize("adsorbate", [
+    "H",
+    Molecule(["C", "O"], [[0, 0, 0], [0, 0, 1.13]]),
+    Crystal(["H"], [[0, 0, 0]], Lattice.cubic(3.0)),
+], ids=["symbol", "molecule", "crystal"])
+def test_add_adsorbate_registry_matches_the_function(adsorbate):
+    from matsimpy.builders.surface import add_adsorbate
+
+    slab = Crystal(["Cu"], [[0, 0, 0.5]], Lattice.cubic(10.0), pbc=(True, True, False))
+    direct = add_adsorbate(slab, adsorbate, (0, 0), 2.0)
+    built = registry.build("add_adsorbate", slab=slab, adsorbate=adsorbate, position=(0, 0), height=2.0)
+    assert built.species == direct.species
+    np.testing.assert_allclose(built.cart_positions, direct.cart_positions)
 
 
 def test_builder_registry_validates_required_parameters_before_calling():

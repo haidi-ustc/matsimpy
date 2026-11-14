@@ -83,6 +83,7 @@ def register_all():
         "primitive": {"type": "boolean", "default": True},
         "symprec": {"type": "number", "default": 1e-3},
     }
+    slab_thickness = [{"required": ["layers"]}, {"required": ["min_slab_size"]}]  # exactly one
     registry.register(BuilderSpec(
         name="generate_slab", category="surface", callable=generate_slab,
         description="Create surface slab with vacuum from bulk crystal",
@@ -91,6 +92,7 @@ def register_all():
             "type": "object",
             "properties": {**slab_properties, "center_slab": {"type": "boolean", "default": True}},
             "required": ["bulk", "miller_index"],
+            "oneOf": slab_thickness,
         },
     ))
     registry.register(BuilderSpec(
@@ -101,6 +103,7 @@ def register_all():
             "type": "object",
             "properties": slab_properties,
             "required": ["bulk", "miller_index"],
+            "oneOf": slab_thickness,
         },
     ))
 
@@ -113,7 +116,7 @@ def register_all():
             "type": "object",
             "properties": {
                 "slab": {},
-                "adsorbate": {"type": "string"},
+                "adsorbate": {"description": "Element symbol, or a Molecule or Crystal"},
                 "position": {
                     "type": "array", "items": {"type": "number"},
                     "minItems": 2, "maxItems": 2,

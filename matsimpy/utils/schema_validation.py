@@ -24,6 +24,23 @@ def validate_kwargs(schema: dict | None, kwargs: dict[str, Any]) -> None:
             continue
         _validate_value(name, value, prop)
 
+    # object-level oneOf: exactly one alternative must hold, e.g.
+    # [{"required": ["layers"]}, {"required": ["min_slab_size"]}]
+    alternatives = schema.get("oneOf")
+    if alternatives:
+        matches = 0
+        for option in alternatives:
+            try:
+                validate_kwargs(option, kwargs)
+            except (TypeError, ValueError):
+                continue
+            matches += 1
+        if matches != 1:
+            choices = " | ".join(
+                ", ".join(option.get("required", [])) or "(none)" for option in alternatives
+            )
+            raise ValueError(f"Give exactly one of: {choices}")
+
 
 def _validate_value(name: str, value: Any, schema: dict) -> None:
     if "oneOf" in schema:
