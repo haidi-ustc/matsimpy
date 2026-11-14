@@ -4,6 +4,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from typing import Optional, Union
 from ..core import Crystal, Molecule
+from .graph import _periodic_coordination_numbers
 
 
 class BondAnalyzer:
@@ -128,7 +129,18 @@ class BondAnalyzer:
             return 0.5
 
     def get_coordination_numbers(self, cutoff: Optional[float] = None) -> dict[int, int]:
-        """Coordination number (bond count) for each atom."""
+        """Coordination number for each atom (neighbours closer than ``cutoff``).
+
+        For a :class:`Crystal` with at least one periodic axis every periodic image
+        counts separately, including images of the atom itself, so a primitive
+        rocksalt cell gives 6. This is then not the per-atom count of
+        :meth:`find_bonds`, which pairs atom indices by Cartesian distance inside
+        the cell only. For molecules and fully non-periodic crystals it is the
+        number of :meth:`find_bonds` bonds each atom takes part in.
+        """
+        if isinstance(self.structure, Crystal) and any(self.structure.pbc):
+            cutoff = cutoff if cutoff is not None else self._cutoff
+            return _periodic_coordination_numbers(self.structure, cutoff, inclusive=False)
         bonds = self.find_bonds(cutoff)
         cn: dict[int, int] = {}
         for i, j, _ in bonds:

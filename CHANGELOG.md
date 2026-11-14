@@ -109,6 +109,15 @@ same sections below.
   and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
+- Periodic coordination numbers counted each neighbouring atom index once, so periodic
+  images collapsed and an atom's own images were dropped: a primitive rocksalt cell
+  gave 1 instead of 6, primitive bcc and fcc gave 0 instead of 8 and 12.
+  `get_coordination_numbers`, `get_degree_distribution`, `get_graph_statistics` and
+  `CrystalGraph.coordination_numbers` / `.degree_distribution` now count every
+  periodic image within the cutoff (inclusive); `BondAnalyzer.get_coordination_numbers`
+  does the same for periodic crystals (exclusive cutoff, as `find_bonds`). Molecules and
+  `use_pbc=False` are unchanged. `adjacency_matrix` stays binary and its docstring now
+  says it carries no multiplicity.
 - `generate_slab` built surface cells 2 to 26 times larger than the primitive surface
   cell, left-handed cells for some planes, did not reduce the Miller index ((2, 2, 2)
   gave a different slab from (1, 1, 1)) and did not put the normal along z. It now uses

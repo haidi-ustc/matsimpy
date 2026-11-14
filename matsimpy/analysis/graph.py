@@ -39,6 +39,7 @@ from scipy.spatial.distance import cdist
 from abc import ABC, abstractmethod
 from ..core.crystal import Crystal
 from ..core.molecule import Molecule
+from .neighbors import find_points_in_spheres
 
 
 def _crystal_all_pairs_distance_matrix(crystal: Crystal, use_pbc: bool) -> np.ndarray:
@@ -68,6 +69,34 @@ def _crystal_all_pairs_distance_matrix(crystal: Crystal, use_pbc: bool) -> np.nd
     dist_matrix = np.min(candidate_distances, axis=2)
     np.fill_diagonal(dist_matrix, 0.0)
     return dist_matrix
+
+
+def _periodic_coordination_numbers(
+    crystal: Crystal, cutoff: float, inclusive: bool = True
+) -> Dict[int, int]:
+    """Count every periodic image within ``cutoff`` of each atom.
+
+    ``inclusive`` selects ``d <= cutoff`` (graph convention) or ``d < cutoff``
+    (:class:`~matsimpy.analysis.bonding.BondAnalyzer` convention).
+
+    Unlike :meth:`Crystal.get_neighbor_list`, which reports each neighbouring atom
+    index once, this counts each image separately, including the atom's own
+    images. Only the atom itself (zero image shift) is excluded.
+    """
+    frac = np.array(crystal.frac_positions, dtype=float)
+    periodic = np.array(crystal.pbc, dtype=bool)
+    frac[:, periodic] = np.mod(frac[:, periodic], 1.0)
+    lattice = np.asarray(crystal.lattice.matrix, dtype=float)
+    cart = frac @ lattice
+
+    centers, neighbors, images, distances = find_points_in_spheres(
+        cart, cart, r=float(cutoff), pbc=periodic.astype(np.int64), lattice=lattice
+    )
+    is_self = (centers == neighbors) & np.all(images == 0, axis=1)
+    within = distances <= cutoff if inclusive else distances < cutoff
+    keep = ~is_self & within
+    counts = np.bincount(centers[keep], minlength=len(crystal))
+    return {i: int(counts[i]) for i in range(len(crystal))}
 
 
 class StructureGraph(ABC):
@@ -164,7 +193,10 @@ class StructureGraph(ABC):
         Returns:
             np.ndarray: Binary adjacency matrix of shape (N, N) where N is the
                        number of atoms. Entry (i, j) is 1 if atoms i and j are
-                       within cutoff distance, 0 otherwise.
+                       within cutoff distance, 0 otherwise. It carries no
+                       multiplicity: for periodic crystals, several images of
+                       atom j count once and an atom's own images are not
+                       recorded, so row sums are not coordination numbers.
 
         Note:
             This is an abstract method that must be implemented by subclasses.
@@ -231,6 +263,9 @@ class StructureGraph(ABC):
         Get coordination number for each atom.
 
         The coordination number is the number of neighbors within the cutoff distance.
+        For a periodic :class:`CrystalGraph` every periodic image is counted
+        separately (including images of the atom itself), so a primitive rocksalt
+        cell gives 6, not the number of distinct neighbouring atom indices.
 
         Returns:
             Dict[int, int]: Dictionary mapping atom index to coordination number
@@ -736,7 +771,11 @@ class CrystalGraph(StructureGraph):
         Get adjacency matrix with PBC support (cached).
 
         Returns:
-            Binary adjacency matrix of shape (N, N).
+            Binary adjacency matrix of shape (N, N). Entry (i, j) is 1 if any
+            periodic image of atom j lies within the cutoff of atom i. It carries
+            no multiplicity (several images of j count once) and the diagonal is
+            always 0, even when an atom's own images are within the cutoff. Use
+            :attr:`coordination_numbers` for image-resolved neighbour counts.
         """
         if self._adjacency_matrix is None:
             n_atoms = self.num_nodes
@@ -772,6 +811,22 @@ class CrystalGraph(StructureGraph):
             )
 
         return self._distance_matrix
+
+    @property
+    def coordination_numbers(self) -> Dict[int, int]:
+        """
+        Get the image-resolved coordination number of each atom.
+
+        With ``use_pbc=True`` on a crystal with at least one periodic axis, every
+        periodic image within the cutoff (inclusive) counts, including images of
+        the atom itself. Otherwise this is the row sum of :attr:`adjacency_matrix`.
+
+        Returns:
+            Dict[int, int]: Dictionary mapping atom index to coordination number.
+        """
+        if self.use_pbc and any(self.structure.pbc):
+            return _periodic_coordination_numbers(self.structure, self.cutoff)
+        return super().coordination_numbers
 
 
 # Convenience factory function
