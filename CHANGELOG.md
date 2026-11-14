@@ -118,6 +118,8 @@ same sections below.
   does the same for periodic crystals (exclusive cutoff, as `find_bonds`). Molecules and
   `use_pbc=False` are unchanged. `adjacency_matrix` stays binary and its docstring now
   says it carries no multiplicity.
+- `StructureMatcher.fit` has a docstring stating that it needs equal site counts and
+  does not handle supercells or uniform rescaling.
 - `generate_slab` built surface cells 2 to 26 times larger than the primitive surface
   cell, left-handed cells for some planes, did not reduce the Miller index ((2, 2, 2)
   gave a different slab from (1, 1, 1)) and did not put the normal along z. It now uses

@@ -162,6 +162,25 @@ class StructureMatcher:
         return False
 
     def fit(self, a, b):
+        """Return True if ``b`` is ``a`` up to a unimodular basis change and a translation.
+
+        Lattice vectors must agree within ``ltol`` (relative length) and
+        ``angle_tol`` (degrees), and every site must map onto a site of the same
+        species within ``stol`` (fractional of ``(V / N) ** (1/3)``).
+
+        Limitations: ``a`` and ``b`` must have the same number of sites and the
+        same species counts, otherwise the result is False. Supercells are not
+        reduced to a common cell, so a primitive cell and its supercell never
+        match. Volumes are not rescaled, so two cells that differ by a uniform
+        scale factor beyond ``ltol`` do not match.
+
+        Args:
+            a: First crystal.
+            b: Second crystal.
+
+        Returns:
+            bool: Whether the two crystals match.
+        """
         if len(a) != len(b) or Counter(a.species) != Counter(b.species):
             return False
         lattice_a = np.asarray(a.lattice.matrix, dtype=float)
