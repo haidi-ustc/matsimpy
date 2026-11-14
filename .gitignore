@@ -100,3 +100,7 @@ thirds
 # live LLM example evidence
 examples/llm/*/results/
 examples/llm/stability-report.json
+
+# sdist build artifacts left in the source tree by `pip install .`
+/PKG-INFO
+/setup.cfg
