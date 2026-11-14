@@ -34,13 +34,16 @@ def _wrap(structure: Crystal, frac: np.ndarray) -> np.ndarray:
 
 
 def _nearest_distance(structure: Crystal, frac: np.ndarray) -> float:
-    """Shortest distance from the point ``frac`` to an atom of ``structure``, with periodic images."""
+    """Shortest distance from the point ``frac`` to an atom of ``structure``, with periodic images.
+
+    Exact below ``_MIN_DISTANCE``; larger distances are reported as some value above it.
+    """
     if len(structure) == 0:
         return np.inf
-    shifts = [range(-1, 2) if periodic else [0] for periodic in structure.pbc]
-    images = np.array([[i, j, k] for i in shifts[0] for j in shifts[1] for k in shifts[2]], dtype=float)
-    delta = structure.frac_positions[:, None, :] + images[None] - frac
-    return float(np.linalg.norm(delta @ structure.lattice.matrix, axis=-1).min())
+    vectors = structure.lattice.get_min_image_vectors(
+        structure.frac_positions - frac, structure.pbc, cutoff=_MIN_DISTANCE
+    )
+    return float(np.linalg.norm(vectors, axis=-1).min())
 
 
 def _check_free(structure: Crystal, frac: np.ndarray, what: str) -> None:

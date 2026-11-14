@@ -77,15 +77,12 @@ class StructureAnalyzer:
 
     def pair_distance(self, i: int, j: int) -> float:
         """Distance between atoms i and j (PBC-aware for crystals)."""
-        pos = self.structure.positions
-        d = pos[i] - pos[j]
         if isinstance(self.structure, Crystal):
-            frac = self.structure.lattice.get_fractional_coords(d)
-            pbc = self.structure.pbc
-            for k in range(3):
-                if pbc[k]:
-                    frac[k] -= np.round(frac[k])
-            d = frac @ self.structure.lattice.matrix
+            lattice = self.structure.lattice
+            frac = self.structure.frac_positions
+            d = lattice.get_min_image_vectors(frac[i] - frac[j], self.structure.pbc)
+        else:
+            d = self.structure.positions[i] - self.structure.positions[j]
         return float(np.linalg.norm(d))
 
     def density(self) -> Optional[float]:

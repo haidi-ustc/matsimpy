@@ -942,18 +942,18 @@ class Structure(ABC, MSONable):
         return {}
 
     def _min_image_distances(self, a_cart: np.ndarray, b_cart: np.ndarray) -> np.ndarray:
-        """Pairwise distances (len(a), len(b)); minimum image along periodic axes."""
+        """Pairwise distances (len(a), len(b)); minimum image along periodic axes.
+
+        Exact up to the add_atom threshold, which is all the proximity checks need;
+        larger distances are reported as some value above it.
+        """
         diff = a_cart[:, None, :] - b_cart[None, :, :]
         pbc = np.array(getattr(self, "pbc", (False, False, False)), dtype=bool)
         if self.lattice is not None and pbc.any():
-            frac = diff @ self.lattice.inv_matrix
-            frac[..., pbc] -= np.round(frac[..., pbc])
-            # rounding alone is not the minimum image in skewed cells: try the
-            # neighbouring images along the periodic axes as well
-            steps = [(-1, 0, 1) if periodic else (0,) for periodic in pbc]
-            shifts = np.array([[i, j, k] for i in steps[0] for j in steps[1] for k in steps[2]], dtype=float)
-            images = (frac[..., None, :] + shifts) @ self.lattice.matrix
-            return np.linalg.norm(images, axis=-1).min(axis=-1)
+            vectors = self.lattice.get_min_image_vectors(
+                diff @ self.lattice.inv_matrix, pbc, cutoff=self._MIN_ADD_DISTANCE
+            )
+            return np.linalg.norm(vectors, axis=-1)
         return np.linalg.norm(diff, axis=-1)
 
     def _check_new_atom_distances(self, native: np.ndarray, cart: np.ndarray) -> None:

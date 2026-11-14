@@ -1,219 +1,153 @@
-"""Tests for defect structure builders."""
-import unittest
+"""Tests for the point-defect builders."""
+
 import numpy as np
-from matsimpy.core import Crystal
-from matsimpy.builders.defects import (
-    create_vacancy,
-    create_interstitial,
-    create_substitution,
-    create_frenkel,
-    create_schottky,
-    create_antisite
-)
+import pytest
+
 from matsimpy.builders.bulk import from_prototype
+from matsimpy.builders.defects import (
+    create_antisite,
+    create_frenkel,
+    create_interstitial,
+    create_schottky,
+    create_substitution,
+    create_vacancy,
+)
+from matsimpy.core import Crystal, Lattice
+from matsimpy.transformation.structural import make_supercell
 
-class TestVacancy(unittest.TestCase):
-    """Tests for create_vacancy function."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        # Use diamond structure instead of FCC since FCC primitive has only 1 atom
-        self.fcc = from_prototype('diamond', 'Si', 5.43)
-    
-    
-    
-    def test_create_vacancy_returns_new_object(self):
-        """Test that create_vacancy returns a new object."""
-        original_count = len(self.fcc.species)
-        result = create_vacancy(self.fcc, 0)
+# Every coordinate is in [0, 1), yet the image of Cu at 2a is 0.2 Å from fractional
+# (0, 0.5, 0): further than one cell away in the unreduced basis.
+SKEW = Lattice([[4, 0, 0], [16, 0.4, 0], [0, 0, 4]])
 
-        # Original unchanged
-        self.assertEqual(len(self.fcc.species), original_count)
-        # Result has one fewer atom
-        self.assertEqual(len(result.species), original_count - 1)
-    
-    def test_create_vacancy_invalid_index(self):
-        """Test creating vacancy with invalid index."""
-        with self.assertRaises(IndexError):
-            create_vacancy(self.fcc, 1000)
-    
 
-class TestInterstitial(unittest.TestCase):
-    """Tests for create_interstitial function."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        # Use diamond structure instead of FCC since FCC primitive has only 1 atom
-        self.fcc = from_prototype('diamond', 'Si', 5.43)
-    
-    
-    def test_create_multiple_interstitials(self):
-        """Test creating multiple interstitials."""
-        # Use positions that don't conflict with existing atoms (diamond has atoms at [0,0,0] and [0.25,0.25,0.25])
-        with_interstitials = create_interstitial(
-            self.fcc, ['H', 'H'], [[0.5, 0.5, 0.5], [0.1, 0.1, 0.1]]
-        )
-        
-        self.assertIsInstance(with_interstitials, Crystal)
-        self.assertEqual(len(with_interstitials.species), len(self.fcc.species) + 2)
-        self.assertEqual(with_interstitials.species.count('H'), self.fcc.species.count('H') + 2)
-    
-    def test_create_interstitial_position_wrapping(self):
-        """Test that positions are wrapped to [0, 1)."""
-        with_interstitial = create_interstitial(self.fcc, 'H', [1.5, 1.5, 1.5])
-        
-        # Position should be wrapped to fractional [0.5, 0.5, 0.5]
-        pos = with_interstitial.frac_positions[-1]
-        self.assertAlmostEqual(pos[0], 0.5, places=5)
-    
-    def test_create_interstitial_mismatch(self):
-        """Test creating interstitial with mismatched species/positions."""
-        with self.assertRaises(ValueError):
-            create_interstitial(self.fcc, ['H', 'H'], [[0.5, 0.5, 0.5]])
+@pytest.fixture
+def si():
+    return from_prototype("diamond", "Si", 5.43)
 
-    def test_create_interstitial_wraps_only_periodic_axes(self):
-        """Positions in the vacuum of a slab used to be wrapped back into the slab."""
-        from matsimpy.core import Lattice
 
-        slab = Crystal(['Cu'], [[0, 0, 0.5]], Lattice.tetragonal(2.55, 20.0), pbc=(True, True, False))
-        above = create_interstitial(slab, 'H', [1.5, 0.5, 0.6])
-        np.testing.assert_allclose(above.frac_positions[-1], [0.5, 0.5, 0.6])
-        outside = create_interstitial(slab, 'H', [0.5, 0.5, 1.2])
-        self.assertAlmostEqual(outside.frac_positions[-1][2], 1.2)
+@pytest.fixture
+def nacl():
+    return from_prototype("rocksalt", ["Na", "Cl"], 5.64)
 
-    def test_create_interstitial_rejects_overlap(self):
-        with self.assertRaisesRegex(ValueError, "from an existing atom"):
-            create_interstitial(self.fcc, 'H', [1.0, 0.0, 0.01])
 
-class TestSubstitution(unittest.TestCase):
-    """Tests for create_substitution function."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        # Use diamond structure instead of FCC since FCC primitive has only 1 atom
-        self.fcc = from_prototype('diamond', 'Si', 5.43)
-    
-    
-    
-    def test_create_substitution_mismatch(self):
-        """Test creating substitution with mismatched indices/species."""
-        with self.assertRaises(ValueError):
-            create_substitution(self.fcc, [0, 1], ['Ni'])
-    
-    def test_create_substitution_invalid_index(self):
-        """Test creating substitution with invalid index."""
-        with self.assertRaises(IndexError):
-            create_substitution(self.fcc, 1000, 'Ni')
+# --------------------------------------------------------------------------
+# Vacancy and substitution
+# --------------------------------------------------------------------------
 
-    def test_create_substitution_accepts_numpy_index(self):
-        """A numpy integer index (e.g. from np.where) used to raise TypeError."""
-        doped = create_substitution(self.fcc, np.int64(1), 'Ge')
-        self.assertEqual(doped.species[1], 'Ge')
 
-class TestFrenkel(unittest.TestCase):
-    """Tests for create_frenkel function."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        self.nacl = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
-    
-    def test_create_frenkel(self):
-        """Test creating a Frenkel defect."""
-        # Use a position that doesn't conflict with existing atoms (rocksalt has atoms at [0,0,0] and [0.5,0.5,0.5])
-        with_frenkel = create_frenkel(self.nacl, 0, [0.25, 0.25, 0.25])
-        
-        self.assertIsInstance(with_frenkel, Crystal)
-        # Should have same number of atoms (atom moved, not removed)
-        self.assertEqual(len(with_frenkel.species), len(self.nacl.species))
-        
-        # Check that atom was moved
-        original_pos = self.nacl.positions[0]
-        new_pos = with_frenkel.positions[-1]  # Last position should be the interstitial
-        self.assertFalse(np.allclose(original_pos, new_pos, atol=0.01))
-    
-    
-    def test_create_frenkel_invalid_index(self):
-        """Test creating Frenkel defect with invalid index."""
-        with self.assertRaises(IndexError):
-            create_frenkel(self.nacl, 1000, [0.25, 0.25, 0.25])
+def test_create_vacancy(si):
+    assert len(create_vacancy(si, 0)) == len(si) - 1
+    with pytest.raises(IndexError):
+        create_vacancy(si, 1000)
 
-    def test_create_frenkel_requires_a_free_site(self):
-        """The old default moved the atom by a random, unseeded 0.1 fractional step."""
-        with self.assertRaises(TypeError):
-            create_frenkel(self.nacl, 0)
-        with self.assertRaisesRegex(ValueError, "from an existing atom"):
-            create_frenkel(self.nacl, 0, [0.5, 0.5, 0.52])
 
-class TestSchottky(unittest.TestCase):
-    """Tests for create_schottky function."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        self.nacl = from_prototype('rocksalt', ['Na', 'Cl'], 5.64)
-    
-    
-    
-    def test_create_schottky_removes_a_formula_unit(self):
-        """The old default removed two random atoms, often both Na or both Cl."""
-        from matsimpy.transformation.structural import make_supercell
+def test_create_substitution(si):
+    assert create_substitution(si, np.int64(1), "Ge").species[1] == "Ge"  # numpy index
+    with pytest.raises(ValueError):
+        create_substitution(si, [0, 1], ["Ni"])
+    with pytest.raises(IndexError):
+        create_substitution(si, 1000, "Ni")
 
-        cell = make_supercell(self.nacl, [2, 2, 2])
-        for seed in range(5):
-            defect = create_schottky(cell, seed=seed)
-            self.assertEqual(defect.species.count('Na'), 7)
-            self.assertEqual(defect.species.count('Cl'), 7)
-        self.assertEqual(create_schottky(cell, seed=3).frac_positions.tolist(),
-                         create_schottky(cell, seed=3).frac_positions.tolist())
 
-    def test_create_schottky_rejects_non_stoichiometric_indices(self):
-        na = [i for i, s in enumerate(self.nacl.species) if s == 'Na']
-        with self.assertRaisesRegex(ValueError, "formula units"):
-            create_schottky(self.nacl, indices=na[:1])
-        with self.assertRaisesRegex(ValueError, "every atom"):
-            create_schottky(self.nacl, indices=list(range(len(self.nacl))))
+# --------------------------------------------------------------------------
+# Interstitial
+# --------------------------------------------------------------------------
 
-    def test_create_schottky_rejects_unknown_keyword(self):
-        with self.assertRaises(TypeError):
-            create_schottky(self.nacl, num_vacancies=2)
 
-class TestAntisite(unittest.TestCase):
-    """Tests for create_antisite function."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        self.gan = from_prototype('zincblende', ['Ga', 'N'], 4.5)
-    
-    def test_create_antisite(self):
-        """Test creating an antisite defect."""
-        with_antisite = create_antisite(self.gan, 0, 1)
-        
-        self.assertIsInstance(with_antisite, Crystal)
-        self.assertEqual(len(with_antisite.species), len(self.gan.species))
-        
-        # Check that species were swapped
-        self.assertEqual(with_antisite.species[0], self.gan.species[1])
-        self.assertEqual(with_antisite.species[1], self.gan.species[0])
-        # Antisite swaps occupancy on fixed sites; coordinates should not move.
-        np.testing.assert_array_almost_equal(with_antisite.positions, self.gan.positions)
-    
-    def test_create_antisite_same_index(self):
-        """Test creating antisite defect with same index."""
-        with self.assertRaises(ValueError):
-            create_antisite(self.gan, 0, 0)
-    
-    def test_create_antisite_rejects_same_species(self):
-        """Swapping two Ga atoms used to return an unchanged crystal as an 'antisite'."""
-        from matsimpy.transformation.structural import make_supercell
+def test_create_interstitials(si):
+    out = create_interstitial(si, ["H", "H"], [[0.5, 0.5, 0.5], [0.1, 0.1, 0.1]])
+    assert out.species == si.species + ("H", "H")
+    with pytest.raises(ValueError):
+        create_interstitial(si, ["H", "H"], [[0.5, 0.5, 0.5]])
 
-        cell = make_supercell(self.gan, [2, 1, 1])
-        ga = [i for i, s in enumerate(cell.species) if s == 'Ga']
-        with self.assertRaisesRegex(ValueError, "different species"):
-            create_antisite(cell, ga[0], ga[1])
 
-    def test_create_antisite_invalid_index(self):
-        """Test creating antisite defect with invalid index."""
-        with self.assertRaises(IndexError):
-            create_antisite(self.gan, 0, 1000)
+def test_interstitial_positions_wrap_along_periodic_axes_only(si):
+    np.testing.assert_allclose(create_interstitial(si, "H", [1.5, 1.5, 1.5]).frac_positions[-1], 0.5)
+    slab = Crystal(["Cu"], [[0, 0, 0.5]], Lattice.tetragonal(2.55, 20.0), pbc=(True, True, False))
+    np.testing.assert_allclose(create_interstitial(slab, "H", [1.5, 0.5, 0.6]).frac_positions[-1], [0.5, 0.5, 0.6])
+    assert create_interstitial(slab, "H", [0.5, 0.5, 1.2]).frac_positions[-1][2] == pytest.approx(1.2)
 
-if __name__ == '__main__':
-    unittest.main()
+
+@pytest.mark.parametrize("structure, position", [
+    (from_prototype("diamond", "Si", 5.43), [1.0, 0.0, 0.01]),
+    (Crystal(["Cu"], [[3, 0, 0]], Lattice.cubic(4)), [0.025, 0, 0]),  # atom stored three cells away
+    (Crystal(["Cu"], [[0, 0, 0]], SKEW), [0, 0.5, 0]),
+])
+def test_interstitial_too_close_to_an_atom_raises(structure, position):
+    with pytest.raises(ValueError, match="from an existing atom|too close|already exists"):
+        create_interstitial(structure, "H", position)
+
+
+def test_interstitial_near_an_atom_across_a_non_periodic_axis_is_allowed():
+    cell = Crystal(["Cu"], [[0, 0, 3]], Lattice.cubic(4), pbc=(True, True, False))
+    np.testing.assert_allclose(create_interstitial(cell, "H", [0, 0, 0]).cart_positions, [[0, 0, 12], [0, 0, 0]])
+
+
+# --------------------------------------------------------------------------
+# Frenkel and Schottky
+# --------------------------------------------------------------------------
+
+
+def test_create_frenkel_moves_the_atom(nacl):
+    out = create_frenkel(nacl, 0, [0.25, 0.25, 0.25])
+    assert sorted(out.species) == sorted(nacl.species)
+    np.testing.assert_allclose(out.frac_positions[-1], [0.25, 0.25, 0.25])
+    with pytest.raises(IndexError):
+        create_frenkel(nacl, 1000, [0.25, 0.25, 0.25])
+
+
+@pytest.mark.parametrize("structure, position", [
+    (from_prototype("rocksalt", ["Na", "Cl"], 5.64), [0.5, 0.5, 0.52]),
+    (Crystal(["H", "Cu"], [[0, 0, 0.5], [0, 0, 0]], SKEW), [0, 0.5, 0]),
+])
+def test_frenkel_site_must_be_free(structure, position):
+    with pytest.raises(ValueError, match="from an existing atom|too close"):
+        create_frenkel(structure, 0, position)
+
+
+def test_frenkel_needs_an_explicit_site(nacl):
+    with pytest.raises(TypeError):
+        create_frenkel(nacl, 0)  # the old default moved the atom by a random step
+
+
+def test_create_schottky_removes_a_formula_unit(nacl):
+    cell = make_supercell(nacl, [2, 2, 2])
+    for seed in range(5):
+        defect = create_schottky(cell, seed=seed)
+        assert (defect.species.count("Na"), defect.species.count("Cl")) == (7, 7)
+    np.testing.assert_array_equal(create_schottky(cell, seed=3).frac_positions,
+                                  create_schottky(cell, seed=3).frac_positions)
+
+
+def test_create_schottky_rejects_bad_input(nacl):
+    na = [i for i, s in enumerate(nacl.species) if s == "Na"]
+    with pytest.raises(ValueError, match="formula units"):
+        create_schottky(nacl, indices=na[:1])
+    with pytest.raises(ValueError, match="every atom"):
+        create_schottky(nacl, indices=list(range(len(nacl))))
+    with pytest.raises(TypeError):
+        create_schottky(nacl, num_vacancies=2)
+
+
+# --------------------------------------------------------------------------
+# Antisite
+# --------------------------------------------------------------------------
+
+
+def test_create_antisite_swaps_species_on_fixed_sites():
+    gan = from_prototype("zincblende", ["Ga", "N"], 4.5)
+    out = create_antisite(gan, 0, 1)
+    assert out.species == (gan.species[1], gan.species[0])
+    np.testing.assert_allclose(out.positions, gan.positions)
+
+
+def test_create_antisite_rejects_bad_pairs():
+    gan = from_prototype("zincblende", ["Ga", "N"], 4.5)
+    with pytest.raises(ValueError):
+        create_antisite(gan, 0, 0)
+    with pytest.raises(IndexError):
+        create_antisite(gan, 0, 1000)
+    cell = make_supercell(gan, [2, 1, 1])
+    ga = [i for i, s in enumerate(cell.species) if s == "Ga"]
+    with pytest.raises(ValueError, match="different species"):
+        create_antisite(cell, ga[0], ga[1])

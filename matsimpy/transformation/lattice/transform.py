@@ -205,8 +205,7 @@ def _map_site_properties(
 
     def periodic_distance(position1: np.ndarray, position2: np.ndarray) -> float:
         delta_frac = (position1 - position2) @ inv_lattice
-        delta_frac[pbc] -= np.rint(delta_frac[pbc])
-        return float(np.linalg.norm(delta_frac @ lattice.matrix))
+        return float(np.linalg.norm(lattice.get_min_image_vectors(delta_frac, pbc)))
 
     for new_symbol, new_position in zip(species, new_cart):
         candidates = [

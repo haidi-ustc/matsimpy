@@ -207,8 +207,8 @@ def merge_atoms(
         delta = src_positions[index2] - src_positions[index1]
         if isinstance(structure, Crystal):
             # midpoint of the minimum-image pair along periodic axes
-            periodic = np.array(structure.pbc, dtype=bool)
-            delta[periodic] -= np.round(delta[periodic])
+            lattice = structure.lattice
+            delta = lattice.get_min_image_vectors(delta, structure.pbc) @ lattice.inv_matrix
         merged_position = src_positions[index1] + delta / 2.0
     else:
         merged_position = validate_vector3("position", position)

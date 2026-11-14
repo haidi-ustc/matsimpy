@@ -89,6 +89,12 @@ def test_merge_atoms_uses_the_minimum_image_midpoint():
     assert min(x, 1.0 - x) == pytest.approx(0.0, abs=1e-12)
 
 
+def test_merge_atoms_midpoint_in_a_skewed_cell():
+    # the second atom's closest image is 0.2 Å away at Cartesian (8, 0.2, 0) - 2a = (0, 0.2, 0)
+    c = Crystal(["H", "H"], [[0, 0, 0], [0, 0.5, 0]], Lattice([[4, 0, 0], [16, 0.4, 0], [0, 0, 4]]))
+    np.testing.assert_allclose(merge_atoms(c, 0, 1).cart_positions[0], [0, 0.1, 0], atol=1e-12)
+
+
 def test_split_atom_copies_the_source_site_properties():
     m = Molecule(["O", "He"], [[0, 0, 0], [3, 0, 0]], site_properties=[{"role": "split"}, {"role": "kept"}])
     split = split_atom(m, 0, ["H", "H"], [[-0.5, 0, 0], [0.5, 0, 0]])

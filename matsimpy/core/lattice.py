@@ -57,6 +57,38 @@ def _check_lengths(*lengths: float) -> None:
             raise ValueError(f"Lattice parameter must be positive, got {length}")
 
 
+def _lll_reduce(basis: np.ndarray, delta: float = 0.75) -> np.ndarray:
+    """LLL-reduce the rows of ``basis`` (1 to 3 vectors); the rows span the same lattice."""
+    b = np.array(basis, dtype=np.float64)
+    n = len(b)
+
+    def gram_schmidt(vectors):
+        ortho = np.zeros_like(vectors)
+        mu = np.zeros((n, n))
+        for i in range(n):
+            ortho[i] = vectors[i]
+            for j in range(i):
+                mu[i, j] = vectors[i] @ ortho[j] / (ortho[j] @ ortho[j])
+                ortho[i] = ortho[i] - mu[i, j] * ortho[j]
+        return ortho, mu
+
+    ortho, mu = gram_schmidt(b)
+    k = 1
+    while k < n:
+        for j in range(k - 1, -1, -1):
+            q = np.rint(mu[k, j])
+            if q:
+                b[k] -= q * b[j]
+                ortho, mu = gram_schmidt(b)
+        if ortho[k] @ ortho[k] >= (delta - mu[k, k - 1] ** 2) * (ortho[k - 1] @ ortho[k - 1]):
+            k += 1
+        else:
+            b[[k - 1, k]] = b[[k, k - 1]]
+            ortho, mu = gram_schmidt(b)
+            k = max(k - 1, 1)
+    return b
+
+
 class Lattice(MSONable):
     """
     Represents a crystal lattice with flexible input formats.
@@ -950,6 +982,76 @@ class Lattice(MSONable):
             (2, 3)
         """
         return np.dot(cartesian_coords, self.inv_matrix)
+
+    def get_min_image_vectors(
+        self,
+        frac_vectors,
+        pbc=(True, True, True),
+        cutoff: Optional[float] = None,
+    ) -> np.ndarray:
+        """
+        Shortest Cartesian image of fractional displacement vectors.
+
+        Lattice translations are added along the periodic axes only. The search is
+        exact for any basis, however skewed. The periodic lattice vectors are first
+        LLL-reduced. Rounding in the reduced basis gives an upper bound R on the
+        shortest length. A displacement no longer than R has reduced coordinate i of
+        at most R * |column i of the pseudo-inverse|; that is, R divided by the
+        spacing of lattice planes i. So only those translations are tried. In a
+        reduced basis this is a few cells in each direction.
+
+        Args:
+            frac_vectors: Fractional displacements, shape (3,) or (..., 3).
+            pbc: Periodic axes (three booleans).
+            cutoff: Optional search radius in Angstroms. Vectors whose shortest
+                image is within ``cutoff`` are exact. For the others an image
+                longer than ``cutoff`` is returned. This is enough for proximity
+                checks and keeps the search small.
+
+        Returns:
+            np.ndarray: Cartesian vectors with the shape of ``frac_vectors``.
+
+        Example:
+            >>> lat = Lattice([[4, 0, 0], [16, 0.4, 0], [0, 0, 4]])
+            >>> float(np.linalg.norm(lat.get_min_image_vectors([0, 0.5, 0])))
+            0.2
+        """
+        frac = np.array(frac_vectors, dtype=np.float64)
+        if frac.shape[-1:] != (3,):
+            raise ValueError(f"frac_vectors must have shape (..., 3), got {frac.shape}")
+        periodic = np.array(pbc, dtype=bool).reshape(3)
+        shape = frac.shape
+        frac = frac.reshape(-1, 3)
+        frac[:, periodic] -= np.rint(frac[:, periodic])
+        cart = frac @ self.matrix
+        if not periodic.any() or not len(frac):
+            return cart.reshape(shape)
+
+        reduced = _lll_reduce(self.matrix[periodic])          # (k, 3), same translations
+        pinv = np.linalg.pinv(reduced)                         # (3, k): coordinates in ``reduced``
+        coords = cart @ pinv
+        best = cart - np.rint(coords) @ reduced
+        best_length = np.linalg.norm(best, axis=1)
+        radius = float(best_length.max())
+        if cutoff is not None:
+            radius = min(radius, float(cutoff))
+        # after rounding |coord_i| <= 1/2; an image within ``radius`` has |coord_i + n| <= radius * |pinv_i|
+        reach = np.floor(radius * np.linalg.norm(pinv, axis=0) + 0.5 + 1e-9).astype(int)
+        grids = np.meshgrid(*[np.arange(-n, n + 1) for n in reach], indexing="ij")
+        shifts = np.stack(grids, axis=-1).reshape(-1, len(reach)).astype(np.float64) @ reduced
+        if len(shifts) == 1:
+            return best.reshape(shape)
+
+        chunk = max(1, 2_000_000 // len(shifts))
+        for start in range(0, len(best), chunk):
+            rows = slice(start, start + chunk)
+            images = best[rows, None, :] + shifts[None]
+            lengths = np.linalg.norm(images, axis=-1)
+            pick = lengths.argmin(axis=1)
+            index = np.arange(len(pick))
+            shorter = lengths[index, pick] < best_length[rows]
+            best[rows][shorter] = images[index, pick][shorter]
+        return best.reshape(shape)
 
     def is_orthogonal(self, tol: float = 1e-8) -> bool:
         """

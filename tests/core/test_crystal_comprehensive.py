@@ -57,11 +57,14 @@ def test_add_atom_checks_distances_through_periodic_boundaries_only():
     assert len(c.set_pbc([False, True, True]).add_atom("Si", [0.99, 0.5, 0.5])) == 2  # 4.9 Å apart
 
 
-def test_add_atom_uses_the_true_minimum_image_in_a_skewed_cell():
-    c = Crystal(["H"], [[0, 0, 0]], Lattice([[1, 0, 0], [0.9, 0.3, 0], [0, 0, 10]]))
-    # the closest image is ~0.19 Å away; rounding fractional differences gives 1.3 Å
+@pytest.mark.parametrize("matrix, position", [
+    ([[1, 0, 0], [0.9, 0.3, 0], [0, 0, 10]], [0.6, 0.6, 0.0]),  # ~0.19 Å; rounding alone gives 1.3 Å
+    ([[4, 0, 0], [16, 0.4, 0], [0, 0, 4]], [0.0, 0.5, 0.0]),  # 0.2 Å, two cells away along a
+])
+def test_add_atom_uses_the_true_minimum_image_in_a_skewed_cell(matrix, position):
+    c = Crystal(["H"], [[0, 0, 0]], Lattice(matrix))
     with pytest.raises(ValueError, match="too close"):
-        c.add_atom("H", [0.6, 0.6, 0.0])
+        c.add_atom("H", position)
 
 
 def test_from_dict_rejects_cart_positions_that_disagree_with_frac_positions():
