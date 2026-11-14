@@ -3,6 +3,7 @@ Lattice scaling and volume operations.
 """
 
 from matsimpy.utils.tooling import tool
+from matsimpy.constants import AMU_TO_GRAM
 from typing import List, Optional, Union
 import numpy as np
 from ...core import Crystal, Lattice
@@ -165,9 +166,8 @@ def optimize_lattice(
         # density = mass / volume
         mass = crystal.composition.mass  # in amu
         # Convert amu to grams and A^3 to cm^3
-        amu_to_g = 1.66053906660e-24
         angstrom3_to_cm3 = 1e-24
-        mass_g = mass * amu_to_g
+        mass_g = mass * AMU_TO_GRAM
         target_volume = mass_g / target_density / angstrom3_to_cm3
     else:
         target_volume = _validate_positive_finite_scalar(

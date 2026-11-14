@@ -45,6 +45,7 @@ from scipy.spatial import cKDTree
 from .structure import Structure
 from .lattice import Lattice
 from .periodic_table import Element
+from matsimpy.constants import AMU_TO_GRAM
 from .site import CrystalSite
 from ._validation import (
     validate_lattice,
@@ -1002,9 +1003,6 @@ class Crystal(Structure):
             0.123...
         """
         # Mass is in atomic mass units (amu)
-        # Conversion: 1 amu = 1.66053906660e-24 g
-        AMU_TO_GRAM = 1.66053906660e-24
-
         mass_amu = self.composition.mass
         pbc_count = sum(self.pbc)
 

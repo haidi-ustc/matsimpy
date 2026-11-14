@@ -2,6 +2,7 @@
 
 import numpy as np
 from typing import Optional, Union
+from ..constants import AMU_TO_GRAM
 from ..core import Crystal, Molecule
 
 
@@ -89,7 +90,6 @@ class StructureAnalyzer:
         """Mass density in g/cm³ (Crystal only, None for Molecule)."""
         if isinstance(self.structure, Molecule):
             return None
-        AMU_TO_GRAM = 1.660539e-24
         total_mass_amu = float(np.sum(self._get_masses()))
         volume = self.structure.volume
         if volume <= 0:

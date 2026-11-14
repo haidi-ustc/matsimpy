@@ -117,6 +117,9 @@ same sections below.
   non-existent `Element.covalent_radius`. It now uses `Element.atomic_radius` and
   raises `ValueError` when an element has none. The step heuristic is unchanged and
   documented; it gives 1.0 for C=O at 1.21 A, the same as a C-C single bond.
+- `StructureAnalyzer.density()` used a 7-digit amu-to-gram factor and came out
+  4e-8 lower than `Crystal.density`. Both, and `scale_lattice(target_density=...)`, now
+  use `matsimpy.constants.AMU_TO_GRAM`.
 - Periodic coordination numbers counted each neighbouring atom index once, so periodic
   images collapsed and an atom's own images were dropped: a primitive rocksalt cell
   gave 1 instead of 6, primitive bcc and fcc gave 0 instead of 8 and 12.

@@ -21,3 +21,7 @@ POSITION_TOL: float = 1e-8
 # Lattice.__hash__ rounds to 5 decimal places (bucket = 5e-6); LATTICE_TOL = 1e-6
 # satisfies the hash contract: 1e-6 < 5e-6.
 LATTICE_TOL: float = 1e-6
+
+# Atomic mass unit in grams (CODATA 2018). The single source for every
+# amu -> g conversion (Crystal.density, StructureAnalyzer.density, scale_lattice).
+AMU_TO_GRAM: float = 1.66053906660e-24

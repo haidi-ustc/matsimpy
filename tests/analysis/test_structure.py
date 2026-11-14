@@ -5,6 +5,8 @@ import pytest
 
 from matsimpy.analysis.structure import StructureAnalyzer
 from matsimpy.core import Crystal, Lattice, Molecule
+from matsimpy.io import read
+from tests.conftest import require_path
 
 
 @pytest.mark.parametrize("structure, distance", [
@@ -15,3 +17,8 @@ from matsimpy.core import Crystal, Lattice, Molecule
 ])
 def test_pair_distance(structure, distance):
     assert StructureAnalyzer(structure).pair_distance(0, 1) == pytest.approx(distance)
+
+
+def test_density_matches_crystal_density():
+    crystal = read(require_path("tests", "calculator", "fixtures", "vasp", "POSCAR_Li2O"))
+    assert StructureAnalyzer(crystal).density() == pytest.approx(crystal.density, rel=1e-14)
