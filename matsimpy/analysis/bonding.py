@@ -77,7 +77,12 @@ class BondAnalyzer:
         return angles
 
     def get_dihedral_angles(self, cutoff: Optional[float] = None) -> list[tuple[int, int, int, int, float]]:
-        """All (i, j, k, l, angle_degrees) dihedral angles."""
+        """All (i, j, k, l, angle_degrees) dihedral angles about each bond j-k (j < k).
+
+        The angle is signed (IUPAC convention) in (-180, 180]: positive when, viewed
+        along j -> k, the bond j-i must turn clockwise to eclipse the bond k-l.
+        Anti butane gives 180, gauche +60 or -60.
+        """
         cutoff = cutoff if cutoff is not None else self._cutoff
         pos = self.structure.positions
         bonds = self.find_bonds(cutoff)
@@ -86,41 +91,56 @@ class BondAnalyzer:
             adj[i].add(j)
             adj[j].add(i)
         dihedrals = []
-        for j, k in bonds:
-            for i in adj[j]:
+        for j, k, _ in bonds:
+            for i in sorted(adj[j]):
                 if i == k:
                     continue
-                for ell in adj[k]:
-                    if ell == j:
+                for ell in sorted(adj[k]):
+                    if ell == j or ell == i:
                         continue
-                    v1 = pos[i] - pos[j]
-                    v2 = pos[j] - pos[k]
-                    v3 = pos[k] - pos[ell]
-                    n1 = np.cross(v1, v2)
-                    n2 = np.cross(v2, v3)
-                    n1_norm = np.linalg.norm(n1)
-                    n2_norm = np.linalg.norm(n2)
-                    if n1_norm < 1e-10 or n2_norm < 1e-10:
-                        continue
-                    cos = np.dot(n1, n2) / (n1_norm * n2_norm)
-                    cos = np.clip(cos, -1, 1)
-                    angle = np.degrees(np.arccos(cos))
-                    dihedrals.append((i, j, k, ell, float(angle)))
+                    b1 = pos[j] - pos[i]
+                    b2 = pos[k] - pos[j]
+                    b3 = pos[ell] - pos[k]
+                    n1 = np.cross(b1, b2)
+                    n2 = np.cross(b2, b3)
+                    if np.linalg.norm(n1) < 1e-10 or np.linalg.norm(n2) < 1e-10:
+                        continue  # collinear atoms: dihedral undefined
+                    y = np.linalg.norm(b2) * np.dot(b1, n2)
+                    x = np.dot(n1, n2)
+                    angle = float(np.degrees(np.arctan2(y, x)))
+                    if angle <= -180.0:
+                        angle = 180.0
+                    dihedrals.append((i, j, k, ell, angle))
         return dihedrals
 
     def get_bond_order(self, atom_i: int, atom_j: int) -> float:
-        """Estimate bond order from distance vs. covalent radii."""
+        """Estimate bond order from distance vs. the sum of atomic radii.
+
+        Uses ``Element.atomic_radius`` (Slater's empirical atomic radii, e.g.
+        H 0.25, C 0.70, N 0.65, O 0.60 Angstrom) as a stand-in for covalent radii,
+        which MatSimPy's element data does not provide. With
+        ``ratio = (r_i + r_j) / d`` the result is a step function: 2.0 if
+        ratio > 1.3, 1.0 if ratio > 0.9, else 0.5.
+
+        This is a coarse heuristic. It never returns 3, and it does not separate
+        most double bonds from single ones: C=O at 1.21 A has ratio 1.07 and gives
+        1.0, the same as C-C at 1.53 A (ratio 0.92). Only bonds shorter than about
+        77% of the radius sum count as double.
+
+        Raises:
+            ValueError: If an element has no atomic radius.
+        """
         pos = self.structure.positions
         d = float(np.linalg.norm(pos[atom_i] - pos[atom_j]))
         species = self.structure.species
         from ..core.periodic_table import Element
-        ei = Element.get_element(species[atom_i])
-        ej = Element.get_element(species[atom_j])
-        ri = ei.covalent_radius if ei and ei.covalent_radius else 0.7
-        rj = ej.covalent_radius if ej and ej.covalent_radius else 0.7
-        if ri + rj == 0:
-            return 1.0
-        ratio = (ri + rj) / d
+        radii = []
+        for s in (species[atom_i], species[atom_j]):
+            r = Element.get_element(s).atomic_radius
+            if r is None:
+                raise ValueError(f"No atomic radius for element {s}; cannot estimate bond order")
+            radii.append(float(r))
+        ratio = sum(radii) / d
         if ratio > 1.3:
             return 2.0
         elif ratio > 0.9:

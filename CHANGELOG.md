@@ -109,6 +109,14 @@ same sections below.
   and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
+- `BondAnalyzer.get_dihedral_angles()` no longer raises `ValueError` (it unpacked the
+  `(i, j, distance)` bond triples as pairs). Angles are now signed (IUPAC, in
+  (-180, 180]), so gauche +60 and -60 differ; anti butane gives 180. Degenerate
+  three-membered rings (`l == i`) are skipped.
+- `BondAnalyzer.get_bond_order()` no longer raises `AttributeError`: it read a
+  non-existent `Element.covalent_radius`. It now uses `Element.atomic_radius` and
+  raises `ValueError` when an element has none. The step heuristic is unchanged and
+  documented; it gives 1.0 for C=O at 1.21 A, the same as a C-C single bond.
 - Periodic coordination numbers counted each neighbouring atom index once, so periodic
   images collapsed and an atom's own images were dropped: a primitive rocksalt cell
   gave 1 instead of 6, primitive bcc and fcc gave 0 instead of 8 and 12.
