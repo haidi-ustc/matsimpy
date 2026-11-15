@@ -187,6 +187,11 @@ same sections below.
   shift, as `Kpoints` writes it, could not be read back. `VaspInput.copy(deep=False)`
   raised `TypeError`. `Poscar.set_temperature` left a net momentum (about 5 % for
   FePO4) when the structure had more than one element.
+- VASP input sets (also ported): a user MAGMOM of 0 for a species was replaced by the
+  site's magmom; `EDIFF_PER_ATOM`, which is not a VASP tag, was written to the INCAR
+  when given in `user_incar_settings` and by `MITMDSet`; `auto_ispin` chose ISPIN = 1
+  whenever the previous OUTCAR had no site moments (LORBIT unset) instead of asking
+  the vasprun. `Vasprun.run_type` names IVDW = 13 as DFT-D4 (it was "vdW-unknown").
 - Agent tools: a list or object argument that the model sent as a JSON string
   (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
   executor now decodes it when the parameter accepts a list or object.

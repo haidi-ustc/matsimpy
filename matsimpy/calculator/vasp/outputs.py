@@ -858,6 +858,7 @@ class Vasprun(MSONable):
             10: "DFT-D2",
             11: "DFT-D3",
             12: "DFT-D3-BJ",
+            13: "DFT-D4",
             2: "TS",
             20: "TS",
             21: "TS-H",

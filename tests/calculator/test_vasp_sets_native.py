@@ -300,3 +300,39 @@ def test_batch_write_native_inputs(tmp_path: Path, si_crystal: Crystal) -> None:
     assert (output / "KPOINTS").is_file()
     assert (output / "POSCAR").is_file()
     assert (output / "POTCAR.spec").is_file()
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "vasp"
+
+
+@pytest.fixture
+def fepo4_with_site_magmoms() -> Crystal:
+    from matsimpy.calculator.vasp.inputs import Poscar
+
+    crystal = Poscar.from_file(FIXTURES / "POSCAR", check_for_potcar=False).structure  # Fe4 P4 O16
+    return crystal.with_site_properties([{"magmom": 3.0}] * len(crystal))
+
+
+@pytest.mark.parametrize("fe_magmom", [0, 1])
+def test_user_magmom_wins_over_site_magmoms_also_when_zero(fepo4_with_site_magmoms, fe_magmom) -> None:
+    incar = MPRelaxSet(fepo4_with_site_magmoms, user_incar_settings={"MAGMOM": {"Fe": fe_magmom}}).incar
+    assert incar["MAGMOM"] == [fe_magmom] * 4 + [3.0] * 20  # 0 fell through to the site's 3.0
+
+
+def test_ediff_per_atom_never_reaches_the_incar(fepo4_with_site_magmoms) -> None:
+    from matsimpy.calculator.vasp.sets import MITMDSet
+
+    md = MITMDSet(fepo4_with_site_magmoms, start_temp=300, end_temp=300, nsteps=10).incar  # set by its updates
+    user = MPRelaxSet(fepo4_with_site_magmoms, user_incar_settings={"EDIFF_PER_ATOM": 1e-5}).incar
+    assert "EDIFF_PER_ATOM" not in md and "EDIFF_PER_ATOM" not in user  # not a VASP tag
+    assert md["EDIFF"] == pytest.approx(1e-5) and user["EDIFF"] == pytest.approx(24e-5)  # 1e-5 x 24 atoms
+
+
+def test_ispin_comes_from_the_vasprun_when_the_outcar_has_no_site_moments() -> None:
+    from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
+    from matsimpy.calculator.vasp.sets import _get_ispin
+
+    outcar = Outcar(str(FIXTURES / "OUTCAR.etest1.gz"))
+    assert outcar.magnetization == ()  # no LORBIT: an empty tuple, which was taken for "no spin"
+    vasprun = Vasprun(str(FIXTURES / "vasprun.xml"), parse_dos=False, parse_eigen=False)
+    assert vasprun.is_spin and _get_ispin(vasprun, outcar) == 2

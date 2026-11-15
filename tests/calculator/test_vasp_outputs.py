@@ -244,6 +244,13 @@ class TestVasprun:
         assert vr.parameters["HFSCREEN"] == pytest.approx(hfscreen)
         assert vr.run_type == "HSE06"
 
+    def test_run_type_names_dft_d4(self):
+        from matsimpy.calculator.vasp.outputs import Vasprun
+
+        vr = Vasprun(os.path.join(FIXTURES_DIR, "vasprun.xml"), parse_dos=False, parse_eigen=False)
+        vr.incar["IVDW"] = 13  # DFT-D4, as MP24RelaxSet(dispersion="D4") writes it
+        assert vr.run_type == "HSE06+vdW-DFT-D4"  # was "+vdW-unknown"
+
     @pytest.mark.parametrize("parser_name", ["Vasprun", "BSVasprun"])
     def test_as_dict_uses_native_reciprocal_lattice(self, parser_name):
         """Both XML serializers must use MatSimPy's reciprocal-lattice API."""

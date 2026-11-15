@@ -675,7 +675,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
                 for site in structure:
                     symbol = site.specie
                     user_magmom = self.user_incar_settings.get("MAGMOM", {})
-                    if isinstance(user_magmom, dict) and (uic_magmom := user_magmom.get(symbol)):
+                    # compared with None, so that a user magmom of 0 is used too
+                    if isinstance(user_magmom, dict) and (uic_magmom := user_magmom.get(symbol)) is not None:
                         mag.append(uic_magmom)
                     elif "magmom" in site.properties:
                         mag.append(site.properties["magmom"])
@@ -823,6 +824,10 @@ class VaspInputSet(InputGenerator, abc.ABC):
         # overwritten settings are changed back to the intended values.
         # skip dictionary parameters to avoid dictionaries appearing in the INCAR
         _apply_incar_updates(incar, self.user_incar_settings, skip=["LDAUU", "LDAUJ", "LDAUL", "MAGMOM"])
+
+        # EDIFF_PER_ATOM is a config key (converted to EDIFF above), not a VASP tag; keep it
+        # out of the INCAR also when user_incar_settings or incar_updates (MITMDSet) give it
+        incar.pop("EDIFF_PER_ATOM", None)
 
         # Remove unused INCAR parameters
         _remove_unused_incar_params(incar, skip=list(self.user_incar_settings))
@@ -3558,7 +3563,9 @@ class MPAbsorptionSet(VaspInputSet):
 
 def _get_ispin(vasprun: Vasprun | None, outcar: Outcar | None) -> Literal[1, 2]:
     """Get value of ISPIN depending on the magnetization in the OUTCAR and vasprun."""
-    if outcar is not None and outcar.magnetization is not None:
+    # Outcar.magnetization is an empty tuple, never None, when the OUTCAR has no site
+    # moments (LORBIT not set); the vasprun decides then
+    if outcar is not None and outcar.magnetization:
         # Turn off spin when magmom for every site is smaller than 0.02.
         site_magmom = np.array([i["tot"] for i in outcar.magnetization])
         return 2 if np.any(np.abs(site_magmom) > 0.02) else 1
