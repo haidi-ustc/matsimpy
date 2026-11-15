@@ -28,14 +28,29 @@ pip install -e .[ai]
 export DEEPSEEK_API_KEY=sk-...
 matsimpy-ai                                   # interactive; /help lists the commands
 matsimpy-ai -c "build rocksalt NaCl with a=5.64 A and save nacl.cif"
+matsimpy-ai -r last -c "make a 2x2x2 supercell and save it"   # continue the newest session
 matsimpy-ai -w ~/project -r 20261112-101500-ab12   # resume a session of that workspace
+matsimpy-ai -m deepseek-flash -e low -c "..."      # faster model, less reasoning
 matsimpy-ai doctor [--network]                # check key, workspace, tools, skills, MCP
 ```
 
 Answers are Markdown. On a terminal they are rendered (headings, tables, lists, code)
 with rich. When the output is piped, or with `--raw`, the Markdown source is printed.
 Tool calls are shown as `→ name {arguments}` lines on stderr; `-q` hides them. `-c`
-exits with 1 when the request fails.
+exits with 1 when the request fails. After a saved turn, `-c` (and the interactive
+agent, on exit) prints `Session <id>; continue with: matsimpy-ai -r <id>` on stderr.
+
+The **workspace** is the current directory unless `-w` (or `Agent(workspace=...)`)
+names another one, so `matsimpy-ai -c "... save nacl.cif"` writes `./nacl.cif`.
+Sessions belong to their workspace: resume them from the same directory or with the
+same `-w`.
+
+**Model.** `-m` / `$MATSIMPY_AI_MODEL` picks the model: `deepseek-v4-pro` (default,
+most accurate with tools) or `deepseek-flash` (faster, cheaper). `-e` /
+`$MATSIMPY_AI_EFFORT` sets the reasoning effort: `low`, `high`, `max`, or `off` for
+no thinking; by default the server's (high). The model's reasoning is kept in the
+session and sent back with later requests, as DeepSeek requires for tool use.
+Connection errors, timeouts, 429 and 5xx replies are retried three times with backoff.
 
 ```python
 from matsimpy.ai import Agent
@@ -49,7 +64,8 @@ with Agent(workspace="project") as agent:
 
 Any object with `chat(messages, tools) -> ChatResponse` can replace the default
 `DeepSeekProvider` (`MATSIMPY_AI_BASE_URL` or `-b` points it at another
-OpenAI-compatible endpoint).
+OpenAI-compatible API; requests go to `<base_url>/chat/completions`, so give the
+root as the OpenAI SDK expects it, e.g. `https://api.openai.com/v1`).
 
 **What the model sees.** The system prompt lists every tool *name* (grouped by
 module) and every Skill's name and description. Full JSON schemas are sent only

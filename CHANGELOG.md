@@ -8,6 +8,14 @@ A second review covered `core`, `transformation` and `io`; its fixes are listed 
 same sections below.
 
 ### Breaking changes
+- `matsimpy-ai` and `Agent` use the current directory as the workspace when none is
+  given (it was `~/.matsimpy/ai/workspace`), so files the agent writes land where it
+  was started. Sessions saved before are resumed with
+  `matsimpy-ai -w ~/.matsimpy/ai/workspace -r <id>`.
+- `DeepSeekProvider` posts to `<base_url>/chat/completions`, as DeepSeek documents and
+  the OpenAI SDK does (it was `<base_url>/v1/chat/completions`). The default DeepSeek
+  URL is unaffected; a custom OpenAI-compatible `base_url` must now include `/v1` if
+  the server needs it.
 - Builders no longer accept and silently ignore unknown keyword arguments (`**kwargs`);
   a misspelled option now raises `TypeError`. `random_crystal` still passes extra
   keywords on to PyXtal.
@@ -87,6 +95,19 @@ same sections below.
   `write_MOL` raises above 999 atoms.
 
 ### Added
+- `matsimpy-ai -c` prints the session id and the command that continues it on stderr
+  (the interactive agent does so on exit); `-r last` resumes the newest session of the
+  workspace (`Agent.resume("last")`).
+- Reasoning effort: `matsimpy-ai -e low|high|max|off`, `$MATSIMPY_AI_EFFORT`,
+  `DeepSeekProvider(reasoning_effort=...)`. `deepseek-flash` (DeepSeek's current name
+  for the fast model) is listed in `MODELS`.
+- The agent keeps the model's `reasoning_content` in the conversation and in saved
+  sessions and sends it back with later requests. DeepSeek's documentation requires
+  this for thinking mode with tools (it may answer 400 otherwise); before, it was
+  dropped.
+- `DeepSeekProvider` retries connection errors, timeouts, 429 and 5xx replies (three
+  times, with backoff and `Retry-After`) and puts the API's error message in the
+  exception.
 - `build_nanotube` rolls any 2D sheet whose chiral direction has a perpendicular lattice
   vector: hexagonal sheets in a 60 or 120 degree basis, square and rectangular sheets
   for every chirality, oblique sheets for commensurate directions. Atoms keep their
@@ -109,6 +130,11 @@ same sections below.
   and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
+- Agent tools: a list or object argument that the model sent as a JSON string
+  (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
+  executor now decodes it when the parameter accepts a list or object.
+- `matsimpy-ai -r <id>` with an unknown id printed a traceback; it now prints the
+  error and exits with 2.
 - `BondAnalyzer.get_dihedral_angles()` no longer raises `ValueError` (it unpacked the
   `(i, j, distance)` bond triples as pairs). Angles are now signed (IUPAC, in
   (-180, 180]), so gauche +60 and -60 differ; anti butane gives 180. Degenerate

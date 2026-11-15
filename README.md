@@ -581,6 +581,7 @@ The full guide, including adding tools, writing Skills and configuring MCP serve
 export DEEPSEEK_API_KEY="sk-..."
 matsimpy-ai                                   # interactive; /help lists the commands
 matsimpy-ai -c "build rocksalt NaCl with a=5.64 angstrom and save it as nacl.cif"
+matsimpy-ai -r last -c "now make a 2x2x2 supercell and save it"   # continue that session
 matsimpy-ai doctor                            # check key, workspace, tools, skills, MCP
 matsimpy-ai mcp serve -w ~/project            # serve MatSimPy's tools to other MCP clients
 ```
@@ -602,8 +603,10 @@ with Agent(workspace="project") as agent:
   until `/approve`.
 - **MCP**: servers listed in `~/.matsimpy/ai/mcp.json` or `<workspace>/mcp.json`
   (stdio or Streamable HTTP) add their tools to the agent.
-- **Sessions** are JSON files in `<workspace>/.matsimpy/sessions/` (`/resume`,
-  `/undo`, `/retry`).
+- **Workspace**: files are read and written in the current directory unless `-w`
+  names another one.
+- **Sessions** are JSON files in `<workspace>/.matsimpy/sessions/` (`-r <id>|last`,
+  `/resume`, `/undo`, `/retry`). `-c` prints the session id on stderr.
 
 ## Core Conventions
 
