@@ -330,6 +330,27 @@ def test_failures_are_results_with_clear_messages(executor):
     assert unknown_tool.content() == {"error": unknown_tool.error}
 
 
+@pytest.mark.parametrize("tool, arguments, expected", [
+    # seen live: a str | list[str] parameter given a JSON-encoded list
+    ("from_prototype", {"prototype": "wurtzite", "species": '["Ga", "N"]', "lattice_constant": "[3.19, 5.19]"},
+     {"formula": "Ga2N2", "num_atoms": 4}),
+    ("create_molecule", {"species": '["H", "H"]', "positions": "[[0, 0, 0], [0.74, 0, 0]]"},
+     {"formula": "H2", "num_atoms": 2}),
+])
+def test_lists_sent_as_json_strings_are_decoded(executor, tool, arguments, expected):
+    result = executor.call(tool, arguments)
+    assert result.ok, result.error
+    assert {key: result.value[key] for key in expected} == expected
+
+
+def test_strings_that_only_look_like_json_stay_strings(executor):
+    executor.call("create_molecule", {"species": ["H", "H"], "positions": [[0, 0, 0], [0.74, 0, 0]]})
+    written = executor.call("write_structure", {"structure": "structure:1", "filename": "[1].xyz"})
+    assert written.value == {"status": "ok", "filename": "[1].xyz"}  # a path parameter accepts no list
+    bad = executor.call("from_prototype", {"prototype": "fcc", "species": "[Cu", "lattice_constant": 3.6})
+    assert "Could not parse formula '[Cu'" in bad.error
+
+
 def test_paths_stay_in_the_workspace(executor, tmp_path):
     executor.call("create_molecule", {"species": ["H", "H"], "positions": [[0, 0, 0], [0.74, 0, 0]]})
     outside = executor.call("write_structure", {"structure": "structure:1", "filename": "../h2.xyz"})

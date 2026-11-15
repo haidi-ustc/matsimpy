@@ -106,7 +106,7 @@ SCENARIOS = [
         "primitive rhombohedral cell with vector length 5.64/sqrt(2) and 60 degree angles."),
     Scenario("05", "wurtzite_gan", "Wurtzite GaN", "pipeline", (
         "Build wurtzite GaN with lattice constants a=3.19 A and c=5.19 A, then save gan.cif",
-    ), frozenset({"from_prototype", "write_structure"}), _saved(".cif", 2)),
+    ), frozenset({"from_prototype", "write_structure"}), _saved(".cif", 4)),  # 2 Ga + 2 N
     Scenario("06", "random_sio2", "Random SiO2 with PyXtal", "pipeline", (
         "Generate a random SiO2 crystal in space group 1 with 1 Si and 2 O atoms, then save random_sio2.cif",
     ), frozenset({"random_crystal", "write_structure"}), _saved(".cif", 3)),

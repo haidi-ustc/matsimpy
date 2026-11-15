@@ -33,7 +33,8 @@ def _trace(result):
 def test_live_rocksalt_uses_prototype_and_writes_valid_cif(agent, prompt):
     result = agent.run(prompt)
     assert result.status == "success", _trace(result)
-    build = next(call for call in result.tool_calls if call.name == "from_prototype")
+    # the model may correct a failed first call (rule 5 of the system prompt); check the build it used
+    build = next(call for call in result.tool_calls if call.name == "from_prototype" and call.ok)
     assert build.arguments["prototype"] == "rocksalt", _trace(result)
     assert build.result["structure_ref"].startswith("structure:")
     write = next(call for call in result.tool_calls if call.name == "write_structure")

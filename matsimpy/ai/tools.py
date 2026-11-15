@@ -664,6 +664,7 @@ class ToolExecutor:
             close = [t.name for t in self.catalog.search(name.replace("_", " "), limit=5)]
             hint = f"; similar tools: {', '.join(close)}" if close else ""
             return ToolResult(name, arguments, False, error=f"unknown tool {name!r}{hint}")
+        arguments = _decode_stringified_json(tool.parameters, arguments)
         errors = validate(tool.parameters, arguments)
         if errors:
             return ToolResult(name, arguments, False, error="invalid arguments: " + "; ".join(errors))
@@ -752,6 +753,35 @@ class ToolExecutor:
         for ref, item in data.items():
             cls = Molecule if item.get("@class") == "Molecule" else Crystal
             self.objects[ref] = cls.from_dict(dict(item))
+
+
+def _decode_stringified_json(schema: Mapping[str, Any], arguments: dict) -> dict:
+    """Undo a common model slip: a list or object argument sent as a JSON string.
+
+    Models sometimes write ``"species": "[\"Ga\", \"N\"]"`` for ``["Ga", "N"]``.
+    A string that decodes to a list (or dict) is replaced by it when the parameter
+    accepts a list (or object).
+    """
+    properties = schema.get("properties", {})
+    fixed = dict(arguments)
+    for name, value in arguments.items():
+        if not (isinstance(value, str) and value.lstrip()[:1] in ("[", "{")):
+            continue
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            continue
+        wanted = "array" if isinstance(decoded, list) else "object" if isinstance(decoded, dict) else None
+        if wanted and wanted in _schema_types(properties.get(name, {})):
+            fixed[name] = decoded
+    return fixed
+
+
+def _schema_types(schema: Mapping[str, Any]) -> set[str]:
+    types_ = {schema["type"]} if isinstance(schema.get("type"), str) else set(schema.get("type") or ())
+    for option in (*schema.get("anyOf", ()), *schema.get("oneOf", ())):
+        types_ |= _schema_types(option)
+    return types_
 
 
 def _lattice(value: Any) -> Lattice:
