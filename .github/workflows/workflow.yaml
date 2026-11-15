@@ -1,0 +1,161 @@
+name: Release
+
+# Publishes MatSimPy to PyPI when a GitHub release is published.
+#
+# The version lives in pyproject.toml only; the job refuses to publish when that
+# version does not match the release tag, so a mistyped tag cannot ship a wrong
+# artefact. Release order: bump pyproject.toml (and the README "**Version**" line,
+# plus CHANGELOG.md) on main, then create the tag vX.Y.Z on that commit and
+# publish a GitHub release for it.
+#
+# PyPI side (one-time setup):
+#   1. Add a trusted publisher for the MatSimPy project on PyPI:
+#        owner haidi-ustc, repository matsimpy, workflow workflow.yaml, environment pypi
+#      or, for the first upload before the project exists, add the same publisher as a
+#      "pending publisher" on https://pypi.org/manage/account/publishing/
+#   2. No API token secret is needed — authentication is OIDC.
+#   Alternative without a GitHub mirror: uncomment the Gitee tag trigger below.
+
+on:
+  release:
+    types: [published]
+    push:
+     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "testpypi to rehearse the upload, pypi to publish for real"
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------- checks
+  verify:
+    name: Verify version and tag
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tag matches pyproject version
+        shell: bash
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          tag="${{ github.event.release.tag_name }}"
+          echo "pyproject=$version tag=$tag"
+          if [ "v$version" != "$tag" ]; then
+            echo "::error::tag $tag does not match pyproject.toml version $version"
+            exit 1
+          fi
+
+      - name: README version line matches pyproject
+        run: |
+          python - <<'PY'
+          import pathlib, tomllib
+          version = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+          readme = pathlib.Path("README.md").read_text()
+          assert f"**Version**: v{version}" in readme, f"README does not declare v{version}"
+          print("README version line OK:", version)
+          PY
+
+      - name: CHANGELOG has an entry for this version
+        shell: bash
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if ! grep -Eq "^## \[?v?${version//./\\.}\]?( |$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $version' section"
+            exit 1
+          fi
+
+  test:
+    name: Test ${{ matrix.python }}
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # The sdist-contents test builds an sdist with the active interpreter.
+          python -m pip install "setuptools>=77" wheel
+          python -m pip install -e ".[all]"
+
+      # One worker: the xdist run needs more memory than a GitHub runner has.
+      - name: Run tests
+        run: python -m pytest -q -p no:xdist
+
+  # ---------------------------------------------------------------- publish
+  publish:
+    name: Publish to ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'pypi' }}
+    needs: [verify, test]
+    # workflow_dispatch skips verify/test, so run-by-run the needs are satisfied.
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' || needs.verify.result == 'success' && needs.test.result == 'success') &&
+      !cancelled()
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'pypi' }}
+    permissions:
+      id-token: write   # OIDC token for PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip "setuptools>=77" wheel build
+          python -m build --sdist --wheel
+
+      - name: Check the artefacts
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check --strict dist/*
+
+      - name: Install the wheel and import it
+        run: |
+          python -m venv /tmp/install-check
+          /tmp/install-check/bin/python -m pip install --upgrade pip
+          /tmp/install-check/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/install-check/bin/python - <<'PY'
+          import pathlib
+          import matsimpy, matsimpy.core, matsimpy.io, matsimpy.builders, matsimpy.transformation
+          print("imported matsimpy", matsimpy.__version__, "from", matsimpy.__file__)
+          # Packaged data files must survive the install.
+          import matsimpy.calculator.vasp as v
+          assert pathlib.Path(v.__file__).with_name("MPRelaxSet.yaml").is_file()
+          PY
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi') && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          # A re-run of the same release must not fail on "already exists".
+          skip-existing: true

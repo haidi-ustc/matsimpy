@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Packaging
+- `.github/workflows/workflow.yaml` publishes every GitHub release to PyPI through
+  Trusted Publishing (OIDC, no API token). Before uploading it checks that the release
+  tag equals `v<pyproject version>`, that the README `**Version**` line matches, that
+  `CHANGELOG.md` has a section for that version, and runs the test suite on Python 3.10
+  and 3.12. It then builds the sdist and wheel, runs `twine check --strict`, installs the
+  wheel into a clean venv and imports the packaged data files, and uploads with
+  `skip-existing` so a re-run is safe. The workflow can also be started by hand against
+  TestPyPI to rehearse a release.
+
 A review of every builder. Several produced wrong structures; those are fixed, and the
 nanotube and twisted-layer builders are rewritten on new, general algorithms.
 A second review covered `core`, `transformation` and `io`; its fixes are listed in the
