@@ -18,6 +18,7 @@ inputs or outputs by hand, and do not edit these copies.
 | OUTCAR | outputs/OUTCAR.gz (decompressed) |
 | POSCAR | inputs/POSCAR (VASP 4 format: no symbol line) |
 | POSCAR.AlN | inputs/POSCAR.AlN |
+| POSCAR_O2 | inputs/POSCAR_O2 (VASP 5: species line `O`) |
 | PROCAR.new_format_5.4.4.gz | outputs/PROCAR.new_format_5.4.4.gz |
 | PROCAR.simple | outputs/PROCAR.simple |
 | vasprun.hse06.xml.gz | outputs/vasprun.hse06.xml.gz |

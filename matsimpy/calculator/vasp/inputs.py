@@ -424,12 +424,15 @@ class Poscar(MSONable):
         The code will try its best to determine the elements in the POSCAR in
         the following order:
 
-        1. If default_names are supplied and valid, it will use those. Usually,
-        default names comes from an external source, such as a POTCAR in the
-        same directory.
+        1. A VASP 5+ POSCAR names its species (6th line). If ``default_names`` (usually
+        from a POTCAR in the same directory) are given too, they must be the same names
+        in the same order: VASP takes the species from the POTCAR, so a POTCAR that
+        disagrees belongs to another structure, and ``ValueError`` is raised.
+        (pymatgen relabelled the atoms with the POTCAR's names and only warned, so a
+        stale POTCAR in ``Si O`` order turned an ``O Si`` POSCAR's O into Si.)
 
-        2. If there are no valid default names but the input file is VASP5-like
-        and contains element symbols in the 6th line, the code will use that.
+        2. A VASP 4 POSCAR has no species line: ``default_names`` are used, as VASP
+        does, and must have one name per species block.
 
         3. Failing (2), the code will check if a symbol is provided at the end
         of each coordinate.
@@ -531,7 +534,7 @@ class Poscar(MSONable):
                     pass
 
             for i_line_symbols in range(6, 5 + n_lines_symbols):
-                symbols.extend(lines[i_line_symbols].split())
+                symbols.extend(symbol.split("/")[0].split("_")[0] for symbol in lines[i_line_symbols].split())
 
             n_atoms = []
             iline_natoms_start = 5 + n_lines_symbols
@@ -559,19 +562,22 @@ class Poscar(MSONable):
         # This is in line with VASP's parsing order that the POTCAR
         # specified is the default used.
         if default_names is not None:
-            # Use len(n_atoms) over len(symbols) as symbols is None for VASP 4 format
-            if len(n_atoms) > len(default_names):
-                raise ValueError(f"{default_names=} (likely from POTCAR) has fewer elements than POSCAR {symbols}")
-
-            if symbols is None or default_names[: len(symbols)] != symbols:
-                # After this VASP 4.x POSCAR would be converted to VASP 5/6 format
+            default_names = list(default_names)
+            if symbols is not None:
+                if default_names != symbols:
+                    raise ValueError(
+                        f"POSCAR species {symbols} do not match the POTCAR's {default_names}. VASP takes "
+                        "the species from the POTCAR, so these files do not belong together. Fix the "
+                        "POTCAR, or read the POSCAR's own species with check_for_potcar=False."
+                    )
+            else:  # VASP 4: the POTCAR names the species, one per block of the POSCAR
+                if len(default_names) != len(n_atoms):
+                    raise ValueError(
+                        f"the POTCAR has {len(default_names)} species {default_names}, "
+                        f"but the POSCAR has {len(n_atoms)} blocks of atoms {n_atoms}"
+                    )
                 vasp5or6_symbols = True
-
-                atomic_symbols = []
-                for idx, n_atom in enumerate(n_atoms):
-                    atomic_symbols.extend([default_names[idx]] * n_atom)
-
-                warnings.warn(f"Elements in POSCAR would be overwritten by {default_names=}", stacklevel=2)
+                atomic_symbols = [name for name, n_atom in zip(default_names, n_atoms) for _ in range(n_atom)]
 
         if not vasp5or6_symbols:
             ind: Literal[3, 6] = 6 if has_selective_dynamics else 3
