@@ -1,28 +1,21 @@
-# INCAR presets
+# Input sets
 
-Starting points only; converge ENCUT and the k-point mesh for production work.
+`write_vasp_input` starts from a Materials Project input set. Its INCAR holds the
+tested defaults (ENCUT 520 eV, PREC Accurate, spin polarization with MAGMOM, +U for
+transition-metal oxides and fluorides, LASPH); pass only the changes the user asks for.
 
-## Common to all
-- `PREC = Accurate`, `ENCUT = 520` (or 1.3 x the largest ENMAX of the POTCARs)
-- `EDIFF = 1E-6`, `LREAL = Auto` for cells with more than about 20 atoms
-- Spin polarized (magnetic elements such as Fe, Co, Ni, Mn): `ISPIN = 2`, `MAGMOM` per atom
+| Task | input_set | Notes |
+|---|---|---|
+| Relax positions and cell | `MPRelaxSet` | ISIF = 3, IBRION = 2, NSW = 99, ionic stop by EDIFF |
+| Relax positions only (slabs, fixed cell) | `MPRelaxSet` | override `{"ISIF": 2}` |
+| Single point, charge density, DOS | `MPStaticSet` | NSW = 0, tetrahedron smearing (ISMEAR = -5), LORBIT = 11 |
+| r2SCAN meta-GGA | `MPScanRelaxSet`, `MPScanStaticSet` | |
+| HSE06 hybrid | `MPHSERelaxSet` | expensive |
 
-## Smearing
-- Metals: `ISMEAR = 1`, `SIGMA = 0.2`
-- Semiconductors and insulators: `ISMEAR = 0`, `SIGMA = 0.05`
-- Unknown: `ISMEAR = 0`, `SIGMA = 0.05` is safe for both
-
-## Relaxation (positions and cell)
-`IBRION = 2`, `ISIF = 3`, `NSW = 100`, `EDIFFG = -0.02`
-
-## Relaxation (positions only, e.g. slabs or fixed cell)
-`IBRION = 2`, `ISIF = 2`, `NSW = 100`, `EDIFFG = -0.02`
-
-## Static (single point)
-`IBRION = -1`, `NSW = 0`, `LCHARG = .TRUE.`
-
-## Density of states (after a static run)
-`ICHARG = 11`, `ISMEAR = -5`, `LORBIT = 11`, `NEDOS = 3001`, denser k-point mesh
-
-## Band structure (after a static run)
-`ICHARG = 11`, `LORBIT = 11`, line-mode KPOINTS along a high-symmetry path
+Common overrides:
+- Both sets use tetrahedron smearing (ISMEAR = -5, SIGMA = 0.05). For metals the user
+  may want Methfessel-Paxton: `{"ISMEAR": 1, "SIGMA": 0.2}`; for molecules or very few
+  k-points, Gaussian: `{"ISMEAR": 0, "SIGMA": 0.05}`.
+- A force criterion: `{"EDIFFG": -0.02}`.
+- Non-magnetic calculation: `{"ISPIN": 1, "MAGMOM": null}`.
+- Converged production values: raise `ENCUT` and use a denser k-point mesh.

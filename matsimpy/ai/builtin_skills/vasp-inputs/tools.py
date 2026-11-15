@@ -8,7 +8,9 @@ from matsimpy.utils.tooling import tool
 
 @tool
 def kpoint_mesh(structure: Crystal, kppa: int = 1000) -> list[int]:
-    """Monkhorst-Pack mesh for a k-point density per reciprocal atom.
+    """k-point mesh divisions for a k-point density per reciprocal atom.
+
+    write_vasp_input writes them as a Gamma-centred mesh.
 
     Divisions are inversely proportional to the lattice vector lengths, so the
     k-point spacing is about the same along each axis.  Same rule as pymatgen's

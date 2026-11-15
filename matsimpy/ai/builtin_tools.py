@@ -120,24 +120,35 @@ def calculate_lennard_jones(structure: Structure, sigma: float = 3.4, epsilon: f
 def write_vasp_input(
     structure: Crystal,
     directory: str = "vasp_calc",
+    input_set: str = "MPStaticSet",
     incar: dict[str, Any] | None = None,
     kpoints: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Write VASP input files (INCAR, KPOINTS, POSCAR) without running VASP.
+    """Write VASP input files (INCAR, KPOINTS, POSCAR, POTCAR.spec) without running VASP.
 
-    No POTCAR is written; add one from your licensed VASP pseudopotentials.
+    The INCAR, k-points and POTCAR choices come from a Materials Project input set;
+    ``incar`` and ``kpoints`` override them.  No POTCAR is written: POTCAR.spec lists
+    the POTCARs (e.g. Ga_d) to take from the user's licensed VASP pseudopotentials.
 
     Args:
         structure: Crystal to calculate.
         directory: Output directory in the workspace.
-        incar: INCAR tags, e.g. {"ENCUT": 520, "ISMEAR": 0}.
-        kpoints: Monkhorst-Pack grid, e.g. [6, 6, 6].
+        input_set: "MPStaticSet" (single point), "MPRelaxSet" (relax positions and cell),
+            "MPScanStaticSet" or "MPScanRelaxSet" (r2SCAN), "MPHSERelaxSet" (HSE06).
+        incar: INCAR tags that override the set's, e.g. {"ENCUT": 600}; null removes a tag.
+        kpoints: Gamma-centred mesh, e.g. [6, 6, 6]; default: the set's k-point density.
+
+    Returns:
+        directory, files, and the INCAR tags and KPOINTS that were written.
     """
     from ..calculator import VaspCalculator
 
-    calculator = VaspCalculator(directory=directory, incar=incar, kpoints=kpoints, copy_potcar=False)
+    calculator = VaspCalculator(directory=directory, input_set=input_set, incar=incar, kpoints=kpoints,
+                                copy_potcar=False)
     path = calculator.write_input(structure, directory)
-    return {"directory": path, "files": sorted(item.name for item in path.iterdir())}
+    return {"directory": path, "files": sorted(item.name for item in path.iterdir()),
+            "incar": (path / "INCAR").read_text().splitlines(),
+            "kpoints": (path / "KPOINTS").read_text().splitlines()}
 
 
 @tool
