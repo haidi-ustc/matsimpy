@@ -348,12 +348,16 @@ class TestSettings:
         poscar = Poscar.from_file(os.path.join(FIXTURES_DIR, "POSCAR"))
         assert poscar.structure.formula == "Fe4P4O16"
 
-    def test_settings_read_pmg_environment_variables(self, monkeypatch):
+    def test_settings_read_pmg_environment_variables(self, monkeypatch, tmp_path):
         from matsimpy.calculator.vasp.inputs import SETTINGS
 
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("PMG_VASP_PSP_DIR", raising=False)
         assert SETTINGS.get("PMG_VASP_PSP_DIR") is None
-        monkeypatch.setenv("PMG_VASP_PSP_DIR", "/opt/psp")
+        (tmp_path / ".matsimpy" / "vasp_pp").mkdir(parents=True)  # the default POTCAR directory
+        assert SETTINGS.get("PMG_VASP_PSP_DIR") == str(tmp_path / ".matsimpy" / "vasp_pp")
+        assert "PMG_VASP_PSP_DIR" in dict(SETTINGS)
+        monkeypatch.setenv("PMG_VASP_PSP_DIR", "/opt/psp")  # the environment wins
         assert SETTINGS.get("PMG_VASP_PSP_DIR") == "/opt/psp"
         assert "PMG_VASP_PSP_DIR" in dict(SETTINGS)
         for raw, expected in [("false", False), ("0", False), ("True", True)]:
@@ -361,9 +365,10 @@ class TestSettings:
             assert SETTINGS.get("PMG_POTCAR_CHECKS") is expected
         assert SETTINGS.get("HOME") is None  # only PMG_* keys
 
-    def test_potcar_from_symbols_reports_missing_psp_dir(self, monkeypatch):
+    def test_potcar_from_symbols_reports_missing_psp_dir(self, monkeypatch, tmp_path):
         from matsimpy.calculator.vasp.inputs import PmgVaspPspDirError, Potcar
 
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("PMG_VASP_PSP_DIR", raising=False)
-        with pytest.raises(PmgVaspPspDirError, match="PMG_VASP_PSP_DIR environment variable"):
+        with pytest.raises(PmgVaspPspDirError, match="~/.matsimpy/vasp_pp .* PMG_VASP_PSP_DIR"):
             Potcar(["Si"], functional="PBE")

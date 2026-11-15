@@ -81,6 +81,15 @@ def test_dict_set_generates_native_inputs(si_crystal: Crystal) -> None:
     assert type(input_set).__mro__[1].__module__.startswith("matsimpy")
 
 
+def test_write_input_without_a_potcar_directory_says_how_to_add_one(si_crystal, tmp_path, monkeypatch) -> None:
+    from matsimpy.calculator.vasp.inputs import PmgVaspPspDirError
+
+    monkeypatch.setenv("HOME", str(tmp_path))  # no ~/.matsimpy/vasp_pp
+    monkeypatch.delenv("PMG_VASP_PSP_DIR", raising=False)
+    with pytest.raises(PmgVaspPspDirError, match="potcar_spec=True"):  # was a NameError
+        MPRelaxSet(si_crystal).write_input(tmp_path / "run")
+
+
 def test_standardize_structure_returns_crystal(si_crystal: Crystal) -> None:
     standardized = standardize_structure(si_crystal, sym_prec=1e-3, international_monoclinic=True)
     assert isinstance(standardized, Crystal)

@@ -79,7 +79,8 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 class _EnvSettings(Mapping):
     """pymatgen-style settings, read from ``PMG_*`` environment variables on access.
 
-    Keys used here: ``PMG_VASP_PSP_DIR`` (directory holding e.g. POT_GGA_PAW_PBE),
+    Keys used here: ``PMG_VASP_PSP_DIR`` (directory holding e.g. POT_GGA_PAW_PBE_54;
+    default ``~/.matsimpy/vasp_pp`` when that directory exists),
     ``PMG_DEFAULT_FUNCTIONAL``, ``PMG_POTCAR_CHECKS`` ("false"/"0" disables the
     POTCAR lookup in Poscar.from_file) and ``PMG_VASP_EXE``. Unlike pymatgen, no
     ``.pmgrc.yaml`` is read. 0.8.x-0.9.0 referenced ``SETTINGS`` without defining
@@ -87,8 +88,13 @@ class _EnvSettings(Mapping):
     """
 
     _BOOLEAN = {"PMG_POTCAR_CHECKS"}
+    DEFAULT_PSP_DIR = Path("~/.matsimpy/vasp_pp")
 
     def __getitem__(self, key: str) -> Any:
+        if key == "PMG_VASP_PSP_DIR" and key not in os.environ:
+            default = self.DEFAULT_PSP_DIR.expanduser()
+            if default.is_dir():
+                return str(default)
         if not key.startswith("PMG_") or key not in os.environ:
             raise KeyError(key)
         value = os.environ[key]
@@ -97,7 +103,10 @@ class _EnvSettings(Mapping):
         return value
 
     def __iter__(self) -> Iterator[str]:
-        return (key for key in os.environ if key.startswith("PMG_"))
+        keys = [key for key in os.environ if key.startswith("PMG_")]
+        if "PMG_VASP_PSP_DIR" not in keys and self.DEFAULT_PSP_DIR.expanduser().is_dir():
+            keys.append("PMG_VASP_PSP_DIR")
+        return iter(keys)
 
     def __len__(self) -> int:
         return sum(1 for _ in self)
@@ -2625,8 +2634,8 @@ class PotcarSingle:
         PMG_VASP_PSP_DIR = SETTINGS.get("PMG_VASP_PSP_DIR")
         if PMG_VASP_PSP_DIR is None:
             raise PmgVaspPspDirError(
-                "Set the PMG_VASP_PSP_DIR environment variable to your POTCAR directory "
-                "(the one containing e.g. POT_GGA_PAW_PBE); it is needed to find POTCARs"
+                "Put your POTCARs in ~/.matsimpy/vasp_pp (e.g. ~/.matsimpy/vasp_pp/POT_GGA_PAW_PBE_54) "
+                "or set the PMG_VASP_PSP_DIR environment variable to their directory"
             )
         if not os.path.isdir(PMG_VASP_PSP_DIR):
             raise FileNotFoundError(f"{PMG_VASP_PSP_DIR=} does not exist.")

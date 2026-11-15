@@ -49,7 +49,7 @@ from monty.json import MSONable
 from monty.serialization import loadfn
 
 from matsimpy.core import Crystal, Element, Lattice, Molecule
-from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, Potcar, VaspInput
+from matsimpy.calculator.vasp.inputs import Incar, Kpoints, PmgVaspPspDirError, Poscar, Potcar, VaspInput
 from matsimpy.calculator.vasp.outputs import Outcar, Vasprun
 from matsimpy.calculator.vasp._resources import load_resource
 from matsimpy.symmetry import HighSymmKpath, SpacegroupAnalyzer, StructureMatcher
@@ -448,8 +448,8 @@ class VaspInputSet(InputGenerator, abc.ABC):
         except PmgVaspPspDirError:
             if not potcar_spec:
                 raise PmgVaspPspDirError(
-                    "PMG_VASP_PSP_DIR is not set. Please set PMG_VASP_PSP_DIR"
-                    " in .pmgrc.yaml or use potcar_spec=True argument."
+                    "No POTCAR directory: put your POTCARs in ~/.matsimpy/vasp_pp, set"
+                    " PMG_VASP_PSP_DIR, or use potcar_spec=True."
                 ) from None
 
         if vasp_input is None:
