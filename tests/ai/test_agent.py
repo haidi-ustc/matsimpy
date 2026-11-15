@@ -12,6 +12,7 @@ from matsimpy import io
 from matsimpy.ai.agent import SYSTEM_PROMPT, Agent
 from matsimpy.ai.mcp import MCPServerConfig
 from matsimpy.ai.memory import AgentMemory
+from matsimpy.ai.provider import ChatMessage, ChatResponse, ToolCall
 from matsimpy.ai.skills import SkillLibrary
 
 from .test_mcp import our_server
@@ -118,7 +119,8 @@ def test_structures_carry_over_between_turns_and_sessions_resume(make_agent, scr
         [("write_structure", {"structure": "structure:2", "filename": "cu8.cif"})], "Saved."))
     assert [s["id"] for s in resumed.list_sessions()] == [session_id]
     assert resumed.list_sessions()[0]["first_request"] == "Build fcc Cu"
-    resumed.resume(session_id)
+    resumed.resume("last")
+    assert resumed.session.id == session_id
     assert "make_supercell" in resumed.session.loaded_tools
     assert resumed.run("save it").tool_calls[0].ok
     assert len(io.read(str(tmp_path / "ws" / "cu8.cif"))) == 8
@@ -126,6 +128,30 @@ def test_structures_carry_over_between_turns_and_sessions_resume(make_agent, scr
     assert resumed.provider.requests[0]["messages"][1]["content"] == "Build fcc Cu"
     with pytest.raises(KeyError, match="no saved session"):
         resumed.resume("missing")
+
+
+def test_reasoning_is_sent_back_in_later_requests_and_saved(make_agent, scripted, tmp_path):
+    # DeepSeek's docs: a request with tools must send back all earlier reasoning_content
+    call = ToolCall("c1", "from_prototype", {"prototype": "fcc", "species": "Cu", "lattice_constant": 3.61})
+    thinking = ChatResponse(ChatMessage.assistant("", [call], "Use from_prototype."), [call], "tool_calls")
+    agent = make_agent(scripted(thinking, "Built.", "Still fcc."))
+    agent.run("Build fcc Cu")
+    agent.run("What did you build?")
+    for request in agent.provider.requests[1:]:
+        (sent,) = [m for m in request["messages"] if m.get("tool_calls")]
+        assert sent["reasoning_content"] == "Use from_prototype."
+    saved = (tmp_path / "ws" / ".matsimpy" / "sessions" / f"{agent.session.id}.json").read_text()
+    assert '"reasoning_content": "Use from_prototype."' in saved
+
+
+def test_the_default_workspace_is_the_current_directory(scripted, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with Agent(scripted([("from_prototype", {"prototype": "fcc", "species": "Cu", "lattice_constant": 3.61})],
+                        [("write_structure", {"structure": "structure:1", "filename": "cu.cif"})], "Saved."),
+               skills=SkillLibrary(tmp_path, user=None), mcp_servers={}) as agent:
+        agent.run("Build fcc Cu and save cu.cif")
+    assert agent.workspace.path == tmp_path.resolve()
+    assert len(io.read(str(tmp_path / "cu.cif"))) == 1
 
 
 def test_undo_retry_and_new_session(make_agent, scripted):

@@ -14,7 +14,8 @@ class ScriptedProvider:
     """Replies from a script; records the messages and tool names of every request.
 
     Each script item is a string (a final answer), a list of ``(tool, arguments)``
-    pairs (tool calls), an exception (raised), or a callable ``(messages) -> item``.
+    pairs (tool calls), a :class:`ChatResponse` (returned as is), an exception (raised),
+    or a callable ``(messages) -> item``.
     """
 
     model = "scripted"
@@ -34,6 +35,8 @@ class ScriptedProvider:
             item = item(messages)
         if isinstance(item, BaseException):
             raise item
+        if isinstance(item, ChatResponse):
+            return item
         if isinstance(item, str):
             return ChatResponse(ChatMessage.assistant(item), [], "stop", {"prompt_tokens": 10, "completion_tokens": 2})
         calls = [ToolCall(f"call_{next(self._ids)}", name, arguments) for name, arguments in item]

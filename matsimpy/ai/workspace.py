@@ -1,4 +1,4 @@
-"""Workspace manager — default working directory for file operations."""
+"""The agent's workspace: the directory its tools read and write (default: the current directory)."""
 
 from __future__ import annotations
 
@@ -8,15 +8,19 @@ from pathlib import Path
 from threading import RLock
 from collections.abc import Iterator
 
-DEFAULT_WORKSPACE = Path.home() / ".matsimpy" / "ai" / "workspace"
 _CWD_LOCK = RLock()
 
 
 class Workspace:
-    """Manages the AI agent's working directory."""
+    """The AI agent's working directory.
+
+    Args:
+        path: The directory; created if missing.  Default: the current directory,
+            so files the agent writes land where it was started.
+    """
 
     def __init__(self, path: str | Path | None = None):
-        self.path = Path(path).expanduser().resolve() if path else DEFAULT_WORKSPACE
+        self.path = Path(path).expanduser().resolve() if path else Path.cwd().resolve()
         self.path.mkdir(parents=True, exist_ok=True)
         self._original_cwd = os.getcwd()
 
@@ -53,10 +57,6 @@ class Workspace:
         """List files in workspace matching glob pattern."""
         from glob import glob
         return [str(Path(f).relative_to(self.path)) for f in glob(str(self.path / pattern))]
-
-    @property
-    def home(self) -> str:
-        return str(DEFAULT_WORKSPACE)
 
 
 __all__ = ["Workspace"]

@@ -26,7 +26,8 @@ typer_testing = pytest.importorskip("typer.testing")
 
 def test_parse_chat_completion_with_tool_calls():
     response = parse_chat_completion({
-        "choices": [{"finish_reason": "tool_calls", "message": {"role": "assistant", "content": None, "tool_calls": [
+        "choices": [{"finish_reason": "tool_calls", "message": {
+            "role": "assistant", "content": None, "reasoning_content": "Translate first.", "tool_calls": [
             {"id": "c1", "type": "function", "function": {"name": "translate", "arguments": '{"vector": [1, 0, 0]}'}},
             {"id": "c2", "type": "function", "function": {"name": "broken", "arguments": "{not json"}},
         ]}}],
@@ -38,33 +39,89 @@ def test_parse_chat_completion_with_tool_calls():
     assert response.tool_calls[1].arguments == {"__invalid_json__": "{not json"}
     assert response.usage == {"prompt_tokens": 12, "completion_tokens": 3, "total_tokens": 15}
     assert response.message.to_dict()["tool_calls"][0]["function"]["arguments"] == '{"vector": [1, 0, 0]}'
+    assert response.message.to_dict()["reasoning_content"] == "Translate first."
     assert ChatMessage.from_dict(response.message.to_dict()) == response.message
 
 
-def test_deepseek_provider_request(monkeypatch):
-    sent = {}
+class Reply:
+    def __init__(self, status=200, body=None, headers=None):
+        self.status_code, self.headers = status, headers or {}
+        self.body = body or {"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]}
+        self.text = json.dumps(self.body)
 
-    class Reply:
-        def raise_for_status(self):
-            pass
+    def json(self):
+        return self.body
 
-        def json(self):
-            return {"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]}
 
-    def post(url, json, headers, timeout):
-        sent.update(url=url, payload=json, headers=headers)
-        return Reply()
+@pytest.fixture
+def post(monkeypatch):
+    """Replace requests.post by a queue of replies; records every request."""
+    sent, replies = [], []
 
-    monkeypatch.setattr("requests.post", post)
+    def fake(url, json, headers, timeout):
+        sent.append({"url": url, "payload": json, "headers": headers})
+        reply = replies.pop(0) if replies else Reply()
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+    monkeypatch.setattr("requests.post", fake)
+    return sent, replies
+
+
+TOOLS = [{"type": "function", "function": {"name": "t", "parameters": {"type": "object"}}}]
+
+
+def test_deepseek_provider_request(post, monkeypatch):
+    sent, _ = post
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("MATSIMPY_AI_EFFORT", raising=False)
     with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
         DeepSeekProvider()
-    provider = DeepSeekProvider("key", "deepseek-v4-flash", "https://example.org/")
-    tools = [{"type": "function", "function": {"name": "t", "parameters": {"type": "object"}}}]
-    assert provider.chat([ChatMessage.user("hello")], tools).message.content == "hi"
-    assert sent["url"] == "https://example.org/v1/chat/completions"
-    assert sent["payload"]["model"] == "deepseek-v4-flash" and sent["payload"]["tool_choice"] == "auto"
-    assert sent["headers"]["Authorization"] == "Bearer key"
+    provider = DeepSeekProvider("key", "deepseek-flash", "https://example.org/v1/")
+    assert provider.chat([ChatMessage.user("hello")], TOOLS).message.content == "hi"
+    assert sent[0]["url"] == "https://example.org/v1/chat/completions"
+    assert sent[0]["payload"]["model"] == "deepseek-flash" and sent[0]["payload"]["tool_choice"] == "auto"
+    assert "reasoning_effort" not in sent[0]["payload"] and "thinking" not in sent[0]["payload"]
+    assert sent[0]["headers"]["Authorization"] == "Bearer key"
+
+
+@pytest.mark.parametrize("effort, fields", [
+    ("low", {"reasoning_effort": "low"}),
+    ("max", {"reasoning_effort": "max"}),
+    ("off", {"thinking": {"type": "disabled"}}),
+])
+def test_deepseek_provider_reasoning_effort(effort, fields):
+    payload = DeepSeekProvider("key", reasoning_effort=effort).payload([ChatMessage.user("hi")])
+    assert {key: payload[key] for key in fields} == fields
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        DeepSeekProvider("key", reasoning_effort="medium")
+
+
+def test_deepseek_provider_retries_transient_failures(post):
+    import requests
+
+    sent, replies = post
+    provider = DeepSeekProvider("key", max_retries=3)
+    waits = []
+    provider._sleep = waits.append
+    replies += [requests.ConnectionError("reset"), Reply(503), Reply(429, headers={"Retry-After": "7"})]
+    assert provider.chat([ChatMessage.user("hi")]).message.content == "hi"
+    assert len(sent) == 4 and waits == [1, 2, 7.0]
+
+
+def test_deepseek_provider_reports_the_api_error_and_gives_up(post):
+    sent, replies = post
+    provider = DeepSeekProvider("key", max_retries=1)
+    provider._sleep = lambda seconds: None
+    replies += [Reply(400, {"error": {"message": "reasoning_content is missing"}})]
+    with pytest.raises(RuntimeError, match="HTTP 400 .*reasoning_content is missing"):
+        provider.chat([ChatMessage.user("hi")])
+    assert len(sent) == 1  # a client error is not retried
+    replies += [Reply(503), Reply(503)]
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        provider.chat([ChatMessage.user("hi")])
+    assert len(sent) == 3
 
 
 # --------------------------------------------------------------------------- REPL
@@ -242,12 +299,23 @@ def test_cli(tmp_path, monkeypatch, scripted):
     doctor = runner.invoke(cli.app, ["doctor", "-w", workspace])
     assert "[PASS] tools" in doctor.output
 
+    agents = []
+
     def build(*args, **kwargs):
-        return Agent(scripted("Done."), workspace=workspace, mcp_servers={})
+        agents.append(Agent(scripted("Done."), workspace=workspace, mcp_servers={}))
+        return agents[-1]
 
     monkeypatch.setattr(cli, "build_agent", build)
     one_shot = runner.invoke(cli.app, ["-c", "do it"])
-    assert one_shot.exit_code == 0 and one_shot.output.strip() == "Done."
+    assert one_shot.exit_code == 0 and one_shot.stdout.strip() == "Done."
+    session_id = agents[0].session.id
+    assert one_shot.stderr.strip() == f"Session {session_id}; continue with: matsimpy-ai -r {session_id}"
+    again = runner.invoke(cli.app, ["-r", "last", "-c", "and again"])
+    assert again.exit_code == 0 and agents[1].session.id == session_id
+    assert [m["content"] for m in agents[1].provider.requests[0]["messages"] if m["role"] == "user"] == [
+        "do it", "and again"]
+    missing = runner.invoke(cli.app, ["-r", "nope", "-c", "x"])
+    assert missing.exit_code == 2 and "no saved session 'nope'" in missing.stderr
 
     def failing(*args, **kwargs):
         return Agent(scripted(RuntimeError("provider down")), workspace=workspace, mcp_servers={})

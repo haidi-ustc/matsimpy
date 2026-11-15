@@ -117,7 +117,7 @@ class Agent:
 
     Args:
         provider: The LLM; defaults to :class:`DeepSeekProvider` (needs ``DEEPSEEK_API_KEY``).
-        workspace: Directory for files and sessions (default ``~/.matsimpy/ai/workspace``).
+        workspace: Directory for files and sessions (default: the current directory).
         catalog: Tools; defaults to :meth:`ToolCatalog.default` with ``tool_modules``.
         tool_modules: Extra modules whose ``@tool`` functions are added to the default catalog.
         skills: Skill library; defaults to packaged, user and workspace skills.
@@ -236,7 +236,16 @@ class Agent:
         return items
 
     def resume(self, session_id: str) -> Session:
-        """Continue a saved session: its messages, structures, loaded tools and active skills."""
+        """Continue a saved session: its messages, structures, loaded tools and active skills.
+
+        Args:
+            session_id: Id of a session in this workspace, or ``"last"`` for the newest.
+        """
+        if session_id == "last":
+            sessions = self.list_sessions()
+            if not sessions:
+                raise KeyError(f"no saved sessions in {self.sessions_dir}")
+            session_id = sessions[0]["id"]
         path = self.sessions_dir / f"{session_id}.json"
         if not path.is_file():
             raise KeyError(f"no saved session {session_id!r}")

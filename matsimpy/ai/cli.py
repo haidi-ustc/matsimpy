@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Optional
@@ -10,7 +11,7 @@ from typing import Optional
 import typer
 
 from .doctor import Doctor, render_diagnostics
-from .provider import DEFAULT_MODEL
+from .provider import DEFAULT_MODEL, EFFORTS
 
 app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]}, no_args_is_help=False)
 skills_app = typer.Typer(help="Manage skills.")
@@ -20,11 +21,12 @@ app.add_typer(skills_app, name="skills")
 app.add_typer(tools_app, name="tools")
 app.add_typer(mcp_app, name="mcp")
 
-WORKSPACE = typer.Option(None, "--workspace", "-w", help="Workspace directory (default ~/.matsimpy/ai/workspace).")
+WORKSPACE = typer.Option(None, "--workspace", "-w", help="Workspace directory (default: the current directory).")
 TOOL_MODULES = typer.Option([], "--tools", "-t", help="Extra module with @tool functions (repeatable).")
 
 
-def build_agent(workspace=None, model=None, api_key=None, base_url=None, tool_modules=(), verbose=True):
+def build_agent(workspace=None, model=None, api_key=None, base_url=None, tool_modules=(), verbose=True,
+                effort=None):
     """The agent of the CLI: DeepSeek provider, default tools, skills, MCP servers and memory."""
     from .agent import Agent
     from .memory import AgentMemory
@@ -36,7 +38,7 @@ def build_agent(workspace=None, model=None, api_key=None, base_url=None, tool_mo
         if line and (verbose or event == "warning"):
             print(line, file=sys.stderr)
 
-    return Agent(DeepSeekProvider(api_key, model, base_url), workspace=workspace, tool_modules=tool_modules,
+    return Agent(DeepSeekProvider(api_key, model, base_url, reasoning_effort=effort), workspace=workspace, tool_modules=tool_modules,
                  memory=AgentMemory(), on_event=show)
 
 
@@ -48,7 +50,10 @@ def main(
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (default $DEEPSEEK_API_KEY)."),
     base_url: Optional[str] = typer.Option(None, "--base-url", "-b", help="OpenAI-compatible API base URL."),
     command: Optional[str] = typer.Option(None, "--command", "-c", help="Run one request and exit."),
-    resume: Optional[str] = typer.Option(None, "--resume", "-r", help="Resume a saved session."),
+    resume: Optional[str] = typer.Option(None, "--resume", "-r",
+                                         help="Resume a saved session of the workspace: its id, or 'last'."),
+    effort: Optional[str] = typer.Option(None, "--effort", "-e",
+                                         help=f"Reasoning effort: {', '.join(EFFORTS)} (default: the server's)."),
     tool_modules: list[str] = TOOL_MODULES,
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Do not show tool calls."),
     raw: bool = typer.Option(False, "--raw", help="Print answers as Markdown source (the default when piped)."),
@@ -58,6 +63,7 @@ def main(
     \b
     Examples:
         matsimpy-ai -c "build fcc Cu with a=3.61 and save it as cu.cif"
+        matsimpy-ai -r last -c "now make a 2x2x2 supercell and save it"
         matsimpy-ai -w ~/project --resume 20261112-101500-ab12
         matsimpy-ai doctor
         matsimpy-ai mcp serve
@@ -68,21 +74,35 @@ def main(
     from .terminal import create_terminal, markdown_printer
 
     try:
-        agent = build_agent(workspace, model, api_key, base_url, tool_modules, verbose=not quiet)
+        agent = build_agent(workspace, model, api_key, base_url, tool_modules, verbose=not quiet, effort=effort)
     except ValueError as exc:  # e.g. no API key
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(2)
     with agent:
         if resume:
-            agent.resume(resume)
+            try:
+                agent.resume(resume)
+            except (KeyError, ValueError) as exc:
+                typer.echo(f"Error: {exc.args[0] if exc.args else exc}", err=True)
+                raise typer.Exit(2)
         if command:
             result = agent.run(command)
             if result.status == "error":
                 typer.echo(f"Error: {result.response}", err=True)
             else:
                 markdown_printer(markdown=False if raw else None)(result.response)
+            _print_resume_hint(agent, workspace)
             raise typer.Exit(0 if result.status == "success" else 1)
         create_terminal(ReplController(agent), markdown=False if raw else None).run()
+        _print_resume_hint(agent, workspace)
+
+
+def _print_resume_hint(agent, workspace: Optional[str]) -> None:
+    """Tell the user (on stderr) how to continue the session, if it was saved."""
+    if not (agent.sessions_dir / f"{agent.session.id}.json").is_file():
+        return
+    where = f"-w {shlex.quote(workspace)} " if workspace else ""
+    typer.echo(f"Session {agent.session.id}; continue with: matsimpy-ai {where}-r {agent.session.id}", err=True)
 
 
 @app.command("doctor")

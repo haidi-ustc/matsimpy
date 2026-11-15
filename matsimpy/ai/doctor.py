@@ -17,7 +17,6 @@ from .mcp import USER_CONFIG, MCPClient, load_config
 from .provider import DEFAULT_BASE_URL
 from .skills import SkillLibrary
 from .tools import ToolCatalog
-from .workspace import DEFAULT_WORKSPACE
 
 __all__ = ["Diagnostic", "Doctor", "render_diagnostics"]
 
@@ -45,7 +44,7 @@ class Doctor:
         tool_modules: Sequence[str] = (),
         network_probe: Callable[[], None] | None = None,
     ) -> None:
-        self.workspace = Path(workspace).expanduser() if workspace else DEFAULT_WORKSPACE
+        self.workspace = Path(workspace).expanduser() if workspace else Path.cwd()
         self.environ = os.environ if environ is None else environ
         self.mcp_config = list(mcp_config) if mcp_config is not None else [USER_CONFIG, self.workspace / "mcp.json"]
         self.skills = skills or SkillLibrary(self.workspace)
