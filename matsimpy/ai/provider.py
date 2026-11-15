@@ -174,27 +174,44 @@ class DeepSeekProvider:
         return payload
 
     def chat(self, messages: list[ChatMessage], tools: list[dict] | None = None) -> ChatResponse:
-        import requests
+        response = post_with_retries(
+            self.endpoint, json=self.payload(messages, tools), timeout=self.request_timeout,
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            max_retries=self.max_retries, sleep=self._sleep,
+        )
+        return parse_chat_completion(response.json())
 
-        payload = self.payload(messages, tools)
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        for attempt in range(self.max_retries + 1):
-            last = attempt == self.max_retries
-            try:
-                response = requests.post(self.endpoint, json=payload, headers=headers, timeout=self.request_timeout)
-            except (requests.ConnectionError, requests.Timeout):
-                if last:
-                    raise
-                self._sleep(2 ** attempt)
-                continue
-            if response.status_code in RETRY_STATUS and not last:
-                self._sleep(_retry_after(response) or 2 ** attempt)
-                continue
-            if response.status_code >= 400:
-                # the body says what is wrong (bad model name, missing reasoning_content, ...)
-                raise RuntimeError(f"HTTP {response.status_code} from {self.endpoint}: {response.text[:500]}")
-            return parse_chat_completion(response.json())
-        raise AssertionError("unreachable")
+
+def post_with_retries(url: str, *, headers: dict, timeout: float, max_retries: int = 3,
+                      sleep=time.sleep, retry_timeouts: bool = True, **kwargs: Any):
+    """``requests.post`` that retries connection errors, timeouts, 429 and 5xx with backoff.
+
+    Raises ``RuntimeError`` with the start of the body for any other error status, so the
+    API's message (bad model name, missing field, ...) reaches the user.
+    """
+    import requests
+
+    for attempt in range(max_retries + 1):
+        last = attempt == max_retries
+        try:
+            response = requests.post(url, headers=headers, timeout=timeout, **kwargs)
+        except requests.Timeout:
+            if last or not retry_timeouts:
+                raise
+            sleep(2 ** attempt)
+            continue
+        except requests.ConnectionError:
+            if last:
+                raise
+            sleep(2 ** attempt)
+            continue
+        if response.status_code in RETRY_STATUS and not last:
+            sleep(_retry_after(response) or 2 ** attempt)
+            continue
+        if response.status_code >= 400:
+            raise RuntimeError(f"HTTP {response.status_code} from {url}: {response.text[:500]}")
+        return response
+    raise AssertionError("unreachable")
 
 
 def _retry_after(response) -> float | None:
