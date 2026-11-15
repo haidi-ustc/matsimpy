@@ -73,6 +73,22 @@ for *loaded* tools: a few common ones plus the meta-tools `search_tools`,
 `load_tools`, `activate_skill`, `read_skill_resource` and `propose_skill`. This
 keeps requests small with ~80 tools while every tool stays reachable.
 
+**Web, documents and images.** Four tools use DeepSeek's tool APIs with the same
+`DEEPSEEK_API_KEY` (DeepSeek bills them separately: search and fetch per request, OCR
+per page, vision per token):
+
+| Tool | API | Does |
+|---|---|---|
+| `web_search(query, count=5, full_content=False)` | [Search](https://api-docs.deepseek.com/guides/search/) | titles, URLs, dates and summaries; `site:`, `lang:`, `after:` work in the query |
+| `fetch_url(url, max_chars=12000)` | Fetch | a page as Markdown |
+| `ocr_document(path, output=None, layout=False)` | [OCR](https://api-docs.deepseek.com/guides/ocr) | text of a PDF, Word, PowerPoint or image file; `output` saves all of it, `layout` keeps bounding boxes |
+| `describe_image(image, question)` | [Vision](https://api-docs.deepseek.com/guides/vision) | asks `deepseek-flash` about a workspace image or URL, also when the agent runs `deepseek-v4-pro` |
+
+They are ordinary tools, so they work with any model and show up in the session.
+DeepSeek's server-side web tools are not used, because they run only on
+`deepseek-flash` and cannot be declared next to function tools.
+`$MATSIMPY_DEEPSEEK_TOOLS_URL` replaces the API root `https://api.deepseek.com`.
+
 **Structures.** A tool that returns a structure stores it and gives the model a
 summary with a `structure_ref` such as `"structure:3"`. Later calls pass that
 reference (or a workspace file path) wherever a structure is expected.

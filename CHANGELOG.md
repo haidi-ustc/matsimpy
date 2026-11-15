@@ -95,6 +95,12 @@ same sections below.
   `write_MOL` raises above 999 atoms.
 
 ### Added
+- Agent tools on DeepSeek's tool APIs (`matsimpy.ai.deepseek_tools`, need
+  `DEEPSEEK_API_KEY`): `web_search` and `fetch_url` (Search & Fetch API),
+  `ocr_document` (OCR of PDF, Word, PowerPoint and image files, plain text or with
+  layout boxes, optionally saved to a file) and `describe_image` (asks the vision model
+  `deepseek-flash` about an image file or URL). A new system-prompt rule tells the model
+  to look up outside facts with them and cite the URLs.
 - `matsimpy-ai -c` prints the session id and the command that continues it on stderr
   (the interactive agent does so on exit); `-r last` resumes the newest session of the
   workspace (`Agent.resume("last")`).

@@ -603,6 +603,9 @@ with Agent(workspace="project") as agent:
   until `/approve`.
 - **MCP**: servers listed in `~/.matsimpy/ai/mcp.json` or `<workspace>/mcp.json`
   (stdio or Streamable HTTP) add their tools to the agent.
+- **Web, documents, images**: `web_search`, `fetch_url`, `ocr_document` and
+  `describe_image` use DeepSeek's Search, Fetch, OCR and vision APIs (same key, billed
+  separately), e.g. "find the experimental lattice constant of MgO and build it".
 - **Workspace**: files are read and written in the current directory unless `-w`
   names another one.
 - **Sessions** are JSON files in `<workspace>/.matsimpy/sessions/` (`-r <id>|last`,
