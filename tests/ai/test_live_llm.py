@@ -51,6 +51,8 @@ def test_live_rocksalt_uses_prototype_and_writes_valid_cif(agent, prompt):
      {"from_prototype", "translate", "write_structure"}),
     ("Create an argon dimer at Cartesian coordinates [0,0,0] and [4,0,0], then calculate its "
      "Lennard-Jones energy", {"create_molecule", "calculate_lennard_jones"}),
+    ("Find the experimental lattice constant of MgO on the web, build rocksalt MgO with it and save mgo.cif",
+     {"web_search", "from_prototype", "write_structure"}),
 ])
 def test_live_workflows_use_expected_tools(agent, prompt, required_tools):
     result = agent.run(prompt)

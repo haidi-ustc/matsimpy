@@ -58,6 +58,7 @@ DEFAULT_TOOL_MODULES: tuple[str, ...] = (
     "matsimpy.symmetry",
     "matsimpy.analysis",
     "matsimpy.ai.builtin_tools",
+    "matsimpy.ai.deepseek_tools",
 )
 """Modules scanned for ``@tool`` functions by :meth:`ToolCatalog.default`."""
 

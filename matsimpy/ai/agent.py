@@ -47,6 +47,9 @@ use random_crystal.
 Do not add claims or default values the user did not ask for.
 5. If a tool fails, read the error, fix the arguments or pick another tool, and say what failed if \
 you cannot recover.
+6. For facts no other tool gives (experimental values, literature, recent results) use web_search \
+and fetch_url, and cite the URLs. Read documents with ocr_document and images or figures with \
+describe_image.
 
 Only some tools are loaded. All tool names are listed below; call search_tools or load_tools to \
 load the ones you need before calling them. Skills hold instructions for specific tasks: call \
