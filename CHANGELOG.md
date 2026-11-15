@@ -176,6 +176,9 @@ same sections below.
   `e<r>_ev` line raised `RuntimeError` (`np.array(map(...))`).
 - `Vaspout` (vaspout.h5) raised `KeyError: '0 is not an element symbol'` for every file;
   `atomic_symbols` now follow the site order, as in vasprun.xml.
+- `Vasprun.kpoints` for an explicit k-point list (hybrid and band runs) said there was
+  one k-point, so the KPOINTS written from it had one point. `Kpoints` wrote fractional
+  weights as integers (0.25 became 0).
 - Agent tools: a list or object argument that the model sent as a JSON string
   (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
   executor now decodes it when the parameter accepts a list or object.

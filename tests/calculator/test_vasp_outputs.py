@@ -425,6 +425,18 @@ def test_vaspout_reads_a_band_structure_run():
     assert gap["energy"] == pytest.approx(0.78098165) and gap["direct"]
 
 
+def test_vasprun_kpoints_keep_an_explicit_kpoint_list():
+    from matsimpy.calculator.vasp.inputs import Kpoints
+    from matsimpy.calculator.vasp.outputs import Vasprun
+
+    vr = Vasprun(os.path.join(FIXTURES_DIR, "vasprun.force_hybrid_like_calc.xml.gz"), parse_dos=False)
+    # num_kpts was 1, so the written KPOINTS held one k-point of weight 0
+    written = Kpoints.from_str(str(vr.kpoints))
+    assert written.num_kpts == 5
+    np.testing.assert_allclose(written.kpts, [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0], [0.5, 0.5, 0], [0, 0, 0]])
+    np.testing.assert_allclose(written.kpts_weights, [0.25, 0.25, 0.25, 0.25, 0.0])
+
+
 @pytest.mark.parametrize("name, efermi, nelect, density_matrices", [
     # the last values in the file; the reverse scan kept the first ionic step's (3.6761)
     ("OUTCAR.etest1.gz", 8.9069, 11.0000101, False),

@@ -1390,10 +1390,12 @@ class Kpoints(MSONable):
                 if idx % 2 == 1:
                     lines[-1] += "\n"
             elif self.num_kpts > 0 and self.kpts_weights is not None:
+                weight = self.kpts_weights[idx]  # often fractional, e.g. vasprun.xml's normalized weights
+                weight_str = str(int(weight)) if float(weight).is_integer() else str(float(weight))
                 if self.labels is not None:
-                    lines[-1] += f" {int(self.kpts_weights[idx])} {self.labels[idx]}"
+                    lines[-1] += f" {weight_str} {self.labels[idx]}"
                 else:
-                    lines[-1] += f" {int(self.kpts_weights[idx])}"
+                    lines[-1] += f" {weight_str}"
 
         # Tetrahedron parameters if the number of tetrahedrons > 0
         if style not in "lagm" and self.tet_number > 0:

@@ -158,6 +158,8 @@ class TestKpoints:
         assert again.style == kpt.style
         assert again.num_kpts == kpt.num_kpts
         np.testing.assert_allclose(np.asarray(again.kpts, float), np.asarray(kpt.kpts, float))
+        if kpt.style.name != "Line_mode" and kpt.num_kpts:
+            assert list(again.kpts_weights) == list(kpt.kpts_weights)
 
     @pytest.mark.parametrize("name", KPOINTS_FILES)
     def test_optional_pymatgen_reference(self, name):
