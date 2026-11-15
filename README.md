@@ -446,6 +446,14 @@ calc.write_input(crystal, "si_offline")    # inputs only; run VASP yourself
 r = calc.read_results("si_offline")        # -> Results
 ```
 
+The INCAR, KPOINTS and POTCAR choices come from a Materials Project input set
+(`input_set="MPStaticSet"` by default; also `"MPRelaxSet"`, `"MPScanStaticSet"`, ...);
+`incar` overrides its tags and `kpoints=[n1, n2, n3]` writes a Gamma-centred mesh.
+POTCARs are read from `~/.matsimpy/vasp_pp` (or `$PMG_VASP_PSP_DIR`), e.g.
+`~/.matsimpy/vasp_pp/POT_GGA_PAW_PBE_54/POTCAR.Si.gz`; `potcar_functional` picks the
+set (default `"PBE_54"`). With `copy_potcar=False` a `POTCAR.spec` lists the POTCARs
+instead. `vasp_cmd` may be a full command (`"mpirun -np 16 vasp_std"`).
+
 MatterSim needs the separate `mattersim` package and either a valid local model
 file or a supported pretrained-model shortcut. Model weights may be downloaded
 by MatterSim and are not bundled with MatSimPy.

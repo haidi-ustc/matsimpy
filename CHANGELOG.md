@@ -8,6 +8,13 @@ A second review covered `core`, `transformation` and `io`; its fixes are listed 
 same sections below.
 
 ### Breaking changes
+- `VaspCalculator(directory, incar=None, kpoints=None, input_set="MPStaticSet",
+  potcar_functional="PBE_54", vasp_cmd="vasp", copy_potcar=True, timeout=None)` writes
+  the inputs of a Materials Project input set; `incar` overrides its tags (it was the
+  whole INCAR, default ENCUT 400, ISMEAR 0) and `kpoints` its k-points. With
+  `copy_potcar=False` a `POTCAR.spec` names the POTCARs. POTCARs come from
+  `$PMG_VASP_PSP_DIR`, default `~/.matsimpy/vasp_pp`; `$VASP_PP_PATH` is no longer read.
+  The AI tool `write_vasp_input` takes `input_set` and returns the INCAR and KPOINTS.
 - `matsimpy-ai` and `Agent` use the current directory as the workspace when none is
   given (it was `~/.matsimpy/ai/workspace`), so files the agent writes land where it
   was started. Sessions saved before are resumed with
@@ -136,6 +143,18 @@ same sections below.
   and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
+- `VaspCalculator`: KPOINTS for `kpoints=[4, 4, 4]` was the "fully automatic" format
+  with the list printed as its length (`Automatic` / `[4, 4, 4]`), which VASP cannot
+  read; it is now a Gamma-centred mesh. The POTCAR came from the `POT_GGA_PAW_PBE`
+  folder, with bare element symbols, and was only found if `$PMG_VASP_PSP_DIR` was set
+  although the error asked for `$VASP_PP_PATH`; it now follows the input set's POTCAR
+  choices (`Fe_pv`, `Ga_d`, ...) in `potcar_functional`. `vasp_cmd` with arguments
+  (`mpirun -np 4 vasp_std`) failed, runs were killed after one hour, and a failure
+  showed only stderr. `read_results` returned no forces or stress from an OUTCAR,
+  energy 0.0 from an OSZICAR without E0, and empty results when no output existed; it
+  now reads both from the OUTCAR, and raises `FileNotFoundError`.
+- `VaspInputSet.write_input` without a POTCAR directory raised `NameError` instead of
+  explaining how to add POTCARs.
 - Agent tools: a list or object argument that the model sent as a JSON string
   (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
   executor now decodes it when the parameter accepts a list or object.
