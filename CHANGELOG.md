@@ -8,6 +8,10 @@ A second review covered `core`, `transformation` and `io`; its fixes are listed 
 same sections below.
 
 ### Breaking changes
+- `Poscar.from_file` raises `ValueError` when a POTCAR in the same directory names
+  other species, or another order, than a VASP 5 POSCAR (it relabelled the atoms with
+  the POTCAR's names and only warned), or has a different number of species than a
+  VASP 4 POSCAR. `check_for_potcar=False` reads the POSCAR's own species.
 - `VaspCalculator(directory, incar=None, kpoints=None, input_set="MPStaticSet",
   potcar_functional="PBE_54", vasp_cmd="vasp", copy_potcar=True, timeout=None)` writes
   the inputs of a Materials Project input set; `incar` overrides its tags (it was the
@@ -143,6 +147,13 @@ same sections below.
   and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
+- POSCAR/POTCAR order (a pymatgen legacy): with a stale POTCAR next to it, an
+  `O Mn` POSCAR was read as `Fe O` (the O atom became Fe) because the POTCAR's names
+  replaced the POSCAR's by position; a POTCAR with extra entries was accepted.
+  Species on the second and later species lines of a POSCAR (more than 20 blocks)
+  kept their POTCAR suffixes (`Fe_pv/hash`). Writing was checked and is aligned:
+  POSCAR blocks, POTCAR entries, LDAUU/LDAUL/LDAUJ and MAGMOM follow the same order,
+  also for species that are not grouped.
 - `VaspCalculator`: KPOINTS for `kpoints=[4, 4, 4]` was the "fully automatic" format
   with the list printed as its length (`Automatic` / `[4, 4, 4]`), which VASP cannot
   read; it is now a Gamma-centred mesh. The POTCAR came from the `POT_GGA_PAW_PBE`
