@@ -413,6 +413,18 @@ def test_outcar_read_igpar_reads_the_dipole_moments():
     np.testing.assert_array_equal(outcar.p_ion, [0.0, 0.0, -5.56684])
 
 
+def test_vaspout_reads_a_band_structure_run():
+    pytest.importorskip("h5py")
+    from matsimpy.calculator.vasp.outputs import Vaspout
+
+    # raised KeyError: '0 is not an element symbol' (the symbols came from iterating a Composition)
+    vo = Vaspout(os.path.join(FIXTURES_DIR, "vaspout.line_mode_band_structure.h5.gz"))
+    assert vo.atomic_symbols == ["Ga", "Sb"]
+    assert vo.final_energy == pytest.approx(-8.953035077)
+    gap = vo.get_band_structure(line_mode=True).get_band_gap()
+    assert gap["energy"] == pytest.approx(0.78098165) and gap["direct"]
+
+
 @pytest.mark.parametrize("name, efermi, nelect, density_matrices", [
     # the last values in the file; the reverse scan kept the first ionic step's (3.6761)
     ("OUTCAR.etest1.gz", 8.9069, 11.0000101, False),

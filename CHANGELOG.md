@@ -174,6 +174,8 @@ same sections below.
 - `Outcar.read_igpar` set `p_elec` and `p_ion` to None: the electronic dipole was
   stored as `p_elc` and the `Ionic dipole moment` line never matched. A non-spin
   `e<r>_ev` line raised `RuntimeError` (`np.array(map(...))`).
+- `Vaspout` (vaspout.h5) raised `KeyError: '0 is not an element symbol'` for every file;
+  `atomic_symbols` now follow the site order, as in vasprun.xml.
 - Agent tools: a list or object argument that the model sent as a JSON string
   (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
   executor now decodes it when the parameter accepts a list or object.

@@ -6229,12 +6229,14 @@ class Vaspout(Vasprun):
         )
 
     @staticmethod
-    def _parse_atominfo(composition: Composition):
-        # TODO: this function seems irrelevant but is used in Vasprun, do we need this?
-        atom_symbols = []
-        for element in composition:
-            atom_symbols += [str(element) for _ in range(int(composition[element]))]
-        return atom_symbols
+    def _parse_atominfo(structure) -> list[str]:  # type: ignore[override]
+        """One symbol per site, in site order, as in vasprun.xml's atominfo.
+
+        pymatgen grouped the symbols by element of the composition, which differs from
+        the site order when a species occurs in more than one block; MatSimPy's
+        Composition is not iterable, so it raised KeyError for every vaspout.h5.
+        """
+        return [str(symbol) for symbol in structure.species]
 
     def _parse_params(self, input_data: dict):  # type: ignore[override]
         self.incar = Incar(input_data["incar"])
@@ -6262,7 +6264,7 @@ class Vaspout(Vasprun):
             ) = self._parse_kpoints(input_data["kpoints_opt"])
 
         self.initial_structure = self._parse_structure(input_data["poscar"])
-        self.atomic_symbols = self._parse_atominfo(self.initial_structure.composition)
+        self.atomic_symbols = self._parse_atominfo(self.initial_structure)
 
         self.potcar = None
         self.potcar_symbols = []

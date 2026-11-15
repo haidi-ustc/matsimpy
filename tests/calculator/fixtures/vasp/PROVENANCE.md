@@ -25,6 +25,7 @@ inputs or outputs by hand, and do not edit these copies.
 | PROCAR.simple | outputs/PROCAR.simple |
 | vasprun.hse06.xml.gz | outputs/vasprun.hse06.xml.gz |
 | vasprun.xml | outputs/vasprun.xml.gz (decompressed) |
+| vaspout.line_mode_band_structure.h5.gz | outputs/vaspout.line_mode_band_structure.h5.gz (GaSb band structure, VASP 6 HDF5) |
 | CONTCAR_Li2O | outputs/CONTCAR_Li2O |
 | FePO4.vasp | inputs/FePO4.vasp |
 | POSCAR_fcc | inputs/POSCAR_fcc |
