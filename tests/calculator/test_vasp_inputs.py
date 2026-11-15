@@ -56,6 +56,26 @@ class TestIncar:
         assert all(re.fullmatch(r"[A-Z_0-9]+ = \S.*", line) for line in lines), lines
         assert dict(Incar.from_file(fpath)) == dict(incar)
 
+    def test_init_does_not_change_the_callers_dict(self):
+        from matsimpy.calculator.vasp.inputs import Incar
+
+        params = {"MAGMOM": [1, 2, 3, 4, 5, 6], "LSORBIT": True}
+        assert Incar(params)["MAGMOM"] == [[1, 2, 3], [4, 5, 6]]
+        assert params["MAGMOM"] == [1, 2, 3, 4, 5, 6]  # was reshaped in place
+
+    @pytest.mark.parametrize("value, expected", [
+        # Fortran numbers without a leading digit or with "+" were returned as the raw string
+        ("2*.5 -.5 +1.5", [0.5, 0.5, -0.5, 1.5]),
+        (".6 2*-.25", [0.6, -0.25, -0.25]),
+        ("2*1e-3 -2", [0.001, 0.001, -2]),
+        # a nested multiplier counted only when the first count contained the digit 3
+        ("2*2*1 4*0.6", [1, 1, 1, 1, 0.6, 0.6, 0.6, 0.6]),
+    ])
+    def test_list_values_read_fortran_numbers(self, value, expected):
+        from matsimpy.calculator.vasp.inputs import Incar
+
+        assert Incar.proc_val("MAGMOM", value) == expected
+
     def test_diff(self):
         from matsimpy.calculator.vasp.inputs import Incar
 
@@ -146,6 +166,16 @@ class TestKpoints:
         assert kpt.num_kpts == 4
         assert list(kpt.kpts_weights) == [1, 1, 2, 4]
         assert kpt.tet_number > 0
+
+    def test_generating_basis_without_a_shift_round_trips(self):
+        from matsimpy.calculator.vasp.inputs import Kpoints
+
+        basis = Kpoints.from_file(_fixture("KPOINTS_cartesian"))
+        assert basis.num_kpts == 0 and basis.kpts_shift == (0.5, 0.5, 0.5)
+        unshifted = Kpoints(comment=basis.comment, num_kpts=0, style=basis.style, kpts=basis.kpts)
+        again = Kpoints.from_str(str(unshifted))  # the zero shift line is not written; reading raised IndexError
+        assert again.style == basis.style and again.kpts_shift == (0, 0, 0)
+        np.testing.assert_allclose(again.kpts, np.eye(3) * 0.25)
 
     @pytest.mark.parametrize("name", KPOINTS_FILES)
     def test_write_read_roundtrip(self, name, tmp_path):
@@ -284,6 +314,16 @@ class TestPoscar:
         assert all("velocities" in d for d in p.structure.site_properties)
         assert original.site_properties[0].get("velocities") is None  # input untouched
 
+    def test_set_temperature_leaves_no_net_momentum(self):
+        from matsimpy.calculator.vasp.inputs import Poscar
+
+        p = Poscar.from_file(_fixture("POSCAR"), check_for_potcar=False)  # Fe, P and O
+        p.set_temperature(300)
+        masses = np.array([e.atomic_mass for e in p.structure.elements], dtype=float)
+        momenta = masses[:, None] * np.asarray(p.velocities)
+        # the drift was removed before the 1/sqrt(m) scaling, about 5 % of the total remained
+        assert np.linalg.norm(momenta.sum(axis=0)) < 1e-12 * np.abs(momenta).sum()
+
     def test_from_str_empty_raises(self):
         from matsimpy.calculator.vasp.inputs import Poscar
 
@@ -374,3 +414,14 @@ class TestSettings:
         monkeypatch.delenv("PMG_VASP_PSP_DIR", raising=False)
         with pytest.raises(PmgVaspPspDirError, match="~/.matsimpy/vasp_pp .* PMG_VASP_PSP_DIR"):
             Potcar(["Si"], functional="PBE")
+
+
+def test_vasp_input_shallow_copy_keeps_the_file_names():
+    from matsimpy.calculator.vasp.inputs import Incar, Kpoints, Poscar, VaspInput
+
+    vasp_input = VaspInput(Incar.from_file(_fixture("INCAR")), Kpoints.from_file(_fixture("KPOINTS")),
+                           Poscar.from_file(_fixture("POSCAR"), check_for_potcar=False), "Fe\nP\nO",
+                           potcar_spec=True, optional_files={"ICONST": "R 1 2 0"})
+    copy = vasp_input.copy(deep=False)  # raised TypeError: the keys were passed lower-cased
+    assert set(copy) == {"INCAR", "KPOINTS", "POSCAR", "POTCAR.spec", "ICONST"}
+    assert copy["POTCAR.spec"] == "Fe\nP\nO" and copy["ICONST"] is vasp_input["ICONST"]

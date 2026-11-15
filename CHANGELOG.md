@@ -179,6 +179,14 @@ same sections below.
 - `Vasprun.kpoints` for an explicit k-point list (hybrid and band runs) said there was
   one k-point, so the KPOINTS written from it had one point. `Kpoints` wrote fractional
   weights as integers (0.25 became 0).
+- VASP inputs (fixes made upstream in pymatgen-core, ported): a POSCAR with a negative
+  scale (the cell volume) and Cartesian coordinates had its coordinates multiplied by
+  the volume. INCAR lists returned the raw string for Fortran numbers such as `.5`,
+  `-.5`, `+1.5` and `1e-3`, and `2*2*1` counted as `2*2`. `Incar(params)` reshaped
+  MAGMOM in the caller's dict for LSORBIT runs. A generating-basis KPOINTS with zero
+  shift, as `Kpoints` writes it, could not be read back. `VaspInput.copy(deep=False)`
+  raised `TypeError`. `Poscar.set_temperature` left a net momentum (about 5 % for
+  FePO4) when the structure had more than one element.
 - Agent tools: a list or object argument that the model sent as a JSON string
   (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
   executor now decodes it when the parameter accepts a list or object.

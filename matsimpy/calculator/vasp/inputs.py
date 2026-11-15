@@ -472,10 +472,10 @@ class Poscar(MSONable):
         if scale < 0:
             # In VASP, a negative scale factor is treated as a volume. We need
             # to translate this to a proper lattice vector scaling.
+            # The same length factor applies to Cartesian coordinates below.
             vol: float = abs(np.linalg.det(lattice))
-            lattice *= (-scale / vol) ** (1 / 3)
-        else:
-            lattice *= scale
+            scale = (-scale / vol) ** (1 / 3)
+        lattice *= scale
 
         # "atomic_symbols" is the "fully expanded" list of symbols,
         # while "symbols" is the list as shown in POSCAR.
@@ -862,12 +862,13 @@ class Poscar(MSONable):
         atomic_masses = np.array([Element(str(site.specie)).atomic_mass for site in self.structure])
         dof = 3 * len(self.structure) - 3
 
-        # Remove linear drift (net momentum)
-        velocities -= np.mean(atomic_masses[:, None] * velocities, axis=0) / np.mean(atomic_masses)
-
         # Scale velocities due to atomic masses
         # mean 0 std proportional to sqrt(1/m)
         velocities /= atomic_masses[:, None] ** (1 / 2)
+
+        # Remove linear drift (net momentum). After the mass scaling, which would otherwise
+        # bring a net momentum back for structures with more than one element.
+        velocities -= np.mean(atomic_masses[:, None] * velocities, axis=0) / np.mean(atomic_masses)
 
         # Scale velocities to get correct temperature
         energy = np.sum(1 / 2 * atomic_masses * np.sum(velocities**2, axis=1))
@@ -917,7 +918,7 @@ class Incar(UserDict, MSONable):
         Warnings:
             BadIncarWarning: If there are duplicate in keys (case insensitive).
         """
-        params = params or {}
+        params = dict(params or {})  # a copy: MAGMOM is reshaped below, not in the caller's dict
 
         # Check for case-insensitive duplicate keys
         key_counter = Counter(key.strip().upper() for key in params)
@@ -1149,9 +1150,12 @@ class Incar(UserDict, MSONable):
                     return int(str_)
 
                 output = []
-                tokens = re.findall(r"(-?\d+\.?\d*|[\.A-Z]+)\*?(-?\d+\.?\d*|[\.A-Z]+)?\*?(-?\d+\.?\d*|[\.A-Z]+)?", val)
+                # a token is a number (also 1e-3, .5, -.5 and +1.5, as Fortran reads them) or a
+                # string such as .TRUE.; "count*value" and "count1*count2*value" repeat the value
+                num_or_str = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[\.A-Z]+"
+                tokens = re.findall(rf"({num_or_str})\*?({num_or_str})?\*?({num_or_str})?", val)
                 for tok in tokens:
-                    if tok[2] and "3" in tok[0]:
+                    if tok[2]:
                         output.extend([smart_int_or_float_bool(tok[2])] * int(tok[0]) * int(tok[1]))
                     elif tok[1]:
                         output.extend([smart_int_or_float_bool(tok[1])] * int(tok[0]))
@@ -1850,7 +1854,8 @@ class Kpoints(MSONable):
         # Automatic kpoints with basis
         if num_kpts <= 0:
             _style = cls.supported_modes.Cartesian if style in "ck" else cls.supported_modes.Reciprocal
-            _kpts_shift = [float(i) for i in lines[6].split()]
+            # the shift line is optional (it is not written when the shift is zero)
+            _kpts_shift = [float(i) for i in lines[6].split()] if len(lines) > 6 else []
             kpts_shift = cast("tuple[float, float, float]", tuple(_kpts_shift)) if len(_kpts_shift) == 3 else (0, 0, 0)
 
             kpts: list[Kpoint] = [
@@ -3348,7 +3353,15 @@ class VaspInput(dict, MSONable):
         """Deep copy of VaspInput."""
         if deep:
             return self.from_dict(self.as_dict())
-        return type(self)(**{key.lower(): val for key, val in self.items()})
+        standard_keys = ("INCAR", "KPOINTS", "POSCAR", self._potcar_filename)
+        return type(self)(
+            incar=self["INCAR"],
+            kpoints=self["KPOINTS"],
+            poscar=self["POSCAR"],
+            potcar=self[self._potcar_filename],
+            potcar_spec=self._potcar_filename == "POTCAR.spec",
+            optional_files={key: val for key, val in self.items() if key not in standard_keys},
+        )
 
     def run_vasp(
         self,
