@@ -403,6 +403,31 @@ class TestOutcarOnDemandReaders:
         )
 
 
+def test_outcar_read_igpar_reads_the_dipole_moments():
+    from matsimpy.calculator.vasp.outputs import Outcar
+
+    outcar = Outcar(os.path.join(FIXTURES_DIR, "OUTCAR.BaTiO3.polar"))
+    outcar.read_igpar()
+    # both were reset to None: p_elec was stored as p_elc, and "Ionic dipole moment" never matched
+    np.testing.assert_array_equal(outcar.p_elec, [0.00024, 0.00019, 3.61674])
+    np.testing.assert_array_equal(outcar.p_ion, [0.0, 0.0, -5.56684])
+
+
+@pytest.mark.parametrize("name, efermi, nelect, density_matrices", [
+    # the last values in the file; the reverse scan kept the first ionic step's (3.6761)
+    ("OUTCAR.etest1.gz", 8.9069, 11.0000101, False),
+    ("OUTCAR", 2.0112, 44.9999991, True),
+])
+def test_outcar_reads_the_final_values(name, efermi, nelect, density_matrices):
+    from matsimpy.calculator.vasp.outputs import Outcar
+
+    outcar = Outcar(os.path.join(FIXTURES_DIR, name))
+    assert (outcar.efermi, outcar.nelect) == (efermi, nelect)
+    # "has_onsite_density_matrices" was True for every OUTCAR
+    assert outcar.has_onsite_density_matrices is density_matrices
+    assert bool(outcar.data.get("onsite_density_matrices")) is density_matrices
+
+
 def test_outcar_tables_absent_from_the_run_read_as_empty():
     """read_table_pattern indexed tables[-1] and raised IndexError when the OUTCAR
     has no such table (e.g. read_elastic_tensor on a relaxation)."""

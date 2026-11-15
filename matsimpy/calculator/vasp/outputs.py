@@ -2133,6 +2133,7 @@ class Outcar:
         e_wo_entrp_pattern = re.compile(r"energy  without entropy\s*=\s+([\d\-\.]+)")
         e0_pattern = re.compile(r"energy\(sigma->0\)\s*=\s+([\d\-\.]+)")
 
+        efermi_found: bool = False
         all_lines = []
         for line in reverse_readfile(self.filename):
             clean = line.strip()
@@ -2151,20 +2152,24 @@ class Outcar:
                         run_stats[tok[0].strip()] = None
                     continue
 
+                # The file is read backwards: keep the first match, i.e. the last value in
+                # the file. Overwriting kept the value of an earlier ionic step whenever the
+                # loop had to read further back for another quantity.
                 if match := efermi_patt.search(clean):
-                    try:
-                        # try-catch because VASP sometimes prints
-                        # 'E-fermi: ********     XC(G=0):  -6.1327
-                        # alpha+bet : -1.8238'
-                        efermi = float(match[1])
-                        continue
-                    except ValueError:
-                        efermi = None
-                        continue
-                if match := nelect_patt.search(clean):
+                    if not efermi_found:
+                        efermi_found = True
+                        try:
+                            # try-catch because VASP sometimes prints
+                            # 'E-fermi: ********     XC(G=0):  -6.1327
+                            # alpha+bet : -1.8238'
+                            efermi = float(match[1])
+                        except ValueError:
+                            efermi = None
+                    continue
+                if nelect is None and (match := nelect_patt.search(clean)):
                     nelect = float(match[1])
 
-                if match := mag_patt.search(clean):
+                if total_mag is None and (match := mag_patt.search(clean)):
                     total_mag = float(match[1])
 
                 if e_fr_energy is None and (match := e_fr_energy_pattern.search(clean)):
@@ -2174,7 +2179,7 @@ class Outcar:
                 if e0 is None and (match := e0_pattern.search(clean)):
                     e0 = float(match[1])
 
-            if nelect is not None and total_mag is not None and efermi is not None and run_stats:
+            if nelect is not None and total_mag is not None and efermi_found and run_stats:
                 break
 
         # For single atom systems, VASP doesn't print a total line, so
@@ -2382,7 +2387,8 @@ class Outcar:
             {"has_onsite_density_matrices": r"onsite density matrix"},
             terminate_on_match=True,
         )
-        if "has_onsite_density_matrices" in self.data:
+        # read_pattern always sets the key, to an empty list when there is no match
+        if self.data.get("has_onsite_density_matrices"):
             self.has_onsite_density_matrices: bool = True
             self.read_onsite_density_matrices()
         else:
@@ -3036,7 +3042,7 @@ class Outcar:
 
             # Non-spin cases
             def er_ev(results, match):
-                results.er_ev[Spin.up] = np.array(map(float, match.groups()[1:4])) / 2
+                results.er_ev[Spin.up] = np.array([float(match[i]) for i in range(1, 4)]) / 2
                 results.er_ev[Spin.down] = results.er_ev[Spin.up]
                 results.context = 2
 
@@ -3091,7 +3097,7 @@ class Outcar:
 
             # Always present spin/non-spin
             def p_elc(results, match):
-                results.p_elc = np.array([float(match[i]) for i in range(1, 4)])
+                results.p_elec = np.array([float(match[i]) for i in range(1, 4)])
 
             elec_dipole_moment_pattern = (
                 r"^.*Total electronic dipole moment: *p\[elc\]=\( *([-0-9.Ee+]*) *([-0-9.Ee+]*) *([-0-9.Ee+]*) *\)"
@@ -3102,7 +3108,7 @@ class Outcar:
                 results.p_ion = np.array([float(match[i]) for i in range(1, 4)])
 
             ionic_dipole_moment_pattern = (
-                r"^.*ionic dipole moment: *p\[ion\]=\( *([-0-9.Ee+]*) *([-0-9.Ee+]*) *([-0-9.Ee+]*) *\)"
+                r"^.*[Ii]onic dipole moment: *p\[ion\]=\( *([-0-9.Ee+]*) *([-0-9.Ee+]*) *([-0-9.Ee+]*) *\)"
             )
             search.append([ionic_dipole_moment_pattern, None, p_ion])
 

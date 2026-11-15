@@ -166,6 +166,14 @@ same sections below.
   now reads both from the OUTCAR, and raises `FileNotFoundError`.
 - `VaspInputSet.write_input` without a POTCAR directory raised `NameError` instead of
   explaining how to add POTCARs.
+- `Outcar.efermi`, `nelect` and `total_mag` could come from an earlier ionic step: the
+  file is scanned backwards and later (earlier-in-the-file) matches overwrote the last
+  value, e.g. E-fermi 3.68 instead of 8.91 eV for a relaxation. `Outcar` also called
+  every OUTCAR a run with onsite density matrices (`has_onsite_density_matrices` was
+  always True).
+- `Outcar.read_igpar` set `p_elec` and `p_ion` to None: the electronic dipole was
+  stored as `p_elc` and the `Ionic dipole moment` line never matched. A non-spin
+  `e<r>_ev` line raised `RuntimeError` (`np.array(map(...))`).
 - Agent tools: a list or object argument that the model sent as a JSON string
   (`"species": "[\"Ga\", \"N\"]"`, seen with DeepSeek) failed and cost a retry; the
   executor now decodes it when the parameter accepts a list or object.

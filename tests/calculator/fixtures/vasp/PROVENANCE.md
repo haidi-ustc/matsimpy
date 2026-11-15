@@ -16,6 +16,8 @@ inputs or outputs by hand, and do not edit these copies.
 | KPOINTS | inputs/KPOINTS |
 | OSZICAR | outputs/OSZICAR |
 | OUTCAR | outputs/OUTCAR.gz (decompressed) |
+| OUTCAR.etest1.gz | outputs/OUTCAR.etest1.gz (8 ionic steps whose E-fermi differ; no onsite density matrices) |
+| OUTCAR.BaTiO3.polar | outputs/OUTCAR.BaTiO3.polar (LCALCPOL Berry-phase run) |
 | POSCAR | inputs/POSCAR (VASP 4 format: no symbol line) |
 | POSCAR.AlN | inputs/POSCAR.AlN |
 | POSCAR_O2 | inputs/POSCAR_O2 (VASP 5: species line `O`) |
