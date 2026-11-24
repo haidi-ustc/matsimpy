@@ -34,6 +34,16 @@ def test_multiframe_reads_every_frame(tmp_path):
     assert [f.positions[1, 0] for f in frames] == pytest.approx([0.74, 0.75, 0.76])
 
 
+def test_read_returns_the_first_frame_of_a_multiframe_file(tmp_path):
+    (tmp_path / "f.xyz").write_text(
+        "2\nFrame 1\nH 0.0 0.0 0.0\nH 0.74 0.0 0.0\n"
+        "2\nFrame 2\nH 0.0 0.0 0.0\nH 0.75 0.0 0.0\n"
+    )
+    molecule = read(tmp_path / "f.xyz")
+    assert list(molecule.species) == ["H", "H"]
+    np.testing.assert_allclose(molecule.positions, [[0, 0, 0], [0.74, 0, 0]])
+
+
 def test_multiframe_strict_mode_rejects_garbage_between_frames(tmp_path, co2):
     write_XYZ(co2, tmp_path / "a.xyz")
     text = (tmp_path / "a.xyz").read_text()

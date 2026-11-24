@@ -330,6 +330,10 @@ same sections below.
   (image (0, 0, 0), distance 0), as pymatgen's kernel does; the NumPy fallback, used
   without pymatgen, is tested to return the same rows. `get_distance_matrix` states
   that two sites that are periodic images of each other are 0 apart.
+- `io.read` states that it returns one structure (the first frame of a multi-frame XYZ
+  file; `read_XYZ_multiframe` reads all of them) and that keyword arguments must be
+  accepted by the format's reader. `write_CIF` states that it always writes P 1 with
+  every atom listed, the form `read_CIF` reads.
 
 ## 0.11.0 — 2026-11-12
 

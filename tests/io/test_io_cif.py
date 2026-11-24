@@ -108,6 +108,19 @@ def test_write_uses_per_element_labels(tmp_path):
     assert "Si3" not in content
 
 
+def test_write_lists_every_atom_in_p1(tmp_path):
+    """The writer makes no symmetry claim: simple-cubic Po is written as P 1, read back unchanged."""
+    crystal = Crystal(["Po"], [[0, 0, 0]], Lattice.cubic(3.0))
+    write_CIF(crystal, tmp_path / "po.cif")
+    content = (tmp_path / "po.cif").read_text()
+    assert "_space_group_IT_number       1\n" in content
+    assert "_symmetry_equiv_pos_as_xyz" not in content and "_space_group_symop" not in content
+    back = read_CIF(tmp_path / "po.cif")
+    assert list(back.species) == ["Po"]
+    np.testing.assert_allclose(back.lattice.matrix, crystal.lattice.matrix, atol=1e-6)
+    np.testing.assert_allclose(back.frac_positions, [[0, 0, 0]], atol=1e-8)
+
+
 def test_write_rejects_non_crystals(tmp_path):
     with pytest.raises(ValueError):
         write_CIF("not a crystal", tmp_path / "x.cif")

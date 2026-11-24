@@ -316,6 +316,10 @@ def write_CIF(crystal: Crystal, filename: str, title: Optional[str] = None) -> N
     Write a Crystal structure to a CIF format file.
 
     This function writes the structure following CIF 1.1 standard conventions.
+    The file is always in space group P 1 with every atom listed and no
+    symmetry-operation loop, so no symmetry is inferred or lost: it is the
+    form ``read_CIF`` reads. Use ``matsimpy.symmetry.get_symmetry_info`` for
+    the space group.
 
     Args:
         crystal: Crystal structure to write

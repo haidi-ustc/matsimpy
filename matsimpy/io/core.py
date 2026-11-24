@@ -31,10 +31,17 @@ def read(
         filename: Path to the structure file.
         format: Optional format name/alias (e.g. ``'vasp'``, ``'cif'``).
             If None, format is detected from file extension.
-        **kwargs: Passed to the format-specific reader.
+        **kwargs: Passed to the format-specific reader; it must accept them
+            (``strict`` is an argument of ``read_XYZ_multiframe``, not of the
+            ``read_XYZ`` reader behind ``read``).
 
     Returns:
         Crystal or Molecule.
+
+    Note:
+        This returns one structure. For a multi-frame XYZ file that is the
+        first frame (as ``read_XYZ`` documents); ``read_XYZ_multiframe`` reads
+        every frame.
 
     Raises:
         FileNotFoundError: If file doesn't exist.
