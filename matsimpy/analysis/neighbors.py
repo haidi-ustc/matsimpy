@@ -27,7 +27,14 @@ def find_points_in_spheres(
     utilities: center indices, neighbor indices, integer image offsets, and
     distances. When PyMatGen is available, MatSimPy delegates to its optimized
     implementation to preserve MatterSim graph ordering. A pure NumPy fallback
-    keeps the API usable without PyMatGen.
+    keeps the API usable without PyMatGen and returns the same rows.
+
+    Every pair within ``r`` is returned, including zero-distance pairs: when
+    ``center_coords`` are among ``all_coords``, each centre is listed as its own
+    neighbour with image (0, 0, 0) and distance 0, as pymatgen's kernel does
+    (a one-atom simple-cubic cell with ``r`` just above a gives 7 rows: itself
+    and its six images). Callers that want neighbours only drop the rows with
+    ``center == neighbor`` and a zero image.
     """
     try:
         from pymatgen.optimization.neighbors import (

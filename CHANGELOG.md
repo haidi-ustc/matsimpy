@@ -326,6 +326,10 @@ same sections below.
   `metadata["d_spacing"]` is d_hkl, the bulk's period along the normal, which can hold
   several atomic planes (Si(111): a bilayer, 3.135 Å). `min_slab_size` is compared with
   `layers * d_hkl`, not with the distance between the outermost atoms.
+- `find_points_in_spheres` states that each centre is returned as its own neighbour
+  (image (0, 0, 0), distance 0), as pymatgen's kernel does; the NumPy fallback, used
+  without pymatgen, is tested to return the same rows. `get_distance_matrix` states
+  that two sites that are periodic images of each other are 0 apart.
 
 ## 0.11.0 — 2026-11-12
 

@@ -976,7 +976,9 @@ def get_distance_matrix(
     Note:
         Crystal distances are computed as all-pairs distances directly. When
         periodic boundary conditions are enabled, distances use the nearest
-        periodic image and are independent of graph edge cutoffs.
+        periodic image (over all lattice translations, exact in skewed cells)
+        and are independent of graph edge cutoffs. Two sites that are periodic
+        images of each other (e.g. at fractional 0 and 1) are 0 apart.
 
     Example:
         >>> from matsimpy.core import Molecule
