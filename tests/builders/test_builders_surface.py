@@ -65,10 +65,22 @@ class TestGenerateSlab:
         slab = generate_slab(_si(), hkl, min_slab_size=8)
         assert np.isclose(_nearest(slab).min(), 5.43 * np.sqrt(3) / 4)
 
-    def test_layers_and_spacing(self):
+    @pytest.mark.parametrize("bulk,hkl,d,atoms_per_layer", [
+        (_cu, (1, 1, 1), 3.61 / np.sqrt(3), 1),
+        (_cu, (1, 0, 0), 3.61 / 2, 1),
+        # the Si(111) layer is a bilayer: d_111 = a / sqrt(3) (the Bragg spacing), not the
+        # 2.35 A gap between bilayers
+        (_si, (1, 1, 1), 5.43 / np.sqrt(3), 2),
+        (_si, (1, 0, 0), 5.43 / 2, 2),
+    ])
+    def test_a_layer_is_one_d_hkl_period(self, bulk, hkl, d, atoms_per_layer):
+        slab = generate_slab(bulk(), hkl, layers=3, min_vacuum_size=10)
+        assert np.isclose(slab.metadata["d_spacing"], d)
+        assert len(slab) == 3 * atoms_per_layer
+        assert np.isclose(slab.lattice.c, 3 * d + 10)
+
+    def test_fcc111_planes_are_one_d_hkl_apart(self):
         slab = generate_slab(_cu(), (1, 1, 1), layers=5)
-        assert len(slab) == 5
-        assert np.isclose(slab.metadata["d_spacing"], 3.61 / np.sqrt(3))
         z = np.sort(slab.cart_positions[:, 2])
         assert np.allclose(np.diff(z), 3.61 / np.sqrt(3))
 
@@ -79,12 +91,22 @@ class TestGenerateSlab:
         assert len(a) == len(b)
         assert np.allclose(a.lattice.matrix, b.lattice.matrix)
 
-    def test_conventional_and_primitive_bulk_give_the_same_surface(self):
-        conventional = generate_slab(_si(), (1, 1, 1), layers=3)
-        # (111) of the conventional cell is (111) of this primitive cell too
-        primitive = generate_slab(_si_primitive(), (1, 1, 1), layers=3)
+    # Miller indices refer to the cell given (as in pymatgen and ASE). The reciprocal
+    # vectors of this primitive cell are (-1,1,1)/a, (1,-1,1)/a and (1,1,-1)/a, so its
+    # (100) is the cubic (-1,1,1) and its (110) the cubic (001); only (111) coincides.
+    @pytest.mark.parametrize("primitive_hkl,conventional_hkl", [
+        ((1, 1, 1), (1, 1, 1)),
+        ((1, 0, 0), (-1, 1, 1)),
+        ((1, 1, 0), (0, 0, 1)),
+    ])
+    def test_primitive_miller_indices_refer_to_the_primitive_cell(self, primitive_hkl, conventional_hkl):
+        conventional = generate_slab(_si(), conventional_hkl, layers=3)
+        primitive = generate_slab(_si_primitive(), primitive_hkl, layers=3)
         assert len(conventional) == len(primitive) == 6
-        assert np.isclose(conventional.lattice.a, primitive.lattice.a)
+        assert np.isclose(conventional.metadata["d_spacing"], primitive.metadata["d_spacing"])
+        assert np.allclose(sorted([conventional.lattice.a, conventional.lattice.b]),
+                           sorted([primitive.lattice.a, primitive.lattice.b]))
+        assert np.isclose(np.linalg.det(conventional.lattice.matrix), np.linalg.det(primitive.lattice.matrix))
 
     def test_si111_is_cut_between_bilayers(self):
         slab = generate_slab(_si(), (1, 1, 1), layers=2)

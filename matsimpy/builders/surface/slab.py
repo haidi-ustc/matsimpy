@@ -7,6 +7,18 @@ given. Its a and b vectors are the shortest lattice vectors spanning the plane
 gives the smallest surface cell); a lies along x, b in the xy-plane and the surface
 normal along z, with vacuum above and below. One layer is one interplanar spacing
 d_hkl of the bulk and holds one primitive cell's worth of atoms.
+
+Two conventions, shared with pymatgen's ``SlabGenerator`` and ASE's ``surface``:
+
+* Miller indices refer to the basis of the cell given. For a primitive cell they are
+  not the cubic indices: in a primitive fcc cell (60 degree rhombohedron, as from
+  ``from_prototype('fcc', ...)``) (100) is a {111} plane of the cubic cell and (110)
+  a {100} plane. Pass the conventional cell (``matsimpy.symmetry.get_conventional_cell``)
+  to use the usual indices.
+* d_hkl is the period of the bulk along the surface normal, the crystallographic
+  (Bragg) spacing of the lattice planes. A layer can hold several atomic planes: the
+  Si(111) layer is a bilayer, d_111 = a / sqrt(3) = 3.135 A, with planes 0.78 A and
+  2.35 A apart.
 """
 
 from __future__ import annotations
@@ -250,19 +262,27 @@ def generate_slab(
     """
     Cut a surface slab from a bulk crystal.
 
-    The Miller indices refer to the bulk cell as given: use the conventional cell
-    for the usual cubic or hexagonal indices. The slab's a and b are the shortest
+    The Miller indices refer to the bulk cell as given, as in pymatgen and ASE: use
+    the conventional cell for the usual cubic or hexagonal indices (in a primitive
+    fcc cell, (100) is a cubic {111} plane). The slab's a and b are the shortest
     lattice vectors in the (hkl) plane, with a along x, b in the xy-plane and the
-    surface normal along z. One layer is one interplanar spacing d_hkl and holds one
-    primitive cell's worth of atoms. The cut is placed in the widest gap between
-    atomic planes (so, for example, Si(111) is cut between the bilayers).
+    surface normal along z. One layer is one interplanar spacing d_hkl, the period
+    of the bulk along the normal, and holds one primitive cell's worth of atoms; it
+    may contain several atomic planes (the Si(111) layer is a bilayer). The cut is
+    placed in the widest gap between atomic planes (so, for example, Si(111) is cut
+    between the bilayers).
+
+    ``min_slab_size`` is compared with ``layers * d_hkl``, the slab's periodic
+    thickness. The distance between its outermost atoms is smaller by the width of
+    that widest gap (all of d_111 for Cu(111), the 2.35 A bond between
+    bilayers for Si(111)).
 
     Args:
         bulk: Bulk crystal structure
         miller_index: Miller indices (h, k, l) of the surface plane in the bulk cell
-        min_slab_size: Minimum slab thickness in Angstroms (rounded up to whole layers)
+        min_slab_size: Minimum of ``layers * d_hkl`` in Angstroms (rounded up to whole layers)
         min_vacuum_size: Vacuum thickness in Angstroms (at least)
-        layers: Number of layers, instead of min_slab_size
+        layers: Number of layers (periods d_hkl), instead of min_slab_size
         center_slab: Centre the slab along z (otherwise its lowest atom is at z = 0)
         primitive: Use the bulk's smallest translation lattice (True) or only the
             lattice of the cell given (False)

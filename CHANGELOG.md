@@ -319,6 +319,14 @@ same sections below.
   `generate_symmetric_slab` schemas now state that exactly one of `layers` and
   `min_slab_size` is required (registry schemas support an object-level `oneOf`).
 
+### Documentation
+- `generate_slab` states its two conventions, unchanged and shared with pymatgen and
+  ASE: Miller indices refer to the cell given, so in a primitive fcc cell (100) is a
+  cubic {111} plane (convert with `get_conventional_cell` first); and
+  `metadata["d_spacing"]` is d_hkl, the bulk's period along the normal, which can hold
+  several atomic planes (Si(111): a bilayer, 3.135 Å). `min_slab_size` is compared with
+  `layers * d_hkl`, not with the distance between the outermost atoms.
+
 ## 0.11.0 — 2026-11-12
 
 The AI module (`matsimpy.ai`) is rewritten around three extension points: tools derived
