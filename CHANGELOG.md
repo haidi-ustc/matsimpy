@@ -157,6 +157,12 @@ same sections below.
   and tries every translation that could be shorter than the rounded image.
 
 ### Fixed
+- `get_distance_matrix` and `CrystalGraph.distance_matrix` returned a periodic image
+  that was not the nearest one when the nearest image lay more than one lattice vector
+  away, which happens in skewed cells: with rows `(1,0,0)`, `(10,1,0)`, `(0,0,8)` and a
+  displacement of `(-3.5, 0.05, 0)` in fractional coordinates the distance was 2.0006 Å
+  instead of 0.05 Å. Only the shifts -1, 0 and 1 along each axis were tried; the matrix
+  now uses `Lattice.get_min_image_vectors`, which is exact in any cell.
 - POSCAR/POTCAR order (a pymatgen legacy): with a stale POTCAR next to it, an
   `O Mn` POSCAR was read as `Fe O` (the O atom became Fe) because the POTCAR's names
   replaced the POSCAR's by position; a POTCAR with extra entries was accepted.

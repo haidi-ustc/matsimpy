@@ -43,30 +43,20 @@ from .neighbors import find_points_in_spheres
 
 
 def _crystal_all_pairs_distance_matrix(crystal: Crystal, use_pbc: bool) -> np.ndarray:
-    """Compute all-pairs crystal distances without relying on graph cutoffs."""
+    """All-pairs crystal distances, independent of graph cutoffs.
+
+    With periodic boundary conditions every entry is the shortest image over all
+    lattice translations along the periodic axes, exact in skewed cells (see
+    :meth:`Lattice.get_min_image_vectors`).
+    """
     if not use_pbc or not any(crystal.pbc):
         return cdist(crystal.cart_positions, crystal.cart_positions)
 
     frac_positions = np.asarray(crystal.frac_positions, dtype=float)
-    frac_diffs = frac_positions[:, np.newaxis, :] - frac_positions[np.newaxis, :, :]
-
-    pbc = np.asarray(crystal.pbc, dtype=bool)
-    translation_axes = [[0] if not periodic else [-1, 0, 1] for periodic in pbc]
-    translations = np.array(
-        [
-            [i, j, k]
-            for i in translation_axes[0]
-            for j in translation_axes[1]
-            for k in translation_axes[2]
-        ],
-        dtype=float,
-    )
-
-    candidate_frac_diffs = frac_diffs[:, :, np.newaxis, :] + translations
-    candidate_cart_diffs = np.dot(candidate_frac_diffs, crystal.lattice.matrix)
-    candidate_distances = np.linalg.norm(candidate_cart_diffs, axis=-1)
-
-    dist_matrix = np.min(candidate_distances, axis=2)
+    frac_diffs = frac_positions[np.newaxis, :, :] - frac_positions[:, np.newaxis, :]
+    vectors = crystal.lattice.get_min_image_vectors(frac_diffs, pbc=crystal.pbc)
+    dist_matrix = np.linalg.norm(vectors, axis=-1)
+    dist_matrix = np.minimum(dist_matrix, dist_matrix.T)  # exactly symmetric
     np.fill_diagonal(dist_matrix, 0.0)
     return dist_matrix
 
