@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-11-26
 
 ### Packaging
-- `.github/workflows/workflow.yaml` publishes every GitHub release to PyPI through
+- `.github/workflows/publish.yml` (renamed from `workflow.yaml`) publishes every GitHub
+  release to PyPI through
   Trusted Publishing (OIDC, no API token). Before uploading it checks that the release
   tag equals `v<pyproject version>`, that the README `**Version**` line matches, that
   `CHANGELOG.md` has a section for that version, and runs the test suite on Python 3.10

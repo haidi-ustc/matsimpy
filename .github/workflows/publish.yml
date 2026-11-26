@@ -10,7 +10,7 @@ name: Release
 #
 # PyPI side (one-time setup):
 #   1. Add a trusted publisher for the MatSimPy project on PyPI:
-#        owner haidi-ustc, repository matsimpy, workflow workflow.yaml, environment pypi
+#        owner haidi-ustc, repository matsimpy, workflow publish.yml, environment pypi
 #      or, for the first upload before the project exists, add the same publisher as a
 #      "pending publisher" on https://pypi.org/manage/account/publishing/
 #   2. No API token secret is needed — authentication is OIDC.
